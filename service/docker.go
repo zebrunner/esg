@@ -128,6 +128,9 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 		},
 		ExtraHosts: getExtraHosts(d.Service, d.Caps),
 	}
+
+	log.Printf("[%d] [HOST_CONFIG] [%s]", requestId, hostConfig)
+
 	hostConfig.PublishAllPorts = d.Service.PublishAllPorts
 	if len(d.Caps.DNSServers) > 0 {
 		hostConfig.DNS = d.Caps.DNSServers
@@ -141,6 +144,8 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	if len(d.Service.Sysctl) > 0 {
 		hostConfig.Sysctls = d.Service.Sysctl
 	}
+
+	//TODO: create ECS fargate task based on env anv caps
 	cl := d.Client
 	env := getEnv(d.ServiceBase, d.Caps)
 	container, err := cl.ContainerCreate(ctx,
@@ -156,10 +161,14 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create container: %v", err)
 	}
+
+	log.Printf("[%d] [CONTAINER] [%s]", requestId, container)
+
 	browserContainerStartTime := time.Now()
-	browserContainerId := container.ID
+	browserContainerId := container.ID //TODO: get Container Runtime ID
 	videoContainerId := ""
 	log.Printf("[%d] [STARTING_CONTAINER] [%s] [%s]", requestId, image, browserContainerId)
+	//TODO: start ECS Fargate container
 	err = cl.ContainerStart(ctx, browserContainerId, types.ContainerStartOptions{})
 	if err != nil {
 		removeContainer(ctx, cl, requestId, browserContainerId)
@@ -176,6 +185,7 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 		}
 	}
 
+	//TODO: inspect fargate container status and remove task in case of any problem
 	stat, err := cl.ContainerInspect(ctx, browserContainerId)
 	if err != nil {
 		removeContainer(ctx, cl, requestId, browserContainerId)
@@ -194,9 +204,16 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 		ports.Fileserver: fileserver,
 		ports.Clipboard:  clipboard,
 	}
-	hostPort := getHostPort(d.Environment, servicePort, d.Caps, stat, pc)
-	u := &url.URL{Scheme: "http", Host: hostPort.Selenium, Path: d.Service.Path}
 
+	//TODO: get fargate task public or private IP to init hostPort
+	// Important getHostPort method has hardcoded ip address as of now
+	hostPort := getHostPort(d.Environment, servicePort, d.Caps, stat, pc)
+        log.Printf("[%d] [HOST_PORT] [%s]", requestId, hostPort)
+
+	u := &url.URL{Scheme: "http", Host: hostPort.Selenium, Path: d.Service.Path}
+        log.Printf("[%d] [CONTAINER_SERVICE_URL] [%s]", requestId, u)
+
+	//TODO: start video recorder task with appropriate container
 	if d.Video {
 		videoContainerId, err = startVideoContainer(ctx, cl, requestId, stat, d.Environment, d.ServiceBase, d.Caps)
 		if err != nil {
@@ -259,6 +276,8 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 			}
 		},
 	}
+
+	log.Printf("[%d] [CONTAINER_SERVICE_DETAILS] [%s]", requestId, s)
 	return &s, nil
 }
 
@@ -438,7 +457,7 @@ func getHostPort(env Environment, servicePort string, caps session.Caps, stat ty
 			}
 		} else {
 			fn = func(containerPort string, port nat.Port) string {
-				return net.JoinHostPort("127.0.0.1", stat.NetworkSettings.Ports[port][0].HostPort)
+				return net.JoinHostPort("54.159.215.5", containerPort)
 			}
 		}
 	} else {
@@ -446,6 +465,12 @@ func getHostPort(env Environment, servicePort string, caps session.Caps, stat ty
 			return net.JoinHostPort(env.IP, stat.NetworkSettings.Ports[port][0].HostPort)
 		}
 	}
+
+        log.Printf("[servicePort]-[pc] [%s]-[%s]", servicePort, pc[servicePort])
+        log.Printf("[ports.Fileserver]-[pc] [%s]-[%s]", ports.Fileserver, pc[ports.Fileserver])
+        log.Printf("[ports.Clipboard]-[pc] [%s]-[%s]", ports.Clipboard, pc[ports.Clipboard])
+        log.Printf("[ports.Devtools]-[pc] [%s]-[%s]", ports.Devtools, pc[ports.Devtools])
+
 	hp := session.HostPort{
 		Selenium:   fn(servicePort, pc[servicePort]),
 		Fileserver: fn(ports.Fileserver, pc[ports.Fileserver]),
@@ -455,6 +480,7 @@ func getHostPort(env Environment, servicePort string, caps session.Caps, stat ty
 
 	if caps.VNC {
 		hp.VNC = fn(ports.VNC, pc[ports.VNC])
+                log.Printf("[ports.VNC]-[pc] [%s]-[%s]", ports.VNC, pc[ports.VNC])
 	}
 
 	return hp
