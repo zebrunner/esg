@@ -434,6 +434,10 @@ func getImage(caps session.Caps) string {
 	}
 	//TODO: don't forgent to insert ":" as prefix if version is not empty!
 	version := ""
+        if caps.Version != "" {
+                version = ":" + caps.Version
+        }
+
 	//TODO: think about possibility to override using custom capabilities
 	return fmt.Sprintf("selenoid/%s%s%s", vnc, caps.Name, version)
 }

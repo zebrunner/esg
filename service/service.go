@@ -70,7 +70,9 @@ func (m *DefaultManager) Find(caps session.Caps, requestId uint64) (Starter, boo
 	browserName := caps.BrowserName()
 	version := caps.Version
 	log.Printf("[%d] [LOCATING_SERVICE] [%s] [%s]", requestId, browserName, version)
-	service, version, ok := m.Config.Find(browserName, version)
+	//[VD] ignoring all kind of versionig as we can dosnload on the fly any valid version
+        service, version, ok := m.Config.Find(browserName, "")
+//      service, version, ok := m.Config.Find(browserName, version)
 	serviceBase := ServiceBase{RequestId: requestId, Service: service}
 	if !ok {
 		return nil, false
