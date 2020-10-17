@@ -113,11 +113,12 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	imageUrl := getImage(d.Caps)
 
 
-	//TODO: create ECS fargate task based on env anv caps
+	//create ECS task definition based on capabilities
+	//TODO: parametrize region
 	svc := ecs.New(awsSession.New(&aws.Config{Region: aws.String("us-east-1")}))
 
 	//TODO: support GPU reservation: The number of GPU units to reserve for the container. A container instance with GPU support has 1 GPU unit for every GPU.
-	input := &ecs.RegisterTaskDefinitionInput{
+	taskDefinitionInput := &ecs.RegisterTaskDefinitionInput{
 	    ContainerDefinitions: []*ecs.ContainerDefinition{
 	        {
                     Name:      aws.String(d.Caps.Name),
@@ -133,11 +134,11 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	    TaskRoleArn: aws.String(""),
 	}
 
-	result, err := svc.RegisterTaskDefinition(input)
+	resultTaskDefinition, err := svc.RegisterTaskDefinition(taskDefinitionInput)
 	if err != nil {
-            return nil, fmt.Errorf("create task definition: %v", err)
+            return nil, fmt.Errorf("Unable to create task definition: %v", err)
 	} else {
-            log.Printf("[%d] [TASK_DEFINITION] [%s]", requestId, result)
+            log.Printf("[%d] [TASK_DEFINITION] [%s]", requestId, resultTaskDefinition)
 	}
 
 	cl := d.Client
@@ -162,7 +163,24 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	browserContainerId := container.ID //TODO: get Container Runtime ID
 	videoContainerId := ""
 	log.Printf("[%d] [STARTING_CONTAINER] [%s] [%s]", requestId, image, browserContainerId)
-	//TODO: start ECS Fargate container
+
+
+        family := *resultTaskDefinition.TaskDefinition.Family
+	revision := *resultTaskDefinition.TaskDefinition.Revision
+        log.Printf("[%d] [REVISION] [%d]", requestId, revision)
+	//TODO: parametrize cluster name 
+	runTaskInput := &ecs.RunTaskInput{
+	    Cluster:        aws.String("demo-news-blog-scale"),
+	    TaskDefinition: aws.String(family + ":" + strconv.FormatInt(revision, 10)),
+	}
+
+	resultRunTask, err := svc.RunTask(runTaskInput)
+        if err != nil {
+            return nil, fmt.Errorf("Unable to run task: %v", err)
+        } else {
+            log.Printf("[%d] [TASK_RUN] [%s]", requestId, resultRunTask)
+        }
+
 	err = cl.ContainerStart(ctx, browserContainerId, types.ContainerStartOptions{})
 	if err != nil {
 		removeContainer(ctx, cl, requestId, browserContainerId)
