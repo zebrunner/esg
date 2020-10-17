@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
-	"github.com/docker/go-units"
+//	"github.com/docker/go-units"
 	"log"
 	"net"
 	"net/url"
@@ -20,9 +20,14 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
+
 	"os"
 	"path/filepath"
 	"strings"
+
+        "github.com/aws/aws-sdk-go/aws"
+        "github.com/aws/aws-sdk-go/service/ecs"
+        awsSession "github.com/aws/aws-sdk-go/aws/session"
 )
 
 const (
@@ -37,38 +42,6 @@ var ports = struct {
 	Devtools:   "7070",
 	Fileserver: "8080",
 	Clipboard:  "9090",
-}
-
-// MemLimit - memory limit for Docker container
-type MemLimit int64
-
-func (limit *MemLimit) String() string {
-	return units.HumanSize(float64(*limit))
-}
-
-func (limit *MemLimit) Set(s string) error {
-	v, err := units.RAMInBytes(s)
-	if err != nil {
-		return fmt.Errorf("set memory limit: %v", err)
-	}
-	*limit = MemLimit(v)
-	return nil
-}
-
-// CpuLimit - CPU limit for Docker container
-type CpuLimit int64
-
-func (limit *CpuLimit) String() string {
-	return strconv.FormatFloat(float64(*limit/1000000000), 'f', -1, 64)
-}
-
-func (limit *CpuLimit) Set(s string) error {
-	v, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return fmt.Errorf("set cpu limit: %v", err)
-	}
-	*limit = CpuLimit(v * 1000000000)
-	return nil
 }
 
 // Docker - docker container manager
@@ -96,14 +69,6 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	if err != nil {
 		return nil, fmt.Errorf("configuring ports: %v", err)
 	}
-	mem, err := getMemory(d.Service, d.Environment)
-	if err != nil {
-		return nil, fmt.Errorf("invalid memory limit: %v", err)
-	}
-	cpu, err := getCpu(d.Service, d.Environment)
-	if err != nil {
-		return nil, fmt.Errorf("invalid CPU limit: %v", err)
-	}
 	selenium := portConfig.SeleniumPort
 	fileserver := portConfig.FileserverPort
 	clipboard := portConfig.ClipboardPort
@@ -122,14 +87,12 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 		Tmpfs:        d.Service.Tmpfs,
 		ShmSize:      getShmSize(d.Service),
 		Privileged:   d.Privileged,
-		Resources: ctr.Resources{
-			Memory:   mem,
-			NanoCPUs: cpu,
-		},
 		ExtraHosts: getExtraHosts(d.Service, d.Caps),
 	}
 
 	log.Printf("[%d] [HOST_CONFIG] [%s]", requestId, hostConfig)
+        log.Printf("[%d] [d.Service] [%s]", requestId, d.Service)
+        log.Printf("[%d] [d.Caps] [%s]", requestId, d.Caps)
 
 	hostConfig.PublishAllPorts = d.Service.PublishAllPorts
 	if len(d.Caps.DNSServers) > 0 {
@@ -145,7 +108,37 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 		hostConfig.Sysctls = d.Service.Sysctl
 	}
 
+        hardMemory, softMemory := getMemory(d.Caps)
+        cpu := getCpu(d.Caps)
+	imageUrl := getImage(d.Caps)
+
+
 	//TODO: create ECS fargate task based on env anv caps
+	svc := ecs.New(awsSession.New(&aws.Config{Region: aws.String("us-east-1")}))
+
+	//TODO: support GPU reservation: The number of GPU units to reserve for the container. A container instance with GPU support has 1 GPU unit for every GPU.
+	input := &ecs.RegisterTaskDefinitionInput{
+	    ContainerDefinitions: []*ecs.ContainerDefinition{
+	        {
+                    Name:      aws.String(d.Caps.Name),
+                    Image:     aws.String(imageUrl),
+	            Cpu:       aws.Int64(cpu),
+	            Essential: aws.Bool(true), //If the essential parameter of a container is marked as true, the failure of that container will stop the task.
+	            Memory:    aws.Int64(hardMemory),
+                    MemoryReservation: aws.Int64(softMemory),
+	        },
+	    },
+	    Family:      aws.String(d.Caps.Name),
+	    TaskRoleArn: aws.String(""),
+	}
+
+	result, err := svc.RegisterTaskDefinition(input)
+	if err != nil {
+            return nil, fmt.Errorf("create task definition: %v", err)
+	} else {
+            log.Printf("[%d] [TASK_DEFINITION] [%s]", requestId, result)
+	}
+
 	cl := d.Client
 	env := getEnv(d.ServiceBase, d.Caps)
 	container, err := cl.ContainerCreate(ctx,
@@ -390,28 +383,59 @@ func getShmSize(service *config.Browser) int64 {
 	return int64(268435456)
 }
 
-func getMemory(service *config.Browser, env Environment) (int64, error) {
-	if service.Mem != "" {
-		var mem MemLimit
-		err := mem.Set(service.Mem)
-		if err != nil {
-			return 0, fmt.Errorf("parse memory limit: %v", err)
-		}
-		return int64(mem), nil
+func getMemory(caps session.Caps) (int64, int64) {
+        capsMemory := "512"
+        if caps.Memory != "" {
+                capsMemory = caps.Memory
+        }
+        hardMemory, err := strconv.Atoi(capsMemory)
+        if err == nil {
+            fmt.Println(hardMemory)
+        } else {
+            fmt.Println(capsMemory, "is not an integer.")
+        }
+
+        capsMemoryReservation := "256"
+        if caps.MemoryReservation != "" {
+                capsMemoryReservation = caps.MemoryReservation
+        }
+
+	softMemory, err := strconv.Atoi(capsMemoryReservation)
+	if err == nil {
+	    fmt.Println(softMemory)
+	} else {
+	    fmt.Println(capsMemoryReservation, "is not an integer.")
 	}
-	return env.Memory, nil
+
+        return int64(hardMemory), int64(softMemory)
 }
 
-func getCpu(service *config.Browser, env Environment) (int64, error) {
-	if service.Cpu != "" {
-		var cpu CpuLimit
-		err := cpu.Set(service.Cpu)
-		if err != nil {
-			return 0, fmt.Errorf("parse CPU limit: %v", err)
-		}
-		return int64(cpu), nil
+func getCpu(caps session.Caps) (int64) {
+	capsCpu := "512"
+        if caps.Cpu != "" {
+                capsCpu = caps.Cpu
+        }
+
+        cpu, err := strconv.Atoi(capsCpu)
+        if err == nil {
+            fmt.Println(cpu)
+        } else {
+            fmt.Println(capsCpu, "is not an integer.")
+        }
+
+        return int64(cpu)
+}
+
+func getImage(caps session.Caps) string {
+	// selenoid/[vnc_][browsername]:[version]
+	vnc := ""
+        if caps.VNC {
+		vnc = "vnc_"
 	}
-	return env.CPU, nil
+	//TODO: don't forgent to insert ":" as prefix if version is not empty!
+	version := ""
+	//TODO: think about possibility to override using custom capabilities
+	return fmt.Sprintf("selenoid/%s%s%s", vnc, caps.Name, version)
 }
 
 func getContainerHostname(caps session.Caps) string {
@@ -457,7 +481,8 @@ func getHostPort(env Environment, servicePort string, caps session.Caps, stat ty
 			}
 		} else {
 			fn = func(containerPort string, port nat.Port) string {
-				return net.JoinHostPort("54.159.215.5", containerPort)
+				return net.JoinHostPort("3.238.78.241", containerPort)
+//                                return net.JoinHostPort("10.0.6.37", containerPort)
 			}
 		}
 	} else {

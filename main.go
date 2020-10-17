@@ -70,8 +70,6 @@ var (
 )
 
 func init() {
-	var mem service.MemLimit
-	var cpu service.CpuLimit
 	flag.BoolVar(&disableDocker, "disable-docker", false, "Disable docker support")
 	flag.BoolVar(&disableQueue, "disable-queue", false, "Disable wait queue")
 	flag.BoolVar(&enableFileUpload, "enable-file-upload", false, "File upload support")
@@ -86,8 +84,6 @@ func init() {
 	flag.DurationVar(&sessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
 	flag.DurationVar(&serviceStartupTimeout, "service-startup-timeout", 30*time.Second, "Service startup timeout in time.Duration format")
 	flag.BoolVar(&version, "version", false, "Show version and exit")
-	flag.Var(&mem, "mem", "Containers memory limit e.g. 128m or 1g")
-	flag.Var(&cpu, "cpu", "Containers cpu limit as float e.g. 0.2 or 1.0")
 	flag.StringVar(&containerNetwork, "container-network", service.DefaultContainerNetwork, "Network to be used for containers")
 	flag.BoolVar(&captureDriverLogs, "capture-driver-logs", false, "Whether to add driver process logs to Selenoid output")
 	flag.BoolVar(&disablePrivileged, "disable-privileged", false, "Whether to disable privileged container mode")
@@ -159,8 +155,6 @@ func init() {
 
 	environment := service.Environment{
 		InDocker:             inDocker,
-		CPU:                  int64(cpu),
-		Memory:               int64(mem),
 		Network:              containerNetwork,
 		StartupTimeout:       serviceStartupTimeout,
 		SessionDeleteTimeout: sessionDeleteTimeout,
