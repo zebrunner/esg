@@ -126,6 +126,7 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	            Essential: aws.Bool(true), //If the essential parameter of a container is marked as true, the failure of that container will stop the task.
 	            Memory:    aws.Int64(hardMemory),
                     MemoryReservation: aws.Int64(softMemory),
+		    Privileged: aws.Bool(d.Privileged),
 	        },
 	    },
 	    Family:      aws.String(d.Caps.Name),
