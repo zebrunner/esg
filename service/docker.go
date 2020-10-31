@@ -128,9 +128,24 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	            Memory:    aws.Int64(hardMemory),
                     MemoryReservation: aws.Int64(softMemory),
 		    Privileged: aws.Bool(d.Privileged),
+		    MountPoints: []*ecs.MountPoint{
+			&ecs.MountPoint{ // Required
+			    ContainerPath: aws.String("/dev/shm"),
+	                    ReadOnly:      aws.Bool(false),
+	                    SourceVolume:  aws.String("devshm"),
+	                },
+	            },
 	        },
 	    },
 	    Family:      aws.String(d.Caps.Name),
+	    Volumes: []*ecs.Volume{
+	        &ecs.Volume{ // Required
+	            Host: &ecs.HostVolumeProperties{
+	                SourcePath: aws.String("/dev/shm"),
+	            },
+	            Name: aws.String("devshm"),
+	        },
+	    },
 	    TaskRoleArn: aws.String(""),
 	}
 
