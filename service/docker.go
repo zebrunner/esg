@@ -119,6 +119,7 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 
 	//TODO: support GPU reservation: The number of GPU units to reserve for the container. A container instance with GPU support has 1 GPU unit for every GPU.
 	taskDefinitionInput := &ecs.RegisterTaskDefinitionInput{
+            NetworkMode: aws.String("bridge"),
 	    ContainerDefinitions: []*ecs.ContainerDefinition{
 	        {
                     Name:      aws.String(d.Caps.Name),
@@ -134,6 +135,28 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	                    ReadOnly:      aws.Bool(false),
 	                    SourceVolume:  aws.String("devshm"),
 	                },
+	            },
+	            PortMappings: []*ecs.PortMapping{
+        	        &ecs.PortMapping{ // Required
+                	    ContainerPort: aws.Int64(4444),
+	                    HostPort:      aws.Int64(4444),
+	                },
+                        &ecs.PortMapping{ // Required
+                            ContainerPort: aws.Int64(5900),
+                            HostPort:      aws.Int64(5900),
+                        },
+                        &ecs.PortMapping{ // Required
+                            ContainerPort: aws.Int64(7070),
+                            HostPort:      aws.Int64(7070),
+                        },
+                        &ecs.PortMapping{ // Required
+                            ContainerPort: aws.Int64(8080),
+                            HostPort:      aws.Int64(8080),
+                        },
+                        &ecs.PortMapping{ // Required
+                            ContainerPort: aws.Int64(9090),
+                            HostPort:      aws.Int64(9090),
+                        },
 	            },
 	        },
 	    },
@@ -418,7 +441,7 @@ func getShmSize(service *config.Browser) int64 {
 }
 
 func getMemory(caps session.Caps) (int64, int64) {
-        capsMemory := "512"
+        capsMemory := "768"
         if caps.Memory != "" {
                 capsMemory = caps.Memory
         }
@@ -429,7 +452,7 @@ func getMemory(caps session.Caps) (int64, int64) {
             fmt.Println(capsMemory, "is not an integer.")
         }
 
-        capsMemoryReservation := "256"
+        capsMemoryReservation := "768"
         if caps.MemoryReservation != "" {
                 capsMemoryReservation = caps.MemoryReservation
         }
@@ -519,7 +542,7 @@ func getHostPort(env Environment, servicePort string, caps session.Caps, stat ty
 			}
 		} else {
 			fn = func(containerPort string, port nat.Port) string {
-				return net.JoinHostPort("3.238.78.241", containerPort)
+				return net.JoinHostPort("35.170.59.24", containerPort)
 //                                return net.JoinHostPort("10.0.6.37", containerPort)
 			}
 		}
