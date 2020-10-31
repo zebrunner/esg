@@ -130,30 +130,30 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
                     MemoryReservation: aws.Int64(softMemory),
 		    Privileged: aws.Bool(d.Privileged),
 		    MountPoints: []*ecs.MountPoint{
-			&ecs.MountPoint{ // Required
+			&ecs.MountPoint{
 			    ContainerPath: aws.String("/dev/shm"),
 	                    ReadOnly:      aws.Bool(false),
 	                    SourceVolume:  aws.String("devshm"),
 	                },
 	            },
 	            PortMappings: []*ecs.PortMapping{
-        	        &ecs.PortMapping{ // Required
-                	    ContainerPort: aws.Int64(4444),
+			&ecs.PortMapping{
+			    ContainerPort: aws.Int64(4444),
 	                    HostPort:      aws.Int64(4444),
 	                },
-                        &ecs.PortMapping{ // Required
+                        &ecs.PortMapping{
                             ContainerPort: aws.Int64(5900),
                             HostPort:      aws.Int64(5900),
                         },
-                        &ecs.PortMapping{ // Required
+                        &ecs.PortMapping{
                             ContainerPort: aws.Int64(7070),
                             HostPort:      aws.Int64(7070),
                         },
-                        &ecs.PortMapping{ // Required
+                        &ecs.PortMapping{
                             ContainerPort: aws.Int64(8080),
                             HostPort:      aws.Int64(8080),
                         },
-                        &ecs.PortMapping{ // Required
+                        &ecs.PortMapping{
                             ContainerPort: aws.Int64(9090),
                             HostPort:      aws.Int64(9090),
                         },
@@ -162,7 +162,7 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	    },
 	    Family:      aws.String(d.Caps.Name),
 	    Volumes: []*ecs.Volume{
-	        &ecs.Volume{ // Required
+	        &ecs.Volume{
 	            Host: &ecs.HostVolumeProperties{
 	                SourcePath: aws.String("/dev/shm"),
 	            },
