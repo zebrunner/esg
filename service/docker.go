@@ -27,6 +27,7 @@ import (
 
         "github.com/aws/aws-sdk-go/aws"
         "github.com/aws/aws-sdk-go/service/ecs"
+        "github.com/aws/aws-sdk-go/service/ec2"
         awsSession "github.com/aws/aws-sdk-go/aws/session"
 )
 
@@ -116,8 +117,10 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	//create ECS task definition based on capabilities
 	//TODO: parametrize region
 	svc := ecs.New(awsSession.New(&aws.Config{Region: aws.String("us-east-1")}))
+	svcEc2 := ec2.New(awsSession.New(&aws.Config{Region: aws.String("us-east-1")}))
 
 	//TODO: support GPU reservation: The number of GPU units to reserve for the container. A container instance with GPU support has 1 GPU unit for every GPU.
+        log.Printf("[%d] [CREATING_ECS_TASK_DEFINITION] [%s]", requestId, imageUrl)
 	taskDefinitionInput := &ecs.RegisterTaskDefinitionInput{
             NetworkMode: aws.String("bridge"),
 	    ContainerDefinitions: []*ecs.ContainerDefinition{
@@ -179,6 +182,14 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
             log.Printf("[%d] [TASK_DEFINITION] [%s]", requestId, resultTaskDefinition)
 	}
 
+	taskDefinition := resultTaskDefinition.TaskDefinition
+        log.Printf("[%d] [TASK_DEFINITION] [%s]", requestId, taskDefinition)
+
+        taskStartTime := time.Now()
+	log.Printf("[%d] [STARTING_TASK] [%s] [%s]", requestId, imageUrl, taskStartTime)
+
+
+	// TODO: remove old docker related code later
 	cl := d.Client
 	env := getEnv(d.ServiceBase, d.Caps)
 	container, err := cl.ContainerCreate(ctx,
@@ -197,34 +208,133 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 
 	log.Printf("[%d] [CONTAINER] [%s]", requestId, container)
 
-	browserContainerStartTime := time.Now()
 	browserContainerId := container.ID //TODO: get Container Runtime ID
 	videoContainerId := ""
-	log.Printf("[%d] [STARTING_CONTAINER] [%s] [%s]", requestId, image, browserContainerId)
-
 
         family := *resultTaskDefinition.TaskDefinition.Family
 	revision := *resultTaskDefinition.TaskDefinition.Revision
-        log.Printf("[%d] [REVISION] [%d]", requestId, revision)
+
+	// Pass a context with a timeout to tell a blocking function that it
+	// should abandon its work after the timeout elapses.
+	//TODO: parametrize provision timeout
+	provisionTimeout := 60 * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), provisionTimeout)
+	defer cancel()
+
+	select {
+	case <-time.After(20 * time.Second):
+		fmt.Println("overslept")
+	case <-ctx.Done():
+		fmt.Println(ctx.Err()) // prints "context deadline exceeded"
+	}
+
+
 	//TODO: parametrize cluster name 
 	runTaskInput := &ecs.RunTaskInput{
-	    Cluster:        aws.String("demo-news-blog-scale"),
+	    Cluster:        aws.String("executor-cluster"),
 	    TaskDefinition: aws.String(family + ":" + strconv.FormatInt(revision, 10)),
 	}
 
-	resultRunTask, err := svc.RunTask(runTaskInput)
+//	resultRunTask, err := svc.RunTask(runTaskInput)
+        resultRunTask, err := svc.RunTaskWithContext(ctx, runTaskInput)
         if err != nil {
+            //TODO: test negative scenario when tasj can't be started during provisioning timeout
             return nil, fmt.Errorf("Unable to run task: %v", err)
         } else {
             log.Printf("[%d] [TASK_RUN] [%s]", requestId, resultRunTask)
         }
+
+        // split arn to get id values
+        // [TASK_ARN] [arn:aws:ecs:us-east-1:659932254483:task/executor-cluster/35bab349ee55458e9182b84b999dbd1c]
+        // [TASK_CONTAINER_INSTANCE] [arn:aws:ecs:us-east-1:659932254483:container-instance/executor-cluster/bf3d12885ef243f2961e88d72baa0f77]
+	taskArn := *resultRunTask.Tasks[0].TaskArn
+	containerInstanceArn := *resultRunTask.Tasks[0].ContainerInstanceArn
+	log.Printf("[%d] [TASK_ARN] [%s]", requestId, taskArn)
+        taskId := strings.Split(taskArn, "/")[2]
+        log.Printf("[%d] [TASK_ID] [%s]", requestId, taskId)
+
+	log.Printf("[%d] [TASK_CONTAINER_INSTANCE] [%s]", requestId, containerInstanceArn)
+        containerInstanceId := strings.Split(containerInstanceArn, "/")[2]
+        log.Printf("[%d] [TASK_CONTAINER_INSTANCE_ID] [%s]", requestId, containerInstanceId)
+
+
+	time.Sleep(5 * time.Second) //TODO: organize valid waiter using startup-timeout until task is RUNNING
+	// TASK DESCRIBE contains information about actual host/port bindings. Potentially we could user taskId to setup stateless mapping
+/*
+            {
+              BindIP: "0.0.0.0",
+              ContainerPort: 4444,
+              HostPort: 4444,
+              Protocol: "tcp"
+            },
+*/
+        describeTaskInput := &ecs.DescribeTasksInput{
+           Cluster:           aws.String("executor-cluster"),
+            Tasks: []*string{
+                aws.String(taskId),
+            },
+        }
+        resultDescribeTask, err := svc.DescribeTasks(describeTaskInput)
+        if err != nil {
+            return nil, fmt.Errorf("Unable to get task details: %v", err)
+        } else {
+           log.Printf("[%d] [TASK_DESCRIBE] [%s]", requestId, resultDescribeTask)
+        }
+
+	containerInstanceInput := &ecs.DescribeContainerInstancesInput{
+	    Cluster: aws.String("executor-cluster"),
+	    ContainerInstances: []*string{
+	        aws.String(containerInstanceId),
+	    },
+	}
+	resultContainerInstance, err := svc.DescribeContainerInstances(containerInstanceInput)
+        if err != nil {
+            return nil, fmt.Errorf("Unable to get container instance details: %v", err)
+        } else {
+           log.Printf("[%d] [TASK_CONTAINER_INSTANCE_DETAILS] [%s]", requestId, resultContainerInstance)
+        }
+
+	//TODO: verify that returned number of instances is 1!
+        instanceId := *resultContainerInstance.ContainerInstances[0].Ec2InstanceId
+        log.Printf("[%d] [INSTANCE_ID] [%s]", requestId, instanceId)
+
+
+	instanceInput := &ec2.DescribeInstancesInput{
+	    InstanceIds: []*string{
+	        aws.String(instanceId),
+	    },
+	}
+	resultInstance, err := svcEc2.DescribeInstances(instanceInput)
+        if err != nil {
+            return nil, fmt.Errorf("Unable to get instance details: %v", err)
+        } else {
+           log.Printf("[%d] [TASK_INSTANCE_DETAILS] [%s]", requestId, resultInstance)
+        }
+	privateIpAddress := *resultInstance.Reservations[0].Instances[0].PrivateIpAddress
+	log.Printf("[%d] [INSTANCE_PRIVATE_IP] [%s]", requestId, privateIpAddress)
+        publicIpAddress := *resultInstance.Reservations[0].Instances[0].PublicIpAddress
+        log.Printf("[%d] [INSTANCE_PUBLIC_IP] [%s]", requestId, publicIpAddress)
+
+
+//	taskDefinitionName := family + ":" + strconv.FormatInt(revision, 10)
+//	describeTaskDefinitionInput := &ecs.DescribeTaskDefinitionInput{
+//	    TaskDefinition: aws.String(taskDefinitionName),
+//	}
+
+//	resultDescribeTaskDefinition, err := svc.DescribeTaskDefinition(describeTaskDefinitionInput)
+//	if err != nil {
+//            return nil, fmt.Errorf("Unable to run task: %v", err)
+//	} else {
+//           log.Printf("[%d] [TASK_DESCRIBE] [%s]", requestId, resultDescribeTaskDefinition)
+//	}
 
 	err = cl.ContainerStart(ctx, browserContainerId, types.ContainerStartOptions{})
 	if err != nil {
 		removeContainer(ctx, cl, requestId, browserContainerId)
 		return nil, fmt.Errorf("start container: %v", err)
 	}
-	log.Printf("[%d] [CONTAINER_STARTED] [%s] [%s] [%.2fs]", requestId, image, browserContainerId, util.SecondsSince(browserContainerStartTime))
+	//TODO: remove old logic
+//	log.Printf("[%d] [CONTAINER_STARTED] [%s] [%s] [%.2fs]", requestId, image, browserContainerId, util.SecondsSince(browserContainerStartTime))
 
 	if len(d.AdditionalNetworks) > 0 {
 		for _, networkName := range d.AdditionalNetworks {
@@ -235,7 +345,6 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 		}
 	}
 
-	//TODO: inspect fargate container status and remove task in case of any problem
 	stat, err := cl.ContainerInspect(ctx, browserContainerId)
 	if err != nil {
 		removeContainer(ctx, cl, requestId, browserContainerId)
@@ -255,7 +364,22 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 		ports.Clipboard:  clipboard,
 	}
 
-	//TODO: get fargate task public or private IP to init hostPort
+	// describe running task to get private ip host and ports
+	//TODO: parse valid task id usnig above task definition and/or task run
+/*
+	input := &ecs.ListContainerInstancesInput{
+	    Cluster: aws.String("executor-cluster"),
+	}
+
+	resultContainerInstances, err := svc.ListContainerInstances(input)
+	if err != nil {
+            return nil, fmt.Errorf("Unable to list containers: %v", err)
+	} else {
+           log.Printf("[%d] [CONTAINERS_LIST] [%s]", requestId, resultContainerInstances)
+	}
+*/
+
+
 	// Important getHostPort method has hardcoded ip address as of now
 	hostPort := getHostPort(d.Environment, servicePort, d.Caps, stat, pc)
         log.Printf("[%d] [HOST_PORT] [%s]", requestId, hostPort)
