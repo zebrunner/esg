@@ -238,7 +238,6 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	    TaskDefinition: aws.String(family + ":" + strconv.FormatInt(revision, 10)),
 	}
 
-//	resultRunTask, err := svc.RunTask(runTaskInput)
         resultRunTask, err := svc.RunTaskWithContext(ctx, runTaskInput)
         if err != nil {
             //TODO: test negative scenario when tasj can't be started during provisioning timeout
@@ -395,7 +394,22 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 		Url: u,
 		HostPort: hostPort,
 		Cancel: func() {
-			//TODO: implement cancel block
+		        stopTaskInput := &ecs.StopTaskInput{
+		            Cluster: aws.String("executor-cluster"),
+                            Reason:  aws.String("Cancel"),
+		            Task:    aws.String(taskArn),
+		        }
+
+		        resultStopTask, err := svc.StopTask(stopTaskInput)
+		        if err != nil {
+		            fmt.Errorf("Unable to stop task: %v", err)
+			    log.Printf("[%d] [FAILED_TASK_STOP] [%s] [Failed to stop task: %v]", requestId, taskId, err)
+			    return
+		        } else {
+		            log.Printf("[%d] [TASK_STOP] [%s]", requestId, resultStopTask)
+		        }
+
+			//TODO: review old functionality and do extra cleanup if needed
 /*
 			if videoContainerId != "" {
 				stopVideoContainer(ctx, cl, requestId, videoContainerId, d.Environment)
@@ -546,7 +560,8 @@ func getMemory(caps session.Caps) (int64, int64) {
         if caps.Memory != "" {
                 capsMemory = caps.Memory
         }
-        hardMemory, err := strconv.Atoi(capsMemory)
+//        hardMemory, err := strconv.Atoi(capsMemory)
+	hardMemory, err := strconv.ParseInt(capsMemory, 10, 64)
         if err != nil {
             fmt.Println(capsMemory, "is not an integer.")
         }
@@ -556,12 +571,14 @@ func getMemory(caps session.Caps) (int64, int64) {
                 capsMemoryReservation = caps.MemoryReservation
         }
 
-	softMemory, err := strconv.Atoi(capsMemoryReservation)
+//	softMemory, err := strconv.Atoi(capsMemoryReservation)
+        softMemory, err := strconv.ParseInt(capsMemoryReservation, 10, 64)
 	if err != nil {
 	    fmt.Println(capsMemoryReservation, "is not an integer.")
 	}
 
         return int64(hardMemory), int64(softMemory)
+//        return int64(capsMemory), int64(capsMemoryReservation)
 }
 
 func getCpu(caps session.Caps) (int64) {
