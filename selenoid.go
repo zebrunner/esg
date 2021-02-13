@@ -286,7 +286,6 @@ func create(w http.ResponseWriter, r *http.Request) {
 		Quota:     user,
 		Caps:      caps,
 		URL:       u,
-		Container: startedService.Container,
 		HostPort:  startedService.HostPort,
 		Timeout:   sessionTimeout,
 		TimeoutCh: onTimeout(sessionTimeout, func() {

@@ -16,13 +16,13 @@ import (
 	"github.com/docker/docker/api/types"
 	ctr "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
-	"github.com/docker/docker/api/types/strslice"
+//	"github.com/docker/docker/api/types/strslice"
 	"github.com/docker/docker/client"
-	"github.com/docker/docker/pkg/stdcopy"
+//	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
 
 	"os"
-	"path/filepath"
+//	"path/filepath"
 	"strings"
 
         "github.com/aws/aws-sdk-go/aws"
@@ -76,9 +76,9 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	vnc := portConfig.VNCPort
 	devtools := portConfig.DevtoolsPort
 	requestId := d.RequestId
-	image := d.Service.Image
+//	image := d.Service.Image
 	ctx := context.Background()
-	log.Printf("[%d] [CREATING_CONTAINER] [%s]", requestId, image)
+/*	log.Printf("[%d] [CREATING_CONTAINER] [%s]", requestId, image)
 	hostConfig := ctr.HostConfig{
 		Binds:        d.Service.Volumes,
 		AutoRemove:   true,
@@ -108,6 +108,7 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	if len(d.Service.Sysctl) > 0 {
 		hostConfig.Sysctls = d.Service.Sysctl
 	}
+*/
 
         hardMemory, softMemory := getMemory(d.Caps)
         cpu := getCpu(d.Caps)
@@ -190,6 +191,7 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 
 
 	// TODO: remove old docker related code later
+/*
 	cl := d.Client
 	env := getEnv(d.ServiceBase, d.Caps)
 	container, err := cl.ContainerCreate(ctx,
@@ -210,6 +212,7 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 
 	browserContainerId := container.ID //TODO: get Container Runtime ID
 	videoContainerId := ""
+*/
 
         family := *resultTaskDefinition.TaskDefinition.Family
 	revision := *resultTaskDefinition.TaskDefinition.Revision
@@ -316,25 +319,13 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
         log.Printf("[%d] [INSTANCE_PUBLIC_IP] [%s]", requestId, publicIpAddress)
 
 
-//	taskDefinitionName := family + ":" + strconv.FormatInt(revision, 10)
-//	describeTaskDefinitionInput := &ecs.DescribeTaskDefinitionInput{
-//	    TaskDefinition: aws.String(taskDefinitionName),
-//	}
-
-//	resultDescribeTaskDefinition, err := svc.DescribeTaskDefinition(describeTaskDefinitionInput)
-//	if err != nil {
-//            return nil, fmt.Errorf("Unable to run task: %v", err)
-//	} else {
-//           log.Printf("[%d] [TASK_DESCRIBE] [%s]", requestId, resultDescribeTaskDefinition)
-//	}
-
-	err = cl.ContainerStart(ctx, browserContainerId, types.ContainerStartOptions{})
+        //TODO: remove old logic
+/*	err = cl.ContainerStart(ctx, browserContainerId, types.ContainerStartOptions{})
 	if err != nil {
 		removeContainer(ctx, cl, requestId, browserContainerId)
 		return nil, fmt.Errorf("start container: %v", err)
 	}
-	//TODO: remove old logic
-//	log.Printf("[%d] [CONTAINER_STARTED] [%s] [%s] [%.2fs]", requestId, image, browserContainerId, util.SecondsSince(browserContainerStartTime))
+	log.Printf("[%d] [CONTAINER_STARTED] [%s] [%s] [%.2fs]", requestId, image, browserContainerId, util.SecondsSince(browserContainerStartTime))
 
 	if len(d.AdditionalNetworks) > 0 {
 		for _, networkName := range d.AdditionalNetworks {
@@ -355,6 +346,7 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 		removeContainer(ctx, cl, requestId, browserContainerId)
 		return nil, fmt.Errorf("no bindings available for %v", selenium)
 	}
+*/
 	servicePort := d.Service.Port
 	pc := map[string]nat.Port{
 		servicePort:      selenium,
@@ -364,29 +356,13 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 		ports.Clipboard:  clipboard,
 	}
 
-	// describe running task to get private ip host and ports
-	//TODO: parse valid task id usnig above task definition and/or task run
-/*
-	input := &ecs.ListContainerInstancesInput{
-	    Cluster: aws.String("executor-cluster"),
-	}
-
-	resultContainerInstances, err := svc.ListContainerInstances(input)
-	if err != nil {
-            return nil, fmt.Errorf("Unable to list containers: %v", err)
-	} else {
-           log.Printf("[%d] [CONTAINERS_LIST] [%s]", requestId, resultContainerInstances)
-	}
-*/
-
-
 	// Important getHostPort method has hardcoded ip address as of now
-	hostPort := getHostPort(d.Environment, servicePort, d.Caps, stat, pc)
+	hostPort := getHostPort(d.Environment, servicePort, d.Caps, privateIpAddress, pc)
         log.Printf("[%d] [HOST_PORT] [%s]", requestId, hostPort)
 
 	u := &url.URL{Scheme: "http", Host: hostPort.Selenium, Path: d.Service.Path}
         log.Printf("[%d] [CONTAINER_SERVICE_URL] [%s]", requestId, u)
-
+/*
 	//TODO: start video recorder task with appropriate container
 	if d.Video {
 		videoContainerId, err = startVideoContainer(ctx, cl, requestId, stat, d.Environment, d.ServiceBase, d.Caps)
@@ -394,8 +370,9 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 			return nil, fmt.Errorf("start video container: %v", err)
 		}
 	}
+*/
 
-	serviceStartTime := time.Now()
+/*	serviceStartTime := time.Now()
 	err = wait(u.String(), d.StartupTimeout)
 	if err != nil {
 		if videoContainerId != "" {
@@ -407,20 +384,19 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	log.Printf("[%d] [SERVICE_STARTED] [%s] [%s] [%.2fs]", requestId, image, browserContainerId, util.SecondsSince(serviceStartTime))
 	log.Printf("[%d] [PROXY_TO] [%s] [%s]", requestId, browserContainerId, u.String())
 
+
 	var publishedPortsInfo map[string]string
 	if d.Service.PublishAllPorts {
 		publishedPortsInfo = getContainerPorts(stat)
 	}
+*/
 
 	s := StartedService{
 		Url: u,
-		Container: &session.Container{
-			ID:        browserContainerId,
-			IPAddress: getContainerIP(d.Environment.Network, stat),
-			Ports:     publishedPortsInfo,
-		},
 		HostPort: hostPort,
 		Cancel: func() {
+			//TODO: implement cancel block
+/*
 			if videoContainerId != "" {
 				stopVideoContainer(ctx, cl, requestId, videoContainerId, d.Environment)
 			}
@@ -448,6 +424,7 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 					log.Printf("[%d] [FAILED_TO_COPY_LOGS] [%s] [Failed to copy data to log file %s: %v]", requestId, browserContainerId, filename, err)
 				}
 			}
+*/
 		},
 	}
 
@@ -654,27 +631,14 @@ func getLabels(service *config.Browser, caps session.Caps) map[string]string {
 	return labels
 }
 
-func getHostPort(env Environment, servicePort string, caps session.Caps, stat types.ContainerJSON, pc map[string]nat.Port) session.HostPort {
+func getHostPort(env Environment, servicePort string, caps session.Caps, taskIP string, pc map[string]nat.Port) session.HostPort {
 	fn := func(containerPort string, port nat.Port) string {
 		return ""
 	}
-	if env.IP == "" {
-		if env.InDocker {
-			containerIP := getContainerIP(env.Network, stat)
-			fn = func(containerPort string, port nat.Port) string {
-				return net.JoinHostPort(containerIP, containerPort)
-			}
-		} else {
-			fn = func(containerPort string, port nat.Port) string {
-				return net.JoinHostPort("35.170.59.24", containerPort)
-//                                return net.JoinHostPort("10.0.6.37", containerPort)
-			}
-		}
-	} else {
-		fn = func(containerPort string, port nat.Port) string {
-			return net.JoinHostPort(env.IP, stat.NetworkSettings.Ports[port][0].HostPort)
-		}
-	}
+        containerIP := taskIP
+        fn = func(containerPort string, port nat.Port) string {
+                return net.JoinHostPort(containerIP, containerPort)
+        }
 
         log.Printf("[servicePort]-[pc] [%s]-[%s]", servicePort, pc[servicePort])
         log.Printf("[ports.Fileserver]-[pc] [%s]-[%s]", ports.Fileserver, pc[ports.Fileserver])
