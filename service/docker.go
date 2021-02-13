@@ -66,17 +66,18 @@ type portConfig struct {
 
 // StartWithCancel - Starter interface implementation
 func (d *Docker) StartWithCancel() (*StartedService, error) {
+        requestId := d.RequestId
 	portConfig, err := getPortConfig(d.Service, d.Caps, d.Environment)
 	if err != nil {
 		return nil, fmt.Errorf("configuring ports: %v", err)
+	} else {
+            log.Printf("[%d] [PORT_CONFIG] [%s]", requestId, portConfig)
 	}
 	selenium := portConfig.SeleniumPort
 	fileserver := portConfig.FileserverPort
 	clipboard := portConfig.ClipboardPort
 	vnc := portConfig.VNCPort
 	devtools := portConfig.DevtoolsPort
-	requestId := d.RequestId
-//	image := d.Service.Image
 	ctx := context.Background()
 /*	log.Printf("[%d] [CREATING_CONTAINER] [%s]", requestId, image)
 	hostConfig := ctr.HostConfig{
@@ -113,7 +114,6 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
         hardMemory, softMemory := getMemory(d.Caps)
         cpu := getCpu(d.Caps)
 	imageUrl := getImage(d.Caps)
-
 
 	//create ECS task definition based on capabilities
 	//TODO: parametrize region
@@ -547,9 +547,7 @@ func getMemory(caps session.Caps) (int64, int64) {
                 capsMemory = caps.Memory
         }
         hardMemory, err := strconv.Atoi(capsMemory)
-        if err == nil {
-            fmt.Println(hardMemory)
-        } else {
+        if err != nil {
             fmt.Println(capsMemory, "is not an integer.")
         }
 
@@ -559,9 +557,7 @@ func getMemory(caps session.Caps) (int64, int64) {
         }
 
 	softMemory, err := strconv.Atoi(capsMemoryReservation)
-	if err == nil {
-	    fmt.Println(softMemory)
-	} else {
+	if err != nil {
 	    fmt.Println(capsMemoryReservation, "is not an integer.")
 	}
 
@@ -575,9 +571,7 @@ func getCpu(caps session.Caps) (int64) {
         }
 
         cpu, err := strconv.Atoi(capsCpu)
-        if err == nil {
-            fmt.Println(cpu)
-        } else {
+        if err != nil {
             fmt.Println(capsCpu, "is not an integer.")
         }
 
