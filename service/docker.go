@@ -5,7 +5,7 @@ import (
 	"fmt"
 //	"github.com/docker/go-units"
 	"log"
-	"net"
+//	"net"
 	"net/url"
 	"strconv"
 	"time"
@@ -19,7 +19,7 @@ import (
 //	"github.com/docker/docker/api/types/strslice"
 	"github.com/docker/docker/client"
 //	"github.com/docker/docker/pkg/stdcopy"
-	"github.com/docker/go-connections/nat"
+//	"github.com/docker/go-connections/nat"
 
 	"os"
 //	"path/filepath"
@@ -55,11 +55,11 @@ type Docker struct {
 }
 
 type portConfig struct {
-	SeleniumPort   nat.Port
-	FileserverPort nat.Port
-	ClipboardPort  nat.Port
-	DevtoolsPort   nat.Port
-	VNCPort        nat.Port
+	SeleniumPort   int64
+	FileserverPort int64
+	ClipboardPort  int64
+	DevtoolsPort   int64
+	VNCPort        int64
 }
 
 // StartWithCancel - Starter interface implementation
@@ -71,11 +71,6 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	} else {
             log.Printf("[%d] [PORT_CONFIG] [%s]", requestId, portConfig)
 	}
-	selenium := portConfig.SeleniumPort
-	fileserver := portConfig.FileserverPort
-	clipboard := portConfig.ClipboardPort
-	vnc := portConfig.VNCPort
-	devtools := portConfig.DevtoolsPort
 	ctx := context.Background()
 /*	log.Printf("[%d] [CREATING_CONTAINER] [%s]", requestId, image)
 	hostConfig := ctr.HostConfig{
@@ -141,23 +136,23 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	            PortMappings: []*ecs.PortMapping{
 			&ecs.PortMapping{
 			    ContainerPort: aws.Int64(4444),
-	                    HostPort:      aws.Int64(4444),
+	                    HostPort:      aws.Int64(portConfig.SeleniumPort),
 	                },
                         &ecs.PortMapping{
                             ContainerPort: aws.Int64(5900),
-                            HostPort:      aws.Int64(5900),
+                            HostPort:      aws.Int64(portConfig.VNCPort),
                         },
                         &ecs.PortMapping{
                             ContainerPort: aws.Int64(7070),
-                            HostPort:      aws.Int64(7070),
+                            HostPort:      aws.Int64(portConfig.DevtoolsPort),
                         },
                         &ecs.PortMapping{
                             ContainerPort: aws.Int64(8080),
-                            HostPort:      aws.Int64(8080),
+                            HostPort:      aws.Int64(portConfig.FileserverPort),
                         },
                         &ecs.PortMapping{
                             ContainerPort: aws.Int64(9090),
-                            HostPort:      aws.Int64(9090),
+                            HostPort:      aws.Int64(portConfig.ClipboardPort),
                         },
 	            },
 	        },
@@ -218,15 +213,13 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	// Pass a context with a timeout to tell a blocking function that it
 	// should abandon its work after the timeout elapses.
 	//TODO: parametrize provision timeout
-	provisionTimeout := 180 * time.Second
+	provisionTimeout := 60 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), provisionTimeout)
 	defer cancel()
 
 	select {
-	case <-time.After(60 * time.Second):
+	case <-time.After(10 * time.Second):
 		fmt.Println("overslept 60...")
-        case <-time.After(120 * time.Second):
-                fmt.Println("overslept 120...")
 	case <-ctx.Done():
 		fmt.Println(ctx.Err()) // prints "context deadline exceeded"
 	}
@@ -346,16 +339,9 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 		return nil, fmt.Errorf("no bindings available for %v", selenium)
 	}
 */
-	servicePort := d.Service.Port
-	pc := map[string]nat.Port{
-		servicePort:      selenium,
-		ports.VNC:        vnc,
-		ports.Devtools:   devtools,
-		ports.Fileserver: fileserver,
-		ports.Clipboard:  clipboard,
-	}
 
-	hostPort := getHostPort(d.Environment, servicePort, d.Caps, privateIpAddress, pc)
+//	servicePort := d.Service.Port
+	hostPort := getHostPort(d.Caps, privateIpAddress, portConfig)
         log.Printf("[%d] [HOST_PORT] [%s]", requestId, hostPort)
 
 	u := &url.URL{Scheme: "http", Host: hostPort.Selenium, Path: d.Service.Path}
@@ -446,41 +432,13 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 }
 
 func getPortConfig(service *config.Browser, caps session.Caps, env Environment) (*portConfig, error) {
-	selenium, err := nat.NewPort("tcp", service.Port)
-	if err != nil {
-		return nil, fmt.Errorf("new selenium port: %v", err)
-	}
-        log.Printf("[selenium port] [%s]", selenium)
-	fileserver, err := nat.NewPort("tcp", ports.Fileserver)
-	if err != nil {
-		return nil, fmt.Errorf("new fileserver port: %v", err)
-	}
-        log.Printf("[tcp port] [%s]", fileserver)
-	clipboard, err := nat.NewPort("tcp", ports.Clipboard)
-	if err != nil {
-		return nil, fmt.Errorf("new clipboard port: %v", err)
-	}
-        log.Printf("[clipboard port] [%s]", clipboard)
-	var vnc nat.Port
-	if caps.VNC {
-		vnc, err = nat.NewPort("tcp", ports.VNC)
-		if err != nil {
-			return nil, fmt.Errorf("new vnc port: %v", err)
-		}
-	        log.Printf("[vnc port] [%s]", vnc)
-	}
-	devtools, err := nat.NewPort("tcp", ports.Devtools)
-	if err != nil {
-		return nil, fmt.Errorf("new devtools port: %v", err)
-	}
-        log.Printf("[devtools port] [%s]", devtools)
-
+	//TODO: review numbre of arguments
 	return &portConfig{
-		SeleniumPort:   selenium,
-		FileserverPort: fileserver,
-		ClipboardPort:  clipboard,
-		VNCPort:        vnc,
-		DevtoolsPort:   devtools}, nil
+		SeleniumPort:   1025,
+		FileserverPort: 1026,
+		ClipboardPort:  1027,
+		VNCPort:        1028,
+		DevtoolsPort:   1029}, nil
 }
 
 const (
@@ -631,30 +589,24 @@ func getLabels(service *config.Browser, caps session.Caps) map[string]string {
 	return labels
 }
 
-func getHostPort(env Environment, servicePort string, caps session.Caps, taskIP string, pc map[string]nat.Port) session.HostPort {
-	fn := func(containerPort string, port nat.Port) string {
+func getHostPort(caps session.Caps, taskIP string, pc *portConfig) session.HostPort {
+	fn := func(containerPort int64) string {
 		return ""
 	}
         containerIP := taskIP
-        fn = func(containerPort string, port nat.Port) string {
-                return net.JoinHostPort(containerIP, containerPort)
+        fn = func(containerPort int64) string {
+                return containerIP + ":" + strconv.FormatInt(containerPort, 10)
         }
 
-        log.Printf("[servicePort]-[pc] [%s]-[%s]", servicePort, pc[servicePort])
-        log.Printf("[ports.Fileserver]-[pc] [%s]-[%s]", ports.Fileserver, pc[ports.Fileserver])
-        log.Printf("[ports.Clipboard]-[pc] [%s]-[%s]", ports.Clipboard, pc[ports.Clipboard])
-        log.Printf("[ports.Devtools]-[pc] [%s]-[%s]", ports.Devtools, pc[ports.Devtools])
-
 	hp := session.HostPort{
-		Selenium:   fn(servicePort, pc[servicePort]),
-		Fileserver: fn(ports.Fileserver, pc[ports.Fileserver]),
-		Clipboard:  fn(ports.Clipboard, pc[ports.Clipboard]),
-		Devtools:   fn(ports.Devtools, pc[ports.Devtools]),
+		Selenium:   fn(pc.SeleniumPort),
+		Fileserver: fn(pc.FileserverPort),
+		Clipboard:  fn(pc.ClipboardPort),
+		Devtools:   fn(pc.DevtoolsPort),
 	}
 
 	if caps.VNC {
-		hp.VNC = fn(ports.VNC, pc[ports.VNC])
-                log.Printf("[ports.VNC]-[pc] [%s]-[%s]", ports.VNC, pc[ports.VNC])
+		hp.VNC = fn(pc.VNCPort)
 	}
 
 	return hp
