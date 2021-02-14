@@ -78,12 +78,10 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	hostConfig := ctr.HostConfig{
 		Binds:        d.Service.Volumes,
 		AutoRemove:   true,
-		PortBindings: portConfig.PortBindings,
 		LogConfig:    getLogConfig(*d.LogConfig, d.Caps),
 		NetworkMode:  ctr.NetworkMode(d.Network),
 		Tmpfs:        d.Service.Tmpfs,
 		ShmSize:      getShmSize(d.Service),
-		Privileged:   d.Privileged,
 		ExtraHosts: getExtraHosts(d.Service, d.Caps),
 	}
 
@@ -105,14 +103,13 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
         cpu := getCpu(d.Caps)
 	imageUrl := getImage(d.Caps)
 
+	taskDefFamily := d.Caps.Name + "-" + strconv.Itoa(int(time.Now().UnixNano()))
+	log.Printf("[%d] [task definition family] [%s]", requestId, taskDefFamily)
+
 	//create ECS task definition based on capabilities
 	//TODO: parametrize region
 	svc := ecs.New(awsSession.New(&aws.Config{Region: aws.String("us-east-1")}))
 	svcEc2 := ec2.New(awsSession.New(&aws.Config{Region: aws.String("us-east-1")}))
-
-        //TODO: handle multi-threading failure:
-        // Unable to create task definition: ClientException: Too many concurrent attempts to create a new revision of the specified family.
-
 
 	//TODO: support GPU reservation: The number of GPU units to reserve for the container. A container instance with GPU support has 1 GPU unit for every GPU.
         log.Printf("[%d] [CREATING_ECS_TASK_DEFINITION] [%s]", requestId, imageUrl)
@@ -158,7 +155,7 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	            },
 	        },
 	    },
-	    Family:      aws.String(d.Caps.Name),
+	    Family:      aws.String(taskDefFamily),
 	    Volumes: []*ecs.Volume{
 	        &ecs.Volume{
 	            Host: &ecs.HostVolumeProperties{
@@ -366,11 +363,25 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 		        resultStopTask, err := svc.StopTask(stopTaskInput)
 		        if err != nil {
 		            fmt.Errorf("Unable to stop task: %v", err)
-			    log.Printf("[%d] [FAILED_TASK_STOP] [%s] [Failed to stop task: %v]", requestId, taskId, err)
 			    return
 		        } else {
 		            log.Printf("[%d] [TASK_STOP] [%s]", requestId, resultStopTask)
 		        }
+			taskDefinitionArn := *resultStopTask.Task.TaskDefinitionArn
+			log.Printf("[%d] [TASK_DEFINITION_ARN] [%s]", requestId, taskDefinitionArn)
+
+		        taskDeregisterInput := &ecs.DeregisterTaskDefinitionInput{
+		            TaskDefinition: aws.String(taskDefinitionArn),
+			}
+		        resultTaskDeregister, err := svc.DeregisterTaskDefinition(taskDeregisterInput)
+		        if err != nil {
+                            fmt.Errorf("Unable to deregister task: %v", err)
+		            return
+		        } else {
+		            log.Printf("[%d] [TASK_DEFINITION_DEREGISTER] [%s]", requestId, resultTaskDeregister)
+		        }
+
+			log.Printf("[%d] [FINISH_SESSION_STATUS] [%s]", requestId, "ok!")
 
 			//TODO: review old functionality and do extra cleanup if needed
 /*
