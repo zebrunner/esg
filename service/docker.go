@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 	"time"
+	"math/rand"
 
 	"github.com/aerokube/selenoid/config"
 	"github.com/aerokube/selenoid/session"
@@ -65,13 +66,14 @@ type portConfig struct {
 // StartWithCancel - Starter interface implementation
 func (d *Docker) StartWithCancel() (*StartedService, error) {
         requestId := d.RequestId
-	portConfig, err := getPortConfig(d.Service, d.Caps, d.Environment)
+        log.Printf("[%d] [d.Caps] [%s]", requestId, d.Caps)
+	portConfig, err := getPortConfig()
 	if err != nil {
 		return nil, fmt.Errorf("configuring ports: %v", err)
 	} else {
             log.Printf("[%d] [PORT_CONFIG] [%s]", requestId, portConfig)
 	}
-	ctx := context.Background()
+//	ctx := context.Background()
 /*	log.Printf("[%d] [CREATING_CONTAINER] [%s]", requestId, image)
 	hostConfig := ctr.HostConfig{
 		Binds:        d.Service.Volumes,
@@ -85,16 +87,11 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 		ExtraHosts: getExtraHosts(d.Service, d.Caps),
 	}
 
-	log.Printf("[%d] [HOST_CONFIG] [%s]", requestId, hostConfig)
         log.Printf("[%d] [d.Service] [%s]", requestId, d.Service)
-        log.Printf("[%d] [d.Caps] [%s]", requestId, d.Caps)
 
 	hostConfig.PublishAllPorts = d.Service.PublishAllPorts
 	if len(d.Caps.DNSServers) > 0 {
 		hostConfig.DNS = d.Caps.DNSServers
-	}
-	if !d.Privileged {
-		hostConfig.CapAdd = strslice.StrSlice{sysAdmin}
 	}
 	if len(d.ApplicationContainers) > 0 {
 		hostConfig.Links = d.ApplicationContainers
@@ -112,6 +109,10 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	//TODO: parametrize region
 	svc := ecs.New(awsSession.New(&aws.Config{Region: aws.String("us-east-1")}))
 	svcEc2 := ec2.New(awsSession.New(&aws.Config{Region: aws.String("us-east-1")}))
+
+        //TODO: handle multi-threading failure:
+        // Unable to create task definition: ClientException: Too many concurrent attempts to create a new revision of the specified family.
+
 
 	//TODO: support GPU reservation: The number of GPU units to reserve for the container. A container instance with GPU support has 1 GPU unit for every GPU.
         log.Printf("[%d] [CREATING_ECS_TASK_DEFINITION] [%s]", requestId, imageUrl)
@@ -183,36 +184,12 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	log.Printf("[%d] [STARTING_TASK] [%s] [%s]", requestId, imageUrl, taskStartTime)
 
 
-	// TODO: remove old docker related code later
-/*
-	cl := d.Client
-	env := getEnv(d.ServiceBase, d.Caps)
-	container, err := cl.ContainerCreate(ctx,
-		&ctr.Config{
-			Hostname:     getContainerHostname(d.Caps),
-			Image:        image.(string),
-			Env:          env,
-			ExposedPorts: portConfig.ExposedPorts,
-			Labels:       getLabels(d.Service, d.Caps),
-		},
-		&hostConfig,
-		&network.NetworkingConfig{}, "")
-	if err != nil {
-		return nil, fmt.Errorf("create container: %v", err)
-	}
-
-	log.Printf("[%d] [CONTAINER] [%s]", requestId, container)
-
-	browserContainerId := container.ID //TODO: get Container Runtime ID
-	videoContainerId := ""
-*/
-
         family := *resultTaskDefinition.TaskDefinition.Family
 	revision := *resultTaskDefinition.TaskDefinition.Revision
 
-	// Pass a context with a timeout to tell a blocking function that it
-	// should abandon its work after the timeout elapses.
+	// Pass a context with a timeout to tell a blocking function that it should abandon its work after the timeout elapses.
 	//TODO: parametrize provision timeout
+/*
 	provisionTimeout := 60 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), provisionTimeout)
 	defer cancel()
@@ -224,14 +201,15 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 		fmt.Println(ctx.Err()) // prints "context deadline exceeded"
 	}
 
-
+*/
 	//TODO: parametrize cluster name 
 	runTaskInput := &ecs.RunTaskInput{
 	    Cluster:        aws.String("executor-cluster"),
 	    TaskDefinition: aws.String(family + ":" + strconv.FormatInt(revision, 10)),
 	}
 
-        resultRunTask, err := svc.RunTaskWithContext(ctx, runTaskInput)
+//        resultRunTask, err := svc.RunTaskWithContext(ctx, runTaskInput)
+        resultRunTask, err := svc.RunTask(runTaskInput)
         if err != nil {
             //TODO: test negative scenario when task can't be started during provisioning timeout
             return nil, fmt.Errorf("Unable to run task: %v", err)
@@ -285,8 +263,8 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	resultContainerInstance, err := svc.DescribeContainerInstances(containerInstanceInput)
         if err != nil {
             return nil, fmt.Errorf("Unable to get container instance details: %v", err)
-        } else {
-           log.Printf("[%d] [TASK_CONTAINER_INSTANCE_DETAILS] [%s]", requestId, resultContainerInstance)
+//        } else {
+//           log.Printf("[%d] [TASK_CONTAINER_INSTANCE_DETAILS] [%s]", requestId, resultContainerInstance)
         }
 
 	//TODO: verify that returned number of instances is 1!
@@ -431,14 +409,19 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	return &s, nil
 }
 
-func getPortConfig(service *config.Browser, caps session.Caps, env Environment) (*portConfig, error) {
-	//TODO: review numbre of arguments
+func getPortConfig() (*portConfig, error) {
+	//TODO: implement unique ports generation maybe as external service/lambda to support stateless ecs-docker service
+	selelinumPort := rand.Int63n(64511) + 1025
+        fileserverPort := rand.Int63n(64511) + 1025
+        clipboardPort := rand.Int63n(64511) + 1025
+        vncPort := rand.Int63n(64511) + 1025
+        devtoolsPort := rand.Int63n(64511) + 1025
 	return &portConfig{
-		SeleniumPort:   1025,
-		FileserverPort: 1026,
-		ClipboardPort:  1027,
-		VNCPort:        1028,
-		DevtoolsPort:   1029}, nil
+		SeleniumPort:   selelinumPort,
+		FileserverPort: fileserverPort,
+		ClipboardPort:  clipboardPort,
+		VNCPort:        vncPort,
+		DevtoolsPort:   devtoolsPort}, nil
 }
 
 const (
