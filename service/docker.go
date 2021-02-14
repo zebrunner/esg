@@ -60,8 +60,6 @@ type portConfig struct {
 	ClipboardPort  nat.Port
 	DevtoolsPort   nat.Port
 	VNCPort        nat.Port
-	PortBindings   nat.PortMap
-	ExposedPorts   map[nat.Port]struct{}
 }
 
 // StartWithCancel - Starter interface implementation
@@ -220,13 +218,15 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	// Pass a context with a timeout to tell a blocking function that it
 	// should abandon its work after the timeout elapses.
 	//TODO: parametrize provision timeout
-	provisionTimeout := 60 * time.Second
+	provisionTimeout := 180 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), provisionTimeout)
 	defer cancel()
 
 	select {
-	case <-time.After(20 * time.Second):
-		fmt.Println("overslept")
+	case <-time.After(60 * time.Second):
+		fmt.Println("overslept 60...")
+        case <-time.After(120 * time.Second):
+                fmt.Println("overslept 120...")
 	case <-ctx.Done():
 		fmt.Println(ctx.Err()) // prints "context deadline exceeded"
 	}
@@ -240,7 +240,7 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 
         resultRunTask, err := svc.RunTaskWithContext(ctx, runTaskInput)
         if err != nil {
-            //TODO: test negative scenario when tasj can't be started during provisioning timeout
+            //TODO: test negative scenario when task can't be started during provisioning timeout
             return nil, fmt.Errorf("Unable to run task: %v", err)
         } else {
             log.Printf("[%d] [TASK_RUN] [%s]", requestId, resultRunTask)
@@ -355,7 +355,6 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 		ports.Clipboard:  clipboard,
 	}
 
-	// Important getHostPort method has hardcoded ip address as of now
 	hostPort := getHostPort(d.Environment, servicePort, d.Caps, privateIpAddress, pc)
         log.Printf("[%d] [HOST_PORT] [%s]", requestId, hostPort)
 
@@ -451,47 +450,37 @@ func getPortConfig(service *config.Browser, caps session.Caps, env Environment) 
 	if err != nil {
 		return nil, fmt.Errorf("new selenium port: %v", err)
 	}
+        log.Printf("[selenium port] [%s]", selenium)
 	fileserver, err := nat.NewPort("tcp", ports.Fileserver)
 	if err != nil {
 		return nil, fmt.Errorf("new fileserver port: %v", err)
 	}
+        log.Printf("[tcp port] [%s]", fileserver)
 	clipboard, err := nat.NewPort("tcp", ports.Clipboard)
 	if err != nil {
 		return nil, fmt.Errorf("new clipboard port: %v", err)
 	}
-	exposedPorts := map[nat.Port]struct{}{selenium: {}, fileserver: {}, clipboard: {}}
+        log.Printf("[clipboard port] [%s]", clipboard)
 	var vnc nat.Port
 	if caps.VNC {
 		vnc, err = nat.NewPort("tcp", ports.VNC)
 		if err != nil {
 			return nil, fmt.Errorf("new vnc port: %v", err)
 		}
-		exposedPorts[vnc] = struct{}{}
+	        log.Printf("[vnc port] [%s]", vnc)
 	}
 	devtools, err := nat.NewPort("tcp", ports.Devtools)
 	if err != nil {
 		return nil, fmt.Errorf("new devtools port: %v", err)
 	}
-	exposedPorts[devtools] = struct{}{}
+        log.Printf("[devtools port] [%s]", devtools)
 
-	portBindings := nat.PortMap{}
-	if env.IP != "" || !env.InDocker {
-		portBindings[selenium] = []nat.PortBinding{{HostIP: "0.0.0.0"}}
-		portBindings[fileserver] = []nat.PortBinding{{HostIP: "0.0.0.0"}}
-		portBindings[clipboard] = []nat.PortBinding{{HostIP: "0.0.0.0"}}
-		portBindings[devtools] = []nat.PortBinding{{HostIP: "0.0.0.0"}}
-		if caps.VNC {
-			portBindings[vnc] = []nat.PortBinding{{HostIP: "0.0.0.0"}}
-		}
-	}
 	return &portConfig{
 		SeleniumPort:   selenium,
 		FileserverPort: fileserver,
 		ClipboardPort:  clipboard,
 		VNCPort:        vnc,
-		DevtoolsPort:   devtools,
-		PortBindings:   portBindings,
-		ExposedPorts:   exposedPorts}, nil
+		DevtoolsPort:   devtools}, nil
 }
 
 const (
@@ -669,19 +658,6 @@ func getHostPort(env Environment, servicePort string, caps session.Caps, taskIP 
 	}
 
 	return hp
-}
-
-func getContainerPorts(stat types.ContainerJSON) map[string]string {
-	ns := stat.NetworkSettings
-
-	var exposedPorts = make(map[string]string)
-
-	if len(ns.Ports) > 0 {
-		for port, portBindings := range ns.Ports {
-			exposedPorts[port.Port()] = portBindings[0].HostPort
-		}
-	}
-	return exposedPorts
 }
 
 func getContainerIP(networkName string, stat types.ContainerJSON) string {
