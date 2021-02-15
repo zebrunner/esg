@@ -211,12 +211,15 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
         } else {
             log.Printf("[%d] [TASK_RUN] [%s]", requestId, resultRunTask)
         }
+
         // [TASK_ARN] [arn:aws:ecs:us-east-1:659932254483:task/executor-cluster/35bab349ee55458e9182b84b999dbd1c]
         taskArn := *resultRunTask.Tasks[0].TaskArn
         log.Printf("[%d] [TASK_ARN] [%s]", requestId, taskArn)
         taskId := strings.Split(taskArn, "/")[2]
         log.Printf("[%d] [TASK_ID] [%s]", requestId, taskId)
 
+
+        time.Sleep(1 * time.Second)
 //	time.Sleep(5 * time.Second) //TODO: organize valid waiter using startup-timeout until task is RUNNING
 	// TASK DESCRIBE contains information about actual host/port bindings. Potentially we could user taskId to setup stateless mapping
 /*
@@ -228,12 +231,6 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
             },
 */
         //TODO: wait until container starts (in response we should have valid *resultRunTask.Tasks[0].ContainerInstanceArn value
-/*        ctxTask := context.Background()
-        timeout := 300 * time.Second
-        var cancelFn func()
-                ctx, cancelFn = context.WithTimeout(ctx, timeout)
-        defer cancelFn()
-*/
         describeTaskInput := &ecs.DescribeTasksInput{
            Cluster:           aws.String("executor-cluster"),
             Tasks: []*string{
@@ -247,8 +244,6 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
             return nil, fmt.Errorf("Unable to wait until task is running: %v", err)
         }
 
-
-//        resultDescribeTask, err := svc.DescribeTasksWithContext(ctxTask, describeTaskInput)
         resultDescribeTask, err := svc.DescribeTasks(describeTaskInput)
         if err != nil {
             removeTask(ctx, requestId, taskArn)
@@ -256,7 +251,6 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
         } else {
             log.Printf("[%d] [TASK_DESCRIBE] [%s]", requestId, resultDescribeTask)
         }
-
 
         // [TASK_CONTAINER_INSTANCE] [arn:aws:ecs:us-east-1:659932254483:container-instance/executor-cluster/bf3d12885ef243f2961e88d72baa0f77]
         containerInstanceArn := *resultDescribeTask.Tasks[0].ContainerInstanceArn
