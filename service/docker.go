@@ -48,12 +48,13 @@ var ports = struct {
 
 // Docker - docker container manager
 type Docker struct {
-	ServiceBase
-	Environment
-	session.Caps
-	LogConfig *ctr.LogConfig
-	Client    *client.Client
+       ServiceBase
+       Environment
+       session.Caps
+       LogConfig *ctr.LogConfig
+       Client    *client.Client
 }
+
 
 type portConfig struct {
 	SeleniumPort   int64
@@ -73,7 +74,7 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	} else {
             log.Printf("[%d] [PORT_CONFIG] [%s]", requestId, portConfig)
 	}
-//	ctx := context.Background()
+	ctx := context.Background()
 /*	log.Printf("[%d] [CREATING_CONTAINER] [%s]", requestId, image)
 	hostConfig := ctr.HostConfig{
 		Binds:        d.Service.Volumes,
@@ -81,7 +82,6 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 		LogConfig:    getLogConfig(*d.LogConfig, d.Caps),
 		NetworkMode:  ctr.NetworkMode(d.Network),
 		Tmpfs:        d.Service.Tmpfs,
-		ShmSize:      getShmSize(d.Service),
 		ExtraHosts: getExtraHosts(d.Service, d.Caps),
 	}
 
@@ -214,6 +214,8 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
             log.Printf("[%d] [TASK_RUN] [%s]", requestId, resultRunTask)
         }
 
+	browserTaskStartTime := time.Now()
+
         // split arn to get id values
         // [TASK_ARN] [arn:aws:ecs:us-east-1:659932254483:task/executor-cluster/35bab349ee55458e9182b84b999dbd1c]
         // [TASK_CONTAINER_INSTANCE] [arn:aws:ecs:us-east-1:659932254483:container-instance/executor-cluster/bf3d12885ef243f2961e88d72baa0f77]
@@ -228,7 +230,7 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
         log.Printf("[%d] [TASK_CONTAINER_INSTANCE_ID] [%s]", requestId, containerInstanceId)
 
 
-	time.Sleep(5 * time.Second) //TODO: organize valid waiter using startup-timeout until task is RUNNING
+//	time.Sleep(5 * time.Second) //TODO: organize valid waiter using startup-timeout until task is RUNNING
 	// TASK DESCRIBE contains information about actual host/port bindings. Potentially we could user taskId to setup stateless mapping
 /*
             {
@@ -246,6 +248,7 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
         }
         resultDescribeTask, err := svc.DescribeTasks(describeTaskInput)
         if err != nil {
+	    removeTask(ctx, requestId, taskArn)
             return nil, fmt.Errorf("Unable to get task details: %v", err)
         } else {
            log.Printf("[%d] [TASK_DESCRIBE] [%s]", requestId, resultDescribeTask)
@@ -259,6 +262,7 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	}
 	resultContainerInstance, err := svc.DescribeContainerInstances(containerInstanceInput)
         if err != nil {
+	    removeTask(ctx, requestId, taskArn)
             return nil, fmt.Errorf("Unable to get container instance details: %v", err)
 //        } else {
 //           log.Printf("[%d] [TASK_CONTAINER_INSTANCE_DETAILS] [%s]", requestId, resultContainerInstance)
@@ -268,7 +272,6 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
         instanceId := *resultContainerInstance.ContainerInstances[0].Ec2InstanceId
         log.Printf("[%d] [INSTANCE_ID] [%s]", requestId, instanceId)
 
-
 	instanceInput := &ec2.DescribeInstancesInput{
 	    InstanceIds: []*string{
 	        aws.String(instanceId),
@@ -276,44 +279,17 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	}
 	resultInstance, err := svcEc2.DescribeInstances(instanceInput)
         if err != nil {
+	    removeTask(ctx, requestId, taskArn)
             return nil, fmt.Errorf("Unable to get instance details: %v", err)
-        } else {
-           log.Printf("[%d] [TASK_INSTANCE_DETAILS] [%s]", requestId, resultInstance)
+//        } else {
+//           log.Printf("[%d] [TASK_INSTANCE_DETAILS] [%s]", requestId, resultInstance)
         }
 	privateIpAddress := *resultInstance.Reservations[0].Instances[0].PrivateIpAddress
 	log.Printf("[%d] [INSTANCE_PRIVATE_IP] [%s]", requestId, privateIpAddress)
         publicIpAddress := *resultInstance.Reservations[0].Instances[0].PublicIpAddress
         log.Printf("[%d] [INSTANCE_PUBLIC_IP] [%s]", requestId, publicIpAddress)
 
-
-        //TODO: remove old logic
-/*	err = cl.ContainerStart(ctx, browserContainerId, types.ContainerStartOptions{})
-	if err != nil {
-		removeContainer(ctx, cl, requestId, browserContainerId)
-		return nil, fmt.Errorf("start container: %v", err)
-	}
-	log.Printf("[%d] [CONTAINER_STARTED] [%s] [%s] [%.2fs]", requestId, image, browserContainerId, util.SecondsSince(browserContainerStartTime))
-
-	if len(d.AdditionalNetworks) > 0 {
-		for _, networkName := range d.AdditionalNetworks {
-			err = cl.NetworkConnect(ctx, networkName, browserContainerId, nil)
-			if err != nil {
-				return nil, fmt.Errorf("failed to connect container %s to network %s: %v", browserContainerId, networkName, err)
-			}
-		}
-	}
-
-	stat, err := cl.ContainerInspect(ctx, browserContainerId)
-	if err != nil {
-		removeContainer(ctx, cl, requestId, browserContainerId)
-		return nil, fmt.Errorf("inspect container %s: %s", browserContainerId, err)
-	}
-	_, ok := stat.NetworkSettings.Ports[selenium]
-	if !ok {
-		removeContainer(ctx, cl, requestId, browserContainerId)
-		return nil, fmt.Errorf("no bindings available for %v", selenium)
-	}
-*/
+        log.Printf("[%d] [TASK_STARTED] [%s] [%s] [%.2fs]", requestId, imageUrl, taskId, util.SecondsSince(browserTaskStartTime))
 
 //	servicePort := d.Service.Port
 	hostPort := getHostPort(d.Caps, privateIpAddress, portConfig)
@@ -331,64 +307,29 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	}
 */
 
-/*	serviceStartTime := time.Now()
+	serviceStartTime := time.Now()
 	err = wait(u.String(), d.StartupTimeout)
 	if err != nil {
-		if videoContainerId != "" {
+/*		if videoContainerId != "" {
 			stopVideoContainer(ctx, cl, requestId, videoContainerId, d.Environment)
 		}
-		removeContainer(ctx, cl, requestId, browserContainerId)
+*/
+		removeTask(ctx, requestId, taskArn)
 		return nil, fmt.Errorf("wait: %v", err)
 	}
-	log.Printf("[%d] [SERVICE_STARTED] [%s] [%s] [%.2fs]", requestId, image, browserContainerId, util.SecondsSince(serviceStartTime))
-	log.Printf("[%d] [PROXY_TO] [%s] [%s]", requestId, browserContainerId, u.String())
-
-
-	var publishedPortsInfo map[string]string
-	if d.Service.PublishAllPorts {
-		publishedPortsInfo = getContainerPorts(stat)
-	}
-*/
+	log.Printf("[%d] [SERVICE_STARTED] [%s] [%s] [%.2fs]", requestId, imageUrl, taskId, util.SecondsSince(serviceStartTime))
+	log.Printf("[%d] [PROXY_TO] [%s] [%s]", requestId, taskId, u.String())
 
 	s := StartedService{
 		Url: u,
 		HostPort: hostPort,
 		Cancel: func() {
-		        stopTaskInput := &ecs.StopTaskInput{
-		            Cluster: aws.String("executor-cluster"),
-                            Reason:  aws.String("Cancel"),
-		            Task:    aws.String(taskArn),
-		        }
-
-		        resultStopTask, err := svc.StopTask(stopTaskInput)
-		        if err != nil {
-		            fmt.Errorf("Unable to stop task: %v", err)
-			    return
-		        } else {
-		            log.Printf("[%d] [TASK_STOP] [%s]", requestId, resultStopTask)
-		        }
-			taskDefinitionArn := *resultStopTask.Task.TaskDefinitionArn
-			log.Printf("[%d] [TASK_DEFINITION_ARN] [%s]", requestId, taskDefinitionArn)
-
-		        taskDeregisterInput := &ecs.DeregisterTaskDefinitionInput{
-		            TaskDefinition: aws.String(taskDefinitionArn),
-			}
-		        resultTaskDeregister, err := svc.DeregisterTaskDefinition(taskDeregisterInput)
-		        if err != nil {
-                            fmt.Errorf("Unable to deregister task: %v", err)
-		            return
-		        } else {
-		            log.Printf("[%d] [TASK_DEFINITION_DEREGISTER] [%s]", requestId, resultTaskDeregister)
-		        }
-
-			log.Printf("[%d] [FINISH_SESSION_STATUS] [%s]", requestId, "ok!")
-
+			removeTask(ctx, requestId, taskArn)
 			//TODO: review old functionality and do extra cleanup if needed
 /*
 			if videoContainerId != "" {
 				stopVideoContainer(ctx, cl, requestId, videoContainerId, d.Environment)
 			}
-			defer removeContainer(ctx, cl, requestId, browserContainerId)
 			if d.LogOutputDir != "" && (d.SaveAllLogs || d.Log) {
 				r, err := d.Client.ContainerLogs(ctx, browserContainerId, types.ContainerLogsOptions{
 					Timestamps: true,
@@ -416,7 +357,7 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 		},
 	}
 
-	log.Printf("[%d] [CONTAINER_SERVICE_DETAILS] [%s]", requestId, s)
+	log.Printf("[%d] [TASK_SERVICE_DETAILS] [%s]", requestId, s)
 	return &s, nil
 }
 
@@ -487,13 +428,6 @@ func getEnv(service ServiceBase, caps session.Caps) []string {
 	env = append(env, service.Service.Env...)
 	env = append(env, caps.Env...)
 	return env
-}
-
-func getShmSize(service *config.Browser) int64 {
-	if service.ShmSize > 0 {
-		return service.ShmSize
-	}
-	return int64(268435456)
 }
 
 func getMemory(caps session.Caps) (int64, int64) {
@@ -715,3 +649,38 @@ func removeContainer(ctx context.Context, cli *client.Client, requestId uint64, 
 	}
 	log.Printf("[%d] [CONTAINER_REMOVED] [%s]", requestId, id)
 }
+
+func removeTask(ctx context.Context, requestId uint64, taskArn string) {
+        log.Printf("[%d] [REMOVING_TASK] [%s]", requestId, taskArn)
+
+        //TODO: parametrize region
+        svc := ecs.New(awsSession.New(&aws.Config{Region: aws.String("us-east-1")}))
+
+        stopTaskInput := &ecs.StopTaskInput{
+          Cluster: aws.String("executor-cluster"),
+          Reason:  aws.String("Cancel"),
+          Task:    aws.String(taskArn),
+        }
+
+        resultStopTask, err := svc.StopTask(stopTaskInput)
+        if err != nil {
+          log.Printf("[%d] [FAILED_TO_STOP_TASK] [%s] [%v]", requestId, taskArn, err)
+          return
+        } else {
+          log.Printf("[%d] [TASK_STOPPED] [%s]", requestId, resultStopTask)
+        }
+        taskDefinitionArn := *resultStopTask.Task.TaskDefinitionArn
+        log.Printf("[%d] [TASK_DEFINITION_ARN] [%s]", requestId, taskDefinitionArn)
+
+        taskDeregisterInput := &ecs.DeregisterTaskDefinitionInput{
+          TaskDefinition: aws.String(taskDefinitionArn),
+        }
+        resultTaskDeregister, err := svc.DeregisterTaskDefinition(taskDeregisterInput)
+        if err != nil {
+          log.Printf("[%d] [FAILED_TO_DEREGISTER_TASK_DEFINITION] [%s] [%v]", requestId, taskDefinitionArn, err)
+          return
+        } else {
+          log.Printf("[%d] [TASK_DEFINITION_REMOVED] [%s]", requestId, resultTaskDeregister)
+        }
+}
+
