@@ -67,12 +67,10 @@ type portConfig struct {
 // StartWithCancel - Starter interface implementation
 func (d *Docker) StartWithCancel() (*StartedService, error) {
         requestId := d.RequestId
-        log.Printf("[%d] [d.Caps] [%s]", requestId, d.Caps)
+//        log.Printf("[%d] [d.Caps] [%s]", requestId, d.Caps)
 	portConfig, err := getPortConfig()
 	if err != nil {
 		return nil, fmt.Errorf("configuring ports: %v", err)
-	} else {
-            log.Printf("[%d] [PORT_CONFIG] [%s]", requestId, portConfig)
 	}
 	ctx := context.Background()
 /*	log.Printf("[%d] [CREATING_CONTAINER] [%s]", requestId, image)
@@ -104,12 +102,15 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	imageUrl := getImage(d.Caps)
 
 	taskDefFamily := d.Caps.Name + "-" + strconv.Itoa(int(time.Now().UnixNano()))
-	log.Printf("[%d] [task definition family] [%s]", requestId, taskDefFamily)
+//        taskDefFamily := d.Caps.Name
+	log.Printf("[%d] [TASK_DEFINITION_FAMILY] [%s]", requestId, taskDefFamily)
 
 	//create ECS task definition based on capabilities
 	//TODO: parametrize region
-	svc := ecs.New(awsSession.New(&aws.Config{Region: aws.String("us-east-1")}))
-	svcEc2 := ec2.New(awsSession.New(&aws.Config{Region: aws.String("us-east-1")}))
+//	config := &aws.Config{Region: aws.String("us-east-1"), MaxRetries: aws.Int(15)}
+//	config.WithSleepDelay(time.Sleep)
+//	svc := ecs.New(awsSession.New(config))
+	svc := ecs.New(awsSession.New(&aws.Config{Region: aws.String("us-east-1"), MaxRetries: aws.Int(10)}))
 
 	//TODO: support GPU reservation: The number of GPU units to reserve for the container. A container instance with GPU support has 1 GPU unit for every GPU.
         log.Printf("[%d] [CREATING_ECS_TASK_DEFINITION] [%s]", requestId, imageUrl)
@@ -167,15 +168,16 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	    TaskRoleArn: aws.String(""),
 	}
 
+        time.Sleep(1 * time.Second)
 	resultTaskDefinition, err := svc.RegisterTaskDefinition(taskDefinitionInput)
 	if err != nil {
             return nil, fmt.Errorf("Unable to create task definition: %v", err)
-	} else {
-            log.Printf("[%d] [TASK_DEFINITION] [%s]", requestId, resultTaskDefinition)
+//	} else {
+//            log.Printf("[%d] [TASK_DEFINITION] [%s]", requestId, resultTaskDefinition)
 	}
 
-	taskDefinition := resultTaskDefinition.TaskDefinition
-        log.Printf("[%d] [TASK_DEFINITION] [%s]", requestId, taskDefinition)
+//	taskDefinition := resultTaskDefinition.TaskDefinition
+//        log.Printf("[%d] [TASK_DEFINITION] [%s]", requestId, taskDefinition)
 
         taskStartTime := time.Now()
 	log.Printf("[%d] [STARTING_TASK] [%s] [%s]", requestId, imageUrl, taskStartTime)
@@ -208,8 +210,8 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
         resultRunTask, err := svc.RunTask(runTaskInput)
         if err != nil {
             return nil, fmt.Errorf("Unable to run task: %v", err)
-        } else {
-            log.Printf("[%d] [TASK_RUN] [%s]", requestId, resultRunTask)
+//        } else {
+//            log.Printf("[%d] [TASK_RUN] [%s]", requestId, resultRunTask)
         }
 
         // [TASK_ARN] [arn:aws:ecs:us-east-1:659932254483:task/executor-cluster/35bab349ee55458e9182b84b999dbd1c]
@@ -237,7 +239,6 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
                 aws.String(taskId),
             },
         }
-
 	err = svc.WaitUntilTasksRunning(describeTaskInput)
         if err != nil {
             removeTask(ctx, requestId, taskArn)
@@ -248,8 +249,8 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
         if err != nil {
             removeTask(ctx, requestId, taskArn)
             return nil, fmt.Errorf("Unable to describe task: %v", err)
-        } else {
-            log.Printf("[%d] [TASK_DESCRIBE] [%s]", requestId, resultDescribeTask)
+//        } else {
+//            log.Printf("[%d] [TASK_DESCRIBE] [%s]", requestId, resultDescribeTask)
         }
 
         // [TASK_CONTAINER_INSTANCE] [arn:aws:ecs:us-east-1:659932254483:container-instance/executor-cluster/bf3d12885ef243f2961e88d72baa0f77]
@@ -283,6 +284,8 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	        aws.String(instanceId),
 	    },
 	}
+
+	svcEc2 := ec2.New(awsSession.New(&aws.Config{Region: aws.String("us-east-1")}))
 	resultInstance, err := svcEc2.DescribeInstances(instanceInput)
         if err != nil {
 	    removeTask(ctx, requestId, taskArn)
@@ -673,11 +676,8 @@ func removeTask(ctx context.Context, requestId uint64, taskArn string) {
         if err != nil {
           log.Printf("[%d] [FAILED_TO_STOP_TASK] [%s] [%v]", requestId, taskArn, err)
           return
-        } else {
-          log.Printf("[%d] [TASK_STOPPED] [%s]", requestId, resultStopTask)
         }
         taskDefinitionArn := *resultStopTask.Task.TaskDefinitionArn
-        log.Printf("[%d] [TASK_DEFINITION_ARN] [%s]", requestId, taskDefinitionArn)
 
         taskDeregisterInput := &ecs.DeregisterTaskDefinitionInput{
           TaskDefinition: aws.String(taskDefinitionArn),
@@ -687,7 +687,7 @@ func removeTask(ctx context.Context, requestId uint64, taskArn string) {
           log.Printf("[%d] [FAILED_TO_DEREGISTER_TASK_DEFINITION] [%s] [%v]", requestId, taskDefinitionArn, err)
           return
         } else {
-          log.Printf("[%d] [TASK_DEFINITION_REMOVED] [%s]", requestId, resultTaskDeregister)
+          log.Printf("[%d] [TASK_DEFINITION_REMOVED] [%s]", requestId, *resultTaskDeregister.TaskDefinition.TaskDefinitionArn)
         }
 }
 
