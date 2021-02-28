@@ -3,33 +3,26 @@ package service
 import (
 	"context"
 	"fmt"
-//	"github.com/docker/go-units"
+	"github.com/docker/go-units"
 	"log"
-//	"net"
+	"net"
 	"net/url"
 	"strconv"
 	"time"
-	"math/rand"
 
 	"github.com/aerokube/selenoid/config"
 	"github.com/aerokube/selenoid/session"
 	"github.com/aerokube/util"
-//	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types"
 	ctr "github.com/docker/docker/api/types/container"
-//	"github.com/docker/docker/api/types/network"
-//	"github.com/docker/docker/api/types/strslice"
+	"github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/api/types/strslice"
 	"github.com/docker/docker/client"
-//	"github.com/docker/docker/pkg/stdcopy"
-//	"github.com/docker/go-connections/nat"
-
-//	"os"
-//	"path/filepath"
+	"github.com/docker/docker/pkg/stdcopy"
+	"github.com/docker/go-connections/nat"
+	"os"
+	"path/filepath"
 	"strings"
-
-        "github.com/aws/aws-sdk-go/aws"
-        "github.com/aws/aws-sdk-go/service/ecs"
-        "github.com/aws/aws-sdk-go/service/ec2"
-        awsSession "github.com/aws/aws-sdk-go/aws/session"
 )
 
 const (
@@ -46,45 +39,101 @@ var ports = struct {
 	Clipboard:  "9090",
 }
 
-// Docker - docker container manager
-type Docker struct {
-       ServiceBase
-       Environment
-       session.Caps
-       LogConfig *ctr.LogConfig
-       Client    *client.Client
+// MemLimit - memory limit for Docker container
+type MemLimit int64
+
+func (limit *MemLimit) String() string {
+	return units.HumanSize(float64(*limit))
 }
 
+func (limit *MemLimit) Set(s string) error {
+	v, err := units.RAMInBytes(s)
+	if err != nil {
+		return fmt.Errorf("set memory limit: %v", err)
+	}
+	*limit = MemLimit(v)
+	return nil
+}
+
+// CpuLimit - CPU limit for Docker container
+type CpuLimit int64
+
+func (limit *CpuLimit) String() string {
+	return strconv.FormatFloat(float64(*limit/1000000000), 'f', -1, 64)
+}
+
+func (limit *CpuLimit) Set(s string) error {
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return fmt.Errorf("set cpu limit: %v", err)
+	}
+	*limit = CpuLimit(v * 1000000000)
+	return nil
+}
+
+// Docker - docker container manager
+type Docker struct {
+	ServiceBase
+	Environment
+	session.Caps
+	LogConfig *ctr.LogConfig
+	Client    *client.Client
+}
 
 type portConfig struct {
-	SeleniumPort   int64
-	FileserverPort int64
-	ClipboardPort  int64
-	DevtoolsPort   int64
-	VNCPort        int64
+	SeleniumPort   nat.Port
+	FileserverPort nat.Port
+	ClipboardPort  nat.Port
+	DevtoolsPort   nat.Port
+	VNCPort        nat.Port
+	PortBindings   nat.PortMap
+	ExposedPorts   map[nat.Port]struct{}
 }
 
 // StartWithCancel - Starter interface implementation
 func (d *Docker) StartWithCancel() (*StartedService, error) {
-        requestId := d.RequestId
-//        log.Printf("[%d] [d.Caps] [%s]", requestId, d.Caps)
-        log.Printf("[%d] [d.LogConfig] [%s]", requestId, getLogConfig(*d.LogConfig, d.Caps))
-
-	portConfig, err := getPortConfig()
+	portConfig, err := getPortConfig(d.Service, d.Caps, d.Environment)
 	if err != nil {
 		return nil, fmt.Errorf("configuring ports: %v", err)
 	}
+	mem, err := getMemory(d.Service, d.Environment)
+	if err != nil {
+		return nil, fmt.Errorf("invalid memory limit: %v", err)
+	}
+	cpu, err := getCpu(d.Service, d.Environment)
+	if err != nil {
+		return nil, fmt.Errorf("invalid CPU limit: %v", err)
+	}
+	selenium := portConfig.SeleniumPort
+	fileserver := portConfig.FileserverPort
+	clipboard := portConfig.ClipboardPort
+	vnc := portConfig.VNCPort
+	devtools := portConfig.DevtoolsPort
+	requestId := d.RequestId
+	image := d.Service.Image
 	ctx := context.Background()
-/*	log.Printf("[%d] [CREATING_CONTAINER] [%s]", requestId, image)
+	log.Printf("[%d] [CREATING_CONTAINER] [%s]", requestId, image)
 	hostConfig := ctr.HostConfig{
+		Binds:        d.Service.Volumes,
+		AutoRemove:   true,
+		PortBindings: portConfig.PortBindings,
 		LogConfig:    getLogConfig(*d.LogConfig, d.Caps),
+		NetworkMode:  ctr.NetworkMode(d.Network),
 		Tmpfs:        d.Service.Tmpfs,
+		ShmSize:      getShmSize(d.Service),
+		Privileged:   d.Privileged,
+		Resources: ctr.Resources{
+			Memory:   mem,
+			NanoCPUs: cpu,
+		},
 		ExtraHosts: getExtraHosts(d.Service, d.Caps),
 	}
-
 	hostConfig.PublishAllPorts = d.Service.PublishAllPorts
 	if len(d.Caps.DNSServers) > 0 {
 		hostConfig.DNS = d.Caps.DNSServers
+	}
+	if !d.Privileged {
+		hostConfig.CapAdd = strslice.StrSlice{sysAdmin}
 	}
 	if len(d.ApplicationContainers) > 0 {
 		hostConfig.Links = d.ApplicationContainers
@@ -92,277 +141,99 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	if len(d.Service.Sysctl) > 0 {
 		hostConfig.Sysctls = d.Service.Sysctl
 	}
-*/
-
-        hardMemory, softMemory := getMemory(d.Caps)
-        cpu := getCpu(d.Caps)
-	imageUrl := getImage(d.Caps)
-
-	// Without unique nano postfix we face with AWS limitations during multi-threading execution a lot...
-	taskDefFamily := d.Caps.Name + "-" + strconv.Itoa(int(time.Now().UnixNano()))
-	log.Printf("[%d] [TASK_DEFINITION_FAMILY] [%s]", requestId, taskDefFamily)
-
-	//create ECS task definition based on capabilities
-	//TODO: parametrize region
-//	config := &aws.Config{Region: aws.String("us-east-1"), MaxRetries: aws.Int(15)}
-//	config.WithSleepDelay(time.Sleep)
-//	svc := ecs.New(awsSession.New(config))
-	svc := ecs.New(awsSession.New(&aws.Config{Region: aws.String("us-east-1"), MaxRetries: aws.Int(10)}))
-
-	//TODO: support GPU reservation: The number of GPU units to reserve for the container. A container instance with GPU support has 1 GPU unit for every GPU.
-        log.Printf("[%d] [CREATING_ECS_TASK_DEFINITION] [%s]", requestId, imageUrl)
-	taskDefinitionInput := &ecs.RegisterTaskDefinitionInput{
-            NetworkMode: aws.String("bridge"),
-	    ContainerDefinitions: []*ecs.ContainerDefinition{
-	        {
-                    Name:      aws.String(d.Caps.Name),
-                    Image:     aws.String(imageUrl),
-	            Cpu:       aws.Int64(cpu),
-	            Essential: aws.Bool(true), //If the essential parameter of a container is marked as true, the failure of that container will stop the task.
-	            Memory:    aws.Int64(hardMemory),
-                    MemoryReservation: aws.Int64(softMemory),
-		    Privileged: aws.Bool(d.Privileged),
-		    MountPoints: []*ecs.MountPoint{
-			&ecs.MountPoint{
-			    ContainerPath: aws.String("/dev/shm"),
-	                    ReadOnly:      aws.Bool(false),
-	                    SourceVolume:  aws.String("devshm"),
-	                },
-                        &ecs.MountPoint{
-                            ContainerPath: aws.String("/tmp/zebrunner/logs"),
-                            ReadOnly:      aws.Bool(false),
-                            SourceVolume:  aws.String("data"),
-                        },
-	            },
-	            PortMappings: []*ecs.PortMapping{
-			&ecs.PortMapping{
-			    ContainerPort: aws.Int64(4444),
-	                    HostPort:      aws.Int64(portConfig.SeleniumPort),
-	                },
-                        &ecs.PortMapping{
-                            ContainerPort: aws.Int64(5900),
-                            HostPort:      aws.Int64(portConfig.VNCPort),
-                        },
-                        &ecs.PortMapping{
-                            ContainerPort: aws.Int64(7070),
-                            HostPort:      aws.Int64(portConfig.DevtoolsPort),
-                        },
-                        &ecs.PortMapping{
-                            ContainerPort: aws.Int64(8080),
-                            HostPort:      aws.Int64(portConfig.FileserverPort),
-                        },
-                        &ecs.PortMapping{
-                            ContainerPort: aws.Int64(9090),
-                            HostPort:      aws.Int64(portConfig.ClipboardPort),
-                        },
-	            },
-	        },
-                {
-                    Name:      aws.String("video-recorder"),
-                    Image:     aws.String("selenoid/video-recorder:latest-release"),
-                    Essential: aws.Bool(true), //If the essential parameter of a container is marked as true, the failure of that container will stop the task.
-                    Cpu:       aws.Int64(256),
-                    Memory:    aws.Int64(512),
-                    MemoryReservation: aws.Int64(512),
-                    Privileged: aws.Bool(d.Privileged),
-                    Links: []*string{
-                        aws.String(d.Caps.Name),
-                    },
-                    Environment: []*ecs.KeyValuePair{
-			//TODO: provide extra values from caps
-			&ecs.KeyValuePair{
-			    Name: aws.String("BROWSER_CONTAINER_NAME"),
-			    Value: aws.String(d.Caps.Name),
-			},
-                        &ecs.KeyValuePair{
-                            Name: aws.String("FILE_NAME"),
-                            Value: aws.String(d.Caps.VideoName),
-                        },
-		    },
-                    MountPoints: []*ecs.MountPoint{
-                        &ecs.MountPoint{
-                            ContainerPath: aws.String("/data"),
-                            ReadOnly:      aws.Bool(false),
-                            SourceVolume:  aws.String("data"),
-                        },
-                    },
-                    PortMappings: []*ecs.PortMapping{
-                    },
-                },
-	    },
-	    Family:      aws.String(taskDefFamily),
-	    Volumes: []*ecs.Volume{
-	        &ecs.Volume{
-	            Host: &ecs.HostVolumeProperties{
-	                SourcePath: aws.String("/dev/shm"),
-	            },
-	            Name: aws.String("devshm"),
-	        },
-                &ecs.Volume{
-                    Host: &ecs.HostVolumeProperties{
-                        SourcePath: aws.String("/tmp/zebrunner/video"),
-                    },
-                    Name: aws.String("data"),
-                },
-	    },
-	    TaskRoleArn: aws.String(""),
-	}
-
-        time.Sleep(1 * time.Second)
-	resultTaskDefinition, err := svc.RegisterTaskDefinition(taskDefinitionInput)
+	cl := d.Client
+	env := getEnv(d.ServiceBase, d.Caps)
+	container, err := cl.ContainerCreate(ctx,
+		&ctr.Config{
+			Hostname:     getContainerHostname(d.Caps),
+			Image:        image.(string),
+			Env:          env,
+			ExposedPorts: portConfig.ExposedPorts,
+			Labels:       getLabels(d.Service, d.Caps),
+		},
+		&hostConfig,
+		&network.NetworkingConfig{}, "")
 	if err != nil {
-            return nil, fmt.Errorf("Unable to create task definition: %v", err)
-//	} else {
-//            log.Printf("[%d] [TASK_DEFINITION] [%s]", requestId, resultTaskDefinition)
+		return nil, fmt.Errorf("create container: %v", err)
+	}
+	browserContainerStartTime := time.Now()
+	browserContainerId := container.ID
+	videoContainerId := ""
+	log.Printf("[%d] [STARTING_CONTAINER] [%s] [%s]", requestId, image, browserContainerId)
+	err = cl.ContainerStart(ctx, browserContainerId, types.ContainerStartOptions{})
+	if err != nil {
+		removeContainer(ctx, cl, requestId, browserContainerId)
+		return nil, fmt.Errorf("start container: %v", err)
+	}
+	log.Printf("[%d] [CONTAINER_STARTED] [%s] [%s] [%.2fs]", requestId, image, browserContainerId, util.SecondsSince(browserContainerStartTime))
+
+	if len(d.AdditionalNetworks) > 0 {
+		for _, networkName := range d.AdditionalNetworks {
+			err = cl.NetworkConnect(ctx, networkName, browserContainerId, nil)
+			if err != nil {
+				return nil, fmt.Errorf("failed to connect container %s to network %s: %v", browserContainerId, networkName, err)
+			}
+		}
 	}
 
-//	taskDefinition := resultTaskDefinition.TaskDefinition
-//        log.Printf("[%d] [TASK_DEFINITION] [%s]", requestId, taskDefinition)
-
-        taskStartTime := time.Now()
-	log.Printf("[%d] [STARTING_TASK] [%s] [%s]", requestId, imageUrl, taskStartTime)
-
-
-        family := *resultTaskDefinition.TaskDefinition.Family
-	revision := *resultTaskDefinition.TaskDefinition.Revision
-
-	// Pass a context with a timeout to tell a blocking function that it should abandon its work after the timeout elapses.
-	//TODO: parametrize provision timeout
-/*
-	provisionTimeout := 60 * time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), provisionTimeout)
-	defer cancel()
-
-	select {
-	case <-time.After(10 * time.Second):
-		fmt.Println("overslept 60...")
-	case <-ctx.Done():
-		fmt.Println(ctx.Err()) // prints "context deadline exceeded"
+	stat, err := cl.ContainerInspect(ctx, browserContainerId)
+	if err != nil {
+		removeContainer(ctx, cl, requestId, browserContainerId)
+		return nil, fmt.Errorf("inspect container %s: %s", browserContainerId, err)
 	}
-
-*/
-	//TODO: parametrize cluster name 
-	runTaskInput := &ecs.RunTaskInput{
-	    Cluster:        aws.String("executor-cluster"),
-	    TaskDefinition: aws.String(family + ":" + strconv.FormatInt(revision, 10)),
+	_, ok := stat.NetworkSettings.Ports[selenium]
+	if !ok {
+		removeContainer(ctx, cl, requestId, browserContainerId)
+		return nil, fmt.Errorf("no bindings available for %v", selenium)
 	}
-
-        resultRunTask, err := svc.RunTask(runTaskInput)
-        if err != nil {
-            return nil, fmt.Errorf("Unable to run task: %v", err)
-//        } else {
-//            log.Printf("[%d] [TASK_RUN] [%s]", requestId, resultRunTask)
-        }
-
-        // [TASK_ARN] [arn:aws:ecs:us-east-1:659932254483:task/executor-cluster/35bab349ee55458e9182b84b999dbd1c]
-        taskArn := *resultRunTask.Tasks[0].TaskArn
-        log.Printf("[%d] [TASK_ARN] [%s]", requestId, taskArn)
-        taskId := strings.Split(taskArn, "/")[2]
-        log.Printf("[%d] [TASK_ID] [%s]", requestId, taskId)
-
-
-        time.Sleep(1 * time.Second)
-//	time.Sleep(5 * time.Second) //TODO: organize valid waiter using startup-timeout until task is RUNNING
-	// TASK DESCRIBE contains information about actual host/port bindings. Potentially we could user taskId to setup stateless mapping
-/*
-            {
-              BindIP: "0.0.0.0",
-              ContainerPort: 4444,
-              HostPort: 4444,
-              Protocol: "tcp"
-            },
-*/
-        //TODO: wait until container starts (in response we should have valid *resultRunTask.Tasks[0].ContainerInstanceArn value
-        describeTaskInput := &ecs.DescribeTasksInput{
-           Cluster:           aws.String("executor-cluster"),
-            Tasks: []*string{
-                aws.String(taskId),
-            },
-        }
-	err = svc.WaitUntilTasksRunning(describeTaskInput)
-        if err != nil {
-            removeTask(ctx, requestId, taskArn)
-            return nil, fmt.Errorf("Unable to wait until task is running: %v", err)
-        }
-
-        resultDescribeTask, err := svc.DescribeTasks(describeTaskInput)
-        if err != nil {
-            removeTask(ctx, requestId, taskArn)
-            return nil, fmt.Errorf("Unable to describe task: %v", err)
-//        } else {
-//            log.Printf("[%d] [TASK_DESCRIBE] [%s]", requestId, resultDescribeTask)
-        }
-
-        // [TASK_CONTAINER_INSTANCE] [arn:aws:ecs:us-east-1:659932254483:container-instance/executor-cluster/bf3d12885ef243f2961e88d72baa0f77]
-        containerInstanceArn := *resultDescribeTask.Tasks[0].ContainerInstanceArn
-
-        log.Printf("[%d] [TASK_CONTAINER_INSTANCE] [%s]", requestId, containerInstanceArn)
-        containerInstanceId := strings.Split(containerInstanceArn, "/")[2]
-        log.Printf("[%d] [TASK_CONTAINER_INSTANCE_ID] [%s]", requestId, containerInstanceId)
-
-
-	containerInstanceInput := &ecs.DescribeContainerInstancesInput{
-	    Cluster: aws.String("executor-cluster"),
-	    ContainerInstances: []*string{
-	        aws.String(containerInstanceId),
-	    },
+	servicePort := d.Service.Port
+	pc := map[string]nat.Port{
+		servicePort:      selenium,
+		ports.VNC:        vnc,
+		ports.Devtools:   devtools,
+		ports.Fileserver: fileserver,
+		ports.Clipboard:  clipboard,
 	}
-	resultContainerInstance, err := svc.DescribeContainerInstances(containerInstanceInput)
-        if err != nil {
-	    removeTask(ctx, requestId, taskArn)
-            return nil, fmt.Errorf("Unable to get container instance details: %v", err)
-//        } else {
-//           log.Printf("[%d] [TASK_CONTAINER_INSTANCE_DETAILS] [%s]", requestId, resultContainerInstance)
-        }
-
-	//TODO: verify that returned number of instances is 1!
-        instanceId := *resultContainerInstance.ContainerInstances[0].Ec2InstanceId
-        log.Printf("[%d] [INSTANCE_ID] [%s]", requestId, instanceId)
-
-	instanceInput := &ec2.DescribeInstancesInput{
-	    InstanceIds: []*string{
-	        aws.String(instanceId),
-	    },
-	}
-
-	svcEc2 := ec2.New(awsSession.New(&aws.Config{Region: aws.String("us-east-1")}))
-	resultInstance, err := svcEc2.DescribeInstances(instanceInput)
-        if err != nil {
-	    removeTask(ctx, requestId, taskArn)
-            return nil, fmt.Errorf("Unable to get instance details: %v", err)
-//        } else {
-//           log.Printf("[%d] [TASK_INSTANCE_DETAILS] [%s]", requestId, resultInstance)
-        }
-	privateIpAddress := *resultInstance.Reservations[0].Instances[0].PrivateIpAddress
-	log.Printf("[%d] [INSTANCE_PRIVATE_IP] [%s]", requestId, privateIpAddress)
-        publicIpAddress := *resultInstance.Reservations[0].Instances[0].PublicIpAddress
-        log.Printf("[%d] [INSTANCE_PUBLIC_IP] [%s]", requestId, publicIpAddress)
-
-        browserTaskStartTime := time.Now()
-        log.Printf("[%d] [TASK_STARTED] [%s] [%s] [%.2fs]", requestId, imageUrl, taskId, util.SecondsSince(browserTaskStartTime))
-
-	hostPort := getHostPort(d.Caps, privateIpAddress, portConfig)
-        log.Printf("[%d] [HOST_PORT] [%s]", requestId, hostPort)
-
+	hostPort := getHostPort(d.Environment, servicePort, d.Caps, stat, pc)
 	u := &url.URL{Scheme: "http", Host: hostPort.Selenium, Path: d.Service.Path}
-        log.Printf("[%d] [CONTAINER_SERVICE_URL] [%s]", requestId, u)
+
+	if d.Video {
+		videoContainerId, err = startVideoContainer(ctx, cl, requestId, stat, d.Environment, d.ServiceBase, d.Caps)
+		if err != nil {
+			return nil, fmt.Errorf("start video container: %v", err)
+		}
+	}
 
 	serviceStartTime := time.Now()
 	err = wait(u.String(), d.StartupTimeout)
 	if err != nil {
-		removeTask(ctx, requestId, taskArn)
+		if videoContainerId != "" {
+			stopVideoContainer(ctx, cl, requestId, videoContainerId, d.Environment)
+		}
+		removeContainer(ctx, cl, requestId, browserContainerId)
 		return nil, fmt.Errorf("wait: %v", err)
 	}
-	log.Printf("[%d] [SERVICE_STARTED] [%s] [%s] [%.2fs]", requestId, imageUrl, taskId, util.SecondsSince(serviceStartTime))
-	log.Printf("[%d] [PROXY_TO] [%s] [%s]", requestId, taskId, u.String())
+	log.Printf("[%d] [SERVICE_STARTED] [%s] [%s] [%.2fs]", requestId, image, browserContainerId, util.SecondsSince(serviceStartTime))
+	log.Printf("[%d] [PROXY_TO] [%s] [%s]", requestId, browserContainerId, u.String())
+
+	var publishedPortsInfo map[string]string
+	if d.Service.PublishAllPorts {
+		publishedPortsInfo = getContainerPorts(stat)
+	}
 
 	s := StartedService{
 		Url: u,
+		Container: &session.Container{
+			ID:        browserContainerId,
+			IPAddress: getContainerIP(d.Environment.Network, stat),
+			Ports:     publishedPortsInfo,
+		},
 		HostPort: hostPort,
 		Cancel: func() {
-			removeTask(ctx, requestId, taskArn)
-			//TODO: review old functionality and do extra cleanup if needed
-/*
+			if videoContainerId != "" {
+				stopVideoContainer(ctx, cl, requestId, videoContainerId, d.Environment)
+			}
+			defer removeContainer(ctx, cl, requestId, browserContainerId)
 			if d.LogOutputDir != "" && (d.SaveAllLogs || d.Log) {
 				r, err := d.Client.ContainerLogs(ctx, browserContainerId, types.ContainerLogsOptions{
 					Timestamps: true,
@@ -386,27 +257,57 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 					log.Printf("[%d] [FAILED_TO_COPY_LOGS] [%s] [Failed to copy data to log file %s: %v]", requestId, browserContainerId, filename, err)
 				}
 			}
-*/
 		},
 	}
-
-	log.Printf("[%d] [TASK_SERVICE_DETAILS] [%s]", requestId, s)
 	return &s, nil
 }
 
-func getPortConfig() (*portConfig, error) {
-	//TODO: implement unique ports generation maybe as external service/lambda to support stateless ecs-docker service
-	selelinumPort := rand.Int63n(64511) + 1025
-        fileserverPort := rand.Int63n(64511) + 1025
-        clipboardPort := rand.Int63n(64511) + 1025
-        vncPort := rand.Int63n(64511) + 1025
-        devtoolsPort := rand.Int63n(64511) + 1025
+func getPortConfig(service *config.Browser, caps session.Caps, env Environment) (*portConfig, error) {
+	selenium, err := nat.NewPort("tcp", service.Port)
+	if err != nil {
+		return nil, fmt.Errorf("new selenium port: %v", err)
+	}
+	fileserver, err := nat.NewPort("tcp", ports.Fileserver)
+	if err != nil {
+		return nil, fmt.Errorf("new fileserver port: %v", err)
+	}
+	clipboard, err := nat.NewPort("tcp", ports.Clipboard)
+	if err != nil {
+		return nil, fmt.Errorf("new clipboard port: %v", err)
+	}
+	exposedPorts := map[nat.Port]struct{}{selenium: {}, fileserver: {}, clipboard: {}}
+	var vnc nat.Port
+	if caps.VNC {
+		vnc, err = nat.NewPort("tcp", ports.VNC)
+		if err != nil {
+			return nil, fmt.Errorf("new vnc port: %v", err)
+		}
+		exposedPorts[vnc] = struct{}{}
+	}
+	devtools, err := nat.NewPort("tcp", ports.Devtools)
+	if err != nil {
+		return nil, fmt.Errorf("new devtools port: %v", err)
+	}
+	exposedPorts[devtools] = struct{}{}
+
+	portBindings := nat.PortMap{}
+	if env.IP != "" || !env.InDocker {
+		portBindings[selenium] = []nat.PortBinding{{HostIP: "0.0.0.0"}}
+		portBindings[fileserver] = []nat.PortBinding{{HostIP: "0.0.0.0"}}
+		portBindings[clipboard] = []nat.PortBinding{{HostIP: "0.0.0.0"}}
+		portBindings[devtools] = []nat.PortBinding{{HostIP: "0.0.0.0"}}
+		if caps.VNC {
+			portBindings[vnc] = []nat.PortBinding{{HostIP: "0.0.0.0"}}
+		}
+	}
 	return &portConfig{
-		SeleniumPort:   selelinumPort,
-		FileserverPort: fileserverPort,
-		ClipboardPort:  clipboardPort,
-		VNCPort:        vncPort,
-		DevtoolsPort:   devtoolsPort}, nil
+		SeleniumPort:   selenium,
+		FileserverPort: fileserver,
+		ClipboardPort:  clipboard,
+		VNCPort:        vnc,
+		DevtoolsPort:   devtools,
+		PortBindings:   portBindings,
+		ExposedPorts:   exposedPorts}, nil
 }
 
 const (
@@ -463,60 +364,42 @@ func getEnv(service ServiceBase, caps session.Caps) []string {
 	return env
 }
 
-func getMemory(caps session.Caps) (int64, int64) {
-        capsMemory := "768"
-        if caps.Memory != "" {
-                capsMemory = caps.Memory
-        }
-//        hardMemory, err := strconv.Atoi(capsMemory)
-	hardMemory, err := strconv.ParseInt(capsMemory, 10, 64)
-        if err != nil {
-            fmt.Println(capsMemory, "is not an integer.")
-        }
-
-        capsMemoryReservation := "768"
-        if caps.MemoryReservation != "" {
-                capsMemoryReservation = caps.MemoryReservation
-        }
-
-//	softMemory, err := strconv.Atoi(capsMemoryReservation)
-        softMemory, err := strconv.ParseInt(capsMemoryReservation, 10, 64)
-	if err != nil {
-	    fmt.Println(capsMemoryReservation, "is not an integer.")
+func getShmSize(service *config.Browser) int64 {
+	if service.ShmSize > 0 {
+		return service.ShmSize
 	}
-
-        return int64(hardMemory), int64(softMemory)
-//        return int64(capsMemory), int64(capsMemoryReservation)
+	return int64(268435456)
 }
 
-func getCpu(caps session.Caps) (int64) {
-	capsCpu := "512"
-        if caps.Cpu != "" {
-                capsCpu = caps.Cpu
-        }
-
-        cpu, err := strconv.Atoi(capsCpu)
-        if err != nil {
-            fmt.Println(capsCpu, "is not an integer.")
-        }
-
-        return int64(cpu)
+func getMemory(service *config.Browser, env Environment) (int64, error) {
+	if service.Mem != "" {
+		var mem MemLimit
+		err := mem.Set(service.Mem)
+		if err != nil {
+			return 0, fmt.Errorf("parse memory limit: %v", err)
+		}
+		return int64(mem), nil
+	}
+	return env.Memory, nil
 }
 
-func getImage(caps session.Caps) string {
-	// selenoid/[vnc_][browsername]:[version]
-	vnc := ""
-        if caps.VNC {
-		vnc = "vnc_"
+func getCpu(service *config.Browser, env Environment) (int64, error) {
+	if service.Cpu != "" {
+		var cpu CpuLimit
+		err := cpu.Set(service.Cpu)
+		if err != nil {
+			return 0, fmt.Errorf("parse CPU limit: %v", err)
+		}
+		return int64(cpu), nil
 	}
-	//TODO: don't forgent to insert ":" as prefix if version is not empty!
-	version := ""
-        if caps.Version != "" {
-                version = ":" + caps.Version
-        }
+	return env.CPU, nil
+}
 
-	//TODO: think about possibility to override using custom capabilities
-	return fmt.Sprintf("selenoid/%s%s%s", vnc, caps.Name, version)
+func getContainerHostname(caps session.Caps) string {
+	if caps.ContainerHostname != "" {
+		return caps.ContainerHostname
+	}
+	return "localhost"
 }
 
 func getExtraHosts(service *config.Browser, caps session.Caps) []string {
@@ -527,57 +410,175 @@ func getExtraHosts(service *config.Browser, caps session.Caps) []string {
 	return extraHosts
 }
 
-func getHostPort(caps session.Caps, taskIP string, pc *portConfig) session.HostPort {
-	fn := func(containerPort int64) string {
+func getLabels(service *config.Browser, caps session.Caps) map[string]string {
+	labels := make(map[string]string)
+	if caps.TestName != "" {
+		labels["name"] = caps.TestName
+	}
+	for k, v := range service.Labels {
+		labels[k] = v
+	}
+	if len(caps.Labels) > 0 {
+		for k, v := range caps.Labels {
+			labels[k] = v
+		}
+	}
+	return labels
+}
+
+func getHostPort(env Environment, servicePort string, caps session.Caps, stat types.ContainerJSON, pc map[string]nat.Port) session.HostPort {
+	fn := func(containerPort string, port nat.Port) string {
 		return ""
 	}
-        containerIP := taskIP
-        fn = func(containerPort int64) string {
-                return containerIP + ":" + strconv.FormatInt(containerPort, 10)
-        }
-
+	if env.IP == "" {
+		if env.InDocker {
+			containerIP := getContainerIP(env.Network, stat)
+			fn = func(containerPort string, port nat.Port) string {
+				return net.JoinHostPort(containerIP, containerPort)
+			}
+		} else {
+			fn = func(containerPort string, port nat.Port) string {
+				return net.JoinHostPort("127.0.0.1", stat.NetworkSettings.Ports[port][0].HostPort)
+			}
+		}
+	} else {
+		fn = func(containerPort string, port nat.Port) string {
+			return net.JoinHostPort(env.IP, stat.NetworkSettings.Ports[port][0].HostPort)
+		}
+	}
 	hp := session.HostPort{
-		Selenium:   fn(pc.SeleniumPort),
-		Fileserver: fn(pc.FileserverPort),
-		Clipboard:  fn(pc.ClipboardPort),
-		Devtools:   fn(pc.DevtoolsPort),
+		Selenium:   fn(servicePort, pc[servicePort]),
+		Fileserver: fn(ports.Fileserver, pc[ports.Fileserver]),
+		Clipboard:  fn(ports.Clipboard, pc[ports.Clipboard]),
+		Devtools:   fn(ports.Devtools, pc[ports.Devtools]),
 	}
 
 	if caps.VNC {
-		hp.VNC = fn(pc.VNCPort)
+		hp.VNC = fn(ports.VNC, pc[ports.VNC])
 	}
 
 	return hp
 }
 
-func removeTask(ctx context.Context, requestId uint64, taskArn string) {
-        log.Printf("[%d] [REMOVING_TASK] [%s]", requestId, taskArn)
+func getContainerPorts(stat types.ContainerJSON) map[string]string {
+	ns := stat.NetworkSettings
 
-        //TODO: parametrize region
-        svc := ecs.New(awsSession.New(&aws.Config{Region: aws.String("us-east-1")}))
+	var exposedPorts = make(map[string]string)
 
-        stopTaskInput := &ecs.StopTaskInput{
-          Cluster: aws.String("executor-cluster"),
-          Reason:  aws.String("Cancel"),
-          Task:    aws.String(taskArn),
-        }
-
-        resultStopTask, err := svc.StopTask(stopTaskInput)
-        if err != nil {
-          log.Printf("[%d] [FAILED_TO_STOP_TASK] [%s] [%v]", requestId, taskArn, err)
-          return
-        }
-        taskDefinitionArn := *resultStopTask.Task.TaskDefinitionArn
-
-        taskDeregisterInput := &ecs.DeregisterTaskDefinitionInput{
-          TaskDefinition: aws.String(taskDefinitionArn),
-        }
-        resultTaskDeregister, err := svc.DeregisterTaskDefinition(taskDeregisterInput)
-        if err != nil {
-          log.Printf("[%d] [FAILED_TO_DEREGISTER_TASK_DEFINITION] [%s] [%v]", requestId, taskDefinitionArn, err)
-          return
-        } else {
-          log.Printf("[%d] [TASK_DEFINITION_REMOVED] [%s]", requestId, *resultTaskDeregister.TaskDefinition.TaskDefinitionArn)
-        }
+	if len(ns.Ports) > 0 {
+		for port, portBindings := range ns.Ports {
+			exposedPorts[port.Port()] = portBindings[0].HostPort
+		}
+	}
+	return exposedPorts
 }
 
+func getContainerIP(networkName string, stat types.ContainerJSON) string {
+	ns := stat.NetworkSettings
+	if ns.IPAddress != "" {
+		return stat.NetworkSettings.IPAddress
+	}
+	if len(ns.Networks) > 0 {
+		var possibleAddresses []string
+		for name, nt := range ns.Networks {
+			if nt.IPAddress != "" {
+				if name == networkName {
+					return nt.IPAddress
+				}
+				possibleAddresses = append(possibleAddresses, nt.IPAddress)
+			}
+		}
+		if len(possibleAddresses) > 0 {
+			return possibleAddresses[0]
+		}
+	}
+	return ""
+}
+
+func startVideoContainer(ctx context.Context, cl *client.Client, requestId uint64, browserContainer types.ContainerJSON, environ Environment, service ServiceBase, caps session.Caps) (string, error) {
+	videoContainerStartTime := time.Now()
+	videoContainerImage := environ.VideoContainerImage
+	env := getEnv(service, caps)
+	env = append(env, fmt.Sprintf("FILE_NAME=%s", caps.VideoName))
+	videoScreenSize := caps.VideoScreenSize
+	if videoScreenSize != "" {
+		env = append(env, fmt.Sprintf("VIDEO_SIZE=%s", videoScreenSize))
+	}
+	videoFrameRate := caps.VideoFrameRate
+	if videoFrameRate > 0 {
+		env = append(env, fmt.Sprintf("FRAME_RATE=%d", videoFrameRate))
+	}
+	hostConfig := &ctr.HostConfig{
+		Binds:       []string{fmt.Sprintf("%s:/data:rw,z", getVideoOutputDir(environ))},
+		AutoRemove:  true,
+		NetworkMode: ctr.NetworkMode(environ.Network),
+	}
+	browserContainerName := getContainerIP(environ.Network, browserContainer)
+	if environ.Network == DefaultContainerNetwork {
+		const defaultBrowserContainerName = "browser"
+		hostConfig.Links = []string{fmt.Sprintf("%s:%s", browserContainer.ID, defaultBrowserContainerName)}
+		browserContainerName = defaultBrowserContainerName
+	}
+	env = append(env, fmt.Sprintf("BROWSER_CONTAINER_NAME=%s", browserContainerName))
+	log.Printf("[%d] [CREATING_VIDEO_CONTAINER] [%s]", requestId, videoContainerImage)
+	videoContainer, err := cl.ContainerCreate(ctx,
+		&ctr.Config{
+			Image: videoContainerImage,
+			Env:   env,
+		},
+		hostConfig,
+		&network.NetworkingConfig{}, "")
+	if err != nil {
+		removeContainer(ctx, cl, requestId, browserContainer.ID)
+		return "", fmt.Errorf("create video container: %v", err)
+	}
+
+	videoContainerId := videoContainer.ID
+	log.Printf("[%d] [STARTING_VIDEO_CONTAINER] [%s] [%s]", requestId, videoContainerImage, videoContainerId)
+	err = cl.ContainerStart(ctx, videoContainerId, types.ContainerStartOptions{})
+	if err != nil {
+		removeContainer(ctx, cl, requestId, browserContainer.ID)
+		removeContainer(ctx, cl, requestId, videoContainerId)
+		return "", fmt.Errorf("start video container: %v", err)
+	}
+	log.Printf("[%d] [VIDEO_CONTAINER_STARTED] [%s] [%s] [%.2fs]", requestId, videoContainerImage, videoContainerId, util.SecondsSince(videoContainerStartTime))
+	return videoContainerId, nil
+}
+
+func getVideoOutputDir(env Environment) string {
+	videoOutputDirOverride := os.Getenv(overrideVideoOutputDir)
+	if videoOutputDirOverride != "" {
+		return videoOutputDirOverride
+	}
+	return env.VideoOutputDir
+}
+
+func stopVideoContainer(ctx context.Context, cli *client.Client, requestId uint64, containerId string, env Environment) {
+	log.Printf("[%d] [STOPPING_VIDEO_CONTAINER] [%s]", requestId, containerId)
+	err := cli.ContainerKill(ctx, containerId, "TERM")
+	if err != nil {
+		log.Printf("[%d] [FAILED_TO_STOP_VIDEO_CONTAINER] [%s] [%v]", requestId, containerId, err)
+		return
+	}
+	notRunning, doesNotExist := cli.ContainerWait(ctx, containerId, ctr.WaitConditionNotRunning)
+	select {
+	case <-doesNotExist:
+	case <-notRunning:
+		removeContainer(ctx, cli, requestId, containerId)
+		return
+	case <-time.After(env.SessionDeleteTimeout):
+		removeContainer(ctx, cli, requestId, containerId)
+		return
+	}
+	log.Printf("[%d] [STOPPED_VIDEO_CONTAINER] [%s]", requestId, containerId)
+}
+
+func removeContainer(ctx context.Context, cli *client.Client, requestId uint64, id string) {
+	log.Printf("[%d] [REMOVING_CONTAINER] [%s]", requestId, id)
+	err := cli.ContainerRemove(ctx, id, types.ContainerRemoveOptions{Force: true, RemoveVolumes: true})
+	if err != nil {
+		log.Printf("[%d] [FAILED_TO_REMOVE_CONTAINER] [%s] [%v]", requestId, id, err)
+		return
+	}
+	log.Printf("[%d] [CONTAINER_REMOVED] [%s]", requestId, id)
+}
