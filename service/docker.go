@@ -16,7 +16,7 @@ import (
 	"github.com/aerokube/util"
 	"github.com/docker/docker/api/types"
 	ctr "github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/network"
+//	"github.com/docker/docker/api/types/network"
 //	"github.com/docker/docker/api/types/strslice"
 	"github.com/docker/docker/client"
 //	"github.com/docker/docker/pkg/stdcopy"
@@ -356,10 +356,6 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	serviceStartTime := time.Now()
 	err = wait(u.String(), d.StartupTimeout)
 	if err != nil {
-/*		if videoContainerId != "" {
-			stopVideoContainer(ctx, cl, requestId, videoContainerId, d.Environment)
-		}
-*/
 		removeTask(ctx, requestId, taskArn)
 		return nil, fmt.Errorf("wait: %v", err)
 	}
@@ -373,9 +369,6 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 			removeTask(ctx, requestId, taskArn)
 			//TODO: review old functionality and do extra cleanup if needed
 /*
-			if videoContainerId != "" {
-				stopVideoContainer(ctx, cl, requestId, videoContainerId, d.Environment)
-			}
 			if d.LogOutputDir != "" && (d.SaveAllLogs || d.Log) {
 				r, err := d.Client.ContainerLogs(ctx, browserContainerId, types.ContainerLogsOptions{
 					Timestamps: true,
@@ -614,26 +607,6 @@ func getVideoOutputDir(env Environment) string {
 		return videoOutputDirOverride
 	}
 	return env.VideoOutputDir
-}
-
-func stopVideoContainer(ctx context.Context, cli *client.Client, requestId uint64, containerId string, env Environment) {
-	log.Printf("[%d] [STOPPING_VIDEO_CONTAINER] [%s]", requestId, containerId)
-	err := cli.ContainerKill(ctx, containerId, "TERM")
-	if err != nil {
-		log.Printf("[%d] [FAILED_TO_STOP_VIDEO_CONTAINER] [%s] [%v]", requestId, containerId, err)
-		return
-	}
-	notRunning, doesNotExist := cli.ContainerWait(ctx, containerId, ctr.WaitConditionNotRunning)
-	select {
-	case <-doesNotExist:
-	case <-notRunning:
-		removeContainer(ctx, cli, requestId, containerId)
-		return
-	case <-time.After(env.SessionDeleteTimeout):
-		removeContainer(ctx, cli, requestId, containerId)
-		return
-	}
-	log.Printf("[%d] [STOPPED_VIDEO_CONTAINER] [%s]", requestId, containerId)
 }
 
 func removeContainer(ctx context.Context, cli *client.Client, requestId uint64, id string) {
