@@ -136,7 +136,7 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
                         &ecs.MountPoint{
                             ContainerPath: aws.String("/opt/selenoid/logs"),
                             ReadOnly:      aws.Bool(false),
-                            SourceVolume:  aws.String("logs"),
+                            SourceVolume:  aws.String("data"),
                         },
 	            },
 	            PortMappings: []*ecs.PortMapping{
@@ -162,6 +162,38 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
                         },
 	            },
 	        },
+                {
+                    Name:      aws.String("video-recorder"),
+                    Image:     aws.String("selenoid/video-recorder:latest-release"),
+                    Essential: aws.Bool(true), //If the essential parameter of a container is marked as true, the failure of that container will stop the task.
+                    Cpu:       aws.Int64(256),
+                    Memory:    aws.Int64(512),
+                    MemoryReservation: aws.Int64(512),
+                    Privileged: aws.Bool(d.Privileged),
+                    Links: []*string{
+                        aws.String(d.Caps.Name),
+                    },
+                    Environment: []*ecs.KeyValuePair{
+			//TODO: provide extra values from caps
+			&ecs.KeyValuePair{
+			    Name: aws.String("BROWSER_CONTAINER_NAME"),
+			    Value: aws.String(d.Caps.Name),
+			},
+                        &ecs.KeyValuePair{
+                            Name: aws.String("FILE_NAME"),
+                            Value: aws.String(d.Caps.VideoName),
+                        },
+		    },
+                    MountPoints: []*ecs.MountPoint{
+                        &ecs.MountPoint{
+                            ContainerPath: aws.String("/data"),
+                            ReadOnly:      aws.Bool(false),
+                            SourceVolume:  aws.String("data"),
+                        },
+                    },
+                    PortMappings: []*ecs.PortMapping{
+                    },
+                },
 	    },
 	    Family:      aws.String(taskDefFamily),
 	    Volumes: []*ecs.Volume{
@@ -173,9 +205,9 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	        },
                 &ecs.Volume{
                     Host: &ecs.HostVolumeProperties{
-                        SourcePath: aws.String("/opt/selenoid/logs"),
+                        SourcePath: aws.String("/tmp/zebrunner"),
                     },
-                    Name: aws.String("logs"),
+                    Name: aws.String("data"),
                 },
 	    },
 	    TaskRoleArn: aws.String(""),
