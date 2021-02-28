@@ -84,7 +84,7 @@ func (m *DefaultManager) Find(caps session.Caps, requestId uint64) (Starter, boo
 			return nil, false
 		}
 		log.Printf("[%d] [USING_ECS] [%s] [%s]", requestId, browserName, version)
-		return &Ecs{
+		return &Task{
 			ServiceBase: serviceBase,
 			Environment: *m.Environment,
 			Caps:        caps,

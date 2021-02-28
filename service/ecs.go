@@ -5,22 +5,15 @@ import (
 	"fmt"
 //	"github.com/docker/go-units"
 	"log"
-//	"net"
 	"net/url"
 	"strconv"
 	"time"
 	"math/rand"
 
-//	"github.com/aerokube/selenoid/config"
 	"github.com/aerokube/selenoid/session"
 	"github.com/aerokube/util"
-//	"github.com/docker/docker/api/types"
 	ctr "github.com/docker/docker/api/types/container"
-//	"github.com/docker/docker/api/types/network"
-//	"github.com/docker/docker/api/types/strslice"
 	"github.com/docker/docker/client"
-//	"github.com/docker/docker/pkg/stdcopy"
-//	"github.com/docker/go-connections/nat"
 
 //	"os"
 //	"path/filepath"
@@ -32,8 +25,8 @@ import (
         awsSession "github.com/aws/aws-sdk-go/aws/session"
 )
 
-// Ecs - ecs container manager
-type Ecs struct {
+// Task - ecs task container manager
+type Task struct {
        ServiceBase
        Environment
        session.Caps
@@ -50,9 +43,8 @@ type ecsPortConfig struct {
 }
 
 // StartWithCancel - Starter interface implementation
-func (d *Ecs) StartWithCancel() (*StartedService, error) {
+func (d *Task) StartWithCancel() (*StartedService, error) {
         requestId := d.RequestId
-//        log.Printf("[%d] [d.Caps] [%s]", requestId, d.Caps)
 
 	portConfig, err := getEcsPortConfig()
 	if err != nil {
@@ -80,7 +72,7 @@ func (d *Ecs) StartWithCancel() (*StartedService, error) {
 
         hardMemory, softMemory := getEcsMemory(d.Caps)
         cpu := getEcsCpu(d.Caps)
-	imageUrl := getImage(d.Caps)
+	imageUrl := getEcsImage(d.Caps)
 
 	// Without unique nano postfix we face with AWS limitations during multi-threading execution a lot...
 	taskDefFamily := d.Caps.Name + "-" + strconv.Itoa(int(time.Now().UnixNano()))
@@ -433,7 +425,7 @@ func getEcsCpu(caps session.Caps) (int64) {
         return int64(cpu)
 }
 
-func getImage(caps session.Caps) string {
+func getEcsImage(caps session.Caps) string {
 	// selenoid/[vnc_][browsername]:[version]
 	vnc := ""
         if caps.VNC {
