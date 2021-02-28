@@ -14,7 +14,7 @@ import (
 	"github.com/aerokube/selenoid/config"
 	"github.com/aerokube/selenoid/session"
 	"github.com/aerokube/util"
-	"github.com/docker/docker/api/types"
+//	"github.com/docker/docker/api/types"
 	ctr "github.com/docker/docker/api/types/container"
 //	"github.com/docker/docker/api/types/network"
 //	"github.com/docker/docker/api/types/strslice"
@@ -22,7 +22,7 @@ import (
 //	"github.com/docker/docker/pkg/stdcopy"
 //	"github.com/docker/go-connections/nat"
 
-	"os"
+//	"os"
 //	"path/filepath"
 	"strings"
 
@@ -77,15 +77,10 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	ctx := context.Background()
 /*	log.Printf("[%d] [CREATING_CONTAINER] [%s]", requestId, image)
 	hostConfig := ctr.HostConfig{
-		Binds:        d.Service.Volumes,
-		AutoRemove:   true,
 		LogConfig:    getLogConfig(*d.LogConfig, d.Caps),
-		NetworkMode:  ctr.NetworkMode(d.Network),
 		Tmpfs:        d.Service.Tmpfs,
 		ExtraHosts: getExtraHosts(d.Service, d.Caps),
 	}
-
-        log.Printf("[%d] [d.Service] [%s]", requestId, d.Service)
 
 	hostConfig.PublishAllPorts = d.Service.PublishAllPorts
 	if len(d.Caps.DNSServers) > 0 {
@@ -103,8 +98,8 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
         cpu := getCpu(d.Caps)
 	imageUrl := getImage(d.Caps)
 
+	// Without unique nano postfix we face with AWS limitations during multi-threading execution a lot...
 	taskDefFamily := d.Caps.Name + "-" + strconv.Itoa(int(time.Now().UnixNano()))
-//        taskDefFamily := d.Caps.Name
 	log.Printf("[%d] [TASK_DEFINITION_FAMILY] [%s]", requestId, taskDefFamily)
 
 	//create ECS task definition based on capabilities
@@ -134,7 +129,7 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	                    SourceVolume:  aws.String("devshm"),
 	                },
                         &ecs.MountPoint{
-                            ContainerPath: aws.String("/opt/selenoid/logs"),
+                            ContainerPath: aws.String("/tmp/zebrunner/logs"),
                             ReadOnly:      aws.Bool(false),
                             SourceVolume:  aws.String("data"),
                         },
@@ -205,7 +200,7 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	        },
                 &ecs.Volume{
                     Host: &ecs.HostVolumeProperties{
-                        SourcePath: aws.String("/tmp/zebrunner"),
+                        SourcePath: aws.String("/tmp/zebrunner/video"),
                     },
                     Name: aws.String("data"),
                 },
@@ -346,7 +341,6 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
         browserTaskStartTime := time.Now()
         log.Printf("[%d] [TASK_STARTED] [%s] [%s] [%.2fs]", requestId, imageUrl, taskId, util.SecondsSince(browserTaskStartTime))
 
-//	servicePort := d.Service.Port
 	hostPort := getHostPort(d.Caps, privateIpAddress, portConfig)
         log.Printf("[%d] [HOST_PORT] [%s]", requestId, hostPort)
 
@@ -525,35 +519,12 @@ func getImage(caps session.Caps) string {
 	return fmt.Sprintf("selenoid/%s%s%s", vnc, caps.Name, version)
 }
 
-func getContainerHostname(caps session.Caps) string {
-	if caps.ContainerHostname != "" {
-		return caps.ContainerHostname
-	}
-	return "localhost"
-}
-
 func getExtraHosts(service *config.Browser, caps session.Caps) []string {
 	extraHosts := service.Hosts
 	if len(caps.HostsEntries) > 0 {
 		extraHosts = append(caps.HostsEntries, extraHosts...)
 	}
 	return extraHosts
-}
-
-func getLabels(service *config.Browser, caps session.Caps) map[string]string {
-	labels := make(map[string]string)
-	if caps.TestName != "" {
-		labels["name"] = caps.TestName
-	}
-	for k, v := range service.Labels {
-		labels[k] = v
-	}
-	if len(caps.Labels) > 0 {
-		for k, v := range caps.Labels {
-			labels[k] = v
-		}
-	}
-	return labels
 }
 
 func getHostPort(caps session.Caps, taskIP string, pc *portConfig) session.HostPort {
@@ -577,46 +548,6 @@ func getHostPort(caps session.Caps, taskIP string, pc *portConfig) session.HostP
 	}
 
 	return hp
-}
-
-func getContainerIP(networkName string, stat types.ContainerJSON) string {
-	ns := stat.NetworkSettings
-	if ns.IPAddress != "" {
-		return stat.NetworkSettings.IPAddress
-	}
-	if len(ns.Networks) > 0 {
-		var possibleAddresses []string
-		for name, nt := range ns.Networks {
-			if nt.IPAddress != "" {
-				if name == networkName {
-					return nt.IPAddress
-				}
-				possibleAddresses = append(possibleAddresses, nt.IPAddress)
-			}
-		}
-		if len(possibleAddresses) > 0 {
-			return possibleAddresses[0]
-		}
-	}
-	return ""
-}
-
-func getVideoOutputDir(env Environment) string {
-	videoOutputDirOverride := os.Getenv(overrideVideoOutputDir)
-	if videoOutputDirOverride != "" {
-		return videoOutputDirOverride
-	}
-	return env.VideoOutputDir
-}
-
-func removeContainer(ctx context.Context, cli *client.Client, requestId uint64, id string) {
-	log.Printf("[%d] [REMOVING_CONTAINER] [%s]", requestId, id)
-	err := cli.ContainerRemove(ctx, id, types.ContainerRemoveOptions{Force: true, RemoveVolumes: true})
-	if err != nil {
-		log.Printf("[%d] [FAILED_TO_REMOVE_CONTAINER] [%s] [%v]", requestId, id, err)
-		return
-	}
-	log.Printf("[%d] [CONTAINER_REMOVED] [%s]", requestId, id)
 }
 
 func removeTask(ctx context.Context, requestId uint64, taskArn string) {
