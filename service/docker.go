@@ -68,6 +68,8 @@ type portConfig struct {
 func (d *Docker) StartWithCancel() (*StartedService, error) {
         requestId := d.RequestId
 //        log.Printf("[%d] [d.Caps] [%s]", requestId, d.Caps)
+        log.Printf("[%d] [d.LogConfig] [%s]", requestId, getLogConfig(*d.LogConfig, d.Caps))
+
 	portConfig, err := getPortConfig()
 	if err != nil {
 		return nil, fmt.Errorf("configuring ports: %v", err)
@@ -131,6 +133,11 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	                    ReadOnly:      aws.Bool(false),
 	                    SourceVolume:  aws.String("devshm"),
 	                },
+                        &ecs.MountPoint{
+                            ContainerPath: aws.String("/opt/selenoid/logs"),
+                            ReadOnly:      aws.Bool(false),
+                            SourceVolume:  aws.String("logs"),
+                        },
 	            },
 	            PortMappings: []*ecs.PortMapping{
 			&ecs.PortMapping{
@@ -164,6 +171,12 @@ func (d *Docker) StartWithCancel() (*StartedService, error) {
 	            },
 	            Name: aws.String("devshm"),
 	        },
+                &ecs.Volume{
+                    Host: &ecs.HostVolumeProperties{
+                        SourcePath: aws.String("/opt/selenoid/logs"),
+                    },
+                    Name: aws.String("logs"),
+                },
 	    },
 	    TaskRoleArn: aws.String(""),
 	}
