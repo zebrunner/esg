@@ -35,6 +35,12 @@ import (
 
 const slash = "/"
 
+const (
+	browserStarted = iota
+	browserFailed
+	seleniumError
+)
+
 var (
 	httpClient = &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -92,6 +98,63 @@ func (s *sess) Delete(requestId uint64) {
 	}
 }
 
+func session2(ctx context.Context, sessionUrl string, header http.Header, body []byte) (map[string]interface{}, int) {
+	req, err := http.NewRequest(http.MethodPost, sessionUrl,  bytes.NewReader(body))
+	if err != nil {
+		return nil, seleniumError
+	}
+	for key, values := range header {
+		for _, value := range values {
+			req.Header.Add(key, value)
+		}
+	}
+	req.Header.Del("Accept-Encoding")
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	req = req.WithContext(ctx)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := httpClient.Do(req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
+	if err != nil {
+		return nil, seleniumError
+	}
+	location := resp.Header.Get("Location")
+	if location != "" {
+		l, err := url.Parse(location)
+		if err != nil {
+			return nil, seleniumError
+		}
+		fragments := strings.Split(l.Path, "/")
+		return map[string]interface{}{"sessionId": fragments[len(fragments)-1], "status": 0, "value": struct{}{}}, browserStarted
+	}
+	var reply map[string]interface{}
+	err = json.NewDecoder(resp.Body).Decode(&reply)
+	if err != nil {
+		return nil, seleniumError
+	}
+	if resp.StatusCode != http.StatusOK {
+		return reply, browserFailed
+	}
+	return reply, browserStarted
+}
+
+func reply(w http.ResponseWriter, msg map[string]interface{}, status int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(msg)
+}
+
+func errMsg(msg string) map[string]interface{} {
+	return map[string]interface{}{
+		"value": map[string]string{
+			"message": msg,
+		},
+		"status": 13,
+	}
+}
+
 func serial() uint64 {
 	numLock.Lock()
 	defer numLock.Unlock()
@@ -110,6 +173,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 	sessionStartTime := time.Now()
 	requestId := serial()
 	user, remote := util.RequestInfo(r)
+	log.Printf(remote)
 	body, err := ioutil.ReadAll(r.Body)
 	r.Body.Close()
 	if err != nil {
@@ -197,12 +261,77 @@ func create(w http.ResponseWriter, r *http.Request) {
 		queue.Drop()
 		return
 	}
+        log.Printf("[%d] [SERVICE] [%v]", requestId, startedService)
+        log.Printf("[%d] [SERVICE_CONTAINER] [%v]", requestId, startedService.Container)
 	u := startedService.Url
+        log.Printf("[%d] [SERVICE_URL] [%v]", requestId, u)
 	cancel := startedService.Cancel
 	var resp *http.Response
 	i := 1
 	for ; ; i++ {
 		r.URL.Host, r.URL.Path = u.Host, path.Join(u.Path, r.URL.Path)
+
+                log.Printf("[%d] [SESSION_ATTEMPTED] [%s] [%d] [%s]", requestId, u.String(), i, body)
+		//TODO: implement response updater to populate task id as part of sessionId
+		resp, status := session2(r.Context(), r.URL.String(), r.Header, body)
+                log.Printf("resp: [%s]; status: [%s]", resp, status)
+		select {
+		case <-r.Context().Done():
+			log.Printf("[CLIENT_DISCONNECTED]")
+                        queue.Drop()
+                        cancel()
+			return
+		default:
+		}
+		switch status {
+		case browserStarted:
+			sess, ok := resp["sessionId"].(string)
+			if !ok {
+				protocolError := func() {
+					reply(w, errMsg("protocol error"), http.StatusBadGateway)
+					log.Printf("[%d] [BAD_RESPONSE]\n", requestId)
+				}
+				value, ok := resp["value"]
+				if !ok {
+					protocolError()
+		                        queue.Drop()
+                		        cancel()
+					return
+				}
+				valueMap, ok := value.(map[string]interface{})
+				if !ok {
+					protocolError()
+                                        queue.Drop()
+                                        cancel()
+					return
+				}
+				sess, ok = valueMap["sessionId"].(string)
+				if !ok {
+					protocolError()
+                                        queue.Drop()
+                                        cancel()
+					return
+				}
+				resp["value"].(map[string]interface{})["sessionId"] = startedService.Container.ID + sess
+			} else {
+				resp["sessionId"] = startedService.Container.ID + sess
+			}
+			reply(w, resp, http.StatusOK)
+			log.Printf("[%d] [SESSION_CREATED] [%s] [%.2fs]", requestId, startedService.Container.ID + sess, util.SecondsSince(sessionStartTime))
+			break
+		case browserFailed:
+                        log.Printf("[%d] [SESSION_FAILED1]", requestId)
+                        queue.Drop()
+                        cancel()
+                        return
+		case seleniumError:
+                        log.Printf("[%d] [SESSION_FAILED2]", requestId)
+                        queue.Drop()
+                        cancel()
+                        return
+		}
+
+/*
 		req, _ := http.NewRequest(http.MethodPost, r.URL.String(), bytes.NewReader(body))
 		ctx, done := context.WithTimeout(r.Context(), newSessionAttemptTimeout)
 		defer done()
@@ -246,7 +375,9 @@ func create(w http.ResponseWriter, r *http.Request) {
 		}
 		resp = rsp
 		break
+*/
 	}
+
 	defer resp.Body.Close()
 	var s struct {
 		Value struct {
@@ -254,12 +385,14 @@ func create(w http.ResponseWriter, r *http.Request) {
 		}
 		ID string `json:"sessionId"`
 	}
+
 	location := resp.Header.Get("Location")
 	if location != "" {
 		l, err := url.Parse(location)
 		if err == nil {
 			fragments := strings.Split(l.Path, slash)
 			s.ID = fragments[len(fragments)-1]
+	                log.Printf("[%d] [SESSION_ID] [%v]", requestId, s.ID)
 			u := &url.URL{
 				Scheme: "http",
 				Host:   hostname,
@@ -282,6 +415,9 @@ func create(w http.ResponseWriter, r *http.Request) {
 		cancel()
 		return
 	}
+
+	log.Printf("s.ID: %s", s.ID)
+
 	sess := &session.Session{
 		Quota:     user,
 		Caps:      caps,
@@ -431,6 +567,7 @@ func generateRandomFileName(extension string) string {
 }
 
 func proxy(w http.ResponseWriter, r *http.Request) {
+	log.Printf("PROXYING_PROXY")
 	done := make(chan func())
 	go func() {
 		(<-done)()
@@ -442,9 +579,15 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 	requestId := serial()
 	(&httputil.ReverseProxy{
 		Director: func(r *http.Request) {
+                        log.Printf("111 r.URL.Host: %s", r.URL.Host)
+                        log.Printf("111 r.URL.Path: %s", r.URL.Path)
+
 			fragments := strings.Split(r.URL.Path, slash)
-			id := fragments[2]
+			id := fragments[2][32:]
+                        log.Printf("id: %s", id)
+
 			sess, ok := sessions.Get(id)
+			log.Printf("session: %v", sess)
 			if ok {
 				sess.Lock.Lock()
 				defer sess.Lock.Unlock()

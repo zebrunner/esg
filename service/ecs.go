@@ -332,8 +332,16 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 	log.Printf("[%d] [SERVICE_STARTED] [%s] [%s] [%.2fs]", requestId, imageUrl, taskId, util.SecondsSince(serviceStartTime))
 	log.Printf("[%d] [PROXY_TO] [%s] [%s]", requestId, taskId, u.String())
 
+	// publish all ports feature is still under question for ecs task service so empty map is ok
+        var publishedPortsInfo map[string]string
+
 	s := StartedService{
 		Url: u,
+                Container: &session.Container{
+                        ID:        taskId,
+                        IPAddress: privateIpAddress,
+                        Ports:     publishedPortsInfo,
+                },
 		HostPort: hostPort,
 		Cancel: func() {
 			removeTask(ctx, requestId, taskArn)
