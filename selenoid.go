@@ -98,7 +98,8 @@ func (s *sess) Delete(requestId uint64) {
 	}
 }
 
-func session2(ctx context.Context, sessionUrl string, header http.Header, body []byte) (map[string]interface{}, int) {
+// create() method from ggr.
+func createSession(ctx context.Context, sessionUrl string, header http.Header, body []byte) (map[string]interface{}, int) {
 	req, err := http.NewRequest(http.MethodPost, sessionUrl,  bytes.NewReader(body))
 	if err != nil {
 		return nil, seleniumError
@@ -273,7 +274,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 
                 log.Printf("[%d] [SESSION_ATTEMPTED] [%s] [%d] [%s]", requestId, u.String(), i, body)
 		//TODO: implement response updater to populate task id as part of sessionId
-		resp, status := session2(r.Context(), r.URL.String(), r.Header, body)
+		resp, status := createSession(r.Context(), r.URL.String(), r.Header, body)
                 log.Printf("resp: [%s]; status: [%s]", resp, status)
 		select {
 		case <-r.Context().Done():
@@ -337,6 +338,9 @@ func create(w http.ResponseWriter, r *http.Request) {
 		defer done()
 		log.Printf("[%d] [SESSION_ATTEMPTED] [%s] [%d]", requestId, u.String(), i)
 		rsp, err := httpClient.Do(req.WithContext(ctx))
+		// Trying tu insert tesk id in response
+		// rsp.Body["sessionId"] = startedService.Container.ID + rsp.Body["sessionId"]
+	        log.Printf("response body: %s", rsp.Body)
 		select {
 		case <-ctx.Done():
 			if rsp != nil {
@@ -378,6 +382,9 @@ func create(w http.ResponseWriter, r *http.Request) {
 */
 	}
 
+	log.Printf("response body: %+v", resp.Body)
+	//TODO: try to modify response here
+
 	defer resp.Body.Close()
 	var s struct {
 		Value struct {
@@ -415,7 +422,9 @@ func create(w http.ResponseWriter, r *http.Request) {
 		cancel()
 		return
 	}
-
+	// Add task id to session id
+	s.ID = startedService.Container.ID + s.ID
+	// resp["sessionId"] = s.ID
 	log.Printf("s.ID: %s", s.ID)
 
 	sess := &session.Session{
@@ -583,7 +592,8 @@ func proxy(w http.ResponseWriter, r *http.Request) {
                         log.Printf("111 r.URL.Path: %s", r.URL.Path)
 
 			fragments := strings.Split(r.URL.Path, slash)
-			id := fragments[2][32:]
+			id := fragments[2]
+//                        id := fragments[2][32:]
                         log.Printf("id: %s", id)
 
 			sess, ok := sessions.Get(id)
