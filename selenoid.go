@@ -593,9 +593,6 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 	requestId := serial()
 	(&httputil.ReverseProxy{
 		Director: func(r *http.Request) {
-                        log.Printf("111 r.URL.Host: %s", r.URL.Host)
-                        log.Printf("111 r.URL.Path: %s", r.URL.Path)
-
 			fragments := strings.Split(r.URL.Path, slash)
 			longId := fragments[2]
 			id := fragments[2][32:]
@@ -604,7 +601,9 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 
 			sess, ok := sessions.Get(longId)
 			log.Printf("session: %v", sess)
-			if ok {
+			if !ok {
+				log.Printf("NEED TO LOOK FOR IN AWS!!!")
+			} else {
 				sess.Lock.Lock()
 				defer sess.Lock.Unlock()
 				select {

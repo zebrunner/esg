@@ -235,7 +235,6 @@ var seleniumPaths = struct {
 }
 
 func selenium() http.Handler {
-        log.Printf("[PROXYING_SELENIUM]")
 	mux := http.NewServeMux()
 	mux.HandleFunc(seleniumPaths.CreateSession, queue.Try(queue.Check(queue.Protect(post(create)))))
 	mux.HandleFunc(seleniumPaths.ProxySession, proxy)
@@ -317,7 +316,6 @@ var paths = struct {
 func handler() http.Handler {
 	root := http.NewServeMux()
 	root.HandleFunc(paths.WdHub+"/", func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("[PROXYING_MAIN] [%s]", r)
 		w.Header().Add("Content-Type", "application/json")
 		r.URL.Scheme = "http"
 		r.URL.Host = (&request{r}).localaddr()
