@@ -110,6 +110,13 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
                             SourceVolume:  aws.String("data"),
                         },
 	            },
+                    Environment: []*ecs.KeyValuePair{
+			//TODO: provide extra values from caps
+			&ecs.KeyValuePair{
+			    Name: aws.String("VERBOSE"),
+			    Value: aws.String("1"),
+			},
+		    },
 	            PortMappings: []*ecs.PortMapping{
 			&ecs.PortMapping{
 			    ContainerPort: aws.Int64(4444),
