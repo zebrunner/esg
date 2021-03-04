@@ -267,8 +267,15 @@ func create(w http.ResponseWriter, r *http.Request) {
 	u := startedService.Url
         log.Printf("[%d] [SERVICE_URL] [%v]", requestId, u)
 	cancel := startedService.Cancel
-	var resp *http.Response
+	// var resp *http.Response
 	i := 1
+
+	var s struct {
+		Value struct {
+			ID string `json:"sessionId"`
+		}
+		ID string `json:"sessionId"`
+	}
 	for ; ; i++ {
 		r.URL.Host, r.URL.Path = u.Host, path.Join(u.Path, r.URL.Path)
 
@@ -284,10 +291,11 @@ func create(w http.ResponseWriter, r *http.Request) {
 			return
 		default:
 		}
-		switch status {
-		case browserStarted:
+		if status == browserStarted {
+			log.Printf("[BROWSDER STARTED]")
 			sess, ok := resp["sessionId"].(string)
 			if !ok {
+			        log.Printf("[BROWSDER STARTED] !ok resp[sessionId]")
 				protocolError := func() {
 					reply(w, errMsg("protocol error"), http.StatusBadGateway)
 					log.Printf("[%d] [BAD_RESPONSE]\n", requestId)
@@ -313,19 +321,23 @@ func create(w http.ResponseWriter, r *http.Request) {
                                         cancel()
 					return
 				}
-				resp["value"].(map[string]interface{})["sessionId"] = startedService.Container.ID + sess
+				s.ID = startedService.Container.ID + sess
+				resp["value"].(map[string]interface{})["sessionId"] = s.ID
+			        log.Printf("[BROWSDER STARTED] !ok resp[sessionId] end")
 			} else {
-				resp["sessionId"] = startedService.Container.ID + sess
+				sess, ok = resp["sessionId"].(string)
+				s.ID = startedService.Container.ID + sess
+				resp["sessionId"] = s.ID
+			        log.Printf("[BROWSDER STARTED] ok resp[sessionId]")
 			}
+			log.Printf("[BROWSDER STARTED] ok resp[sessionId]")
 			reply(w, resp, http.StatusOK)
-			log.Printf("[%d] [SESSION_CREATED] [%s] [%.2fs]", requestId, startedService.Container.ID + sess, util.SecondsSince(sessionStartTime))
+			log.Printf("[REPLY]")
+			log.Printf("[%d] [SESSION_CREATED] [%s] [%.2fs]", requestId, s.ID, util.SecondsSince(sessionStartTime))
 			break
-		case browserFailed:
-                        log.Printf("[%d] [SESSION_FAILED1]", requestId)
-                        queue.Drop()
-                        cancel()
-                        return
-		case seleniumError:
+			// return
+			log.Printf("[AFTER BREAK]")
+		} else {
                         log.Printf("[%d] [SESSION_FAILED2]", requestId)
                         queue.Drop()
                         cancel()
@@ -381,18 +393,12 @@ func create(w http.ResponseWriter, r *http.Request) {
 		break
 */
 	}
-
-	log.Printf("response body: %+v", resp.Body)
+	log.Printf("response body: ok")
 	//TODO: try to modify response here
 
-	defer resp.Body.Close()
-	var s struct {
-		Value struct {
-			ID string `json:"sessionId"`
-		}
-		ID string `json:"sessionId"`
-	}
+	// defer resp.Body.Close()
 
+/*
 	location := resp.Header.Get("Location")
 	if location != "" {
 		l, err := url.Parse(location)
@@ -422,10 +428,9 @@ func create(w http.ResponseWriter, r *http.Request) {
 		cancel()
 		return
 	}
+*/
 	// Add task id to session id
-	s.ID = startedService.Container.ID + s.ID
 	// resp["sessionId"] = s.ID
-	log.Printf("s.ID: %s", s.ID)
 
 	sess := &session.Session{
 		Quota:     user,
@@ -592,11 +597,12 @@ func proxy(w http.ResponseWriter, r *http.Request) {
                         log.Printf("111 r.URL.Path: %s", r.URL.Path)
 
 			fragments := strings.Split(r.URL.Path, slash)
-			id := fragments[2]
-//                        id := fragments[2][32:]
+			longId := fragments[2]
+			id := fragments[2][32:]
+			r.URL.Path = strings.ReplaceAll(r.URL.Path, longId, id)
                         log.Printf("id: %s", id)
 
-			sess, ok := sessions.Get(id)
+			sess, ok := sessions.Get(longId)
 			log.Printf("session: %v", sess)
 			if ok {
 				sess.Lock.Lock()
