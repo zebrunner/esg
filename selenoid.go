@@ -174,7 +174,6 @@ func create(w http.ResponseWriter, r *http.Request) {
 	sessionStartTime := time.Now()
 	requestId := serial()
 	user, remote := util.RequestInfo(r)
-	log.Printf(remote)
 	body, err := ioutil.ReadAll(r.Body)
 	r.Body.Close()
 	if err != nil {
@@ -267,7 +266,6 @@ func create(w http.ResponseWriter, r *http.Request) {
 	u := startedService.Url
         log.Printf("[%d] [SERVICE_URL] [%v]", requestId, u)
 	cancel := startedService.Cancel
-	// var resp *http.Response
 	i := 1
 
 	var s struct {
@@ -335,102 +333,13 @@ func create(w http.ResponseWriter, r *http.Request) {
 			log.Printf("[REPLY]")
 			log.Printf("[%d] [SESSION_CREATED] [%s] [%.2fs]", requestId, s.ID, util.SecondsSince(sessionStartTime))
 			break
-			// return
-			log.Printf("[AFTER BREAK]")
 		} else {
                         log.Printf("[%d] [SESSION_FAILED2]", requestId)
                         queue.Drop()
                         cancel()
                         return
 		}
-
-/*
-		req, _ := http.NewRequest(http.MethodPost, r.URL.String(), bytes.NewReader(body))
-		ctx, done := context.WithTimeout(r.Context(), newSessionAttemptTimeout)
-		defer done()
-		log.Printf("[%d] [SESSION_ATTEMPTED] [%s] [%d]", requestId, u.String(), i)
-		rsp, err := httpClient.Do(req.WithContext(ctx))
-		// Trying tu insert tesk id in response
-		// rsp.Body["sessionId"] = startedService.Container.ID + rsp.Body["sessionId"]
-	        log.Printf("response body: %s", rsp.Body)
-		select {
-		case <-ctx.Done():
-			if rsp != nil {
-				rsp.Body.Close()
-			}
-			switch ctx.Err() {
-			case context.DeadlineExceeded:
-				log.Printf("[%d] [SESSION_ATTEMPT_TIMED_OUT] [%s]", requestId, newSessionAttemptTimeout)
-				if i < retryCount {
-					continue
-				}
-				err := fmt.Errorf("New session attempts retry count exceeded")
-				log.Printf("[%d] [SESSION_FAILED] [%s] [%s]", requestId, u.String(), err)
-				util.JsonError(w, err.Error(), http.StatusInternalServerError)
-			case context.Canceled:
-				log.Printf("[%d] [CLIENT_DISCONNECTED] [%s] [%s] [%.2fs]", requestId, user, remote, util.SecondsSince(sessionStartTime))
-			}
-			queue.Drop()
-			cancel()
-			return
-		default:
-		}
-		if err != nil {
-			if rsp != nil {
-				rsp.Body.Close()
-			}
-			log.Printf("[%d] [SESSION_FAILED] [%s] [%s]", requestId, u.String(), err)
-			util.JsonError(w, err.Error(), http.StatusInternalServerError)
-			queue.Drop()
-			cancel()
-			return
-		}
-		if rsp.StatusCode == http.StatusNotFound && u.Path == "" {
-			u.Path = "/wd/hub"
-			continue
-		}
-		resp = rsp
-		break
-*/
 	}
-	log.Printf("response body: ok")
-	//TODO: try to modify response here
-
-	// defer resp.Body.Close()
-
-/*
-	location := resp.Header.Get("Location")
-	if location != "" {
-		l, err := url.Parse(location)
-		if err == nil {
-			fragments := strings.Split(l.Path, slash)
-			s.ID = fragments[len(fragments)-1]
-	                log.Printf("[%d] [SESSION_ID] [%v]", requestId, s.ID)
-			u := &url.URL{
-				Scheme: "http",
-				Host:   hostname,
-				Path:   path.Join("/wd/hub/session", s.ID),
-			}
-			w.Header().Add("Location", u.String())
-			w.WriteHeader(resp.StatusCode)
-		}
-	} else {
-		tee := io.TeeReader(resp.Body, w)
-		w.WriteHeader(resp.StatusCode)
-		json.NewDecoder(tee).Decode(&s)
-		if s.ID == "" {
-			s.ID = s.Value.ID
-		}
-	}
-	if s.ID == "" {
-		log.Printf("[%d] [SESSION_FAILED] [%s] [%s]", requestId, u.String(), resp.Status)
-		queue.Drop()
-		cancel()
-		return
-	}
-*/
-	// Add task id to session id
-	// resp["sessionId"] = s.ID
 
 	sess := &session.Session{
 		Quota:     user,
@@ -597,13 +506,12 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 			longId := fragments[2]
 			id := fragments[2][32:]
 			r.URL.Path = strings.ReplaceAll(r.URL.Path, longId, id)
-                        log.Printf("id: %s", id)
 
 			sess, ok := sessions.Get(longId)
-			log.Printf("session: %v", sess)
 			if !ok {
 				log.Printf("NEED TO LOOK FOR IN AWS!!!")
 			} else {
+	                        log.Printf("session is ok for id: ", longId)
 				sess.Lock.Lock()
 				defer sess.Lock.Unlock()
 				select {

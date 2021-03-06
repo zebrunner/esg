@@ -319,9 +319,7 @@ func handler() http.Handler {
 		w.Header().Add("Content-Type", "application/json")
 		r.URL.Scheme = "http"
 		r.URL.Host = (&request{r}).localaddr()
-		log.Printf("r.URL.Host: [%s]", r.URL.Host)
 		r.URL.Path = strings.TrimPrefix(r.URL.Path, paths.WdHub)
-		log.Printf("r.URL.Path: [%s]", r.URL.Path)
 		selenium().ServeHTTP(w, r)
 	})
 	root.HandleFunc(paths.Error, func(w http.ResponseWriter, r *http.Request) {
