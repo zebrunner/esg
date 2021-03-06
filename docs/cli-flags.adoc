@@ -7,8 +7,6 @@ The following flags are supported by `selenoid` command:
     Whether to add driver process logs to Selenoid output
 -conf string
     Browsers configuration file (default "config/browsers.json")
--container-network string
-    Network to be used for containers (default "default")
 -cpu value
     Containers cpu limit as float e.g. 0.2 or 1.0
 -disable-privileged

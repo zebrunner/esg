@@ -44,7 +44,6 @@ var (
 	gracefulPeriod           time.Duration
 	limit                    int
 	retryCount               int
-	containerNetwork         string
 	sessions                 = session.NewMap()
 	confPath                 string
 	logConfPath              string
@@ -80,7 +79,6 @@ func init() {
 	flag.DurationVar(&sessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
 	flag.DurationVar(&serviceStartupTimeout, "service-startup-timeout", 30*time.Second, "Service startup timeout in time.Duration format")
 	flag.BoolVar(&version, "version", false, "Show version and exit")
-	flag.StringVar(&containerNetwork, "container-network", service.DefaultContainerNetwork, "Network to be used for containers")
 	flag.BoolVar(&captureDriverLogs, "capture-driver-logs", false, "Whether to add driver process logs to Selenoid output")
 	flag.BoolVar(&disablePrivileged, "disable-privileged", false, "Whether to disable privileged container mode")
 	flag.StringVar(&videoOutputDir, "video-output-dir", "video", "Directory to save recorded video to")
@@ -150,7 +148,6 @@ func init() {
 
 	environment := service.Environment{
 		InDocker:             inDocker,
-		Network:              containerNetwork,
 		StartupTimeout:       serviceStartupTimeout,
 		SessionDeleteTimeout: sessionDeleteTimeout,
 		CaptureDriverLogs:    captureDriverLogs,
