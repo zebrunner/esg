@@ -277,7 +277,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 	for ; ; i++ {
 		r.URL.Host, r.URL.Path = u.Host, path.Join(u.Path, r.URL.Path)
 
-                log.Printf("[%d] [SESSION_ATTEMPTED] [%s] [%d] [%s]", requestId, u.String(), i, body)
+        log.Printf("[%d] [SESSION_ATTEMPTED] [%s] [%d] [%s]", requestId, u.String(), i, body)
 		//TODO: implement response updater to populate task id as part of sessionId
 		resp, status := createSession(r.Context(), r.URL.String(), r.Header, body)
                 log.Printf("resp: [%s]; status: [%s]", resp, status)
@@ -319,12 +319,12 @@ func create(w http.ResponseWriter, r *http.Request) {
                                         cancel()
 					return
 				}
-				s.ID = startedService.Container.ID + sess
+				s.ID = startedService.Container.ContainerInstanceID + startedService.Container.ID + sess
 				resp["value"].(map[string]interface{})["sessionId"] = s.ID
 			        log.Printf("[BROWSDER STARTED] !ok resp[sessionId] end")
 			} else {
 				sess, ok = resp["sessionId"].(string)
-				s.ID = startedService.Container.ID + sess
+                s.ID = startedService.Container.ContainerInstanceID + startedService.Container.ID + sess
 				resp["sessionId"] = s.ID
 			        log.Printf("[BROWSDER STARTED] ok resp[sessionId]")
 			}
@@ -489,6 +489,20 @@ func generateRandomFileName(extension string) string {
 	return "selenoid" + hex.EncodeToString(randBytes) + extension
 }
 
+type SessionIDParts struct {
+    InstanceID string
+    TaskID string
+    SessionID string
+}
+
+func parseLongSessionId(ID string) SessionIDParts {
+    return SessionIDParts {
+        InstanceID: ID[:32],
+        TaskID: ID[32:64],
+        SessionID: ID[64:],
+    }
+}
+
 func proxy(w http.ResponseWriter, r *http.Request) {
 	log.Printf("PROXYING_PROXY")
 	done := make(chan func())
@@ -504,9 +518,8 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 		Director: func(r *http.Request) {
 			fragments := strings.Split(r.URL.Path, slash)
 			longId := fragments[2]
-			id := fragments[2][32:]
-			r.URL.Path = strings.ReplaceAll(r.URL.Path, longId, id)
-
+		        idParts := parseLongSessionId(longId)
+			r.URL.Path = strings.ReplaceAll(r.URL.Path, longId, idParts.SessionID)
 			sess, ok := sessions.Get(longId)
 			if !ok {
 				log.Printf("NEED TO LOOK FOR IN AWS!!!")
@@ -521,18 +534,18 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 				}
 				if r.Method == http.MethodDelete && len(fragments) == 3 {
 					if enableFileUpload {
-						os.RemoveAll(filepath.Join(os.TempDir(), id))
+						os.RemoveAll(filepath.Join(os.TempDir(), idParts.SessionID))
 					}
 					cancel = sess.Cancel
-					sessions.Remove(id)
+					sessions.Remove(idParts.SessionID)
 					queue.Release()
-					log.Printf("[%d] [SESSION_DELETED] [%s]", requestId, id)
+					log.Printf("[%d] [SESSION_DELETED] [%s]", requestId, idParts.SessionID)
 				} else {
 					sess.TimeoutCh = onTimeout(sess.Timeout, func() {
-						request{r}.session(id).Delete(requestId)
+						request{r}.session(idParts.SessionID).Delete(requestId)
 					})
 					if len(fragments) == 4 && fragments[len(fragments)-1] == "file" && enableFileUpload {
-						r.Header.Set("X-Selenoid-File", filepath.Join(os.TempDir(), id))
+						r.Header.Set("X-Selenoid-File", filepath.Join(os.TempDir(), idParts.SessionID))
 						r.URL.Path = "/file"
 						return
 					}

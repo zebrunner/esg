@@ -69,9 +69,10 @@ func (c *Caps) BrowserName() string {
 
 // Container - container information
 type Container struct {
-	ID        string            `json:"id"`
-	IPAddress string            `json:"ip"`
-	Ports     map[string]string `json:"exposedPorts,omitempty"`
+	ID         string            `json:"id"`
+    ContainerInstanceID string
+	IPAddress  string            `json:"ip"`
+	Ports      map[string]string `json:"exposedPorts,omitempty"`
 }
 
 // Session - holds session info

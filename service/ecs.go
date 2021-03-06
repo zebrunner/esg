@@ -299,8 +299,9 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
         }
 
 	//TODO: verify that returned number of instances is 1!
-        instanceId := *resultContainerInstance.ContainerInstances[0].Ec2InstanceId
-        log.Printf("[%d] [INSTANCE_ID] [%s]", requestId, instanceId)
+    instanceId := *resultContainerInstance.ContainerInstances[0].Ec2InstanceId
+    log.Printf("[%d] [INSTANCE_ID] [%s]", requestId, instanceId)
+    fmt.Println("[AWS RESPONSE]", resultContainerInstance.ContainerInstances[0])
 
 	instanceInput := &ec2.DescribeInstancesInput{
 	    InstanceIds: []*string{
@@ -344,11 +345,12 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 
 	s := StartedService{
 		Url: u,
-                Container: &session.Container{
-                        ID:        taskId,
-                        IPAddress: privateIpAddress,
-                        Ports:     publishedPortsInfo,
-                },
+        Container: &session.Container{
+                ID:        taskId,
+                ContainerInstanceID: containerInstanceId,
+                IPAddress: privateIpAddress,
+                Ports:     publishedPortsInfo,
+        },
 		HostPort: hostPort,
 		Cancel: func() {
 			removeTask(ctx, requestId, taskArn)
@@ -383,6 +385,21 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 
 	log.Printf("[%d] [TASK_SERVICE_DETAILS] [%s]", requestId, s)
 	return &s, nil
+}
+
+func GetTaskInfo(instanceID string, taskID string) {
+	svc := ecs.New(awsSession.New(&aws.Config{Region: aws.String("us-east-1"), MaxRetries: aws.Int(10)}))
+    input := &ecs.ListTasksInput{
+        Cluster: aws.String("executor-cluster"),
+        ContainerInstance: aws.String(instanceID),
+    }
+    fmt.Println(instanceID)
+    result, err := svc.ListTasks(input)
+    if err != nil {
+        log.Printf("[GET TASK INFO ERROR] %v", err)
+    } else {
+        fmt.Println("TASK LIST RESULT", result)
+    }
 }
 
 func getEcsPortConfig() (*ecsPortConfig, error) {
