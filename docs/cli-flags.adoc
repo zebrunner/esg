@@ -1,4 +1,4 @@
-== Selenoid CLI Flags
+== Zebrunner Elastic Selenoid Hub CLI Flags
 
 The following flags are supported by `selenoid` command:
 
@@ -13,8 +13,6 @@ The following flags are supported by `selenoid` command:
     Containers cpu limit as float e.g. 0.2 or 1.0
 -disable-privileged
     Whether to disable privileged container mode
--disable-queue
-    Disable wait queue
 -enable-file-upload
     File upload support
 -graceful-period duration

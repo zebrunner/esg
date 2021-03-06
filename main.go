@@ -34,7 +34,6 @@ import (
 
 var (
 	hostname                 string
-	disableQueue             bool
 	enableFileUpload         bool
 	listen                   string
 	timeout                  time.Duration
@@ -69,7 +68,6 @@ var (
 )
 
 func init() {
-	flag.BoolVar(&disableQueue, "disable-queue", false, "Disable wait queue")
 	flag.BoolVar(&enableFileUpload, "enable-file-upload", false, "File upload support")
 	flag.StringVar(&listen, "listen", ":4444", "Network address to accept connections")
 	flag.StringVar(&confPath, "conf", "config/browsers.json", "Browsers configuration file")
@@ -105,7 +103,7 @@ func init() {
 	if ggrHostEnv := os.Getenv("GGR_HOST"); ggrHostEnv != "" {
 		ggrHost = parseGgrHost(ggrHostEnv)
 	}
-	queue = protect.New(limit, disableQueue)
+	queue = protect.New(limit, false)
 	conf = config.NewConfig()
 	err = conf.Load(confPath, logConfPath)
 	if err != nil {
