@@ -5,22 +5,15 @@ import (
 	"fmt"
 //	"github.com/docker/go-units"
 	"log"
-//	"net"
 	"net/url"
 	"strconv"
 	"time"
 	"math/rand"
 
-//	"github.com/aerokube/selenoid/config"
 	"github.com/aerokube/selenoid/session"
 	"github.com/aerokube/util"
-//	"github.com/docker/docker/api/types"
 	ctr "github.com/docker/docker/api/types/container"
-//	"github.com/docker/docker/api/types/network"
-//	"github.com/docker/docker/api/types/strslice"
 	"github.com/docker/docker/client"
-//	"github.com/docker/docker/pkg/stdcopy"
-//	"github.com/docker/go-connections/nat"
 
 //	"os"
 //	"path/filepath"
@@ -32,8 +25,8 @@ import (
         awsSession "github.com/aws/aws-sdk-go/aws/session"
 )
 
-// Ecs - ecs container manager
-type Ecs struct {
+// Task - ecs task container manager
+type Task struct {
        ServiceBase
        Environment
        session.Caps
@@ -50,9 +43,8 @@ type ecsPortConfig struct {
 }
 
 // StartWithCancel - Starter interface implementation
-func (d *Ecs) StartWithCancel() (*StartedService, error) {
+func (d *Task) StartWithCancel() (*StartedService, error) {
         requestId := d.RequestId
-//        log.Printf("[%d] [d.Caps] [%s]", requestId, d.Caps)
 
 	portConfig, err := getEcsPortConfig()
 	if err != nil {
@@ -80,7 +72,7 @@ func (d *Ecs) StartWithCancel() (*StartedService, error) {
 
         hardMemory, softMemory := getEcsMemory(d.Caps)
         cpu := getEcsCpu(d.Caps)
-	imageUrl := getImage(d.Caps)
+	imageUrl := getEcsImage(d.Caps)
 
 	// Without unique nano postfix we face with AWS limitations during multi-threading execution a lot...
 	taskDefFamily := d.Caps.Name + "-" + strconv.Itoa(int(time.Now().UnixNano()))
@@ -118,6 +110,13 @@ func (d *Ecs) StartWithCancel() (*StartedService, error) {
                             SourceVolume:  aws.String("data"),
                         },
 	            },
+                    Environment: []*ecs.KeyValuePair{
+			//TODO: provide extra values from caps
+			&ecs.KeyValuePair{
+			    Name: aws.String("VERBOSE"),
+			    Value: aws.String("1"),
+			},
+		    },
 	            PortMappings: []*ecs.PortMapping{
 			&ecs.PortMapping{
 			    ContainerPort: aws.Int64(4444),
@@ -300,8 +299,9 @@ func (d *Ecs) StartWithCancel() (*StartedService, error) {
         }
 
 	//TODO: verify that returned number of instances is 1!
-        instanceId := *resultContainerInstance.ContainerInstances[0].Ec2InstanceId
-        log.Printf("[%d] [INSTANCE_ID] [%s]", requestId, instanceId)
+    instanceId := *resultContainerInstance.ContainerInstances[0].Ec2InstanceId
+    log.Printf("[%d] [INSTANCE_ID] [%s]", requestId, instanceId)
+    fmt.Println("[AWS RESPONSE]", resultContainerInstance.ContainerInstances[0])
 
 	instanceInput := &ec2.DescribeInstancesInput{
 	    InstanceIds: []*string{
@@ -340,8 +340,17 @@ func (d *Ecs) StartWithCancel() (*StartedService, error) {
 	log.Printf("[%d] [SERVICE_STARTED] [%s] [%s] [%.2fs]", requestId, imageUrl, taskId, util.SecondsSince(serviceStartTime))
 	log.Printf("[%d] [PROXY_TO] [%s] [%s]", requestId, taskId, u.String())
 
+	// publish all ports feature is still under question for ecs task service so empty map is ok
+        var publishedPortsInfo map[string]string
+
 	s := StartedService{
 		Url: u,
+        Container: &session.Container{
+                ID:        taskId,
+                ContainerInstanceID: containerInstanceId,
+                IPAddress: privateIpAddress,
+                Ports:     publishedPortsInfo,
+        },
 		HostPort: hostPort,
 		Cancel: func() {
 			removeTask(ctx, requestId, taskArn)
@@ -376,6 +385,21 @@ func (d *Ecs) StartWithCancel() (*StartedService, error) {
 
 	log.Printf("[%d] [TASK_SERVICE_DETAILS] [%s]", requestId, s)
 	return &s, nil
+}
+
+func GetTaskInfo(instanceID string, taskID string) {
+	svc := ecs.New(awsSession.New(&aws.Config{Region: aws.String("us-east-1"), MaxRetries: aws.Int(10)}))
+    input := &ecs.ListTasksInput{
+        Cluster: aws.String("executor-cluster"),
+        ContainerInstance: aws.String(instanceID),
+    }
+    fmt.Println(instanceID)
+    result, err := svc.ListTasks(input)
+    if err != nil {
+        log.Printf("[GET TASK INFO ERROR] %v", err)
+    } else {
+        fmt.Println("TASK LIST RESULT", result)
+    }
 }
 
 func getEcsPortConfig() (*ecsPortConfig, error) {
@@ -433,7 +457,7 @@ func getEcsCpu(caps session.Caps) (int64) {
         return int64(cpu)
 }
 
-func getImage(caps session.Caps) string {
+func getEcsImage(caps session.Caps) string {
 	// selenoid/[vnc_][browsername]:[version]
 	vnc := ""
         if caps.VNC {

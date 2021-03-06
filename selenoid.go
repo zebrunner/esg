@@ -35,6 +35,12 @@ import (
 
 const slash = "/"
 
+const (
+	browserStarted = iota
+	browserFailed
+	seleniumError
+)
+
 var (
 	httpClient = &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -92,6 +98,64 @@ func (s *sess) Delete(requestId uint64) {
 	}
 }
 
+// create() method from ggr.
+func createSession(ctx context.Context, sessionUrl string, header http.Header, body []byte) (map[string]interface{}, int) {
+	req, err := http.NewRequest(http.MethodPost, sessionUrl,  bytes.NewReader(body))
+	if err != nil {
+		return nil, seleniumError
+	}
+	for key, values := range header {
+		for _, value := range values {
+			req.Header.Add(key, value)
+		}
+	}
+	req.Header.Del("Accept-Encoding")
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	req = req.WithContext(ctx)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := httpClient.Do(req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
+	if err != nil {
+		return nil, seleniumError
+	}
+	location := resp.Header.Get("Location")
+	if location != "" {
+		l, err := url.Parse(location)
+		if err != nil {
+			return nil, seleniumError
+		}
+		fragments := strings.Split(l.Path, "/")
+		return map[string]interface{}{"sessionId": fragments[len(fragments)-1], "status": 0, "value": struct{}{}}, browserStarted
+	}
+	var reply map[string]interface{}
+	err = json.NewDecoder(resp.Body).Decode(&reply)
+	if err != nil {
+		return nil, seleniumError
+	}
+	if resp.StatusCode != http.StatusOK {
+		return reply, browserFailed
+	}
+	return reply, browserStarted
+}
+
+func reply(w http.ResponseWriter, msg map[string]interface{}, status int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(msg)
+}
+
+func errMsg(msg string) map[string]interface{} {
+	return map[string]interface{}{
+		"value": map[string]string{
+			"message": msg,
+		},
+		"status": 13,
+	}
+}
+
 func serial() uint64 {
 	numLock.Lock()
 	defer numLock.Unlock()
@@ -113,7 +177,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	r.Body.Close()
 	if err != nil {
-		log.Printf("[%d] [ERROR_READING_REQUEST] [%v]", requestId, err)
+		log.Printf("[%d] [%s] [%s] [ERROR_READING_REQUEST] [%v]", requestId, user, remote, err)
 		util.JsonError(w, err.Error(), http.StatusBadRequest)
 		queue.Drop()
 		return
@@ -127,7 +191,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 	}
 	err = json.Unmarshal(body, &browser)
 	if err != nil {
-		log.Printf("[%d] [BAD_JSON_FORMAT] [%v]", requestId, err)
+		log.Printf("[%d] [%s] [%s] [BAD_JSON_FORMAT] [%v]", requestId,  user, remote, err)
 		util.JsonError(w, err.Error(), http.StatusBadRequest)
 		queue.Drop()
 		return
@@ -150,14 +214,14 @@ func create(w http.ResponseWriter, r *http.Request) {
 		caps.ProcessExtensionCapabilities()
 		sessionTimeout, err = getSessionTimeout(caps.SessionTimeout, maxTimeout, timeout)
 		if err != nil {
-			log.Printf("[%d] [BAD_SESSION_TIMEOUT] [%s]", requestId, caps.SessionTimeout)
+			log.Printf("[%d] [%s] [%s] [BAD_SESSION_TIMEOUT] [%s]", requestId,  user, remote, caps.SessionTimeout)
 			util.JsonError(w, err.Error(), http.StatusBadRequest)
 			queue.Drop()
 			return
 		}
 		resolution, err := getScreenResolution(caps.ScreenResolution)
 		if err != nil {
-			log.Printf("[%d] [BAD_SCREEN_RESOLUTION] [%s]", requestId, caps.ScreenResolution)
+			log.Printf("[%d] [%s] [%s] [BAD_SCREEN_RESOLUTION] [%s]", requestId,  user, remote, caps.ScreenResolution)
 			util.JsonError(w, err.Error(), http.StatusBadRequest)
 			queue.Drop()
 			return
@@ -165,7 +229,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 		caps.ScreenResolution = resolution
 		videoScreenSize, err := getVideoScreenSize(caps.VideoScreenSize, resolution)
 		if err != nil {
-			log.Printf("[%d] [BAD_VIDEO_SCREEN_SIZE] [%s]", requestId, caps.VideoScreenSize)
+			log.Printf("[%d] [%s] [%s] [BAD_VIDEO_SCREEN_SIZE] [%s]", requestId,  user, remote, caps.VideoScreenSize)
 			util.JsonError(w, err.Error(), http.StatusBadRequest)
 			queue.Drop()
 			return
@@ -185,103 +249,91 @@ func create(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !ok {
-		log.Printf("[%d] [ENVIRONMENT_NOT_AVAILABLE] [%s] [%s]", requestId, caps.BrowserName(), caps.Version)
+		log.Printf("[%d] [%s] [%s] [ENVIRONMENT_NOT_AVAILABLE] [%s] [%s]", requestId,  user, remote, caps.BrowserName(), caps.Version)
 		util.JsonError(w, "Requested environment is not available", http.StatusBadRequest)
 		queue.Drop()
 		return
 	}
 	startedService, err := starter.StartWithCancel()
 	if err != nil {
-		log.Printf("[%d] [SERVICE_STARTUP_FAILED] [%v]", requestId, err)
+		log.Printf("[%d] [%s] [%s] [SERVICE_STARTUP_FAILED] [%v]", requestId,  user, remote, err)
 		util.JsonError(w, err.Error(), http.StatusInternalServerError)
 		queue.Drop()
 		return
 	}
+        log.Printf("[%d] [%s] [%s] [SERVICE] [%v]", requestId,  user, remote, startedService)
+        log.Printf("[%d] [%s] [%s] [SERVICE_CONTAINER] [%v]", requestId,  user, remote, startedService.Container)
 	u := startedService.Url
+        log.Printf("[%d] [%s] [%s] [SERVICE_URL] [%v]", requestId,  user, remote, u)
 	cancel := startedService.Cancel
-	var resp *http.Response
 	i := 1
-	for ; ; i++ {
-		r.URL.Host, r.URL.Path = u.Host, path.Join(u.Path, r.URL.Path)
-		req, _ := http.NewRequest(http.MethodPost, r.URL.String(), bytes.NewReader(body))
-		ctx, done := context.WithTimeout(r.Context(), newSessionAttemptTimeout)
-		defer done()
-		log.Printf("[%d] [SESSION_ATTEMPTED] [%s] [%d]", requestId, u.String(), i)
-		rsp, err := httpClient.Do(req.WithContext(ctx))
-		select {
-		case <-ctx.Done():
-			if rsp != nil {
-				rsp.Body.Close()
-			}
-			switch ctx.Err() {
-			case context.DeadlineExceeded:
-				log.Printf("[%d] [SESSION_ATTEMPT_TIMED_OUT] [%s]", requestId, newSessionAttemptTimeout)
-				if i < retryCount {
-					continue
-				}
-				err := fmt.Errorf("New session attempts retry count exceeded")
-				log.Printf("[%d] [SESSION_FAILED] [%s] [%s]", requestId, u.String(), err)
-				util.JsonError(w, err.Error(), http.StatusInternalServerError)
-			case context.Canceled:
-				log.Printf("[%d] [CLIENT_DISCONNECTED] [%s] [%s] [%.2fs]", requestId, user, remote, util.SecondsSince(sessionStartTime))
-			}
-			queue.Drop()
-			cancel()
-			return
-		default:
-		}
-		if err != nil {
-			if rsp != nil {
-				rsp.Body.Close()
-			}
-			log.Printf("[%d] [SESSION_FAILED] [%s] [%s]", requestId, u.String(), err)
-			util.JsonError(w, err.Error(), http.StatusInternalServerError)
-			queue.Drop()
-			cancel()
-			return
-		}
-		if rsp.StatusCode == http.StatusNotFound && u.Path == "" {
-			u.Path = "/wd/hub"
-			continue
-		}
-		resp = rsp
-		break
-	}
-	defer resp.Body.Close()
+
 	var s struct {
 		Value struct {
 			ID string `json:"sessionId"`
 		}
 		ID string `json:"sessionId"`
 	}
-	location := resp.Header.Get("Location")
-	if location != "" {
-		l, err := url.Parse(location)
-		if err == nil {
-			fragments := strings.Split(l.Path, slash)
-			s.ID = fragments[len(fragments)-1]
-			u := &url.URL{
-				Scheme: "http",
-				Host:   hostname,
-				Path:   path.Join("/wd/hub/session", s.ID),
+	for ; ; i++ {
+		r.URL.Host, r.URL.Path = u.Host, path.Join(u.Path, r.URL.Path)
+
+        log.Printf("[%d] [%s] [%s] [SESSION_ATTEMPTED] [%s] [%d] [%s]", requestId,  user, remote, u.String(), i, body)
+		//TODO: implement response updater to populate task id as part of sessionId
+		resp, status := createSession(r.Context(), r.URL.String(), r.Header, body)
+		select {
+		case <-r.Context().Done():
+			log.Printf("[%d] {%s] [%s] [CLIENT_DISCONNECTED]", requestId, user, remote)
+                        queue.Drop()
+                        cancel()
+			return
+		default:
+		}
+		if status == browserStarted {
+			sess, ok := resp["sessionId"].(string)
+			if !ok {
+				protocolError := func() {
+					reply(w, errMsg("protocol error"), http.StatusBadGateway)
+					log.Printf("[%d] [%s] [%s] [BAD_RESPONSE]\n", requestId, user, remote)
+				}
+				value, ok := resp["value"]
+				if !ok {
+					protocolError()
+		                        queue.Drop()
+                		        cancel()
+					return
+				}
+				valueMap, ok := value.(map[string]interface{})
+				if !ok {
+					protocolError()
+                                        queue.Drop()
+                                        cancel()
+					return
+				}
+				sess, ok = valueMap["sessionId"].(string)
+				if !ok {
+					protocolError()
+                                        queue.Drop()
+                                        cancel()
+					return
+				}
+				s.ID = startedService.Container.ContainerInstanceID + startedService.Container.ID + sess
+				resp["value"].(map[string]interface{})["sessionId"] = s.ID
+			} else {
+				sess, ok = resp["sessionId"].(string)
+		                s.ID = startedService.Container.ContainerInstanceID + startedService.Container.ID + sess
+				resp["sessionId"] = s.ID
 			}
-			w.Header().Add("Location", u.String())
-			w.WriteHeader(resp.StatusCode)
-		}
-	} else {
-		tee := io.TeeReader(resp.Body, w)
-		w.WriteHeader(resp.StatusCode)
-		json.NewDecoder(tee).Decode(&s)
-		if s.ID == "" {
-			s.ID = s.Value.ID
+			reply(w, resp, http.StatusOK)
+			log.Printf("[%d] [%s] [%s] [SESSION_CREATED] [%s] [%.2fs]", requestId,  user, remote, s.ID, util.SecondsSince(sessionStartTime))
+			break
+		} else {
+                        log.Printf("[%d] [%s] [%s] [SESSION_FAILED]", requestId, user, remote)
+                        queue.Drop()
+                        cancel()
+                        return
 		}
 	}
-	if s.ID == "" {
-		log.Printf("[%d] [SESSION_FAILED] [%s] [%s]", requestId, u.String(), resp.Status)
-		queue.Drop()
-		cancel()
-		return
-	}
+
 	sess := &session.Session{
 		Quota:     user,
 		Caps:      caps,
@@ -292,7 +344,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 			request{r}.session(s.ID).Delete(requestId)
 		}),
 		Started: time.Now()}
-	cancelAndRenameFiles := func() {
+		cancelAndRenameFiles := func() {
 		cancel()
 		sessionId := preprocessSessionId(s.ID)
 		e := event.Event{
@@ -345,7 +397,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 	sess.Cancel = cancelAndRenameFiles
 	sessions.Put(s.ID, sess)
 	queue.Create()
-	log.Printf("[%d] [SESSION_CREATED] [%s] [%d] [%.2fs]", requestId, s.ID, i, util.SecondsSince(sessionStartTime))
+	log.Printf("[%d] [%s] [%s] [SESSION_CREATED] [%s] [%d] [%.2fs]", requestId,  user, remote, s.ID, i, util.SecondsSince(sessionStartTime))
 }
 
 func preprocessSessionId(sid string) string {
@@ -430,6 +482,20 @@ func generateRandomFileName(extension string) string {
 	return "selenoid" + hex.EncodeToString(randBytes) + extension
 }
 
+type SessionIDParts struct {
+    InstanceID string
+    TaskID string
+    SessionID string
+}
+
+func parseLongSessionId(ID string) SessionIDParts {
+    return SessionIDParts {
+        InstanceID: ID[:32],
+        TaskID: ID[32:64],
+        SessionID: ID[64:],
+    }
+}
+
 func proxy(w http.ResponseWriter, r *http.Request) {
 	done := make(chan func())
 	go func() {
@@ -443,9 +509,16 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 	(&httputil.ReverseProxy{
 		Director: func(r *http.Request) {
 			fragments := strings.Split(r.URL.Path, slash)
-			id := fragments[2]
-			sess, ok := sessions.Get(id)
-			if ok {
+			longId := fragments[2]
+		        idParts := parseLongSessionId(longId)
+			r.URL.Path = strings.ReplaceAll(r.URL.Path, longId, idParts.SessionID)
+
+			//TODO: candidate to hide on verbose log level
+		        log.Printf("[%d] [PROXY_TO] [%s]", requestId, r.URL.Path)
+			sess, ok := sessions.Get(longId)
+			if !ok {
+				log.Printf("NEED TO LOOK FOR IN AWS!!!")
+			} else {
 				sess.Lock.Lock()
 				defer sess.Lock.Unlock()
 				select {
@@ -455,18 +528,18 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 				}
 				if r.Method == http.MethodDelete && len(fragments) == 3 {
 					if enableFileUpload {
-						os.RemoveAll(filepath.Join(os.TempDir(), id))
+						os.RemoveAll(filepath.Join(os.TempDir(), idParts.SessionID))
 					}
 					cancel = sess.Cancel
-					sessions.Remove(id)
+					sessions.Remove(idParts.SessionID)
 					queue.Release()
-					log.Printf("[%d] [SESSION_DELETED] [%s]", requestId, id)
+					log.Printf("[%d] [SESSION_DELETED] [%s]", requestId, idParts.SessionID)
 				} else {
 					sess.TimeoutCh = onTimeout(sess.Timeout, func() {
-						request{r}.session(id).Delete(requestId)
+						request{r}.session(idParts.SessionID).Delete(requestId)
 					})
 					if len(fragments) == 4 && fragments[len(fragments)-1] == "file" && enableFileUpload {
-						r.Header.Set("X-Selenoid-File", filepath.Join(os.TempDir(), id))
+						r.Header.Set("X-Selenoid-File", filepath.Join(os.TempDir(), idParts.SessionID))
 						r.URL.Path = "/file"
 						return
 					}
