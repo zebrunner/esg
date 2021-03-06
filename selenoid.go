@@ -324,7 +324,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 				resp["sessionId"] = s.ID
 			}
 			reply(w, resp, http.StatusOK)
-			log.Printf("[%d] [%s] [%s] [SESSION_CREATED] [%s] [%.2fs]", requestId,  user, remote, s.ID, util.SecondsSince(sessionStartTime))
+			log.Printf("[%d] [%s] [%s] [BROWSER_STARTED] [%s] [%.2fs]", requestId,  user, remote, s.ID, util.SecondsSince(sessionStartTime))
 			break
 		} else {
                         log.Printf("[%d] [%s] [%s] [SESSION_FAILED]", requestId, user, remote)
