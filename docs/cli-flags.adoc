@@ -11,8 +11,6 @@ The following flags are supported by `selenoid` command:
     Network to be used for containers (default "default")
 -cpu value
     Containers cpu limit as float e.g. 0.2 or 1.0
--disable-docker
-    Disable docker support
 -disable-privileged
     Whether to disable privileged container mode
 -disable-queue

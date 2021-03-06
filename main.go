@@ -34,7 +34,6 @@ import (
 
 var (
 	hostname                 string
-	disableDocker            bool
 	disableQueue             bool
 	enableFileUpload         bool
 	listen                   string
@@ -70,7 +69,6 @@ var (
 )
 
 func init() {
-	flag.BoolVar(&disableDocker, "disable-docker", false, "Disable docker support")
 	flag.BoolVar(&disableQueue, "disable-queue", false, "Disable wait queue")
 	flag.BoolVar(&enableFileUpload, "enable-file-upload", false, "File upload support")
 	flag.StringVar(&listen, "listen", ":4444", "Network address to accept connections")
@@ -125,17 +123,16 @@ func init() {
 		inDocker = true
 	}
 
-	if !disableDocker {
-		videoOutputDir, err = filepath.Abs(videoOutputDir)
-		if err != nil {
-			log.Fatalf("[-] [INIT] [Invalid video output dir %s: %v]", videoOutputDir, err)
-		}
-		err = os.MkdirAll(videoOutputDir, os.FileMode(0644))
-		if err != nil {
-			log.Fatalf("[-] [INIT] [Failed to create video output dir %s: %v]", videoOutputDir, err)
-		}
-		log.Printf("[-] [INIT] [Video Dir: %s]", videoOutputDir)
+	videoOutputDir, err = filepath.Abs(videoOutputDir)
+	if err != nil {
+		log.Fatalf("[-] [INIT] [Invalid video output dir %s: %v]", videoOutputDir, err)
 	}
+	err = os.MkdirAll(videoOutputDir, os.FileMode(0644))
+	if err != nil {
+		log.Fatalf("[-] [INIT] [Failed to create video output dir %s: %v]", videoOutputDir, err)
+	}
+	log.Printf("[-] [INIT] [Video Dir: %s]", videoOutputDir)
+
 	if logOutputDir != "" {
 		logOutputDir, err = filepath.Abs(logOutputDir)
 		if err != nil {
@@ -164,13 +161,6 @@ func init() {
 		LogOutputDir:         logOutputDir,
 		SaveAllLogs:          saveAllLogs,
 		Privileged:           !disablePrivileged,
-	}
-	if disableDocker {
-		manager = &service.DefaultManager{Environment: &environment, Config: conf}
-		if logOutputDir != "" && captureDriverLogs {
-			log.Fatalf("[-] [INIT] [In drivers mode only one of -capture-driver-logs and -log-output-dir flags is allowed]")
-		}
-		return
 	}
 	dockerHost := os.Getenv("DOCKER_HOST")
 	if dockerHost == "" {
@@ -383,10 +373,8 @@ func main() {
 		s.Cancel()
 	})
 
-	if !disableDocker {
-		err := cli.Close()
-		if err != nil {
-			log.Fatalf("[-] [SHUTTING_DOWN] [Error closing Docker client: %v]", err)
-		}
+	err := cli.Close()
+	if err != nil {
+		log.Fatalf("[-] [SHUTTING_DOWN] [Error closing Docker client: %v]", err)
 	}
 }
