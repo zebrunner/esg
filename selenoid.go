@@ -177,7 +177,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	r.Body.Close()
 	if err != nil {
-		log.Printf("[%d] [ERROR_READING_REQUEST] [%v]", requestId, err)
+		log.Printf("[%d] [%s] [%s] [ERROR_READING_REQUEST] [%v]", requestId, user, remote, err)
 		util.JsonError(w, err.Error(), http.StatusBadRequest)
 		queue.Drop()
 		return
@@ -191,7 +191,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 	}
 	err = json.Unmarshal(body, &browser)
 	if err != nil {
-		log.Printf("[%d] [BAD_JSON_FORMAT] [%v]", requestId, err)
+		log.Printf("[%d] [%s] [%s] [BAD_JSON_FORMAT] [%v]", requestId,  user, remote, err)
 		util.JsonError(w, err.Error(), http.StatusBadRequest)
 		queue.Drop()
 		return
@@ -214,14 +214,14 @@ func create(w http.ResponseWriter, r *http.Request) {
 		caps.ProcessExtensionCapabilities()
 		sessionTimeout, err = getSessionTimeout(caps.SessionTimeout, maxTimeout, timeout)
 		if err != nil {
-			log.Printf("[%d] [BAD_SESSION_TIMEOUT] [%s]", requestId, caps.SessionTimeout)
+			log.Printf("[%d] [%s] [%s] [BAD_SESSION_TIMEOUT] [%s]", requestId,  user, remote, caps.SessionTimeout)
 			util.JsonError(w, err.Error(), http.StatusBadRequest)
 			queue.Drop()
 			return
 		}
 		resolution, err := getScreenResolution(caps.ScreenResolution)
 		if err != nil {
-			log.Printf("[%d] [BAD_SCREEN_RESOLUTION] [%s]", requestId, caps.ScreenResolution)
+			log.Printf("[%d] [%s] [%s] [BAD_SCREEN_RESOLUTION] [%s]", requestId,  user, remote, caps.ScreenResolution)
 			util.JsonError(w, err.Error(), http.StatusBadRequest)
 			queue.Drop()
 			return
@@ -229,7 +229,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 		caps.ScreenResolution = resolution
 		videoScreenSize, err := getVideoScreenSize(caps.VideoScreenSize, resolution)
 		if err != nil {
-			log.Printf("[%d] [BAD_VIDEO_SCREEN_SIZE] [%s]", requestId, caps.VideoScreenSize)
+			log.Printf("[%d] [%s] [%s] [BAD_VIDEO_SCREEN_SIZE] [%s]", requestId,  user, remote, caps.VideoScreenSize)
 			util.JsonError(w, err.Error(), http.StatusBadRequest)
 			queue.Drop()
 			return
@@ -249,22 +249,22 @@ func create(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !ok {
-		log.Printf("[%d] [ENVIRONMENT_NOT_AVAILABLE] [%s] [%s]", requestId, caps.BrowserName(), caps.Version)
+		log.Printf("[%d] [%s] [%s] [ENVIRONMENT_NOT_AVAILABLE] [%s] [%s]", requestId,  user, remote, caps.BrowserName(), caps.Version)
 		util.JsonError(w, "Requested environment is not available", http.StatusBadRequest)
 		queue.Drop()
 		return
 	}
 	startedService, err := starter.StartWithCancel()
 	if err != nil {
-		log.Printf("[%d] [SERVICE_STARTUP_FAILED] [%v]", requestId, err)
+		log.Printf("[%d] [%s] [%s] [SERVICE_STARTUP_FAILED] [%v]", requestId,  user, remote, err)
 		util.JsonError(w, err.Error(), http.StatusInternalServerError)
 		queue.Drop()
 		return
 	}
-        log.Printf("[%d] [SERVICE] [%v]", requestId, startedService)
-        log.Printf("[%d] [SERVICE_CONTAINER] [%v]", requestId, startedService.Container)
+        log.Printf("[%d] [%s] [%s] [SERVICE] [%v]", requestId,  user, remote, startedService)
+        log.Printf("[%d] [%s] [%s] [SERVICE_CONTAINER] [%v]", requestId,  user, remote, startedService.Container)
 	u := startedService.Url
-        log.Printf("[%d] [SERVICE_URL] [%v]", requestId, u)
+        log.Printf("[%d] [%s] [%s] [SERVICE_URL] [%v]", requestId,  user, remote, u)
 	cancel := startedService.Cancel
 	i := 1
 
@@ -277,26 +277,23 @@ func create(w http.ResponseWriter, r *http.Request) {
 	for ; ; i++ {
 		r.URL.Host, r.URL.Path = u.Host, path.Join(u.Path, r.URL.Path)
 
-        log.Printf("[%d] [SESSION_ATTEMPTED] [%s] [%d] [%s]", requestId, u.String(), i, body)
+        log.Printf("[%d] [%s] [%s] [SESSION_ATTEMPTED] [%s] [%d] [%s]", requestId,  user, remote, u.String(), i, body)
 		//TODO: implement response updater to populate task id as part of sessionId
 		resp, status := createSession(r.Context(), r.URL.String(), r.Header, body)
-                log.Printf("resp: [%s]; status: [%s]", resp, status)
 		select {
 		case <-r.Context().Done():
-			log.Printf("[CLIENT_DISCONNECTED]")
+			log.Printf("[%d] {%s] [%s] [CLIENT_DISCONNECTED]", requestId, user, remote)
                         queue.Drop()
                         cancel()
 			return
 		default:
 		}
 		if status == browserStarted {
-			log.Printf("[BROWSDER STARTED]")
 			sess, ok := resp["sessionId"].(string)
 			if !ok {
-			        log.Printf("[BROWSDER STARTED] !ok resp[sessionId]")
 				protocolError := func() {
 					reply(w, errMsg("protocol error"), http.StatusBadGateway)
-					log.Printf("[%d] [BAD_RESPONSE]\n", requestId)
+					log.Printf("[%d] [%s] [%s] [BAD_RESPONSE]\n", requestId, user, remote)
 				}
 				value, ok := resp["value"]
 				if !ok {
@@ -321,20 +318,16 @@ func create(w http.ResponseWriter, r *http.Request) {
 				}
 				s.ID = startedService.Container.ContainerInstanceID + startedService.Container.ID + sess
 				resp["value"].(map[string]interface{})["sessionId"] = s.ID
-			        log.Printf("[BROWSDER STARTED] !ok resp[sessionId] end")
 			} else {
 				sess, ok = resp["sessionId"].(string)
-                s.ID = startedService.Container.ContainerInstanceID + startedService.Container.ID + sess
+		                s.ID = startedService.Container.ContainerInstanceID + startedService.Container.ID + sess
 				resp["sessionId"] = s.ID
-			        log.Printf("[BROWSDER STARTED] ok resp[sessionId]")
 			}
-			log.Printf("[BROWSDER STARTED] ok resp[sessionId]")
 			reply(w, resp, http.StatusOK)
-			log.Printf("[REPLY]")
-			log.Printf("[%d] [SESSION_CREATED] [%s] [%.2fs]", requestId, s.ID, util.SecondsSince(sessionStartTime))
+			log.Printf("[%d] [%s] [%s] [SESSION_CREATED] [%s] [%.2fs]", requestId,  user, remote, s.ID, util.SecondsSince(sessionStartTime))
 			break
 		} else {
-                        log.Printf("[%d] [SESSION_FAILED2]", requestId)
+                        log.Printf("[%d] [%s] [%s] [SESSION_FAILED]", requestId, user, remote)
                         queue.Drop()
                         cancel()
                         return
@@ -351,7 +344,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 			request{r}.session(s.ID).Delete(requestId)
 		}),
 		Started: time.Now()}
-	cancelAndRenameFiles := func() {
+		cancelAndRenameFiles := func() {
 		cancel()
 		sessionId := preprocessSessionId(s.ID)
 		e := event.Event{
@@ -404,7 +397,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 	sess.Cancel = cancelAndRenameFiles
 	sessions.Put(s.ID, sess)
 	queue.Create()
-	log.Printf("[%d] [SESSION_CREATED] [%s] [%d] [%.2fs]", requestId, s.ID, i, util.SecondsSince(sessionStartTime))
+	log.Printf("[%d] [%s] [%s] [SESSION_CREATED] [%s] [%d] [%.2fs]", requestId,  user, remote, s.ID, i, util.SecondsSince(sessionStartTime))
 }
 
 func preprocessSessionId(sid string) string {
@@ -504,7 +497,6 @@ func parseLongSessionId(ID string) SessionIDParts {
 }
 
 func proxy(w http.ResponseWriter, r *http.Request) {
-	log.Printf("PROXYING_PROXY")
 	done := make(chan func())
 	go func() {
 		(<-done)()
@@ -520,11 +512,13 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 			longId := fragments[2]
 		        idParts := parseLongSessionId(longId)
 			r.URL.Path = strings.ReplaceAll(r.URL.Path, longId, idParts.SessionID)
+
+			//TODO: candidate to hide on verbose log level
+		        log.Printf("[%d] [PROXY_TO] [%s]", requestId, r.URL.Path)
 			sess, ok := sessions.Get(longId)
 			if !ok {
 				log.Printf("NEED TO LOOK FOR IN AWS!!!")
 			} else {
-	                        log.Printf("session is ok for id: ", longId)
 				sess.Lock.Lock()
 				defer sess.Lock.Unlock()
 				select {
