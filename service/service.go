@@ -9,7 +9,7 @@ import (
 
 	"github.com/aerokube/selenoid/config"
 	"github.com/aerokube/selenoid/session"
-	"github.com/docker/docker/client"
+//	"github.com/docker/docker/client"
 )
 
 // Environment - all settings that influence browser startup
@@ -59,7 +59,6 @@ type Manager interface {
 // DefaultManager - struct for default implementation
 type DefaultManager struct {
 	Environment *Environment
-	Client      *client.Client
 	Config      *config.Config
 }
 
@@ -83,7 +82,6 @@ func (m *DefaultManager) Find(caps session.Caps, requestId uint64) (Starter, boo
 			ServiceBase: serviceBase,
 			Environment: *m.Environment,
 			Caps:        caps,
-			Client:      m.Client,
 			LogConfig:   m.Config.ContainerLogs}, true
 	}
 	return nil, false

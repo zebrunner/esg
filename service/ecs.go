@@ -13,7 +13,7 @@ import (
 	"github.com/aerokube/selenoid/session"
 	"github.com/aerokube/util"
 	ctr "github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/client"
+//	"github.com/docker/docker/client"
 
 //	"os"
 //	"path/filepath"
@@ -31,7 +31,6 @@ type Task struct {
        Environment
        session.Caps
        LogConfig *ctr.LogConfig
-       Client    *client.Client
 }
 
 type ecsPortConfig struct {

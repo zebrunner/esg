@@ -28,8 +28,8 @@ import (
 
 	"github.com/aerokube/selenoid/session"
 	"github.com/aerokube/util"
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/pkg/stdcopy"
+//	"github.com/docker/docker/api/types"
+//	"github.com/docker/docker/pkg/stdcopy"
 	"golang.org/x/net/websocket"
 )
 
@@ -713,6 +713,7 @@ func streamLogs(wsconn *websocket.Conn) {
 	sess, ok := sessions.Get(sid)
 	if ok && sess.Container != nil {
 		log.Printf("[%d] [CONTAINER_LOGS] [%s]", requestId, sess.Container.ID)
+/*
 		r, err := cli.ContainerLogs(wsconn.Request().Context(), sess.Container.ID, types.ContainerLogsOptions{
 			ShowStdout: true,
 			ShowStderr: true,
@@ -722,10 +723,12 @@ func streamLogs(wsconn *websocket.Conn) {
 			log.Printf("[%d] [CONTAINER_LOGS_ERROR] [%v]", requestId, err)
 			return
 		}
+
 		defer r.Close()
 		wsconn.PayloadType = websocket.BinaryFrame
 		stdcopy.StdCopy(wsconn, wsconn, r)
 		log.Printf("[%d] [CONTAINER_LOGS_DISCONNECTED] [%s]", requestId, sid)
+*/
 	} else {
 		log.Printf("[%d] [SESSION_NOT_FOUND] [%s]", requestId, sid)
 	}

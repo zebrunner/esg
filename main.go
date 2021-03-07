@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"log"
-	"net"
+//	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -29,7 +29,7 @@ import (
 	"github.com/aerokube/selenoid/upload"
 	"github.com/aerokube/util"
 //	"github.com/aerokube/util/docker"
-	"github.com/docker/docker/client"
+//	"github.com/docker/docker/client"
 )
 
 var (
@@ -55,7 +55,6 @@ var (
 	conf                     *config.Config
 	queue                    *protect.Queue
 	manager                  service.Manager
-	cli                      *client.Client
 
 	startTime = time.Now()
 
@@ -144,6 +143,7 @@ func init() {
 		LogOutputDir:         logOutputDir,
 		SaveAllLogs:          saveAllLogs,
 	}
+/*
 	dockerHost := os.Getenv("DOCKER_HOST")
 	if dockerHost == "" {
 		dockerHost = client.DefaultDockerHost
@@ -154,7 +154,8 @@ func init() {
 	}
 	ip, _, _ := net.SplitHostPort(u.Host)
 	environment.IP = ip
-	manager = &service.DefaultManager{Environment: &environment, Client: cli, Config: conf}
+*/
+	manager = &service.DefaultManager{Environment: &environment, Config: conf}
 }
 
 func onSIGHUP(fn func()) {
@@ -327,8 +328,4 @@ func main() {
 	})
 */
 
-	err := cli.Close()
-	if err != nil {
-		log.Fatalf("[-] [SHUTTING_DOWN] [Error closing Docker client: %v]", err)
-	}
 }
