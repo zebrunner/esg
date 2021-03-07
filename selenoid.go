@@ -347,7 +347,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 		Started: time.Now()}
 		cancelAndRenameFiles := func() {
 		cancel()
-		sessionId := preprocessSessionId(s.ID)
+		sessionId := s.ID
 		e := event.Event{
 			RequestId: requestId,
 			SessionId: sessionId,
@@ -399,13 +399,6 @@ func create(w http.ResponseWriter, r *http.Request) {
 	sessions.Put(s.ID, sess)
 	queue.Create()
 	log.Printf("[%d] [%s] [%s] [SESSION_CREATED] [%s] [%d] [%.2fs]", requestId,  user, remote, s.ID, i, util.SecondsSince(sessionStartTime))
-}
-
-func preprocessSessionId(sid string) string {
-	if ggrHost != nil {
-		return ggrHost.Sum() + sid
-	}
-	return sid
 }
 
 const (

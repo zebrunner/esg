@@ -22,7 +22,6 @@ import (
 
 	. "github.com/aandryashin/matchers"
 	. "github.com/aandryashin/matchers/httpresp"
-	ggr "github.com/aerokube/ggr/config"
 )
 
 var _ = func() bool {
@@ -40,10 +39,6 @@ func init() {
 	logOutputDir, _ = ioutil.TempDir("", "selenoid-test")
 	saveAllLogs = true
 	gitRevision = "test-revision"
-	ggrHost = &ggr.Host{
-		Name: "some-host.example.com",
-		Port: 4444,
-	}
 	srv = httptest.NewServer(handler())
 }
 
