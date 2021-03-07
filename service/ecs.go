@@ -538,7 +538,8 @@ func removeTask(ctx context.Context, requestId uint64, taskArn string) {
         log.Printf("[%d] [REMOVING_TASK] [%s]", requestId, taskArn)
 
         //TODO: parametrize region
-        svc := ecs.New(awsSession.New(&aws.Config{Region: aws.String("us-east-1")}))
+	// #33: increased number of retries to fix "ThrottlingException: Rate exceeded"
+        svc := ecs.New(awsSession.New(&aws.Config{Region: aws.String("us-east-1"), MaxRetries: aws.Int(10)}))
 
         stopTaskInput := &ecs.StopTaskInput{
           Cluster: aws.String("executor-cluster"),
