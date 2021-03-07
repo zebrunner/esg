@@ -28,7 +28,7 @@ import (
 	"github.com/aerokube/selenoid/session"
 	"github.com/aerokube/selenoid/upload"
 	"github.com/aerokube/util"
-	"github.com/aerokube/util/docker"
+//	"github.com/aerokube/util/docker"
 	"github.com/docker/docker/client"
 )
 
@@ -107,11 +107,6 @@ func init() {
 			log.Printf("[-] [INIT] [%s: %v]", os.Args[0], err)
 		}
 	})
-	inDocker := false
-	_, err = os.Stat("/.dockerenv")
-	if err == nil {
-		inDocker = true
-	}
 
 	videoOutputDir, err = filepath.Abs(videoOutputDir)
 	if err != nil {
@@ -141,7 +136,6 @@ func init() {
 	upload.Init()
 
 	environment := service.Environment{
-		InDocker:             inDocker,
 		StartupTimeout:       serviceStartupTimeout,
 		SessionDeleteTimeout: sessionDeleteTimeout,
 		CaptureDriverLogs:    captureDriverLogs,
@@ -160,20 +154,6 @@ func init() {
 	}
 	ip, _, _ := net.SplitHostPort(u.Host)
 	environment.IP = ip
-	cli, err = docker.CreateCompatibleDockerClient(
-		func(specifiedApiVersion string) {
-			log.Printf("[-] [INIT] [Using Docker API version: %s]", specifiedApiVersion)
-		},
-		func(determinedApiVersion string) {
-			log.Printf("[-] [INIT] [Your Docker API version is %s]", determinedApiVersion)
-		},
-		func(defaultApiVersion string) {
-			log.Printf("[-] [INIT] [Did not manage to determine your Docker API version - using default version: %s]", defaultApiVersion)
-		},
-	)
-	if err != nil {
-		log.Fatalf("[-] [INIT] [New docker client: %v]", err)
-	}
 	manager = &service.DefaultManager{Environment: &environment, Client: cli, Config: conf}
 }
 

@@ -15,7 +15,6 @@ import (
 // Environment - all settings that influence browser startup
 type Environment struct {
 	IP                   string
-	InDocker             bool
 	CPU                  int64
 	Memory               int64
 	Network              string
