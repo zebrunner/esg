@@ -71,7 +71,7 @@ func init() {
 	flag.StringVar(&listen, "listen", ":4444", "Network address to accept connections")
 	flag.StringVar(&confPath, "conf", "config/browsers.json", "Browsers configuration file")
 	flag.StringVar(&logConfPath, "log-conf", "", "Container logging configuration file")
-	flag.IntVar(&limit, "limit", 5, "Simultaneous container runs")
+	flag.IntVar(&limit, "limit", 5000, "Simultaneous task container runs. See https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-quotas.html for details")
 	flag.IntVar(&retryCount, "retry-count", 1, "New session attempts retry count")
 	flag.DurationVar(&timeout, "timeout", 60*time.Second, "Session idle timeout in time.Duration format")
 	flag.DurationVar(&maxTimeout, "max-timeout", 1*time.Hour, "Maximum valid session idle timeout in time.Duration format")
