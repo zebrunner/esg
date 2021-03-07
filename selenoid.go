@@ -277,7 +277,8 @@ func create(w http.ResponseWriter, r *http.Request) {
 	for ; ; i++ {
 		r.URL.Host, r.URL.Path = u.Host, path.Join(u.Path, r.URL.Path)
 
-        log.Printf("[%d] [%s] [%s] [SESSION_ATTEMPTED] [%s] [%d] [%s]", requestId,  user, remote, u.String(), i, body)
+	        log.Printf("[%d] [%s] [%s] [SESSION_ATTEMPTED] [%s] [%d]", requestId,  user, remote, u.String(), i)
+		//TODO: show body and capabilities in verbose mode
 		//TODO: implement response updater to populate task id as part of sessionId
 		resp, status := createSession(r.Context(), r.URL.String(), r.Header, body)
 		select {
