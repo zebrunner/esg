@@ -97,7 +97,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 	            Essential: aws.Bool(true), //If the essential parameter of a container is marked as true, the failure of that container will stop the task.
 	            Memory:    aws.Int64(hardMemory),
                     MemoryReservation: aws.Int64(softMemory),
-		    Privileged: aws.Bool(d.Privileged),
+		    Privileged: aws.Bool(true), //privileged mode is needed to start browser driver correctly
 		    MountPoints: []*ecs.MountPoint{
 			&ecs.MountPoint{
 			    ContainerPath: aws.String("/dev/shm"),
@@ -147,7 +147,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
                     Cpu:       aws.Int64(256),
                     Memory:    aws.Int64(512),
                     MemoryReservation: aws.Int64(512),
-                    Privileged: aws.Bool(d.Privileged),
+                    Privileged: aws.Bool(false), //no need privileged mode for video-recording container
                     Links: []*string{
                         aws.String(d.Caps.Name),
                     },
@@ -233,8 +233,8 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
         resultRunTask, err := svc.RunTask(runTaskInput)
         if err != nil {
             return nil, fmt.Errorf("Unable to run task: %v", err)
-        } else {
-            log.Printf("[%d] [TASK_RUN] [%s]", requestId, resultRunTask)
+//        } else {
+//            log.Printf("[%d] [TASK_RUN] [%s]", requestId, resultRunTask)
         }
 
 	//log.Printf("size of the tasks: [%s]", len(resultRunTask.Tasks))

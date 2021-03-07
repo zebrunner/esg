@@ -9,8 +9,6 @@ The following flags are supported by `selenoid` command:
     Browsers configuration file (default "config/browsers.json")
 -cpu value
     Containers cpu limit as float e.g. 0.2 or 1.0
--disable-privileged
-    Whether to disable privileged container mode
 -enable-file-upload
     File upload support
 -graceful-period duration

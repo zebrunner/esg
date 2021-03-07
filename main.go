@@ -48,7 +48,6 @@ var (
 	confPath                 string
 	logConfPath              string
 	captureDriverLogs        bool
-	disablePrivileged        bool
 	videoOutputDir           string
 	videoRecorderImage       string
 	logOutputDir             string
@@ -80,7 +79,6 @@ func init() {
 	flag.DurationVar(&serviceStartupTimeout, "service-startup-timeout", 30*time.Second, "Service startup timeout in time.Duration format")
 	flag.BoolVar(&version, "version", false, "Show version and exit")
 	flag.BoolVar(&captureDriverLogs, "capture-driver-logs", false, "Whether to add driver process logs to Selenoid output")
-	flag.BoolVar(&disablePrivileged, "disable-privileged", false, "Whether to disable privileged container mode")
 	flag.StringVar(&videoOutputDir, "video-output-dir", "video", "Directory to save recorded video to")
 	flag.StringVar(&videoRecorderImage, "video-recorder-image", "selenoid/video-recorder:latest-release", "Image to use as video recorder")
 	flag.StringVar(&logOutputDir, "log-output-dir", "", "Directory to save session log to")
@@ -155,7 +153,6 @@ func init() {
 		VideoContainerImage:  videoRecorderImage,
 		LogOutputDir:         logOutputDir,
 		SaveAllLogs:          saveAllLogs,
-		Privileged:           !disablePrivileged,
 	}
 	dockerHost := os.Getenv("DOCKER_HOST")
 	if dockerHost == "" {

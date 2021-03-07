@@ -27,7 +27,6 @@ type Environment struct {
 	VideoContainerImage  string
 	LogOutputDir         string
 	SaveAllLogs          bool
-	Privileged           bool
 }
 
 const (
