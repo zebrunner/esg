@@ -78,9 +78,6 @@ func (m *DefaultManager) Find(caps session.Caps, requestId uint64) (Starter, boo
         log.Printf("[%d] [SERVICE_IMAGE] [%s]", requestId, service.Image)
 	switch service.Image.(type) {
 	case string:
-		if m.Client == nil {
-			return nil, false
-		}
 		log.Printf("[%d] [USING_ECS] [%s] [%s]", requestId, browserName, version)
 		return &Task{
 			ServiceBase: serviceBase,
