@@ -233,9 +233,37 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
         resultRunTask, err := svc.RunTask(runTaskInput)
         if err != nil {
             return nil, fmt.Errorf("Unable to run task: %v", err)
-//        } else {
-//            log.Printf("[%d] [TASK_RUN] [%s]", requestId, resultRunTask)
+        } else {
+            log.Printf("[%d] [TASK_RUN] [%s]", requestId, resultRunTask)
         }
+
+	log.Printf("size of the tasks: [%s]", len(resultRunTask.Tasks))
+        log.Printf("size of the failures: [%s]", len(resultRunTask.Failures))
+
+	//TODO: handle not enough CPU failure to make scaling up happen
+	if len(resultRunTask.Failures) > 0 {
+		taskFailure := *resultRunTask.Failures[0].Reason
+	        log.Printf("failure reason: %s", taskFailure)
+		time.Sleep (5 * time.Second)
+		//try to start one more time
+	        resultRunTask, err = svc.RunTask(runTaskInput)
+	        if err != nil {
+	            return nil, fmt.Errorf("Unable to run task: %v", err)
+	        } else {
+	            log.Printf("[%d] [TASK_RUN] [%s]", requestId, resultRunTask)
+        	}
+	        log.Printf("size of the tasks: [%s]", len(resultRunTask.Tasks))
+	        log.Printf("size of the failures: [%s]", len(resultRunTask.Failures))
+	}
+/*
+	Failures: [{
+	      Arn: "arn:aws:ecs:us-east-1:659932254483:container-instance/829954d05541417cb21d02409e43ea10",
+	      Reason: "RESOURCE:CPU"
+	    }],
+	  Tasks: []
+	}]
+*/
+
 
         // [TASK_ARN] [arn:aws:ecs:us-east-1:659932254483:task/executor-cluster/35bab349ee55458e9182b84b999dbd1c]
         taskArn := *resultRunTask.Tasks[0].TaskArn
