@@ -231,30 +231,38 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 	}
 
         resultRunTask, err := svc.RunTask(runTaskInput)
+/*
         if err != nil {
             return nil, fmt.Errorf("Unable to run task: %v", err)
-//        } else {
-//            log.Printf("[%d] [TASK_RUN] [%s]", requestId, resultRunTask)
+        } else {
+            log.Printf("[%d] [TASK_RUN] [%s]", requestId, resultRunTask)
         }
+*/
 
-	//log.Printf("size of the tasks: [%s]", len(resultRunTask.Tasks))
-        //log.Printf("size of the failures: [%s]", len(resultRunTask.Failures))
+	taskFailure := ""
+	for retry := 1; retry < 5; retry++ {
+		if err != nil {
+			 log.Printf("[%d] [TASK_RUN_FAILURE] [%s] [%d]", requestId, err, retry)
+		} else if len(resultRunTask.Failures) > 0 {
+			 log.Printf("[%d] [TASK_RUN_FAILURE] [%s] [%d]", requestId, taskFailure, retry)
+		} else {
+                        // all good and we can proceed
+                        break
+		}
 
-	// Handle not enough CPU failure doing extra run task call
-	if len(resultRunTask.Failures) > 0 {
-		taskFailure := *resultRunTask.Failures[0].Reason
-	        log.Printf("failure reason: %s", taskFailure)
+		// retry run task operation
 		time.Sleep (5 * time.Second)
-		//try to start one more time
-	        resultRunTask, err = svc.RunTask(runTaskInput)
-	        if err != nil {
-	            return nil, fmt.Errorf("Unable to run task: %v", err)
-	        } else {
-	            log.Printf("[%d] [TASK_RUN] [%s]", requestId, resultRunTask)
-        	}
-	        //log.Printf("size of the tasks: [%s]", len(resultRunTask.Tasks))
-	        //log.Printf("size of the failures: [%s]", len(resultRunTask.Failures))
+                resultRunTask, err = svc.RunTask(runTaskInput)
 	}
+
+	//TODO: add task definition removal for negative use-case
+        if err != nil {
+        	return nil, fmt.Errorf("Unable to run task: %v", err)
+        }
+	if taskFailure != "" {
+                return nil, fmt.Errorf("Unable to run task: %s", taskFailure)
+	}
+
 /*
 	Failures: [{
 	      Arn: "arn:aws:ecs:us-east-1:659932254483:container-instance/829954d05541417cb21d02409e43ea10",
@@ -327,9 +335,10 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
         }
 
 	//TODO: verify that returned number of instances is 1!
-    instanceId := *resultContainerInstance.ContainerInstances[0].Ec2InstanceId
-    log.Printf("[%d] [INSTANCE_ID] [%s]", requestId, instanceId)
-    fmt.Println("[AWS RESPONSE]", resultContainerInstance.ContainerInstances[0])
+	instanceId := *resultContainerInstance.ContainerInstances[0].Ec2InstanceId
+	log.Printf("[%d] [INSTANCE_ID] [%s]", requestId, instanceId)
+
+//    fmt.Println("[AWS RESPONSE]", resultContainerInstance.ContainerInstances[0])
 
 	instanceInput := &ec2.DescribeInstancesInput{
 	    InstanceIds: []*string{
