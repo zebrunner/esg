@@ -237,10 +237,10 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
             log.Printf("[%d] [TASK_RUN] [%s]", requestId, resultRunTask)
         }
 
-	log.Printf("size of the tasks: [%s]", len(resultRunTask.Tasks))
-        log.Printf("size of the failures: [%s]", len(resultRunTask.Failures))
+	//log.Printf("size of the tasks: [%s]", len(resultRunTask.Tasks))
+        //log.Printf("size of the failures: [%s]", len(resultRunTask.Failures))
 
-	//TODO: handle not enough CPU failure to make scaling up happen
+	// Handle not enough CPU failure doing extra run task call
 	if len(resultRunTask.Failures) > 0 {
 		taskFailure := *resultRunTask.Failures[0].Reason
 	        log.Printf("failure reason: %s", taskFailure)
@@ -252,8 +252,8 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 	        } else {
 	            log.Printf("[%d] [TASK_RUN] [%s]", requestId, resultRunTask)
         	}
-	        log.Printf("size of the tasks: [%s]", len(resultRunTask.Tasks))
-	        log.Printf("size of the failures: [%s]", len(resultRunTask.Failures))
+	        //log.Printf("size of the tasks: [%s]", len(resultRunTask.Tasks))
+	        //log.Printf("size of the failures: [%s]", len(resultRunTask.Failures))
 	}
 /*
 	Failures: [{
