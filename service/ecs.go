@@ -373,12 +373,12 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 
 	s := StartedService{
 		Url: u,
-        Container: &session.Container{
-                ID:        taskId,
-                ContainerInstanceID: containerInstanceId,
-                IPAddress: privateIpAddress,
-                Ports:     publishedPortsInfo,
-        },
+	        Container: &session.Container{
+	                ID:        taskId,
+	                ContainerInstanceID: containerInstanceId,
+	                IPAddress: privateIpAddress,
+	                Ports:     publishedPortsInfo,
+	        },
 		HostPort: hostPort,
 		Cancel: func() {
 			removeTask(ctx, requestId, taskArn)
