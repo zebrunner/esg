@@ -242,11 +242,13 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 	taskFailure := ""
 	for retry := 1; retry < 5; retry++ {
 		if err != nil {
-			 log.Printf("[%d] [TASK_RUN_FAILURE] [%s] [%d]", requestId, err, retry)
+			log.Printf("[%d] [TASK_RUN_ERROR] [%s] [%d]", requestId, err, retry)
 		} else if len(resultRunTask.Failures) > 0 {
-			 log.Printf("[%d] [TASK_RUN_FAILURE] [%s] [%d]", requestId, taskFailure, retry)
+			taskFailure = *resultRunTask.Failures[0].Reason
+			log.Printf("[%d] [TASK_RUN_FAILURE] [%s] [%d]", requestId, taskFailure, retry)
 		} else {
                         // all good and we can proceed
+			taskFailure = "" //reset taskFailure if any
                         break
 		}
 
