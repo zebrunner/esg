@@ -63,29 +63,54 @@ type DefaultManager struct {
 
 // Browser configuration
 type Browser struct {
-        Image           interface{}       `json:"image"`
-        Path            string            `json:"path"`
+        Image           string
+        Path            string
+	Port		int64
 }
 
 // Find - default implementation Manager interface
 func (m *DefaultManager) Find(caps session.Caps, requestId uint64) (Starter, bool) {
-	browserName := caps.BrowserName()
+	browser := caps.BrowserName()
 	version := caps.Version
-	log.Printf("[%d] [LOCATING_SERVICE] [%s] [%s]", requestId, browserName, version)
-	//TODO: add support for non selenoid images usage
-        service := Browser{
-                Image: "selenoid/" + browserName,
-                Path: "",
+
+        // selenoid/[vnc_][browsername]:[version]
+	log.Printf("[%d] [LOCATING_SERVICE] [%s] [%s]", requestId, browser, version)
+
+	org := "selenoid"
+        if browser == "MicrosoftEdge" {
+                org = "browsers"
+		browser = "edge"
         }
-        if browserName == "firefox" {
-	        service = Browser{
-        	        Image: "selenoid/" + browserName,
-                	Path: "/wd/hub",
-	        }
+
+        if browser == "operablink" {
+                browser = "opera"
+        }
+
+        vnc := ""
+        if caps.VNC {
+                vnc = "vnc_"
+        }
+
+        if version != "" {
+                version = ":" + caps.Version
+        }
+
+	image := fmt.Sprintf("%s/%s%s%s", org, vnc, browser, version)
+
+	path := ""
+        if browser == "firefox" {
+		path = "/wd/hub"
 	}
 
+	//TODO: add support for non selenoid images usage
+        service := Browser{
+                Image: image,
+                Path: path,
+		Port: 4444,
+        }
+
 	serviceBase := ServiceBase{RequestId: requestId, Service: &service}
-	log.Printf("[%d] [USING_ECS] [%s] [%s]", requestId, service, version)
+	log.Printf("[%d] [USING_ECS] browser: %s; service: %s", requestId, browser, service)
 	return &Task{
 		ServiceBase: serviceBase,
 		Environment: *m.Environment,

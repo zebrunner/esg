@@ -51,26 +51,17 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 	ctx := context.Background()
 /*	log.Printf("[%d] [CREATING_CONTAINER] [%s]", requestId, image)
 	hostConfig := ctr.HostConfig{
-		LogConfig:    getLogConfig(*d.LogConfig, d.Caps),
-		Tmpfs:        d.Service.Tmpfs,
 		ExtraHosts: getExtraHosts(d.Service, d.Caps),
 	}
 
-	hostConfig.PublishAllPorts = d.Service.PublishAllPorts
 	if len(d.Caps.DNSServers) > 0 {
 		hostConfig.DNS = d.Caps.DNSServers
-	}
-	if len(d.ApplicationContainers) > 0 {
-		hostConfig.Links = d.ApplicationContainers
-	}
-	if len(d.Service.Sysctl) > 0 {
-		hostConfig.Sysctls = d.Service.Sysctl
 	}
 */
 
         hardMemory, softMemory := getEcsMemory(d.Caps)
         cpu := getEcsCpu(d.Caps)
-	imageUrl := getEcsImage(d.Caps)
+	imageUrl := d.Service.Image
 
 	// Without unique nano postfix we face with AWS limitations during multi-threading execution a lot...
 	taskDefFamily := d.Caps.Name + "-" + strconv.Itoa(int(time.Now().UnixNano()))
@@ -117,7 +108,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 		    },
 	            PortMappings: []*ecs.PortMapping{
 			&ecs.PortMapping{
-			    ContainerPort: aws.Int64(4444),
+			    ContainerPort: aws.Int64(d.Service.Port),
 	                    HostPort:      aws.Int64(portConfig.SeleniumPort),
 	                },
                         &ecs.PortMapping{
@@ -492,28 +483,6 @@ func getEcsCpu(caps session.Caps) (int64) {
         }
 
         return int64(cpu)
-}
-
-func getEcsImage(caps session.Caps) string {
-	// selenoid/[vnc_][browsername]:[version]
-	vnc := ""
-        if caps.VNC {
-		vnc = "vnc_"
-	}
-
-	version := ""
-        if caps.Version != "" {
-                version = ":" + caps.Version
-        }
-
-	// rename operablink to opera
-	browser := caps.Name
-	if browser == "operablink" {
-		browser = "opera"
-	}
-
-	//TODO: think about possibility to override using custom capabilities
-	return fmt.Sprintf("selenoid/%s%s%s", vnc, browser, version)
 }
 
 func getTaskHostPort(caps session.Caps, taskIP string, pc *ecsPortConfig) session.HostPort {
