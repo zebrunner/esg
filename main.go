@@ -22,7 +22,7 @@ import (
 	"path/filepath"
 
 //	ggr "github.com/aerokube/ggr/config"
-	"github.com/aerokube/selenoid/config"
+//	"github.com/aerokube/selenoid/config"
 	"github.com/aerokube/selenoid/protect"
 	"github.com/aerokube/selenoid/service"
 	"github.com/aerokube/selenoid/session"
@@ -45,14 +45,11 @@ var (
 	limit                    int
 	retryCount               int
 	sessions                 = session.NewMap()
-	confPath                 string
-	logConfPath              string
 	captureDriverLogs        bool
 	videoOutputDir           string
 	videoRecorderImage       string
 	logOutputDir             string
 	saveAllLogs              bool
-	conf                     *config.Config
 	queue                    *protect.Queue
 	manager                  service.Manager
 
@@ -66,8 +63,6 @@ var (
 func init() {
 	flag.BoolVar(&enableFileUpload, "enable-file-upload", false, "File upload support")
 	flag.StringVar(&listen, "listen", ":4444", "Network address to accept connections")
-	flag.StringVar(&confPath, "conf", "config/browsers.json", "Browsers configuration file")
-	flag.StringVar(&logConfPath, "log-conf", "", "Container logging configuration file")
 	flag.IntVar(&limit, "limit", 5000, "Simultaneous task container runs. See https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-quotas.html for details")
 	flag.IntVar(&retryCount, "retry-count", 1, "New session attempts retry count")
 	flag.DurationVar(&timeout, "timeout", 60*time.Second, "Session idle timeout in time.Duration format")
@@ -95,18 +90,6 @@ func init() {
 		log.Fatalf("[-] [INIT] [%s: %v]", os.Args[0], err)
 	}
 	queue = protect.New(limit, false)
-	conf = config.NewConfig()
-	err = conf.Load(confPath, logConfPath)
-	if err != nil {
-		log.Fatalf("[-] [INIT] [%s: %v]", os.Args[0], err)
-	}
-	onSIGHUP(func() {
-		err := conf.Load(confPath, logConfPath)
-		if err != nil {
-			log.Printf("[-] [INIT] [%s: %v]", os.Args[0], err)
-		}
-	})
-
 	videoOutputDir, err = filepath.Abs(videoOutputDir)
 	if err != nil {
 		log.Fatalf("[-] [INIT] [Invalid video output dir %s: %v]", videoOutputDir, err)
@@ -155,18 +138,7 @@ func init() {
 	ip, _, _ := net.SplitHostPort(u.Host)
 	environment.IP = ip
 */
-	manager = &service.DefaultManager{Environment: &environment, Config: conf}
-}
-
-func onSIGHUP(fn func()) {
-	sig := make(chan os.Signal)
-	signal.Notify(sig, syscall.SIGHUP)
-	go func() {
-		for {
-			<-sig
-			fn()
-		}
-	}()
+	manager = &service.DefaultManager{Environment: &environment}
 }
 
 var seleniumPaths = struct {
@@ -199,10 +171,9 @@ func ping(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Add("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(struct {
 		Uptime         string `json:"uptime"`
-		LastReloadTime string `json:"lastReloadTime"`
 		NumRequests    uint64 `json:"numRequests"`
 		Version        string `json:"version"`
-	}{time.Since(startTime).String(), conf.LastReloadTime.Format(time.RFC3339), getSerial(), gitRevision})
+	}{time.Since(startTime).String(), getSerial(), gitRevision})
 }
 
 func video(w http.ResponseWriter, r *http.Request) {
@@ -269,7 +240,7 @@ func handler() http.Handler {
 	})
 	root.HandleFunc(paths.Status, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(conf.State(sessions, limit, queue.Queued(), queue.Pending()))
+		json.NewEncoder(w).Encode("TODO: think what can we return in state without config...")
 	})
 	root.HandleFunc(paths.Ping, ping)
 	root.Handle(paths.VNC, websocket.Handler(vnc))

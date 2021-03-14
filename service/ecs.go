@@ -12,7 +12,7 @@ import (
 
 	"github.com/aerokube/selenoid/session"
 	"github.com/aerokube/util"
-	ctr "github.com/docker/docker/api/types/container"
+//	ctr "github.com/docker/docker/api/types/container"
 //	"github.com/docker/docker/client"
 
 //	"os"
@@ -30,7 +30,6 @@ type Task struct {
        ServiceBase
        Environment
        session.Caps
-       LogConfig *ctr.LogConfig
 }
 
 type ecsPortConfig struct {
@@ -501,14 +500,20 @@ func getEcsImage(caps session.Caps) string {
         if caps.VNC {
 		vnc = "vnc_"
 	}
-	//TODO: don't forgent to insert ":" as prefix if version is not empty!
+
 	version := ""
         if caps.Version != "" {
                 version = ":" + caps.Version
         }
 
+	// rename operablink to opera
+	browser := caps.Name
+	if browser == "operablink" {
+		browser = "opera"
+	}
+
 	//TODO: think about possibility to override using custom capabilities
-	return fmt.Sprintf("selenoid/%s%s%s", vnc, caps.Name, version)
+	return fmt.Sprintf("selenoid/%s%s%s", vnc, browser, version)
 }
 
 func getTaskHostPort(caps session.Caps, taskIP string, pc *ecsPortConfig) session.HostPort {

@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/aerokube/selenoid/config"
+//	"github.com/aerokube/selenoid/config"
 	"github.com/aerokube/selenoid/session"
 //	"github.com/docker/docker/client"
 )
@@ -35,7 +35,7 @@ const (
 // ServiceBase - stores fields required by all services
 type ServiceBase struct {
 	RequestId uint64
-	Service   *config.Browser
+	Service   *Browser
 }
 
 // StartedService - all started service properties
@@ -59,7 +59,12 @@ type Manager interface {
 // DefaultManager - struct for default implementation
 type DefaultManager struct {
 	Environment *Environment
-	Config      *config.Config
+}
+
+// Browser configuration
+type Browser struct {
+        Image           interface{}       `json:"image"`
+        Path            string            `json:"path"`
 }
 
 // Find - default implementation Manager interface
@@ -67,24 +72,24 @@ func (m *DefaultManager) Find(caps session.Caps, requestId uint64) (Starter, boo
 	browserName := caps.BrowserName()
 	version := caps.Version
 	log.Printf("[%d] [LOCATING_SERVICE] [%s] [%s]", requestId, browserName, version)
-	//[VD] ignoring all kind of versionig as we can dosnload on the fly any valid version
-        service, version, ok := m.Config.Find(browserName, "")
-//      service, version, ok := m.Config.Find(browserName, version)
-	serviceBase := ServiceBase{RequestId: requestId, Service: service}
-	if !ok {
-		return nil, false
+	//TODO: add support for non selenoid images usage
+        service := Browser{
+                Image: "selenoid/" + browserName,
+                Path: "",
+        }
+        if browserName == "firefox" {
+	        service = Browser{
+        	        Image: "selenoid/" + browserName,
+                	Path: "/wd/hub",
+	        }
 	}
-        log.Printf("[%d] [SERVICE_IMAGE] [%s]", requestId, service.Image)
-	switch service.Image.(type) {
-	case string:
-		log.Printf("[%d] [USING_ECS] [%s] [%s]", requestId, browserName, version)
-		return &Task{
-			ServiceBase: serviceBase,
-			Environment: *m.Environment,
-			Caps:        caps,
-			LogConfig:   m.Config.ContainerLogs}, true
-	}
-	return nil, false
+
+	serviceBase := ServiceBase{RequestId: requestId, Service: &service}
+	log.Printf("[%d] [USING_ECS] [%s] [%s]", requestId, service, version)
+	return &Task{
+		ServiceBase: serviceBase,
+		Environment: *m.Environment,
+		Caps:        caps}, true
 }
 
 func wait(u string, t time.Duration) error {
