@@ -107,16 +107,6 @@ func ScaleUp() {
 	memoryRatio := float64(runningTasksResources.Memory + provisioningTasksResources.Memory) / float64(provisioningTasksResources.Memory)
 	scaleRatio := math.Max(cpuRatio, memoryRatio)
 
-	autoscalingSvc := autoscaling.New(session)
-	describeAutoScalingGroupsInput := &autoscaling.DescribeAutoScalingGroupsInput{
-		AutoScalingGroupNames: []*string{aws.String("executor-asg")},
-	}
-	describeAutoScalingGroupsOutput, err := autoscalingSvc.DescribeAutoScalingGroups(describeAutoScalingGroupsInput)
-	if err != nil {
-		log.Println("cant describe autoscaling group", err)
-		return
-	}
-	autoScalingGroup := describeAutoScalingGroupsOutput.AutoScalingGroups[0]
 	curentInstanceCount, err := getInstanceCount(svc)
 	if err != nil {
 		log.Println("Error while getting instance count", err)
@@ -124,6 +114,16 @@ func ScaleUp() {
 
 	scaledDesiredCount := int64(math.Ceil(scaleRatio * float64(curentInstanceCount))) + curentInstanceCount
 	if scaledDesiredCount > curentInstanceCount {
+		autoscalingSvc := autoscaling.New(session)
+		describeAutoScalingGroupsInput := &autoscaling.DescribeAutoScalingGroupsInput{
+			AutoScalingGroupNames: []*string{aws.String("executor-asg")},
+		}
+		describeAutoScalingGroupsOutput, err := autoscalingSvc.DescribeAutoScalingGroups(describeAutoScalingGroupsInput)
+		if err != nil {
+			log.Println("cant describe autoscaling group", err)
+			return
+		}
+		autoScalingGroup := describeAutoScalingGroupsOutput.AutoScalingGroups[0]
 		if *autoScalingGroup.MaxSize < scaledDesiredCount {
 			scaledDesiredCount = *autoScalingGroup.MaxSize
 		}
@@ -131,7 +131,7 @@ func ScaleUp() {
 			AutoScalingGroupName: autoScalingGroup.AutoScalingGroupName,
 			DesiredCapacity: aws.Int64(scaledDesiredCount),
 		}
-		_, err := autoscalingSvc.UpdateAutoScalingGroup(updateGroupInput)
+		_, err = autoscalingSvc.UpdateAutoScalingGroup(updateGroupInput)
 		if err != nil {
 			log.Println("Error while updating group", err)
 		} else {
