@@ -289,6 +289,9 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
                 aws.String(taskId),
             },
         }
+		time.Sleep(5 * time.Second)
+		ScaleUp()
+
 	err = svc.WaitUntilTasksRunning(describeTaskInput)
         if err != nil {
             removeTask(ctx, requestId, taskArn)
