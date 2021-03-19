@@ -18,12 +18,12 @@ type Resources struct {
 }
 
 type ClusterResources struct {
-	CurrentResources       Resources
+	CurrentResources      Resources
 	ReservedResources     Resources
 	ProvisioningResources Resources
 }
 
-func getInstanceCount(svc *ecs.ECS) (int64 , error) {
+func getInstanceCount(svc *ecs.ECS) (int64, error) {
 	listInstancesInput := &ecs.ListContainerInstancesInput{
 		Cluster: aws.String("executor-cluster"),
 	}
@@ -34,7 +34,6 @@ func getInstanceCount(svc *ecs.ECS) (int64 , error) {
 	instanceCount := len(listInstancesOutput.ContainerInstanceArns)
 	return int64(instanceCount), nil
 }
-
 
 func getTasksResources(svc *ecs.ECS, taskStatus string) (*Resources, error) {
 	listTasksInput := &ecs.ListTasksInput{
@@ -49,7 +48,7 @@ func getTasksResources(svc *ecs.ECS, taskStatus string) (*Resources, error) {
 	}
 	describeTasksInput := &ecs.DescribeTasksInput{
 		Cluster: aws.String("executor-cluster"),
-		Tasks: listTasksResult.TaskArns,
+		Tasks:   listTasksResult.TaskArns,
 	}
 	describeTasksResult, err := svc.DescribeTasks(describeTasksInput)
 	if err != nil {
@@ -74,7 +73,7 @@ func getTasksResources(svc *ecs.ECS, taskStatus string) (*Resources, error) {
 	}
 
 	return &Resources{
-		CPU: CPU,
+		CPU:    CPU,
 		Memory: Memory,
 	}, nil
 }
@@ -103,8 +102,8 @@ func ScaleUp() {
 		return
 	}
 
-	cpuRatio := float64(runningTasksResources.CPU + provisioningTasksResources.CPU) / float64(provisioningTasksResources.CPU)
-	memoryRatio := float64(runningTasksResources.Memory + provisioningTasksResources.Memory) / float64(provisioningTasksResources.Memory)
+	cpuRatio := float64(runningTasksResources.CPU+provisioningTasksResources.CPU) / float64(provisioningTasksResources.CPU)
+	memoryRatio := float64(runningTasksResources.Memory+provisioningTasksResources.Memory) / float64(provisioningTasksResources.Memory)
 	scaleRatio := math.Max(cpuRatio, memoryRatio)
 
 	curentInstanceCount, err := getInstanceCount(svc)
@@ -112,7 +111,7 @@ func ScaleUp() {
 		log.Println("Error while getting instance count", err)
 	}
 
-	scaledDesiredCount := int64(math.Ceil(scaleRatio * float64(curentInstanceCount))) + curentInstanceCount
+	scaledDesiredCount := int64(math.Ceil(scaleRatio*float64(curentInstanceCount))) + curentInstanceCount
 	if scaledDesiredCount > curentInstanceCount {
 		autoscalingSvc := autoscaling.New(session)
 		describeAutoScalingGroupsInput := &autoscaling.DescribeAutoScalingGroupsInput{
@@ -129,7 +128,7 @@ func ScaleUp() {
 		}
 		updateGroupInput := &autoscaling.UpdateAutoScalingGroupInput{
 			AutoScalingGroupName: autoScalingGroup.AutoScalingGroupName,
-			DesiredCapacity: aws.Int64(scaledDesiredCount),
+			DesiredCapacity:      aws.Int64(scaledDesiredCount),
 		}
 		_, err = autoscalingSvc.UpdateAutoScalingGroup(updateGroupInput)
 		if err != nil {

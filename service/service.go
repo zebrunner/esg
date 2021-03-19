@@ -7,9 +7,9 @@ import (
 	"net/url"
 	"time"
 
-//	"github.com/aerokube/selenoid/config"
+	//	"github.com/aerokube/selenoid/config"
 	"github.com/aerokube/selenoid/session"
-//	"github.com/docker/docker/client"
+	//	"github.com/docker/docker/client"
 )
 
 // Environment - all settings that influence browser startup
@@ -63,9 +63,9 @@ type DefaultManager struct {
 
 // Browser configuration
 type Browser struct {
-        Image           string
-        Path            string
-	Port		int64
+	Image string
+	Path  string
+	Port  int64
 }
 
 // Find - default implementation Manager interface
@@ -73,41 +73,41 @@ func (m *DefaultManager) Find(caps session.Caps, requestId uint64) (Starter, boo
 	browser := caps.BrowserName()
 	version := caps.Version
 
-        // selenoid/[vnc_][browsername]:[version]
+	// selenoid/[vnc_][browsername]:[version]
 	log.Printf("[%d] [LOCATING_SERVICE] [%s] [%s]", requestId, browser, version)
 
 	org := "selenoid"
-        if browser == "MicrosoftEdge" {
-                org = "browsers"
+	if browser == "MicrosoftEdge" {
+		org = "browsers"
 		browser = "edge"
-        }
+	}
 
-        if browser == "operablink" {
-                browser = "opera"
-        }
+	if browser == "operablink" {
+		browser = "opera"
+	}
 
-        vnc := ""
-        if caps.VNC {
-                vnc = "vnc_"
-        }
+	vnc := ""
+	if caps.VNC {
+		vnc = "vnc_"
+	}
 
-        if version != "" {
-                version = ":" + caps.Version
-        }
+	if version != "" {
+		version = ":" + caps.Version
+	}
 
 	image := fmt.Sprintf("%s/%s%s%s", org, vnc, browser, version)
 
 	path := ""
-        if browser == "firefox" {
+	if browser == "firefox" {
 		path = "/wd/hub"
 	}
 
 	//TODO: add support for non selenoid images usage
-        service := Browser{
-                Image: image,
-                Path: path,
-		Port: 4444,
-        }
+	service := Browser{
+		Image: image,
+		Path:  path,
+		Port:  4444,
+	}
 
 	serviceBase := ServiceBase{RequestId: requestId, Service: &service}
 	log.Printf("[%d] [USING_ECS] browser: %s; service: %s", requestId, browser, service)

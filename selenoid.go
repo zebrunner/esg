@@ -28,8 +28,8 @@ import (
 
 	"github.com/aerokube/selenoid/session"
 	"github.com/aerokube/util"
-//	"github.com/docker/docker/api/types"
-//	"github.com/docker/docker/pkg/stdcopy"
+	//	"github.com/docker/docker/api/types"
+	//	"github.com/docker/docker/pkg/stdcopy"
 	"golang.org/x/net/websocket"
 )
 
@@ -100,7 +100,7 @@ func (s *sess) Delete(requestId uint64) {
 
 // create() method from ggr.
 func createSession(ctx context.Context, sessionUrl string, header http.Header, body []byte) (map[string]interface{}, int) {
-	req, err := http.NewRequest(http.MethodPost, sessionUrl,  bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, sessionUrl, bytes.NewReader(body))
 	if err != nil {
 		return nil, seleniumError
 	}
@@ -191,7 +191,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 	}
 	err = json.Unmarshal(body, &browser)
 	if err != nil {
-		log.Printf("[%d] [%s] [%s] [BAD_JSON_FORMAT] [%v]", requestId,  user, remote, err)
+		log.Printf("[%d] [%s] [%s] [BAD_JSON_FORMAT] [%v]", requestId, user, remote, err)
 		util.JsonError(w, err.Error(), http.StatusBadRequest)
 		queue.Drop()
 		return
@@ -214,14 +214,14 @@ func create(w http.ResponseWriter, r *http.Request) {
 		caps.ProcessExtensionCapabilities()
 		sessionTimeout, err = getSessionTimeout(caps.SessionTimeout, maxTimeout, timeout)
 		if err != nil {
-			log.Printf("[%d] [%s] [%s] [BAD_SESSION_TIMEOUT] [%s]", requestId,  user, remote, caps.SessionTimeout)
+			log.Printf("[%d] [%s] [%s] [BAD_SESSION_TIMEOUT] [%s]", requestId, user, remote, caps.SessionTimeout)
 			util.JsonError(w, err.Error(), http.StatusBadRequest)
 			queue.Drop()
 			return
 		}
 		resolution, err := getScreenResolution(caps.ScreenResolution)
 		if err != nil {
-			log.Printf("[%d] [%s] [%s] [BAD_SCREEN_RESOLUTION] [%s]", requestId,  user, remote, caps.ScreenResolution)
+			log.Printf("[%d] [%s] [%s] [BAD_SCREEN_RESOLUTION] [%s]", requestId, user, remote, caps.ScreenResolution)
 			util.JsonError(w, err.Error(), http.StatusBadRequest)
 			queue.Drop()
 			return
@@ -229,7 +229,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 		caps.ScreenResolution = resolution
 		videoScreenSize, err := getVideoScreenSize(caps.VideoScreenSize, resolution)
 		if err != nil {
-			log.Printf("[%d] [%s] [%s] [BAD_VIDEO_SCREEN_SIZE] [%s]", requestId,  user, remote, caps.VideoScreenSize)
+			log.Printf("[%d] [%s] [%s] [BAD_VIDEO_SCREEN_SIZE] [%s]", requestId, user, remote, caps.VideoScreenSize)
 			util.JsonError(w, err.Error(), http.StatusBadRequest)
 			queue.Drop()
 			return
@@ -249,22 +249,22 @@ func create(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !ok {
-		log.Printf("[%d] [%s] [%s] [ENVIRONMENT_NOT_AVAILABLE] [%s] [%s]", requestId,  user, remote, caps.BrowserName(), caps.Version)
+		log.Printf("[%d] [%s] [%s] [ENVIRONMENT_NOT_AVAILABLE] [%s] [%s]", requestId, user, remote, caps.BrowserName(), caps.Version)
 		util.JsonError(w, "Requested environment is not available", http.StatusBadRequest)
 		queue.Drop()
 		return
 	}
 	startedService, err := starter.StartWithCancel()
 	if err != nil {
-		log.Printf("[%d] [%s] [%s] [SERVICE_STARTUP_FAILED] [%v]", requestId,  user, remote, err)
+		log.Printf("[%d] [%s] [%s] [SERVICE_STARTUP_FAILED] [%v]", requestId, user, remote, err)
 		util.JsonError(w, err.Error(), http.StatusInternalServerError)
 		queue.Drop()
 		return
 	}
-        log.Printf("[%d] [%s] [%s] [SERVICE] [%v]", requestId,  user, remote, startedService)
-        log.Printf("[%d] [%s] [%s] [SERVICE_CONTAINER] [%v]", requestId,  user, remote, startedService.Container)
+	log.Printf("[%d] [%s] [%s] [SERVICE] [%v]", requestId, user, remote, startedService)
+	log.Printf("[%d] [%s] [%s] [SERVICE_CONTAINER] [%v]", requestId, user, remote, startedService.Container)
 	u := startedService.Url
-        log.Printf("[%d] [%s] [%s] [SERVICE_URL] [%v]", requestId,  user, remote, u)
+	log.Printf("[%d] [%s] [%s] [SERVICE_URL] [%v]", requestId, user, remote, u)
 	cancel := startedService.Cancel
 	i := 1
 
@@ -277,15 +277,15 @@ func create(w http.ResponseWriter, r *http.Request) {
 	for ; ; i++ {
 		r.URL.Host, r.URL.Path = u.Host, path.Join(u.Path, r.URL.Path)
 
-	        log.Printf("[%d] [%s] [%s] [SESSION_ATTEMPTED] [%s] [%d]", requestId,  user, remote, u.String(), i)
+		log.Printf("[%d] [%s] [%s] [SESSION_ATTEMPTED] [%s] [%d]", requestId, user, remote, u.String(), i)
 		//TODO: show body and capabilities in verbose mode
 		//TODO: implement response updater to populate task id as part of sessionId
 		resp, status := createSession(r.Context(), r.URL.String(), r.Header, body)
 		select {
 		case <-r.Context().Done():
 			log.Printf("[%d] {%s] [%s] [CLIENT_DISCONNECTED]", requestId, user, remote)
-                        queue.Drop()
-                        cancel()
+			queue.Drop()
+			cancel()
 			return
 		default:
 		}
@@ -299,53 +299,53 @@ func create(w http.ResponseWriter, r *http.Request) {
 				value, ok := resp["value"]
 				if !ok {
 					protocolError()
-		                        queue.Drop()
-                		        cancel()
+					queue.Drop()
+					cancel()
 					return
 				}
 				valueMap, ok := value.(map[string]interface{})
 				if !ok {
 					protocolError()
-                                        queue.Drop()
-                                        cancel()
+					queue.Drop()
+					cancel()
 					return
 				}
 				sess, ok = valueMap["sessionId"].(string)
 				if !ok {
 					protocolError()
-                                        queue.Drop()
-                                        cancel()
+					queue.Drop()
+					cancel()
 					return
 				}
 				s.ID = startedService.Container.ContainerInstanceID + startedService.Container.ID + sess
 				resp["value"].(map[string]interface{})["sessionId"] = s.ID
 			} else {
 				sess, ok = resp["sessionId"].(string)
-		                s.ID = startedService.Container.ContainerInstanceID + startedService.Container.ID + sess
+				s.ID = startedService.Container.ContainerInstanceID + startedService.Container.ID + sess
 				resp["sessionId"] = s.ID
 			}
 			reply(w, resp, http.StatusOK)
-			log.Printf("[%d] [%s] [%s] [BROWSER_STARTED] [%s] [%.2fs]", requestId,  user, remote, s.ID, util.SecondsSince(sessionStartTime))
+			log.Printf("[%d] [%s] [%s] [BROWSER_STARTED] [%s] [%.2fs]", requestId, user, remote, s.ID, util.SecondsSince(sessionStartTime))
 			break
 		} else {
-                        log.Printf("[%d] [%s] [%s] [SESSION_FAILED]", requestId, user, remote)
-                        queue.Drop()
-                        cancel()
-                        return
+			log.Printf("[%d] [%s] [%s] [SESSION_FAILED]", requestId, user, remote)
+			queue.Drop()
+			cancel()
+			return
 		}
 	}
 
 	sess := &session.Session{
-		Quota:     user,
-		Caps:      caps,
-		URL:       u,
-		HostPort:  startedService.HostPort,
-		Timeout:   sessionTimeout,
+		Quota:    user,
+		Caps:     caps,
+		URL:      u,
+		HostPort: startedService.HostPort,
+		Timeout:  sessionTimeout,
 		TimeoutCh: onTimeout(sessionTimeout, func() {
 			request{r}.session(s.ID).Delete(requestId)
 		}),
 		Started: time.Now()}
-		cancelAndRenameFiles := func() {
+	cancelAndRenameFiles := func() {
 		cancel()
 		sessionId := s.ID
 		e := event.Event{
@@ -398,7 +398,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 	sess.Cancel = cancelAndRenameFiles
 	sessions.Put(s.ID, sess)
 	queue.Create()
-	log.Printf("[%d] [%s] [%s] [SESSION_CREATED] [%s] [%d] [%.2fs]", requestId,  user, remote, s.ID, i, util.SecondsSince(sessionStartTime))
+	log.Printf("[%d] [%s] [%s] [SESSION_CREATED] [%s] [%d] [%.2fs]", requestId, user, remote, s.ID, i, util.SecondsSince(sessionStartTime))
 }
 
 const (
@@ -477,17 +477,17 @@ func generateRandomFileName(extension string) string {
 }
 
 type SessionIDParts struct {
-    InstanceID string
-    TaskID string
-    SessionID string
+	InstanceID string
+	TaskID     string
+	SessionID  string
 }
 
 func parseLongSessionId(ID string) SessionIDParts {
-    return SessionIDParts {
-        InstanceID: ID[:32],
-        TaskID: ID[32:64],
-        SessionID: ID[64:],
-    }
+	return SessionIDParts{
+		InstanceID: ID[:32],
+		TaskID:     ID[32:64],
+		SessionID:  ID[64:],
+	}
 }
 
 func proxy(w http.ResponseWriter, r *http.Request) {
@@ -504,11 +504,11 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 		Director: func(r *http.Request) {
 			fragments := strings.Split(r.URL.Path, slash)
 			longId := fragments[2]
-		        idParts := parseLongSessionId(longId)
+			idParts := parseLongSessionId(longId)
 			r.URL.Path = strings.ReplaceAll(r.URL.Path, longId, idParts.SessionID)
 
 			//TODO: candidate to hide on verbose log level
-		        log.Printf("[%d] [PROXY_TO] [%s]", requestId, r.URL.Path)
+			log.Printf("[%d] [PROXY_TO] [%s]", requestId, r.URL.Path)
 			sess, ok := sessions.Get(longId)
 			if !ok {
 				log.Printf("NEED TO LOOK FOR IN AWS!!!")
@@ -713,22 +713,22 @@ func streamLogs(wsconn *websocket.Conn) {
 	sess, ok := sessions.Get(sid)
 	if ok && sess.Container != nil {
 		log.Printf("[%d] [CONTAINER_LOGS] [%s]", requestId, sess.Container.ID)
-/*
-		r, err := cli.ContainerLogs(wsconn.Request().Context(), sess.Container.ID, types.ContainerLogsOptions{
-			ShowStdout: true,
-			ShowStderr: true,
-			Follow:     true,
-		})
-		if err != nil {
-			log.Printf("[%d] [CONTAINER_LOGS_ERROR] [%v]", requestId, err)
-			return
-		}
+		/*
+			r, err := cli.ContainerLogs(wsconn.Request().Context(), sess.Container.ID, types.ContainerLogsOptions{
+				ShowStdout: true,
+				ShowStderr: true,
+				Follow:     true,
+			})
+			if err != nil {
+				log.Printf("[%d] [CONTAINER_LOGS_ERROR] [%v]", requestId, err)
+				return
+			}
 
-		defer r.Close()
-		wsconn.PayloadType = websocket.BinaryFrame
-		stdcopy.StdCopy(wsconn, wsconn, r)
-		log.Printf("[%d] [CONTAINER_LOGS_DISCONNECTED] [%s]", requestId, sid)
-*/
+			defer r.Close()
+			wsconn.PayloadType = websocket.BinaryFrame
+			stdcopy.StdCopy(wsconn, wsconn, r)
+			log.Printf("[%d] [CONTAINER_LOGS_DISCONNECTED] [%s]", requestId, sid)
+		*/
 	} else {
 		log.Printf("[%d] [SESSION_NOT_FOUND] [%s]", requestId, sid)
 	}

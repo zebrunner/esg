@@ -36,9 +36,9 @@ type Caps struct {
 	SessionTimeout        string            `json:"sessionTimeout,omitempty"`
 	S3KeyPattern          string            `json:"s3KeyPattern,omitempty"`
 	ExtensionCapabilities *Caps             `json:"selenoid:options,omitempty"`
-        Memory                string            `json:"Memory,omitempty"`
+	Memory                string            `json:"Memory,omitempty"`
 	MemoryReservation     string            `json:"MemoryReservation,omitempty"`
-        Cpu                   string            `json:"Cpu,omitempty"`
+	Cpu                   string            `json:"Cpu,omitempty"`
 }
 
 func (c *Caps) ProcessExtensionCapabilities() {
@@ -68,10 +68,10 @@ func (c *Caps) BrowserName() string {
 
 // Container - container information
 type Container struct {
-	ID         string            `json:"id"`
-    ContainerInstanceID string
-	IPAddress  string            `json:"ip"`
-	Ports      map[string]string `json:"exposedPorts,omitempty"`
+	ID                  string `json:"id"`
+	ContainerInstanceID string
+	IPAddress           string            `json:"ip"`
+	Ports               map[string]string `json:"exposedPorts,omitempty"`
 }
 
 // Session - holds session info

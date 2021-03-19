@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"flag"
 	"log"
-//	"net"
+	//	"net"
 	"net/http"
 	"os"
 	"os/signal"
-//	"path"
-//	"strconv"
+	//	"path"
+	//	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -21,15 +21,15 @@ import (
 
 	"path/filepath"
 
-//	ggr "github.com/aerokube/ggr/config"
-//	"github.com/aerokube/selenoid/config"
+	//	ggr "github.com/aerokube/ggr/config"
+	//	"github.com/aerokube/selenoid/config"
 	"github.com/aerokube/selenoid/protect"
 	"github.com/aerokube/selenoid/service"
 	"github.com/aerokube/selenoid/session"
 	"github.com/aerokube/selenoid/upload"
 	"github.com/aerokube/util"
-//	"github.com/aerokube/util/docker"
-//	"github.com/docker/docker/client"
+	//	"github.com/aerokube/util/docker"
+	//	"github.com/docker/docker/client"
 )
 
 var (
@@ -126,18 +126,18 @@ func init() {
 		LogOutputDir:         logOutputDir,
 		SaveAllLogs:          saveAllLogs,
 	}
-/*
-	dockerHost := os.Getenv("DOCKER_HOST")
-	if dockerHost == "" {
-		dockerHost = client.DefaultDockerHost
-	}
-	u, err := client.ParseHostURL(dockerHost)
-	if err != nil {
-		log.Fatalf("[-] [INIT] [%v]", err)
-	}
-	ip, _, _ := net.SplitHostPort(u.Host)
-	environment.IP = ip
-*/
+	/*
+		dockerHost := os.Getenv("DOCKER_HOST")
+		if dockerHost == "" {
+			dockerHost = client.DefaultDockerHost
+		}
+		u, err := client.ParseHostURL(dockerHost)
+		if err != nil {
+			log.Fatalf("[-] [INIT] [%v]", err)
+		}
+		ip, _, _ := net.SplitHostPort(u.Host)
+		environment.IP = ip
+	*/
 	manager = &service.DefaultManager{Environment: &environment}
 }
 
@@ -170,9 +170,9 @@ func post(next http.HandlerFunc) http.HandlerFunc {
 func ping(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Add("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(struct {
-		Uptime         string `json:"uptime"`
-		NumRequests    uint64 `json:"numRequests"`
-		Version        string `json:"version"`
+		Uptime      string `json:"uptime"`
+		NumRequests uint64 `json:"numRequests"`
+		Version     string `json:"version"`
 	}{time.Since(startTime).String(), getSerial(), gitRevision})
 }
 
@@ -290,13 +290,13 @@ func main() {
 	}
 
 	// Session can't be closed when this particular instance of ecs is killed
-/*
-	sessions.Each(func(k string, s *session.Session) {
-		if enableFileUpload {
-			os.RemoveAll(path.Join(os.TempDir(), k))
-		}
-		s.Cancel()
-	})
-*/
+	/*
+		sessions.Each(func(k string, s *session.Session) {
+			if enableFileUpload {
+				os.RemoveAll(path.Join(os.TempDir(), k))
+			}
+			s.Cancel()
+		})
+	*/
 
 }
