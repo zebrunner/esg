@@ -293,7 +293,12 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 	err = svc.WaitUntilTasksRunning(describeTaskInput)
 	if err != nil {
 		removeTask(ctx, requestId, taskArn)
-		return nil, fmt.Errorf("Unable to wait until task is running: %v", err)
+		failReason, reasonErr := getFailReason(svc, taskId)
+		if reasonErr == nil {
+			return nil, fmt.Errorf("Unable to wait until task is running: %v", *failReason)
+		} else {
+			return nil, fmt.Errorf("Unable to wait until task is running: %v", err)
+		}
 	}
 
 	resultDescribeTask, err := svc.DescribeTasks(describeTaskInput)
@@ -353,7 +358,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 	browserTaskStartTime := time.Now()
 	log.Printf("[%d] [TASK_STARTED] [%s] [%s] [%.2fs]", requestId, imageUrl, taskId, util.SecondsSince(browserTaskStartTime))
 
-	hostPort := getTaskHostPort(d.Caps, privateIpAddress, portConfig)
+	hostPort := getTaskHostPort(d.Caps, publicIpAddress, portConfig)
 	log.Printf("[%d] [HOST_PORT] [%s]", requestId, hostPort)
 
 	u := &url.URL{Scheme: "http", Host: hostPort.Selenium, Path: d.Service.Path}
@@ -413,6 +418,26 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 
 	log.Printf("[%d] [TASK_SERVICE_DETAILS] [%s]", requestId, s)
 	return &s, nil
+}
+
+func getFailReason(svc *ecs.ECS, taskId string) (*string, error) {
+	describeTaskInput := &ecs.DescribeTasksInput{
+		Cluster: aws.String("executor-cluster"),
+		Tasks:   []*string{aws.String(taskId)},
+	}
+	describeTaskResult, err := svc.DescribeTasks(describeTaskInput)
+	if err != nil {
+		return nil, err
+	}
+
+	resultReason := ""
+	for _, container := range describeTaskResult.Tasks[0].Containers {
+		if container.Reason != nil {
+			resultReason += *container.Reason
+		}
+	}
+
+	return &resultReason, nil
 }
 
 func GetTaskInfo(instanceID string, taskID string) {
