@@ -86,16 +86,13 @@ func (m *DefaultManager) Find(caps session.Caps, requestId uint64) (Starter, boo
 		browser = "opera"
 	}
 
-	vnc := ""
-	if caps.VNC {
-		vnc = "vnc_"
-	}
-
 	if version != "" {
 		version = ":" + caps.Version
+	} else {
+		version = ":latest"
 	}
 
-	image := fmt.Sprintf("%s/%s%s%s", org, vnc, browser, version)
+	image := fmt.Sprintf("%s/%s%s", org, browser, version)
 
 	path := ""
 	if browser == "firefox" {
@@ -110,7 +107,7 @@ func (m *DefaultManager) Find(caps session.Caps, requestId uint64) (Starter, boo
 	}
 
 	serviceBase := ServiceBase{RequestId: requestId, Service: &service}
-	log.Printf("[%d] [USING_ECS] browser: %s; service: %s", requestId, browser, service)
+	log.Printf("[%d] [USING_ECS] browser: %s; service: %v", requestId, browser, service)
 	return &Task{
 		ServiceBase: serviceBase,
 		Environment: *m.Environment,
