@@ -88,8 +88,6 @@ func (m *DefaultManager) Find(caps session.Caps, requestId uint64) (Starter, boo
 
 	if version != "" {
 		version = ":" + caps.Version
-	} else {
-		version = ":latest"
 	}
 
 	image := fmt.Sprintf("%s/%s%s", org, browser, version)
