@@ -8,9 +8,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/aerokube/selenoid/event"
-	"github.com/aerokube/selenoid/service"
-	"github.com/imdario/mergo"
 	"io"
 	"io/ioutil"
 	"log"
@@ -26,12 +23,17 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aerokube/selenoid/event"
+	"github.com/aerokube/selenoid/service"
+	"github.com/imdario/mergo"
+
 	"github.com/aerokube/selenoid/session"
 	"github.com/aerokube/util"
+
 	//	"github.com/docker/docker/api/types"
 	//	"github.com/docker/docker/pkg/stdcopy"
-	"golang.org/x/net/websocket"
 	"github.com/go-redis/redis/v8"
+	"golang.org/x/net/websocket"
 )
 
 const slash = "/"
@@ -50,10 +52,10 @@ var (
 	}
 	num     uint64
 	numLock sync.RWMutex
-	rdb = redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
+	rdb     = redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
 		Password: "",
-		DB: 0,
+		DB:       0,
 	})
 )
 
@@ -67,43 +69,52 @@ type sess struct {
 }
 
 type CachedSession struct {
-	Quota     string
-	Caps      session.Caps
-	URL       *url.URL
-	HostPort  session.HostPort
-	Timeout   time.Duration
-	Started   time.Time
+	Quota    string
+	Caps     session.Caps
+	URL      *url.URL
+	HostPort session.HostPort
+	Timeout  time.Duration
+	Started  time.Time
+	TaskID   string
 }
 
 func (s CachedSession) MarshalBinary() ([]byte, error) {
 	return json.Marshal(s)
 }
 
-func CreateSessionFromCache(sessionID string, s CachedSession, r *http.Request, requestId uint64) *session.Session {
+func CreateSessionFromCache(sessionID string, r *http.Request, requestId uint64) (*session.Session, error) {
+	result, err := rdb.Get(context.Background(), sessionID).Result()
+	if err != nil {
+		return nil, fmt.Errorf("Error happened while getting session from cache. %v", err)
+	}
+	s := CachedSession{}
+	err = json.Unmarshal([]byte(result), &s)
+	if err != nil {
+		return nil, fmt.Errorf("Cant unmarshal redis data", err)
+	}
+
 	sessionTimeout, err := getSessionTimeout(s.Caps.SessionTimeout, maxTimeout, timeout)
 	if err != nil {
 		log.Println(err)
 	}
 	seleniumSession := session.Session{
-		Quota: s.Quota,
-		Caps: s.Caps,
-		URL: s.URL,
+		Quota:    s.Quota,
+		Caps:     s.Caps,
+		URL:      s.URL,
 		HostPort: s.HostPort,
-		Timeout: s.Timeout,
+		Timeout:  s.Timeout,
 		TimeoutCh: onTimeout(sessionTimeout, func() {
 			request{r}.session(sessionID).Delete(requestId)
 		}),
 		Started: s.Started,
 	}
-	seleniumSession.Cancel = cancelAndRenameFiles(sessionID, &seleniumSession, requestId)
-	return &seleniumSession
+	seleniumSession.Cancel = cancelAndRenameFiles(sessionID, s.TaskID, &seleniumSession, requestId)
+	return &seleniumSession, nil
 }
 
-func cancelAndRenameFiles(sessionId string, sess *session.Session, requestId uint64) func() {
-	// cancel()
-	taskId := ""
+func cancelAndRenameFiles(sessionId string, taskID string, sess *session.Session, requestId uint64) func() {
 	return func() {
-		service.RemoveTask(context.Background(), requestId, taskId)
+		service.RemoveTask(context.Background(), requestId, taskID)
 		e := event.Event{
 			RequestId: requestId,
 			SessionId: sessionId,
@@ -510,12 +521,13 @@ func create(w http.ResponseWriter, r *http.Request) {
 	sess.Cancel = cancelAndRenameFiles
 	// sessions.Put(s.ID, sess)
 	redisSession := CachedSession{
-		Quota: sess.Quota,
-		Caps: sess.Caps,
-		URL: sess.URL,
+		Quota:    sess.Quota,
+		Caps:     sess.Caps,
+		URL:      sess.URL,
 		HostPort: sess.HostPort,
-		Timeout: sess.Timeout,
-		Started: sess.Started,
+		Timeout:  sess.Timeout,
+		Started:  sess.Started,
+		TaskID:   startedService.TaskID,
 	}
 	err = rdb.Set(context.Background(), s.ID, redisSession, 0).Err()
 	if err != nil {
@@ -633,20 +645,16 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 
 			//TODO: candidate to hide on verbose log level
 			log.Printf("[%d] [PROXY_TO] [%s]", requestId, r.URL.Path)
+			var err error = nil
 			sess, ok := sessions.Get(longId)
 			if !ok {
-				result, err := rdb.Get(context.Background(), longId).Result()
+				sess, err = CreateSessionFromCache(longId, r, requestId)
 				if err != nil {
-					fmt.Println("Error happened while getting session from cache", err)
-				} else {
-					s := CachedSession{};
-					err = json.Unmarshal([]byte(result), &s)
-					if err != nil {
-						fmt.Println("Cant unmarshal redis value", err)
-					}
-					fmt.Println(s)
+					log.Printf("Cant find session. %v", err)
 				}
-			} else {
+			}
+
+			if sess != nil {
 				sess.Lock.Lock()
 				defer sess.Lock.Unlock()
 				select {

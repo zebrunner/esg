@@ -384,6 +384,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 			IPAddress:           privateIpAddress,
 			Ports:               publishedPortsInfo,
 		},
+		TaskID:   taskId,
 		HostPort: hostPort,
 		Cancel: func() {
 			RemoveTask(ctx, requestId, taskArn)
