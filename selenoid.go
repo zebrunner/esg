@@ -600,20 +600,6 @@ func generateRandomFileName(extension string) string {
 	return "selenoid" + hex.EncodeToString(randBytes) + extension
 }
 
-type SessionIDParts struct {
-	InstanceID string
-	TaskID     string
-	SessionID  string
-}
-
-func parseLongSessionId(ID string) SessionIDParts {
-	return SessionIDParts{
-		InstanceID: ID[:32],
-		TaskID:     ID[32:64],
-		SessionID:  ID[64:],
-	}
-}
-
 func proxy(w http.ResponseWriter, r *http.Request) {
 	done := make(chan func())
 	go func() {
@@ -627,16 +613,14 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 	(&httputil.ReverseProxy{
 		Director: func(r *http.Request) {
 			fragments := strings.Split(r.URL.Path, slash)
-			longId := fragments[2]
-			// idParts := parseLongSessionId(longId)
-			// r.URL.Path = strings.ReplaceAll(r.URL.Path, longId, longId)
+			sessionID := fragments[2]
 
 			//TODO: candidate to hide on verbose log level
 			log.Printf("[%d] [PROXY_TO] [%s]", requestId, r.URL.Path)
 			var err error = nil
-			sess, ok := sessions.Get(longId)
+			sess, ok := sessions.Get(sessionID)
 			if !ok {
-				sess, err = CreateSessionFromCache(longId, r, requestId)
+				sess, err = CreateSessionFromCache(sessionID, r, requestId)
 				if err != nil {
 					log.Printf("Cant find session. %v", err)
 				}
@@ -652,19 +636,19 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 				}
 				if r.Method == http.MethodDelete && len(fragments) == 3 {
 					if enableFileUpload {
-						os.RemoveAll(filepath.Join(os.TempDir(), longId))
+						os.RemoveAll(filepath.Join(os.TempDir(), sessionID))
 					}
 					cancel = sess.Cancel
-					sessions.Remove(longId)
-					rdb.Del(context.Background(), longId)
+					sessions.Remove(sessionID)
+					rdb.Del(context.Background(), sessionID).Result()
 					queue.Release()
-					log.Printf("[%d] [SESSION_DELETED] [%s]", requestId, longId)
+					log.Printf("[%d] [SESSION_DELETED] [%s]", requestId, sessionID)
 				} else {
 					sess.TimeoutCh = onTimeout(sess.Timeout, func() {
-						request{r}.session(longId).Delete(requestId)
+						request{r}.session(sessionID).Delete(requestId)
 					})
 					if len(fragments) == 4 && fragments[len(fragments)-1] == "file" && enableFileUpload {
-						r.Header.Set("X-Selenoid-File", filepath.Join(os.TempDir(), longId))
+						r.Header.Set("X-Selenoid-File", filepath.Join(os.TempDir(), sessionID))
 						r.URL.Path = "/file"
 						return
 					}
