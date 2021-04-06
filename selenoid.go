@@ -167,18 +167,6 @@ func cancelAndRenameFiles(sessionId string, taskID string, sess *session.Session
 	}
 }
 
-// sess := &session.Session{
-// 	Quota:    user,
-// 	Caps:     caps,
-// 	URL:      u,
-// 	HostPort: startedService.HostPort,
-// 	Timeout:  sessionTimeout,
-// 	TimeoutCh: onTimeout(sessionTimeout, func() {
-// 		request{r}.session(s.ID).Delete(requestId)
-// 	}),
-// 	Started: time.Now(),
-// }
-
 // TODO There is simpler way to do this
 func (r request) localaddr() string {
 	addr := r.Context().Value(http.LocalAddrContextKey).(net.Addr).String()
@@ -519,7 +507,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 		event.SessionStopped(event.StoppedSession{e})
 	}
 	sess.Cancel = cancelAndRenameFiles
-	// sessions.Put(s.ID, sess)
+	sessions.Put(s.ID, sess)
 	redisSession := CachedSession{
 		Quota:    sess.Quota,
 		Caps:     sess.Caps,
@@ -668,6 +656,7 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 					}
 					cancel = sess.Cancel
 					sessions.Remove(longId)
+					rdb.Del(context.Background(), longId)
 					queue.Release()
 					log.Printf("[%d] [SESSION_DELETED] [%s]", requestId, longId)
 				} else {
