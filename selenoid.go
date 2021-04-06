@@ -53,7 +53,7 @@ var (
 	num     uint64
 	numLock sync.RWMutex
 	rdb     = redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
+		Addr:     "esg-redis2.t0rrbb.ng.0001.use1.cache.amazonaws.com:6379",
 		Password: "",
 		DB:       0,
 	})
@@ -104,66 +104,17 @@ func CreateSessionFromCache(sessionID string, r *http.Request, requestId uint64)
 		HostPort: s.HostPort,
 		Timeout:  s.Timeout,
 		TimeoutCh: onTimeout(sessionTimeout, func() {
-			request{r}.session(sessionID).Delete(requestId)
+			request{r}.session(sessionID).Delete(s.TaskID)
 		}),
 		Started: s.Started,
 	}
-	seleniumSession.Cancel = cancelAndRenameFiles(sessionID, s.TaskID, &seleniumSession, requestId)
+	seleniumSession.Cancel = cancelAndRenameFiles(s.TaskID, requestId)
 	return &seleniumSession, nil
 }
 
-func cancelAndRenameFiles(sessionId string, taskID string, sess *session.Session, requestId uint64) func() {
+func cancelAndRenameFiles(taskID string, requestId uint64) func() {
 	return func() {
 		service.RemoveTask(context.Background(), requestId, taskID)
-		e := event.Event{
-			RequestId: requestId,
-			SessionId: sessionId,
-			Session:   sess,
-		}
-		caps := sess.Caps
-		finalVideoName := caps.VideoName
-		finalLogName := caps.LogName
-		if caps.Video {
-			oldVideoName := filepath.Join(videoOutputDir, caps.VideoName)
-			if finalVideoName == "" {
-				finalVideoName = sessionId + videoFileExtension
-				e.Session.Caps.VideoName = finalVideoName
-			}
-			newVideoName := filepath.Join(videoOutputDir, finalVideoName)
-			err := os.Rename(oldVideoName, newVideoName)
-			if err != nil {
-				log.Printf("[%d] [VIDEO_ERROR] [%s]", requestId, fmt.Sprintf("Failed to rename %s to %s: %v", oldVideoName, newVideoName, err))
-			} else {
-				createdFile := event.CreatedFile{
-					Event: e,
-					Name:  newVideoName,
-					Type:  "video",
-				}
-				event.FileCreated(createdFile)
-			}
-		}
-		if logOutputDir != "" && (saveAllLogs || caps.Log) {
-			//The following logic will fail if -capture-driver-logs is enabled and a session is requested in driver mode.
-			//Specifying both -log-output-dir and -capture-driver-logs in that case is considered a misconfiguration.
-			oldLogName := filepath.Join(logOutputDir, caps.LogName)
-			if finalLogName == "" {
-				finalLogName = sessionId + logFileExtension
-				e.Session.Caps.LogName = finalLogName
-			}
-			newLogName := filepath.Join(logOutputDir, finalLogName)
-			err := os.Rename(oldLogName, newLogName)
-			if err != nil {
-				log.Printf("[%d] [LOG_ERROR] [%s]", requestId, fmt.Sprintf("Failed to rename %s to %s: %v", oldLogName, newLogName, err))
-			} else {
-				createdFile := event.CreatedFile{
-					Event: e,
-					Name:  newLogName,
-					Type:  "log",
-				}
-				event.FileCreated(createdFile)
-			}
-		}
-		event.SessionStopped(event.StoppedSession{e})
 	}
 }
 
@@ -182,27 +133,9 @@ func (s *sess) url() string {
 	return fmt.Sprintf("http://%s/wd/hub/session/%s", s.addr, s.id)
 }
 
-func (s *sess) Delete(requestId uint64) {
-	log.Printf("[%d] [SESSION_TIMED_OUT] [%s]", requestId, s.id)
-	r, err := http.NewRequest(http.MethodDelete, s.url(), nil)
-	if err != nil {
-		log.Printf("[%d] [DELETE_FAILED] [%s] [%v]", requestId, s.id, err)
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), sessionDeleteTimeout)
-	defer cancel()
-	resp, err := httpClient.Do(r.WithContext(ctx))
-	if resp != nil {
-		defer resp.Body.Close()
-	}
-	if err == nil && resp.StatusCode == http.StatusOK {
-		return
-	}
-	if err != nil {
-		log.Printf("[%d] [DELETE_FAILED] [%s] [%v]", requestId, s.id, err)
-	} else {
-		log.Printf("[%d] [DELETE_FAILED] [%s] [%s]", requestId, s.id, resp.Status)
-	}
+func (s *sess) Delete(taskId string) {
+	log.Printf("SESSION_TIMED_OUT: Removing ECS task forcibly: '%s' for sessionId: '%s'!", taskId, s.id)
+	service.RemoveTask(context.Background(), serial(), taskId)
 }
 
 // create() method from ggr.
@@ -368,10 +301,8 @@ func create(w http.ResponseWriter, r *http.Request) {
 		queue.Drop()
 		return
 	}
-	log.Printf("[%d] [%s] [%s] [SERVICE] [%v]", requestId, user, remote, startedService)
-	log.Printf("[%d] [%s] [%s] [SERVICE_CONTAINER] [%v]", requestId, user, remote, startedService.Container)
+	log.Printf("[%d] [%s] [%s] [SERVICE_TASK_ID] [%v]", requestId, user, remote, startedService.TaskID)
 	u := startedService.Url
-	log.Printf("[%d] [%s] [%s] [SERVICE_URL] [%v]", requestId, user, remote, u)
 	cancel := startedService.Cancel
 	i := 1
 
@@ -434,7 +365,6 @@ func create(w http.ResponseWriter, r *http.Request) {
 				resp["sessionId"] = s.ID
 			}
 			reply(w, resp, http.StatusOK)
-			log.Printf("[%d] [%s] [%s] [BROWSER_STARTED] [%s] [%.2fs]", requestId, user, remote, s.ID, util.SecondsSince(sessionStartTime))
 			break
 		} else {
 			log.Printf("[%d] [%s] [%s] [SESSION_FAILED]", requestId, user, remote)
@@ -451,7 +381,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 		HostPort: startedService.HostPort,
 		Timeout:  sessionTimeout,
 		TimeoutCh: onTimeout(sessionTimeout, func() {
-			request{r}.session(s.ID).Delete(requestId)
+			request{r}.session(s.ID).Delete(startedService.TaskID)
 		}),
 		Started: time.Now(),
 	}
@@ -644,9 +574,9 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 					queue.Release()
 					log.Printf("[%d] [SESSION_DELETED] [%s]", requestId, sessionID)
 				} else {
-					sess.TimeoutCh = onTimeout(sess.Timeout, func() {
-						request{r}.session(sessionID).Delete(requestId)
-					})
+//					sess.TimeoutCh = onTimeout(sess.Timeout, func() {
+//						request{r}.session(sessionID).Delete(sess.TaskID)
+//					})
 					if len(fragments) == 4 && fragments[len(fragments)-1] == "file" && enableFileUpload {
 						r.Header.Set("X-Selenoid-File", filepath.Join(os.TempDir(), sessionID))
 						r.URL.Path = "/file"

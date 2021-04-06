@@ -267,7 +267,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 	taskArn := *resultRunTask.Tasks[0].TaskArn
 	log.Printf("[%d] [TASK_ARN] [%s]", requestId, taskArn)
 	taskId := strings.Split(taskArn, "/")[2]
-	log.Printf("[%d] [TASK_ID] [%s]", requestId, taskId)
+//	log.Printf("[%d] [TASK_ID] [%s]", requestId, taskId)
 
 	time.Sleep(1 * time.Second)
 	//	time.Sleep(5 * time.Second) //TODO: organize valid waiter using startup-timeout until task is RUNNING
