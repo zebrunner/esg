@@ -8,9 +8,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/aerokube/selenoid/event"
-	"github.com/aerokube/selenoid/service"
-	"github.com/imdario/mergo"
 	"io"
 	"io/ioutil"
 	"log"
@@ -26,10 +23,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aerokube/selenoid/event"
+	"github.com/aerokube/selenoid/service"
+	"github.com/imdario/mergo"
+
 	"github.com/aerokube/selenoid/session"
 	"github.com/aerokube/util"
+
 	//	"github.com/docker/docker/api/types"
 	//	"github.com/docker/docker/pkg/stdcopy"
+	"github.com/go-redis/redis/v8"
 	"golang.org/x/net/websocket"
 )
 
@@ -49,6 +52,11 @@ var (
 	}
 	num     uint64
 	numLock sync.RWMutex
+	rdb     = redis.NewClient(&redis.Options{
+		Addr:     "esg-redis2.t0rrbb.ng.0001.use1.cache.amazonaws.com:6379",
+		Password: "",
+		DB:       0,
+	})
 )
 
 type request struct {
@@ -58,6 +66,56 @@ type request struct {
 type sess struct {
 	addr string
 	id   string
+}
+
+type CachedSession struct {
+	Quota    string
+	Caps     session.Caps
+	URL      *url.URL
+	HostPort session.HostPort
+	Timeout  time.Duration
+	Started  time.Time
+	TaskID   string
+}
+
+func (s CachedSession) MarshalBinary() ([]byte, error) {
+	return json.Marshal(s)
+}
+
+func CreateSessionFromCache(sessionID string, r *http.Request, requestId uint64) (*session.Session, error) {
+	result, err := rdb.Get(context.Background(), sessionID).Result()
+	if err != nil {
+		return nil, fmt.Errorf("Error happened while getting session from cache. %v", err)
+	}
+	s := CachedSession{}
+	err = json.Unmarshal([]byte(result), &s)
+	if err != nil {
+		return nil, fmt.Errorf("Cant unmarshal redis data", err)
+	}
+
+	sessionTimeout, err := getSessionTimeout(s.Caps.SessionTimeout, maxTimeout, timeout)
+	if err != nil {
+		log.Println(err)
+	}
+	seleniumSession := session.Session{
+		Quota:    s.Quota,
+		Caps:     s.Caps,
+		URL:      s.URL,
+		HostPort: s.HostPort,
+		Timeout:  s.Timeout,
+		TimeoutCh: onTimeout(sessionTimeout, func() {
+			request{r}.session(sessionID).Delete(s.TaskID)
+		}),
+		Started: s.Started,
+	}
+	seleniumSession.Cancel = cancelAndRenameFiles(s.TaskID, requestId)
+	return &seleniumSession, nil
+}
+
+func cancelAndRenameFiles(taskID string, requestId uint64) func() {
+	return func() {
+		service.RemoveTask(context.Background(), requestId, taskID)
+	}
 }
 
 // TODO There is simpler way to do this
@@ -75,27 +133,9 @@ func (s *sess) url() string {
 	return fmt.Sprintf("http://%s/wd/hub/session/%s", s.addr, s.id)
 }
 
-func (s *sess) Delete(requestId uint64) {
-	log.Printf("[%d] [SESSION_TIMED_OUT] [%s]", requestId, s.id)
-	r, err := http.NewRequest(http.MethodDelete, s.url(), nil)
-	if err != nil {
-		log.Printf("[%d] [DELETE_FAILED] [%s] [%v]", requestId, s.id, err)
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), sessionDeleteTimeout)
-	defer cancel()
-	resp, err := httpClient.Do(r.WithContext(ctx))
-	if resp != nil {
-		defer resp.Body.Close()
-	}
-	if err == nil && resp.StatusCode == http.StatusOK {
-		return
-	}
-	if err != nil {
-		log.Printf("[%d] [DELETE_FAILED] [%s] [%v]", requestId, s.id, err)
-	} else {
-		log.Printf("[%d] [DELETE_FAILED] [%s] [%s]", requestId, s.id, resp.Status)
-	}
+func (s *sess) Delete(taskId string) {
+	log.Printf("SESSION_TIMED_OUT: Removing ECS task forcibly: '%s' for sessionId: '%s'!", taskId, s.id)
+	service.RemoveTask(context.Background(), serial(), taskId)
 }
 
 // create() method from ggr.
@@ -261,10 +301,8 @@ func create(w http.ResponseWriter, r *http.Request) {
 		queue.Drop()
 		return
 	}
-	log.Printf("[%d] [%s] [%s] [SERVICE] [%v]", requestId, user, remote, startedService)
-	log.Printf("[%d] [%s] [%s] [SERVICE_CONTAINER] [%v]", requestId, user, remote, startedService.Container)
+	log.Printf("[%d] [%s] [%s] [SERVICE_TASK_ID] [%v]", requestId, user, remote, startedService.TaskID)
 	u := startedService.Url
-	log.Printf("[%d] [%s] [%s] [SERVICE_URL] [%v]", requestId, user, remote, u)
 	cancel := startedService.Cancel
 	i := 1
 
@@ -317,15 +355,16 @@ func create(w http.ResponseWriter, r *http.Request) {
 					cancel()
 					return
 				}
-				s.ID = startedService.Container.ContainerInstanceID + startedService.Container.ID + sess
+				// s.ID = startedService.Container.ContainerInstanceID + startedService.Container.ID + sess
+				s.ID = sess
 				resp["value"].(map[string]interface{})["sessionId"] = s.ID
 			} else {
 				sess, ok = resp["sessionId"].(string)
-				s.ID = startedService.Container.ContainerInstanceID + startedService.Container.ID + sess
+				// s.ID = startedService.Container.ContainerInstanceID + startedService.Container.ID + sess
+				s.ID = sess
 				resp["sessionId"] = s.ID
 			}
 			reply(w, resp, http.StatusOK)
-			log.Printf("[%d] [%s] [%s] [BROWSER_STARTED] [%s] [%.2fs]", requestId, user, remote, s.ID, util.SecondsSince(sessionStartTime))
 			break
 		} else {
 			log.Printf("[%d] [%s] [%s] [SESSION_FAILED]", requestId, user, remote)
@@ -342,9 +381,11 @@ func create(w http.ResponseWriter, r *http.Request) {
 		HostPort: startedService.HostPort,
 		Timeout:  sessionTimeout,
 		TimeoutCh: onTimeout(sessionTimeout, func() {
-			request{r}.session(s.ID).Delete(requestId)
+			request{r}.session(s.ID).Delete(startedService.TaskID)
 		}),
-		Started: time.Now()}
+		Started: time.Now(),
+	}
+
 	cancelAndRenameFiles := func() {
 		cancel()
 		sessionId := s.ID
@@ -397,6 +438,19 @@ func create(w http.ResponseWriter, r *http.Request) {
 	}
 	sess.Cancel = cancelAndRenameFiles
 	sessions.Put(s.ID, sess)
+	redisSession := CachedSession{
+		Quota:    sess.Quota,
+		Caps:     sess.Caps,
+		URL:      sess.URL,
+		HostPort: sess.HostPort,
+		Timeout:  sess.Timeout,
+		Started:  sess.Started,
+		TaskID:   startedService.TaskID,
+	}
+	err = rdb.Set(context.Background(), s.ID, redisSession, 0).Err()
+	if err != nil {
+		fmt.Println("Session not cached", err)
+	}
 	queue.Create()
 	log.Printf("[%d] [%s] [%s] [SESSION_CREATED] [%s] [%d] [%.2fs]", requestId, user, remote, s.ID, i, util.SecondsSince(sessionStartTime))
 }
@@ -476,20 +530,6 @@ func generateRandomFileName(extension string) string {
 	return "selenoid" + hex.EncodeToString(randBytes) + extension
 }
 
-type SessionIDParts struct {
-	InstanceID string
-	TaskID     string
-	SessionID  string
-}
-
-func parseLongSessionId(ID string) SessionIDParts {
-	return SessionIDParts{
-		InstanceID: ID[:32],
-		TaskID:     ID[32:64],
-		SessionID:  ID[64:],
-	}
-}
-
 func proxy(w http.ResponseWriter, r *http.Request) {
 	done := make(chan func())
 	go func() {
@@ -503,16 +543,20 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 	(&httputil.ReverseProxy{
 		Director: func(r *http.Request) {
 			fragments := strings.Split(r.URL.Path, slash)
-			longId := fragments[2]
-			idParts := parseLongSessionId(longId)
-			r.URL.Path = strings.ReplaceAll(r.URL.Path, longId, idParts.SessionID)
+			sessionID := fragments[2]
 
 			//TODO: candidate to hide on verbose log level
 			log.Printf("[%d] [PROXY_TO] [%s]", requestId, r.URL.Path)
-			sess, ok := sessions.Get(longId)
+			var err error = nil
+			sess, ok := sessions.Get(sessionID)
 			if !ok {
-				log.Printf("NEED TO LOOK FOR IN AWS!!!")
-			} else {
+				sess, err = CreateSessionFromCache(sessionID, r, requestId)
+				if err != nil {
+					log.Printf("Cant find session. %v", err)
+				}
+			}
+
+			if sess != nil {
 				sess.Lock.Lock()
 				defer sess.Lock.Unlock()
 				select {
@@ -522,18 +566,19 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 				}
 				if r.Method == http.MethodDelete && len(fragments) == 3 {
 					if enableFileUpload {
-						os.RemoveAll(filepath.Join(os.TempDir(), idParts.SessionID))
+						os.RemoveAll(filepath.Join(os.TempDir(), sessionID))
 					}
 					cancel = sess.Cancel
-					sessions.Remove(idParts.SessionID)
+					sessions.Remove(sessionID)
+					rdb.Del(context.Background(), sessionID).Result()
 					queue.Release()
-					log.Printf("[%d] [SESSION_DELETED] [%s]", requestId, idParts.SessionID)
+					log.Printf("[%d] [SESSION_DELETED] [%s]", requestId, sessionID)
 				} else {
-					sess.TimeoutCh = onTimeout(sess.Timeout, func() {
-						request{r}.session(idParts.SessionID).Delete(requestId)
-					})
+//					sess.TimeoutCh = onTimeout(sess.Timeout, func() {
+//						request{r}.session(sessionID).Delete(sess.TaskID)
+//					})
 					if len(fragments) == 4 && fragments[len(fragments)-1] == "file" && enableFileUpload {
-						r.Header.Set("X-Selenoid-File", filepath.Join(os.TempDir(), idParts.SessionID))
+						r.Header.Set("X-Selenoid-File", filepath.Join(os.TempDir(), sessionID))
 						r.URL.Path = "/file"
 						return
 					}

@@ -289,14 +289,4 @@ func main() {
 		log.Fatalf("[-] [SHUTTING_DOWN] [Failed to shut down: %v]", err)
 	}
 
-	// Session can't be closed when this particular instance of ecs is killed
-	/*
-		sessions.Each(func(k string, s *session.Session) {
-			if enableFileUpload {
-				os.RemoveAll(path.Join(os.TempDir(), k))
-			}
-			s.Cancel()
-		})
-	*/
-
 }

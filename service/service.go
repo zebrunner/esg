@@ -43,6 +43,7 @@ type StartedService struct {
 	Url       *url.URL
 	Container *session.Container
 	HostPort  session.HostPort
+	TaskID    string
 	Cancel    func()
 }
 
