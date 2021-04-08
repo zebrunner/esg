@@ -8,9 +8,7 @@ import (
 	"net/url"
 	"time"
 
-	//	"github.com/aerokube/selenoid/config"
 	"github.com/aerokube/selenoid/session"
-	//	"github.com/docker/docker/client"
 )
 
 // Environment - all settings that influence browser startup
@@ -83,12 +81,10 @@ func (m *DefaultManager) Find(caps session.Caps, requestId uint64) (Starter, boo
 	browser := caps.BrowserName()
 	version := caps.Version
 
-	// selenoid/[vnc_][browsername]:[version]
 	log.Printf("[%d] [LOCATING_SERVICE] [%s] [%s]", requestId, browser, version)
 
-	org := "selenoid"
+	org := "browsers"
 	if browser == "MicrosoftEdge" {
-		org = "browsers"
 		browser = "edge"
 	}
 
