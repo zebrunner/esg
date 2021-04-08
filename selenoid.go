@@ -53,7 +53,7 @@ var (
 	num     uint64
 	numLock sync.RWMutex
 	rdb     = redis.NewClient(&redis.Options{
-		Addr:     *service.AwsEs,
+		Addr:     *service.AwsElasticCache,
 		Password: "",
 		DB:       0,
 	})

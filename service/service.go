@@ -35,10 +35,10 @@ const (
 )
 
 var (
-	awsRegion  = flag.String("aws-region", "us-east-1", "AWS region name")
-	awsRetry   = flag.Int("aws-retry", 10, "AWS client retry count")
-	awsCluster = flag.String("aws-cluster", "esg-linux", "AWS cluster name")
-	AwsEs      = flag.String("aws-es", "localhost:6379", "AWS redis connection URL")
+	awsRegion       = flag.String("aws-region", "us-east-1", "AWS region name")
+	awsRetry        = flag.Int("aws-retry", 10, "AWS client retry count")
+	awsCluster      = flag.String("aws-cluster", "esg-linux", "AWS cluster name")
+	AwsElasticCache = flag.String("aws-elastic-cache", "localhost:6379", "AWS elastic cache connection URL")
 )
 
 // ServiceBase - stores fields required by all services
