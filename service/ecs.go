@@ -70,11 +70,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 	log.Printf("[%d] [TASK_DEFINITION_FAMILY] [%s]", requestId, taskDefFamily)
 
 	//create ECS task definition based on capabilities
-	//TODO: parametrize region
-	//	config := &aws.Config{Region: aws.String("us-east-1"), MaxRetries: aws.Int(15)}
-	//	config.WithSleepDelay(time.Sleep)
-	//	svc := ecs.New(awsSession.New(config))
-	svc := ecs.New(awsSession.New(&aws.Config{Region: aws.String("us-east-1"), MaxRetries: aws.Int(10)}))
+	svc := ecs.New(awsSession.New(&aws.Config{Region: awsRegion, MaxRetries: awsRetry}))
 
 	//TODO: support GPU reservation: The number of GPU units to reserve for the container. A container instance with GPU support has 1 GPU unit for every GPU.
 	log.Printf("[%d] [CREATING_ECS_TASK_DEFINITION] [%s]", requestId, imageUrl)
@@ -213,9 +209,8 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 		}
 
 	*/
-	//TODO: parametrize cluster name
 	runTaskInput := &ecs.RunTaskInput{
-		Cluster:        aws.String("executor-cluster"),
+		Cluster:        awsCluster,
 		TaskDefinition: aws.String(family + ":" + strconv.FormatInt(revision, 10)),
 	}
 
@@ -267,7 +262,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 	taskArn := *resultRunTask.Tasks[0].TaskArn
 	log.Printf("[%d] [TASK_ARN] [%s]", requestId, taskArn)
 	taskId := strings.Split(taskArn, "/")[2]
-//	log.Printf("[%d] [TASK_ID] [%s]", requestId, taskId)
+	//	log.Printf("[%d] [TASK_ID] [%s]", requestId, taskId)
 
 	time.Sleep(1 * time.Second)
 	//	time.Sleep(5 * time.Second) //TODO: organize valid waiter using startup-timeout until task is RUNNING
@@ -282,7 +277,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 	*/
 	//TODO: wait until container starts (in response we should have valid *resultRunTask.Tasks[0].ContainerInstanceArn value
 	describeTaskInput := &ecs.DescribeTasksInput{
-		Cluster: aws.String("executor-cluster"),
+		Cluster: awsCluster,
 		Tasks: []*string{
 			aws.String(taskId),
 		},
@@ -317,7 +312,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 	log.Printf("[%d] [TASK_CONTAINER_INSTANCE_ID] [%s]", requestId, containerInstanceId)
 
 	containerInstanceInput := &ecs.DescribeContainerInstancesInput{
-		Cluster: aws.String("executor-cluster"),
+		Cluster: awsCluster,
 		ContainerInstances: []*string{
 			aws.String(containerInstanceId),
 		},
@@ -342,7 +337,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 		},
 	}
 
-	svcEc2 := ec2.New(awsSession.New(&aws.Config{Region: aws.String("us-east-1")}))
+	svcEc2 := ec2.New(awsSession.New(&aws.Config{Region: awsRegion}))
 	resultInstance, err := svcEc2.DescribeInstances(instanceInput)
 	if err != nil {
 		RemoveTask(ctx, requestId, taskArn)
@@ -423,7 +418,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 
 func getFailReason(svc *ecs.ECS, taskId string) (*string, error) {
 	describeTaskInput := &ecs.DescribeTasksInput{
-		Cluster: aws.String("executor-cluster"),
+		Cluster: awsCluster,
 		Tasks:   []*string{aws.String(taskId)},
 	}
 	describeTaskResult, err := svc.DescribeTasks(describeTaskInput)
@@ -442,9 +437,9 @@ func getFailReason(svc *ecs.ECS, taskId string) (*string, error) {
 }
 
 func GetTaskInfo(instanceID string, taskID string) {
-	svc := ecs.New(awsSession.New(&aws.Config{Region: aws.String("us-east-1"), MaxRetries: aws.Int(10)}))
+	svc := ecs.New(awsSession.New(&aws.Config{Region: awsRegion, MaxRetries: awsRetry}))
 	input := &ecs.ListTasksInput{
-		Cluster:           aws.String("executor-cluster"),
+		Cluster:           awsCluster,
 		ContainerInstance: aws.String(instanceID),
 	}
 	fmt.Println(instanceID)
@@ -539,10 +534,10 @@ func RemoveTask(ctx context.Context, requestId uint64, taskArn string) {
 
 	//TODO: parametrize region
 	// #33: increased number of retries to fix "ThrottlingException: Rate exceeded"
-	svc := ecs.New(awsSession.New(&aws.Config{Region: aws.String("us-east-1"), MaxRetries: aws.Int(10)}))
+	svc := ecs.New(awsSession.New(&aws.Config{Region: awsRegion, MaxRetries: awsRetry}))
 
 	stopTaskInput := &ecs.StopTaskInput{
-		Cluster: aws.String("executor-cluster"),
+		Cluster: awsCluster,
 		Reason:  aws.String("Cancel"),
 		Task:    aws.String(taskArn),
 	}
