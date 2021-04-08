@@ -25,6 +25,8 @@ import (
 	awsSession "github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ecs"
+
+	"github.com/google/uuid"
 )
 
 // Task - ecs task container manager
@@ -74,6 +76,10 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 
 	//TODO: support GPU reservation: The number of GPU units to reserve for the container. A container instance with GPU support has 1 GPU unit for every GPU.
 	log.Printf("[%d] [CREATING_ECS_TASK_DEFINITION] [%s]", requestId, imageUrl)
+
+	uuid := uuid.New()
+	mountShare := "/tmp/zebrunner/" + uuid.String()
+	log.Printf("mountShare: %s", mountShare)
 	taskDefinitionInput := &ecs.RegisterTaskDefinitionInput{
 		NetworkMode: aws.String("bridge"),
 		ContainerDefinitions: []*ecs.ContainerDefinition{
@@ -90,11 +96,6 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 						ContainerPath: aws.String("/dev/shm"),
 						ReadOnly:      aws.Bool(false),
 						SourceVolume:  aws.String("devshm"),
-					},
-					&ecs.MountPoint{
-						ContainerPath: aws.String("/tmp/zebrunner/logs"),
-						ReadOnly:      aws.Bool(false),
-						SourceVolume:  aws.String("data"),
 					},
 				},
 				Environment: []*ecs.KeyValuePair{
@@ -169,7 +170,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 			},
 			&ecs.Volume{
 				Host: &ecs.HostVolumeProperties{
-					SourcePath: aws.String("/tmp/zebrunner/video"),
+					SourcePath: aws.String(mountShare),
 				},
 				Name: aws.String("data"),
 			},
