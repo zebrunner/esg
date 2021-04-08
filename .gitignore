@@ -5,3 +5,7 @@ selenoid.exe
 coverage.*
 .DS_Store
 .vscode
+start.sh
+stop.sh
+*.log
+
