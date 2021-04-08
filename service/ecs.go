@@ -80,11 +80,12 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 	uuid := uuid.New()
 	mountShare := "/tmp/zebrunner/" + uuid.String()
 	log.Printf("mountShare: %s", mountShare)
+	browserContainerName := "browser"
 	taskDefinitionInput := &ecs.RegisterTaskDefinitionInput{
 		NetworkMode: aws.String("bridge"),
 		ContainerDefinitions: []*ecs.ContainerDefinition{
 			{
-				Name:              aws.String(d.Caps.Name),
+				Name:              aws.String(browserContainerName),
 				Image:             aws.String(imageUrl),
 				Cpu:               aws.Int64(cpu),
 				Essential:         aws.Bool(true), //If the essential parameter of a container is marked as true, the failure of that container will stop the task.
@@ -137,13 +138,13 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 				MemoryReservation: aws.Int64(768),
 				Privileged:        aws.Bool(false), //no need privileged mode for video-recording container
 				Links: []*string{
-					aws.String(d.Caps.Name),
+					aws.String(browserContainerName),
 				},
 				Environment: []*ecs.KeyValuePair{
 					//TODO: provide extra values from caps
 					&ecs.KeyValuePair{
 						Name:  aws.String("BROWSER_CONTAINER_NAME"),
-						Value: aws.String(d.Caps.Name),
+						Value: aws.String(browserContainerName),
 					},
 					&ecs.KeyValuePair{
 						Name:  aws.String("FILE_NAME"),
