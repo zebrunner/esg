@@ -146,7 +146,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 					},
 					&ecs.KeyValuePair{
 						Name:  aws.String("FILE_NAME"),
-						Value: aws.String(d.Caps.VideoName),
+						Value: aws.String("video.mp4"),
 					},
 				},
 				MountPoints: []*ecs.MountPoint{

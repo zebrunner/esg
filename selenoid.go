@@ -247,7 +247,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 	var starter service.Starter
 	var ok bool
 	var sessionTimeout time.Duration
-	var finalVideoName, finalLogName string
+	var finalLogName string
 	for _, fmc := range firstMatchCaps {
 		caps = browser.Caps
 		mergo.Merge(&caps, *fmc)
@@ -275,10 +275,6 @@ func create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		caps.VideoScreenSize = videoScreenSize
-		finalVideoName = caps.VideoName
-		if caps.Video {
-			caps.VideoName = getTemporaryFileName(videoOutputDir, videoFileExtension)
-		}
 		finalLogName = caps.LogName
 		if logOutputDir != "" && (saveAllLogs || caps.Log) {
 			caps.LogName = getTemporaryFileName(logOutputDir, logFileExtension)
@@ -393,25 +389,6 @@ func create(w http.ResponseWriter, r *http.Request) {
 			RequestId: requestId,
 			SessionId: sessionId,
 			Session:   sess,
-		}
-		if caps.Video {
-			oldVideoName := filepath.Join(videoOutputDir, caps.VideoName)
-			if finalVideoName == "" {
-				finalVideoName = sessionId + videoFileExtension
-				e.Session.Caps.VideoName = finalVideoName
-			}
-			newVideoName := filepath.Join(videoOutputDir, finalVideoName)
-			err := os.Rename(oldVideoName, newVideoName)
-			if err != nil {
-				log.Printf("[%d] [VIDEO_ERROR] [%s]", requestId, fmt.Sprintf("Failed to rename %s to %s: %v", oldVideoName, newVideoName, err))
-			} else {
-				createdFile := event.CreatedFile{
-					Event: e,
-					Name:  newVideoName,
-					Type:  "video",
-				}
-				event.FileCreated(createdFile)
-			}
 		}
 		if logOutputDir != "" && (saveAllLogs || caps.Log) {
 			//The following logic will fail if -capture-driver-logs is enabled and a session is requested in driver mode.
