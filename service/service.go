@@ -1,6 +1,7 @@
 package service
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -26,10 +27,18 @@ type Environment struct {
 	VideoContainerImage  string
 	LogOutputDir         string
 	SaveAllLogs          bool
+	AwsRegion            string
 }
 
 const (
 	DefaultContainerNetwork = "default"
+)
+
+var (
+	awsRegion  = flag.String("aws-region", "us-east-1", "AWS region name")
+	awsRetry   = flag.Int("aws-retry", 10, "AWS client retry count")
+	awsCluster = flag.String("aws-cluster", "esg-linux", "AWS cluster name")
+	AwsEs      = flag.String("aws-es", "localhost:6379", "AWS redis connection URL")
 )
 
 // ServiceBase - stores fields required by all services

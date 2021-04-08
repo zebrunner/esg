@@ -53,7 +53,7 @@ var (
 	num     uint64
 	numLock sync.RWMutex
 	rdb     = redis.NewClient(&redis.Options{
-		Addr:     "esg-redis2.t0rrbb.ng.0001.use1.cache.amazonaws.com:6379",
+		Addr:     *service.AwsEs,
 		Password: "",
 		DB:       0,
 	})
@@ -574,9 +574,9 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 					queue.Release()
 					log.Printf("[%d] [SESSION_DELETED] [%s]", requestId, sessionID)
 				} else {
-//					sess.TimeoutCh = onTimeout(sess.Timeout, func() {
-//						request{r}.session(sessionID).Delete(sess.TaskID)
-//					})
+					//					sess.TimeoutCh = onTimeout(sess.Timeout, func() {
+					//						request{r}.session(sessionID).Delete(sess.TaskID)
+					//					})
 					if len(fragments) == 4 && fragments[len(fragments)-1] == "file" && enableFileUpload {
 						r.Header.Set("X-Selenoid-File", filepath.Join(os.TempDir(), sessionID))
 						r.URL.Path = "/file"
