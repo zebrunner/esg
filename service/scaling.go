@@ -25,7 +25,7 @@ type ClusterResources struct {
 
 func getInstanceCount(svc *ecs.ECS) (int64, error) {
 	listInstancesInput := &ecs.ListContainerInstancesInput{
-		Cluster: aws.String("executor-cluster"),
+		Cluster: awsCluster,
 	}
 	listInstancesOutput, err := svc.ListContainerInstances(listInstancesInput)
 	if err != nil {
@@ -37,7 +37,7 @@ func getInstanceCount(svc *ecs.ECS) (int64, error) {
 
 func getTasksResources(svc *ecs.ECS, taskStatus string) (*Resources, error) {
 	listTasksInput := &ecs.ListTasksInput{
-		Cluster: aws.String("executor-cluster"),
+		Cluster: awsCluster,
 	}
 	listTasksResult, err := svc.ListTasks(listTasksInput)
 	if err != nil {
@@ -47,7 +47,7 @@ func getTasksResources(svc *ecs.ECS, taskStatus string) (*Resources, error) {
 		return nil, errors.New("can't describe tasks")
 	}
 	describeTasksInput := &ecs.DescribeTasksInput{
-		Cluster: aws.String("executor-cluster"),
+		Cluster: awsCluster,
 		Tasks:   listTasksResult.TaskArns,
 	}
 	describeTasksResult, err := svc.DescribeTasks(describeTasksInput)
@@ -79,7 +79,7 @@ func getTasksResources(svc *ecs.ECS, taskStatus string) (*Resources, error) {
 }
 
 func ScaleUp() {
-	session, err := awsSession.NewSession(&aws.Config{Region: aws.String("us-east-1"), MaxRetries: aws.Int(10)})
+	session, err := awsSession.NewSession(&aws.Config{Region: awsRegion, MaxRetries: awsRetry})
 	if err != nil {
 		log.Fatal(err)
 		return
@@ -115,7 +115,7 @@ func ScaleUp() {
 	if scaledDesiredCount > curentInstanceCount {
 		autoscalingSvc := autoscaling.New(session)
 		describeAutoScalingGroupsInput := &autoscaling.DescribeAutoScalingGroupsInput{
-			AutoScalingGroupNames: []*string{aws.String("executor-asg")},
+			AutoScalingGroupNames: []*string{aws.String("esg-asg")},
 		}
 		describeAutoScalingGroupsOutput, err := autoscalingSvc.DescribeAutoScalingGroups(describeAutoScalingGroupsInput)
 		if err != nil {

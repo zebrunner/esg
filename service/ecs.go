@@ -132,8 +132,8 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 				Image:             aws.String("selenoid/video-recorder:latest-release"),
 				Essential:         aws.Bool(true), //If the essential parameter of a container is marked as true, the failure of that container will stop the task.
 				Cpu:               aws.Int64(256),
-				Memory:            aws.Int64(512),
-				MemoryReservation: aws.Int64(512),
+				Memory:            aws.Int64(768),
+				MemoryReservation: aws.Int64(768),
 				Privileged:        aws.Bool(false), //no need privileged mode for video-recording container
 				Links: []*string{
 					aws.String(d.Caps.Name),
