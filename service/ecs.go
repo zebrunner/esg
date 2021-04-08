@@ -78,8 +78,17 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 	log.Printf("[%d] [CREATING_ECS_TASK_DEFINITION] [%s]", requestId, imageUrl)
 
 	uuid := uuid.New()
-	mountShare := "/tmp/zebrunner/" + uuid.String()
-	log.Printf("mountShare: %s", mountShare)
+
+	videoFileName := uuid.String() + ".mp4"
+
+        sharedFolder := "/tmp/log"
+        sharedVolume := "data"
+
+	// [VD]that's expected that inside chrome container no uuid for folder
+	driverArgs := "--log-path=/tmp/log/" + uuid.String() + ".log"
+	log.Printf("driverArgs: %s", driverArgs)
+
+
 	browserContainerName := "browser"
 	taskDefinitionInput := &ecs.RegisterTaskDefinitionInput{
 		NetworkMode: aws.String("bridge"),
@@ -98,6 +107,11 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 						ReadOnly:      aws.Bool(false),
 						SourceVolume:  aws.String("devshm"),
 					},
+                                        &ecs.MountPoint{
+                                                ContainerPath: aws.String("/tmp/log"),
+                                                ReadOnly:      aws.Bool(false),
+                                                SourceVolume:  aws.String(sharedVolume),
+                                        },
 				},
 				Environment: []*ecs.KeyValuePair{
 					//TODO: provide extra values from caps
@@ -105,6 +119,10 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 						Name:  aws.String("VERBOSE"),
 						Value: aws.String("1"),
 					},
+                                        &ecs.KeyValuePair{
+                                                Name:  aws.String("DRIVER_ARGS"),
+                                                Value: aws.String(driverArgs),
+                                        },
 				},
 				PortMappings: []*ecs.PortMapping{
 					&ecs.PortMapping{
@@ -148,14 +166,14 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 					},
 					&ecs.KeyValuePair{
 						Name:  aws.String("FILE_NAME"),
-						Value: aws.String("video.mp4"),
+						Value: aws.String(videoFileName),
 					},
 				},
 				MountPoints: []*ecs.MountPoint{
 					&ecs.MountPoint{
 						ContainerPath: aws.String("/data"),
 						ReadOnly:      aws.Bool(false),
-						SourceVolume:  aws.String("data"),
+						SourceVolume:  aws.String(sharedVolume),
 					},
 				},
 				PortMappings: []*ecs.PortMapping{},
@@ -169,12 +187,18 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 				},
 				Name: aws.String("devshm"),
 			},
-			&ecs.Volume{
-				Host: &ecs.HostVolumeProperties{
-					SourcePath: aws.String(mountShare),
-				},
-				Name: aws.String("data"),
-			},
+                        &ecs.Volume{
+                                Host: &ecs.HostVolumeProperties{
+                                        SourcePath: aws.String(sharedFolder),
+                                },
+                                Name: aws.String(sharedVolume),
+                        },
+//			&ecs.Volume{
+//				Host: &ecs.HostVolumeProperties{
+//					SourcePath: aws.String(sharedVideoFolder),
+//				},
+//				Name: aws.String(sharedVideoVolume),
+//			},
 		},
 		TaskRoleArn: aws.String(""),
 	}
