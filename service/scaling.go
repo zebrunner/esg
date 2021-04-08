@@ -124,6 +124,7 @@ func ScaleUp() {
 		}
 		autoScalingGroup := describeAutoScalingGroupsOutput.AutoScalingGroups[0]
 		if *autoScalingGroup.MaxSize < scaledDesiredCount {
+			log.Printf("[WARN] [LIMIT REACHED] ASG desired count reached limit! MaxCount: %d DesiredCount: %d!", *autoScalingGroup.MaxSize, scaledDesiredCount)
 			scaledDesiredCount = *autoScalingGroup.MaxSize
 		}
 		updateGroupInput := &autoscaling.UpdateAutoScalingGroupInput{
