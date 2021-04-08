@@ -83,7 +83,7 @@ func (m *DefaultManager) Find(caps session.Caps, requestId uint64) (Starter, boo
 
 	log.Printf("[%d] [LOCATING_SERVICE] [%s] [%s]", requestId, browser, version)
 
-	org := "browsers"
+	org := "zebrunner"
 	if browser == "MicrosoftEdge" {
 		browser = "edge"
 	}
