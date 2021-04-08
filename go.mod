@@ -11,6 +11,7 @@ require (
 	github.com/docker/go-connections v0.4.0
 	github.com/docker/go-units v0.4.0
 	github.com/go-redis/redis/v8 v8.8.0
+	github.com/google/uuid v1.2.0
 	github.com/gorilla/websocket v1.4.0
 	github.com/imdario/mergo v0.3.6
 	github.com/mafredri/cdp v0.21.0
