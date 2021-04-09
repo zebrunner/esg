@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"math"
 	"strconv"
@@ -103,8 +104,11 @@ func ScaleUp() {
 	}
 
 	cpuRatio := float64(runningTasksResources.CPU+provisioningTasksResources.CPU) / float64(provisioningTasksResources.CPU)
+	fmt.Println("RunningTasksCpu:", runningTasksResources.CPU, "ProvisioningTaskCpu", provisioningTasksResources.CPU, "Ratio:", cpuRatio)
 	memoryRatio := float64(runningTasksResources.Memory+provisioningTasksResources.Memory) / float64(provisioningTasksResources.Memory)
+	fmt.Println("RunningTasksMemory:", runningTasksResources.Memory, "ProvisioningTaskMemory", provisioningTasksResources.Memory, "Ratio:", memoryRatio)
 	scaleRatio := math.Max(cpuRatio, memoryRatio)
+	fmt.Println("ScaleRatio:", scaleRatio)
 
 	curentInstanceCount, err := getInstanceCount(svc)
 	if err != nil {
