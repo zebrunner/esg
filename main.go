@@ -84,6 +84,7 @@ func init() {
 	flag.IntVar(&service.AwsRetry, "aws-retry", 10, "AWS client retry count")
 	flag.StringVar(&service.AwsCluster, "aws-cluster", "esg-linux", "AWS cluster name")
 	flag.StringVar(&service.AwsElasticCache, "aws-elastic-cache", "localhost:6379", "AWS elastic cache connection URL")
+	flag.StringVar(&service.AwsAutoScalingGroup, "aws-auto-scaling-group", "esg-asg", "AWS auto scaling group name")
 	flag.IntVar(&service.MinMemory, "min-memory", 768, "AWS minimum memory limitation for session")
 	flag.IntVar(&service.MinMemoryReservation, "min-memory-reservation", 768, "AWS minimum memory reservation limitation for session")
 	flag.IntVar(&service.MaxMemory, "max-memory", 8192, "AWS maximum memory limitation for session")
