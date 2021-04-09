@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"flag"
 	"log"
+
 	//	"net"
 	"net/http"
 	"os"
 	"os/signal"
+
 	//	"path"
 	//	"strconv"
 	"strings"
@@ -77,6 +79,10 @@ func init() {
 	flag.StringVar(&logOutputDir, "log-output-dir", "", "Directory to save session log to")
 	flag.BoolVar(&saveAllLogs, "save-all-logs", false, "Whether to save all logs without considering capabilities")
 	flag.DurationVar(&gracefulPeriod, "graceful-period", 300*time.Second, "graceful shutdown period in time.Duration format, e.g. 300s or 500ms")
+	flag.StringVar(&service.AwsRegion, "aws-region", "us-east-1", "AWS region name")
+	flag.IntVar(&service.AwsRetry, "aws-retry", 10, "AWS client retry count")
+	flag.StringVar(&service.AwsCluster, "aws-cluster", "esg-linux", "AWS cluster name")
+	flag.StringVar(&service.AwsElasticCache, "aws-elastic-cache", "localhost:6379", "AWS elastic cache connection URL")
 	flag.Parse()
 
 	if version {

@@ -25,7 +25,7 @@ type ClusterResources struct {
 
 func getInstanceCount(svc *ecs.ECS) (int64, error) {
 	listInstancesInput := &ecs.ListContainerInstancesInput{
-		Cluster: awsCluster,
+		Cluster: &AwsCluster,
 	}
 	listInstancesOutput, err := svc.ListContainerInstances(listInstancesInput)
 	if err != nil {
@@ -37,7 +37,7 @@ func getInstanceCount(svc *ecs.ECS) (int64, error) {
 
 func getTasksResources(svc *ecs.ECS, taskStatus string) (*Resources, error) {
 	listTasksInput := &ecs.ListTasksInput{
-		Cluster: awsCluster,
+		Cluster: &AwsCluster,
 	}
 	listTasksResult, err := svc.ListTasks(listTasksInput)
 	if err != nil {
@@ -47,7 +47,7 @@ func getTasksResources(svc *ecs.ECS, taskStatus string) (*Resources, error) {
 		return nil, errors.New("can't describe tasks")
 	}
 	describeTasksInput := &ecs.DescribeTasksInput{
-		Cluster: awsCluster,
+		Cluster: &AwsCluster,
 		Tasks:   listTasksResult.TaskArns,
 	}
 	describeTasksResult, err := svc.DescribeTasks(describeTasksInput)
@@ -79,7 +79,7 @@ func getTasksResources(svc *ecs.ECS, taskStatus string) (*Resources, error) {
 }
 
 func ScaleUp() {
-	session, err := awsSession.NewSession(&aws.Config{Region: awsRegion, MaxRetries: awsRetry})
+	session, err := awsSession.NewSession(&aws.Config{Region: &AwsRegion, MaxRetries: &AwsRetry})
 	if err != nil {
 		log.Fatal(err)
 		return

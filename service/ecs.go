@@ -72,7 +72,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 	log.Printf("[%d] [TASK_DEFINITION_FAMILY] [%s]", requestId, taskDefFamily)
 
 	//create ECS task definition based on capabilities
-	svc := ecs.New(awsSession.New(&aws.Config{Region: awsRegion, MaxRetries: awsRetry}))
+	svc := ecs.New(awsSession.New(&aws.Config{Region: &AwsRegion, MaxRetries: &AwsRetry}))
 
 	//TODO: support GPU reservation: The number of GPU units to reserve for the container. A container instance with GPU support has 1 GPU unit for every GPU.
 	log.Printf("[%d] [CREATING_ECS_TASK_DEFINITION] [%s]", requestId, imageUrl)
@@ -81,13 +81,12 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 
 	videoFileName := uuid.String() + ".mp4"
 
-        sharedFolder := "/tmp/log"
-        sharedVolume := "data"
+	sharedFolder := "/tmp/log"
+	sharedVolume := "data"
 
 	// [VD]that's expected that inside chrome container no uuid for folder
 	driverArgs := "--log-path=/tmp/log/" + uuid.String() + ".log"
 	log.Printf("driverArgs: %s", driverArgs)
-
 
 	browserContainerName := "browser"
 	taskDefinitionInput := &ecs.RegisterTaskDefinitionInput{
@@ -107,11 +106,11 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 						ReadOnly:      aws.Bool(false),
 						SourceVolume:  aws.String("devshm"),
 					},
-                                        &ecs.MountPoint{
-                                                ContainerPath: aws.String("/tmp/log"),
-                                                ReadOnly:      aws.Bool(false),
-                                                SourceVolume:  aws.String(sharedVolume),
-                                        },
+					&ecs.MountPoint{
+						ContainerPath: aws.String("/tmp/log"),
+						ReadOnly:      aws.Bool(false),
+						SourceVolume:  aws.String(sharedVolume),
+					},
 				},
 				Environment: []*ecs.KeyValuePair{
 					//TODO: provide extra values from caps
@@ -119,10 +118,10 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 						Name:  aws.String("VERBOSE"),
 						Value: aws.String("1"),
 					},
-                                        &ecs.KeyValuePair{
-                                                Name:  aws.String("DRIVER_ARGS"),
-                                                Value: aws.String(driverArgs),
-                                        },
+					&ecs.KeyValuePair{
+						Name:  aws.String("DRIVER_ARGS"),
+						Value: aws.String(driverArgs),
+					},
 				},
 				PortMappings: []*ecs.PortMapping{
 					&ecs.PortMapping{
@@ -187,18 +186,18 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 				},
 				Name: aws.String("devshm"),
 			},
-                        &ecs.Volume{
-                                Host: &ecs.HostVolumeProperties{
-                                        SourcePath: aws.String(sharedFolder),
-                                },
-                                Name: aws.String(sharedVolume),
-                        },
-//			&ecs.Volume{
-//				Host: &ecs.HostVolumeProperties{
-//					SourcePath: aws.String(sharedVideoFolder),
-//				},
-//				Name: aws.String(sharedVideoVolume),
-//			},
+			&ecs.Volume{
+				Host: &ecs.HostVolumeProperties{
+					SourcePath: aws.String(sharedFolder),
+				},
+				Name: aws.String(sharedVolume),
+			},
+			//			&ecs.Volume{
+			//				Host: &ecs.HostVolumeProperties{
+			//					SourcePath: aws.String(sharedVideoFolder),
+			//				},
+			//				Name: aws.String(sharedVideoVolume),
+			//			},
 		},
 		TaskRoleArn: aws.String(""),
 	}
@@ -236,7 +235,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 
 	*/
 	runTaskInput := &ecs.RunTaskInput{
-		Cluster:        awsCluster,
+		Cluster:        &AwsCluster,
 		TaskDefinition: aws.String(family + ":" + strconv.FormatInt(revision, 10)),
 	}
 
@@ -303,7 +302,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 	*/
 	//TODO: wait until container starts (in response we should have valid *resultRunTask.Tasks[0].ContainerInstanceArn value
 	describeTaskInput := &ecs.DescribeTasksInput{
-		Cluster: awsCluster,
+		Cluster: &AwsCluster,
 		Tasks: []*string{
 			aws.String(taskId),
 		},
@@ -338,7 +337,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 	log.Printf("[%d] [TASK_CONTAINER_INSTANCE_ID] [%s]", requestId, containerInstanceId)
 
 	containerInstanceInput := &ecs.DescribeContainerInstancesInput{
-		Cluster: awsCluster,
+		Cluster: &AwsCluster,
 		ContainerInstances: []*string{
 			aws.String(containerInstanceId),
 		},
@@ -363,7 +362,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 		},
 	}
 
-	svcEc2 := ec2.New(awsSession.New(&aws.Config{Region: awsRegion}))
+	svcEc2 := ec2.New(awsSession.New(&aws.Config{Region: &AwsRegion}))
 	resultInstance, err := svcEc2.DescribeInstances(instanceInput)
 	if err != nil {
 		RemoveTask(ctx, requestId, taskArn)
@@ -444,7 +443,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 
 func getFailReason(svc *ecs.ECS, taskId string) (*string, error) {
 	describeTaskInput := &ecs.DescribeTasksInput{
-		Cluster: awsCluster,
+		Cluster: &AwsCluster,
 		Tasks:   []*string{aws.String(taskId)},
 	}
 	describeTaskResult, err := svc.DescribeTasks(describeTaskInput)
@@ -463,9 +462,9 @@ func getFailReason(svc *ecs.ECS, taskId string) (*string, error) {
 }
 
 func GetTaskInfo(instanceID string, taskID string) {
-	svc := ecs.New(awsSession.New(&aws.Config{Region: awsRegion, MaxRetries: awsRetry}))
+	svc := ecs.New(awsSession.New(&aws.Config{Region: &AwsRegion, MaxRetries: &AwsRetry}))
 	input := &ecs.ListTasksInput{
-		Cluster:           awsCluster,
+		Cluster:           &AwsCluster,
 		ContainerInstance: aws.String(instanceID),
 	}
 	fmt.Println(instanceID)
@@ -560,10 +559,10 @@ func RemoveTask(ctx context.Context, requestId uint64, taskArn string) {
 
 	//TODO: parametrize region
 	// #33: increased number of retries to fix "ThrottlingException: Rate exceeded"
-	svc := ecs.New(awsSession.New(&aws.Config{Region: awsRegion, MaxRetries: awsRetry}))
+	svc := ecs.New(awsSession.New(&aws.Config{Region: &AwsRegion, MaxRetries: &AwsRetry}))
 
 	stopTaskInput := &ecs.StopTaskInput{
-		Cluster: awsCluster,
+		Cluster: &AwsCluster,
 		Reason:  aws.String("Cancel"),
 		Task:    aws.String(taskArn),
 	}
