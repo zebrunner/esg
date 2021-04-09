@@ -496,36 +496,6 @@ func getEcsPortConfig() (*ecsPortConfig, error) {
 		DevtoolsPort:   devtoolsPort}, nil
 }
 
-// func getEcsMemory(caps session.Caps) ((int64, int64), error) {
-// 	capsMemory := caps.Memory
-// 	capsMemoryReservation := caps.MemoryReservation
-
-// 	if capsMemory == "" {
-// 		capsMemory = "768"
-// 	}
-// 	if capsMemoryReservation == "" {
-// 		capsMemoryReservation = "768"
-// 	}
-
-// 	hardMemory, err := strconv.Atoi(capsMemory)
-// 	if err != nil {
-// 		fmt.Println(capsMemory, "is not an integer.")
-// 	}
-
-// 	if caps.MemoryReservation != "" {
-// 		capsMemoryReservation = caps.MemoryReservation
-// 	}
-
-// 	//	softMemory, err := strconv.Atoi(capsMemoryReservation)
-// 	softMemory, err := strconv.ParseInt(capsMemoryReservation, 10, 64)
-// 	if err != nil {
-// 		fmt.Println(capsMemoryReservation, "is not an integer.")
-// 	}
-
-// 	return int64(hardMemory), int64(softMemory)
-// 	//        return int64(capsMemory), int64(capsMemoryReservation)
-// }
-
 func parseResourceCapability(cap string, defaultValue int, capabilityName string) (int, error) {
 	if cap == "" {
 		return defaultValue, nil
