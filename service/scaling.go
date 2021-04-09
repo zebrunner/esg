@@ -115,7 +115,7 @@ func ScaleUp() {
 	if scaledDesiredCount > curentInstanceCount {
 		autoscalingSvc := autoscaling.New(session)
 		describeAutoScalingGroupsInput := &autoscaling.DescribeAutoScalingGroupsInput{
-			AutoScalingGroupNames: []*string{aws.String("esg-asg")},
+			AutoScalingGroupNames: []*string{&AwsAutoScalingGroup},
 		}
 		describeAutoScalingGroupsOutput, err := autoscalingSvc.DescribeAutoScalingGroups(describeAutoScalingGroupsInput)
 		if err != nil {

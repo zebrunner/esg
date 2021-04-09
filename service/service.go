@@ -36,6 +36,7 @@ var (
 	AwsRetry             int
 	AwsCluster           string
 	AwsElasticCache      string
+	AwsAutoScalingGroup  string
 	MinMemory            int
 	MinMemoryReservation int
 	MaxMemory            int
