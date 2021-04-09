@@ -63,8 +63,13 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 		}
 	*/
 
-	hardMemory, softMemory := getEcsMemory(d.Caps)
-	cpu := getEcsCpu(d.Caps)
+	memory, memErr := getEcsMemory(d.Caps)
+	memoryReservation, memResErr := getEcsMemoryReservation(d.Caps)
+	cpu, cpuErr := getEcsCpu(d.Caps)
+	if memErr != nil || memResErr != nil || cpuErr != nil {
+		return nil, fmt.Errorf("error happend while parsing resources. Errors: [%v, %v, %v]", memErr, memResErr, cpuErr)
+	}
+
 	imageUrl := d.Service.Image
 
 	// Without unique nano postfix we face with AWS limitations during multi-threading execution a lot...
@@ -95,10 +100,10 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 			{
 				Name:              aws.String(browserContainerName),
 				Image:             aws.String(imageUrl),
-				Cpu:               aws.Int64(cpu),
+				Cpu:               &cpu,
 				Essential:         aws.Bool(true), //If the essential parameter of a container is marked as true, the failure of that container will stop the task.
-				Memory:            aws.Int64(hardMemory),
-				MemoryReservation: aws.Int64(softMemory),
+				Memory:            &memory,
+				MemoryReservation: &memoryReservation,
 				Privileged:        aws.Bool(true), //privileged mode is needed to start browser driver correctly
 				MountPoints: []*ecs.MountPoint{
 					&ecs.MountPoint{
@@ -491,44 +496,87 @@ func getEcsPortConfig() (*ecsPortConfig, error) {
 		DevtoolsPort:   devtoolsPort}, nil
 }
 
-func getEcsMemory(caps session.Caps) (int64, int64) {
-	capsMemory := "768"
-	if caps.Memory != "" {
-		capsMemory = caps.Memory
+// func getEcsMemory(caps session.Caps) ((int64, int64), error) {
+// 	capsMemory := caps.Memory
+// 	capsMemoryReservation := caps.MemoryReservation
+
+// 	if capsMemory == "" {
+// 		capsMemory = "768"
+// 	}
+// 	if capsMemoryReservation == "" {
+// 		capsMemoryReservation = "768"
+// 	}
+
+// 	hardMemory, err := strconv.Atoi(capsMemory)
+// 	if err != nil {
+// 		fmt.Println(capsMemory, "is not an integer.")
+// 	}
+
+// 	if caps.MemoryReservation != "" {
+// 		capsMemoryReservation = caps.MemoryReservation
+// 	}
+
+// 	//	softMemory, err := strconv.Atoi(capsMemoryReservation)
+// 	softMemory, err := strconv.ParseInt(capsMemoryReservation, 10, 64)
+// 	if err != nil {
+// 		fmt.Println(capsMemoryReservation, "is not an integer.")
+// 	}
+
+// 	return int64(hardMemory), int64(softMemory)
+// 	//        return int64(capsMemory), int64(capsMemoryReservation)
+// }
+
+func parseResourceCapability(cap string, defaultValue int, capabilityName string) (int, error) {
+	if cap == "" {
+		return defaultValue, nil
 	}
-	//        hardMemory, err := strconv.Atoi(capsMemory)
-	hardMemory, err := strconv.ParseInt(capsMemory, 10, 64)
+	resource, err := strconv.Atoi(cap)
 	if err != nil {
-		fmt.Println(capsMemory, "is not an integer.")
+		return 0, fmt.Errorf("unexpected %s capability format. %v Expected integer, got: %v", capabilityName, err, cap)
 	}
-
-	capsMemoryReservation := "768"
-	if caps.MemoryReservation != "" {
-		capsMemoryReservation = caps.MemoryReservation
-	}
-
-	//	softMemory, err := strconv.Atoi(capsMemoryReservation)
-	softMemory, err := strconv.ParseInt(capsMemoryReservation, 10, 64)
-	if err != nil {
-		fmt.Println(capsMemoryReservation, "is not an integer.")
-	}
-
-	return int64(hardMemory), int64(softMemory)
-	//        return int64(capsMemory), int64(capsMemoryReservation)
+	return resource, nil
 }
 
-func getEcsCpu(caps session.Caps) int64 {
-	capsCpu := "512"
-	if caps.Cpu != "" {
-		capsCpu = caps.Cpu
-	}
-
-	cpu, err := strconv.Atoi(capsCpu)
+func getEcsMemory(caps session.Caps) (int64, error) {
+	memory, err := parseResourceCapability(caps.Memory, MinMemory, "Memory")
 	if err != nil {
-		fmt.Println(capsCpu, "is not an integer.")
+		return 0, err
 	}
+	if memory < MinMemory {
+		fmt.Println("[WARN] Requested Memory is lower than MinMemory. Using MinMemory as default. Requested:", memory, "MinMemory:", MinMemory)
+		return int64(MinMemory), nil
+	} else if memory > MaxMemory {
+		return 0, fmt.Errorf("Requested Memory is grater than MaxMemory allowed by system administrator. Requested: %d. MaxMemory: %d", memory, MaxMemory)
+	}
+	return int64(memory), nil
+}
 
-	return int64(cpu)
+func getEcsMemoryReservation(caps session.Caps) (int64, error) {
+	memoryReservation, err := parseResourceCapability(caps.MemoryReservation, MinMemoryReservation, "MemoryReservation")
+	if err != nil {
+		return 0, err
+	}
+	if memoryReservation < MinMemoryReservation {
+		fmt.Println("[WARN] Requested MemoryReservation lower than MinMemoryReservation. Using MinMemoryReservation as default. Requested:", memoryReservation, "MinMemoryReservation:", MinMemoryReservation)
+		return int64(MinMemoryReservation), nil
+	} else if memoryReservation > MaxMemoryReservation {
+		return 0, fmt.Errorf("Requested MemoryReservation is grater than MaxMemoryReservation allowed by system administrator. Requested: %d. MaxMemory: %d", memoryReservation, MaxMemoryReservation)
+	}
+	return int64(memoryReservation), nil
+}
+
+func getEcsCpu(caps session.Caps) (int64, error) {
+	cpu, err := parseResourceCapability(caps.Cpu, MinCpu, "Cpu")
+	if err != nil {
+		return 0, err
+	}
+	if cpu < MinCpu {
+		fmt.Println("[WARN] Requested CPU lower than MinCpu. Using MinCpu as default. Requested:", cpu, "MinCpu:", MinCpu)
+		return int64(MinCpu), nil
+	} else if cpu > MaxCpu {
+		return 0, fmt.Errorf("Requested CPU is grater than MaxCpu allowed by system administrator. Requested: %d. MaxCpu: %d", cpu, MaxCpu)
+	}
+	return int64(cpu), nil
 }
 
 func getTaskHostPort(caps session.Caps, taskIP string, pc *ecsPortConfig) session.HostPort {

@@ -79,10 +79,18 @@ func init() {
 	flag.StringVar(&logOutputDir, "log-output-dir", "", "Directory to save session log to")
 	flag.BoolVar(&saveAllLogs, "save-all-logs", false, "Whether to save all logs without considering capabilities")
 	flag.DurationVar(&gracefulPeriod, "graceful-period", 300*time.Second, "graceful shutdown period in time.Duration format, e.g. 300s or 500ms")
+	// AWS Related args
 	flag.StringVar(&service.AwsRegion, "aws-region", "us-east-1", "AWS region name")
 	flag.IntVar(&service.AwsRetry, "aws-retry", 10, "AWS client retry count")
 	flag.StringVar(&service.AwsCluster, "aws-cluster", "esg-linux", "AWS cluster name")
 	flag.StringVar(&service.AwsElasticCache, "aws-elastic-cache", "localhost:6379", "AWS elastic cache connection URL")
+	flag.IntVar(&service.MinMemory, "min-memory", 768, "AWS minimum memory limitation for session")
+	flag.IntVar(&service.MinMemoryReservation, "min-memory-reservation", 768, "AWS minimum memory reservation limitation for session")
+	flag.IntVar(&service.MaxMemory, "max-memory", 8192, "AWS maximum memory limitation for session")
+	flag.IntVar(&service.MaxMemoryReservation, "max-memory-reservation", 8192, "AWS maximum memory reservation limitation for session")
+	flag.IntVar(&service.MinCpu, "min-cpu", 512, "AWS minimum CPU limitation for session")
+	flag.IntVar(&service.MaxCpu, "max-cpu", 4096, "AWS maximum CPU limitation for session")
+
 	flag.Parse()
 
 	if version {

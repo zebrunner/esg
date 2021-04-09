@@ -32,10 +32,16 @@ const (
 )
 
 var (
-	AwsRegion       string
-	AwsRetry        int
-	AwsCluster      string
-	AwsElasticCache string
+	AwsRegion            string
+	AwsRetry             int
+	AwsCluster           string
+	AwsElasticCache      string
+	MinMemory            int
+	MinMemoryReservation int
+	MaxMemory            int
+	MaxMemoryReservation int
+	MinCpu               int
+	MaxCpu               int
 )
 
 // ServiceBase - stores fields required by all services
