@@ -1,7 +1,6 @@
 package service
 
 import (
-	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -33,10 +32,16 @@ const (
 )
 
 var (
-	awsRegion       = flag.String("aws-region", "us-east-1", "AWS region name")
-	awsRetry        = flag.Int("aws-retry", 10, "AWS client retry count")
-	awsCluster      = flag.String("aws-cluster", "esg-linux", "AWS cluster name")
-	AwsElasticCache = flag.String("aws-elastic-cache", "localhost:6379", "AWS elastic cache connection URL")
+	AwsRegion            string
+	AwsRetry             int
+	AwsCluster           string
+	AwsElasticCache      string
+	MinMemory            int
+	MinMemoryReservation int
+	MaxMemory            int
+	MaxMemoryReservation int
+	MinCpu               int
+	MaxCpu               int
 )
 
 // ServiceBase - stores fields required by all services

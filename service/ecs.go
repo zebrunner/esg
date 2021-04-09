@@ -63,8 +63,13 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 		}
 	*/
 
-	hardMemory, softMemory := getEcsMemory(d.Caps)
-	cpu := getEcsCpu(d.Caps)
+	memory, memErr := getEcsMemory(d.Caps)
+	memoryReservation, memResErr := getEcsMemoryReservation(d.Caps)
+	cpu, cpuErr := getEcsCpu(d.Caps)
+	if memErr != nil || memResErr != nil || cpuErr != nil {
+		return nil, fmt.Errorf("error happend while parsing resources. Errors: [%v, %v, %v]", memErr, memResErr, cpuErr)
+	}
+
 	imageUrl := d.Service.Image
 
 	// Without unique nano postfix we face with AWS limitations during multi-threading execution a lot...
@@ -72,7 +77,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 	log.Printf("[%d] [TASK_DEFINITION_FAMILY] [%s]", requestId, taskDefFamily)
 
 	//create ECS task definition based on capabilities
-	svc := ecs.New(awsSession.New(&aws.Config{Region: awsRegion, MaxRetries: awsRetry}))
+	svc := ecs.New(awsSession.New(&aws.Config{Region: &AwsRegion, MaxRetries: &AwsRetry}))
 
 	//TODO: support GPU reservation: The number of GPU units to reserve for the container. A container instance with GPU support has 1 GPU unit for every GPU.
 	log.Printf("[%d] [CREATING_ECS_TASK_DEFINITION] [%s]", requestId, imageUrl)
@@ -81,13 +86,12 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 
 	videoFileName := uuid.String() + ".mp4"
 
-        sharedFolder := "/tmp/log"
-        sharedVolume := "data"
+	sharedFolder := "/tmp/log"
+	sharedVolume := "data"
 
 	// [VD]that's expected that inside chrome container no uuid for folder
 	driverArgs := "--log-path=/tmp/log/" + uuid.String() + ".log"
 	log.Printf("driverArgs: %s", driverArgs)
-
 
 	browserContainerName := "browser"
 	taskDefinitionInput := &ecs.RegisterTaskDefinitionInput{
@@ -96,10 +100,10 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 			{
 				Name:              aws.String(browserContainerName),
 				Image:             aws.String(imageUrl),
-				Cpu:               aws.Int64(cpu),
+				Cpu:               &cpu,
 				Essential:         aws.Bool(true), //If the essential parameter of a container is marked as true, the failure of that container will stop the task.
-				Memory:            aws.Int64(hardMemory),
-				MemoryReservation: aws.Int64(softMemory),
+				Memory:            &memory,
+				MemoryReservation: &memoryReservation,
 				Privileged:        aws.Bool(true), //privileged mode is needed to start browser driver correctly
 				MountPoints: []*ecs.MountPoint{
 					&ecs.MountPoint{
@@ -107,11 +111,11 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 						ReadOnly:      aws.Bool(false),
 						SourceVolume:  aws.String("devshm"),
 					},
-                                        &ecs.MountPoint{
-                                                ContainerPath: aws.String("/tmp/log"),
-                                                ReadOnly:      aws.Bool(false),
-                                                SourceVolume:  aws.String(sharedVolume),
-                                        },
+					&ecs.MountPoint{
+						ContainerPath: aws.String("/tmp/log"),
+						ReadOnly:      aws.Bool(false),
+						SourceVolume:  aws.String(sharedVolume),
+					},
 				},
 				Environment: []*ecs.KeyValuePair{
 					//TODO: provide extra values from caps
@@ -119,10 +123,10 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 						Name:  aws.String("VERBOSE"),
 						Value: aws.String("1"),
 					},
-                                        &ecs.KeyValuePair{
-                                                Name:  aws.String("DRIVER_ARGS"),
-                                                Value: aws.String(driverArgs),
-                                        },
+					&ecs.KeyValuePair{
+						Name:  aws.String("DRIVER_ARGS"),
+						Value: aws.String(driverArgs),
+					},
 				},
 				PortMappings: []*ecs.PortMapping{
 					&ecs.PortMapping{
@@ -187,18 +191,18 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 				},
 				Name: aws.String("devshm"),
 			},
-                        &ecs.Volume{
-                                Host: &ecs.HostVolumeProperties{
-                                        SourcePath: aws.String(sharedFolder),
-                                },
-                                Name: aws.String(sharedVolume),
-                        },
-//			&ecs.Volume{
-//				Host: &ecs.HostVolumeProperties{
-//					SourcePath: aws.String(sharedVideoFolder),
-//				},
-//				Name: aws.String(sharedVideoVolume),
-//			},
+			&ecs.Volume{
+				Host: &ecs.HostVolumeProperties{
+					SourcePath: aws.String(sharedFolder),
+				},
+				Name: aws.String(sharedVolume),
+			},
+			//			&ecs.Volume{
+			//				Host: &ecs.HostVolumeProperties{
+			//					SourcePath: aws.String(sharedVideoFolder),
+			//				},
+			//				Name: aws.String(sharedVideoVolume),
+			//			},
 		},
 		TaskRoleArn: aws.String(""),
 	}
@@ -236,7 +240,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 
 	*/
 	runTaskInput := &ecs.RunTaskInput{
-		Cluster:        awsCluster,
+		Cluster:        &AwsCluster,
 		TaskDefinition: aws.String(family + ":" + strconv.FormatInt(revision, 10)),
 	}
 
@@ -303,7 +307,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 	*/
 	//TODO: wait until container starts (in response we should have valid *resultRunTask.Tasks[0].ContainerInstanceArn value
 	describeTaskInput := &ecs.DescribeTasksInput{
-		Cluster: awsCluster,
+		Cluster: &AwsCluster,
 		Tasks: []*string{
 			aws.String(taskId),
 		},
@@ -338,7 +342,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 	log.Printf("[%d] [TASK_CONTAINER_INSTANCE_ID] [%s]", requestId, containerInstanceId)
 
 	containerInstanceInput := &ecs.DescribeContainerInstancesInput{
-		Cluster: awsCluster,
+		Cluster: &AwsCluster,
 		ContainerInstances: []*string{
 			aws.String(containerInstanceId),
 		},
@@ -363,7 +367,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 		},
 	}
 
-	svcEc2 := ec2.New(awsSession.New(&aws.Config{Region: awsRegion}))
+	svcEc2 := ec2.New(awsSession.New(&aws.Config{Region: &AwsRegion}))
 	resultInstance, err := svcEc2.DescribeInstances(instanceInput)
 	if err != nil {
 		RemoveTask(ctx, requestId, taskArn)
@@ -444,7 +448,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 
 func getFailReason(svc *ecs.ECS, taskId string) (*string, error) {
 	describeTaskInput := &ecs.DescribeTasksInput{
-		Cluster: awsCluster,
+		Cluster: &AwsCluster,
 		Tasks:   []*string{aws.String(taskId)},
 	}
 	describeTaskResult, err := svc.DescribeTasks(describeTaskInput)
@@ -463,9 +467,9 @@ func getFailReason(svc *ecs.ECS, taskId string) (*string, error) {
 }
 
 func GetTaskInfo(instanceID string, taskID string) {
-	svc := ecs.New(awsSession.New(&aws.Config{Region: awsRegion, MaxRetries: awsRetry}))
+	svc := ecs.New(awsSession.New(&aws.Config{Region: &AwsRegion, MaxRetries: &AwsRetry}))
 	input := &ecs.ListTasksInput{
-		Cluster:           awsCluster,
+		Cluster:           &AwsCluster,
 		ContainerInstance: aws.String(instanceID),
 	}
 	fmt.Println(instanceID)
@@ -492,44 +496,87 @@ func getEcsPortConfig() (*ecsPortConfig, error) {
 		DevtoolsPort:   devtoolsPort}, nil
 }
 
-func getEcsMemory(caps session.Caps) (int64, int64) {
-	capsMemory := "768"
-	if caps.Memory != "" {
-		capsMemory = caps.Memory
+// func getEcsMemory(caps session.Caps) ((int64, int64), error) {
+// 	capsMemory := caps.Memory
+// 	capsMemoryReservation := caps.MemoryReservation
+
+// 	if capsMemory == "" {
+// 		capsMemory = "768"
+// 	}
+// 	if capsMemoryReservation == "" {
+// 		capsMemoryReservation = "768"
+// 	}
+
+// 	hardMemory, err := strconv.Atoi(capsMemory)
+// 	if err != nil {
+// 		fmt.Println(capsMemory, "is not an integer.")
+// 	}
+
+// 	if caps.MemoryReservation != "" {
+// 		capsMemoryReservation = caps.MemoryReservation
+// 	}
+
+// 	//	softMemory, err := strconv.Atoi(capsMemoryReservation)
+// 	softMemory, err := strconv.ParseInt(capsMemoryReservation, 10, 64)
+// 	if err != nil {
+// 		fmt.Println(capsMemoryReservation, "is not an integer.")
+// 	}
+
+// 	return int64(hardMemory), int64(softMemory)
+// 	//        return int64(capsMemory), int64(capsMemoryReservation)
+// }
+
+func parseResourceCapability(cap string, defaultValue int, capabilityName string) (int, error) {
+	if cap == "" {
+		return defaultValue, nil
 	}
-	//        hardMemory, err := strconv.Atoi(capsMemory)
-	hardMemory, err := strconv.ParseInt(capsMemory, 10, 64)
+	resource, err := strconv.Atoi(cap)
 	if err != nil {
-		fmt.Println(capsMemory, "is not an integer.")
+		return 0, fmt.Errorf("unexpected %s capability format. %v Expected integer, got: %v", capabilityName, err, cap)
 	}
-
-	capsMemoryReservation := "768"
-	if caps.MemoryReservation != "" {
-		capsMemoryReservation = caps.MemoryReservation
-	}
-
-	//	softMemory, err := strconv.Atoi(capsMemoryReservation)
-	softMemory, err := strconv.ParseInt(capsMemoryReservation, 10, 64)
-	if err != nil {
-		fmt.Println(capsMemoryReservation, "is not an integer.")
-	}
-
-	return int64(hardMemory), int64(softMemory)
-	//        return int64(capsMemory), int64(capsMemoryReservation)
+	return resource, nil
 }
 
-func getEcsCpu(caps session.Caps) int64 {
-	capsCpu := "512"
-	if caps.Cpu != "" {
-		capsCpu = caps.Cpu
-	}
-
-	cpu, err := strconv.Atoi(capsCpu)
+func getEcsMemory(caps session.Caps) (int64, error) {
+	memory, err := parseResourceCapability(caps.Memory, MinMemory, "Memory")
 	if err != nil {
-		fmt.Println(capsCpu, "is not an integer.")
+		return 0, err
 	}
+	if memory < MinMemory {
+		fmt.Println("[WARN] Requested Memory is lower than MinMemory. Using MinMemory as default. Requested:", memory, "MinMemory:", MinMemory)
+		return int64(MinMemory), nil
+	} else if memory > MaxMemory {
+		return 0, fmt.Errorf("Requested Memory is grater than MaxMemory allowed by system administrator. Requested: %d. MaxMemory: %d", memory, MaxMemory)
+	}
+	return int64(memory), nil
+}
 
-	return int64(cpu)
+func getEcsMemoryReservation(caps session.Caps) (int64, error) {
+	memoryReservation, err := parseResourceCapability(caps.MemoryReservation, MinMemoryReservation, "MemoryReservation")
+	if err != nil {
+		return 0, err
+	}
+	if memoryReservation < MinMemoryReservation {
+		fmt.Println("[WARN] Requested MemoryReservation lower than MinMemoryReservation. Using MinMemoryReservation as default. Requested:", memoryReservation, "MinMemoryReservation:", MinMemoryReservation)
+		return int64(MinMemoryReservation), nil
+	} else if memoryReservation > MaxMemoryReservation {
+		return 0, fmt.Errorf("Requested MemoryReservation is grater than MaxMemoryReservation allowed by system administrator. Requested: %d. MaxMemory: %d", memoryReservation, MaxMemoryReservation)
+	}
+	return int64(memoryReservation), nil
+}
+
+func getEcsCpu(caps session.Caps) (int64, error) {
+	cpu, err := parseResourceCapability(caps.Cpu, MinCpu, "Cpu")
+	if err != nil {
+		return 0, err
+	}
+	if cpu < MinCpu {
+		fmt.Println("[WARN] Requested CPU lower than MinCpu. Using MinCpu as default. Requested:", cpu, "MinCpu:", MinCpu)
+		return int64(MinCpu), nil
+	} else if cpu > MaxCpu {
+		return 0, fmt.Errorf("Requested CPU is grater than MaxCpu allowed by system administrator. Requested: %d. MaxCpu: %d", cpu, MaxCpu)
+	}
+	return int64(cpu), nil
 }
 
 func getTaskHostPort(caps session.Caps, taskIP string, pc *ecsPortConfig) session.HostPort {
@@ -560,10 +607,10 @@ func RemoveTask(ctx context.Context, requestId uint64, taskArn string) {
 
 	//TODO: parametrize region
 	// #33: increased number of retries to fix "ThrottlingException: Rate exceeded"
-	svc := ecs.New(awsSession.New(&aws.Config{Region: awsRegion, MaxRetries: awsRetry}))
+	svc := ecs.New(awsSession.New(&aws.Config{Region: &AwsRegion, MaxRetries: &AwsRetry}))
 
 	stopTaskInput := &ecs.StopTaskInput{
-		Cluster: awsCluster,
+		Cluster: &AwsCluster,
 		Reason:  aws.String("Cancel"),
 		Task:    aws.String(taskArn),
 	}
