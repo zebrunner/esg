@@ -116,6 +116,7 @@ func ScaleUp() {
 	}
 
 	scaledDesiredCount := int64(math.Ceil(scaleRatio*float64(curentInstanceCount))) + curentInstanceCount
+	fmt.Println("ScaledDesiredCount:", scaledDesiredCount, "CurrentInstacneCount", curentInstanceCount)
 	if scaledDesiredCount > curentInstanceCount {
 		autoscalingSvc := autoscaling.New(session)
 		describeAutoScalingGroupsInput := &autoscaling.DescribeAutoScalingGroupsInput{
