@@ -79,6 +79,37 @@ func getTasksResources(svc *ecs.ECS, taskStatus string) (*Resources, error) {
 	}, nil
 }
 
+func setDesiredCapacity(autoscalingService *autoscaling.AutoScaling, newDesiredCapacity int64) {
+	describeAutoScalingGroupsInput := &autoscaling.DescribeAutoScalingGroupsInput{
+		AutoScalingGroupNames: []*string{&AwsAutoScalingGroup},
+	}
+	describeAutoScalingGroupsOutput, err := autoscalingService.DescribeAutoScalingGroups(describeAutoScalingGroupsInput)
+	if err != nil {
+		log.Println("cant describe autoscaling group", err)
+		return
+	}
+	autoScalingGroup := describeAutoScalingGroupsOutput.AutoScalingGroups[0]
+	if newDesiredCapacity < *autoScalingGroup.DesiredCapacity {
+		log.Printf("[WARN] Scaled down not allowed")
+		return
+	}
+
+	if newDesiredCapacity > *autoScalingGroup.MaxSize {
+		log.Printf("[WARN] [LIMIT REACHED] ASG desired size reached limit! MaxCount: %d DesiredCount: %d!", *autoScalingGroup.MaxSize, newDesiredCapacity)
+		newDesiredCapacity = *autoScalingGroup.MaxSize
+	}
+	updateGroupInput := &autoscaling.UpdateAutoScalingGroupInput{
+		AutoScalingGroupName: autoScalingGroup.AutoScalingGroupName,
+		DesiredCapacity:      &newDesiredCapacity,
+	}
+	_, err = autoscalingService.UpdateAutoScalingGroup(updateGroupInput)
+	if err != nil {
+		log.Println("Error while updating group", err)
+	} else {
+		log.Printf("Capacity updated from %d to %d \n", *autoScalingGroup.DesiredCapacity, newDesiredCapacity)
+	}
+}
+
 func ScaleUp() {
 	session, err := awsSession.NewSession(&aws.Config{Region: &AwsRegion, MaxRetries: &AwsRetry})
 	if err != nil {
@@ -86,6 +117,8 @@ func ScaleUp() {
 		return
 	}
 	svc := ecs.New(session)
+	autoscalingSvc := autoscaling.New(session)
+
 	runningTasksResources, err := getTasksResources(svc, "RUNNING")
 	if err != nil {
 		log.Println("Error while getting running tasks resources.", err)
@@ -98,7 +131,8 @@ func ScaleUp() {
 		return
 	}
 
-	if provisioningTasksResources.CPU == 0 || provisioningTasksResources.Memory == 0 {
+	// All tasks is running
+	if provisioningTasksResources.CPU == 0 && provisioningTasksResources.Memory == 0 {
 		log.Println("There is no tasks in PROVISIONING state. No need to scale up")
 		return
 	}
@@ -117,30 +151,5 @@ func ScaleUp() {
 
 	scaledDesiredCount := int64(math.Ceil(scaleRatio*float64(curentInstanceCount))) + curentInstanceCount
 	fmt.Println("ScaledDesiredCount:", scaledDesiredCount, "CurrentInstacneCount", curentInstanceCount)
-	if scaledDesiredCount > curentInstanceCount {
-		autoscalingSvc := autoscaling.New(session)
-		describeAutoScalingGroupsInput := &autoscaling.DescribeAutoScalingGroupsInput{
-			AutoScalingGroupNames: []*string{&AwsAutoScalingGroup},
-		}
-		describeAutoScalingGroupsOutput, err := autoscalingSvc.DescribeAutoScalingGroups(describeAutoScalingGroupsInput)
-		if err != nil {
-			log.Println("cant describe autoscaling group", err)
-			return
-		}
-		autoScalingGroup := describeAutoScalingGroupsOutput.AutoScalingGroups[0]
-		if *autoScalingGroup.MaxSize < scaledDesiredCount {
-			log.Printf("[WARN] [LIMIT REACHED] ASG desired count reached limit! MaxCount: %d DesiredCount: %d!", *autoScalingGroup.MaxSize, scaledDesiredCount)
-			scaledDesiredCount = *autoScalingGroup.MaxSize
-		}
-		updateGroupInput := &autoscaling.UpdateAutoScalingGroupInput{
-			AutoScalingGroupName: autoScalingGroup.AutoScalingGroupName,
-			DesiredCapacity:      aws.Int64(scaledDesiredCount),
-		}
-		_, err = autoscalingSvc.UpdateAutoScalingGroup(updateGroupInput)
-		if err != nil {
-			log.Println("Error while updating group", err)
-		} else {
-			log.Printf("Capacity updated from %d to %d \n", curentInstanceCount, scaledDesiredCount)
-		}
-	}
+	setDesiredCapacity(autoscalingSvc, scaledDesiredCount)
 }
