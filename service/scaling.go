@@ -139,9 +139,9 @@ func ScaleUp() {
 
 	allTasksCPU := runningTasksResources.CPU + provisioningTasksResources.CPU
 	allTasksMemory := runningTasksResources.Memory + provisioningTasksResources.Memory
-	cpuRatio := 1. + float64(provisioningTasksResources.CPU)/float64(allTasksCPU)
+	cpuRatio := float64(allTasksCPU) / float64(runningTasksResources.CPU)
 	fmt.Println("RunningTasksCpu:", runningTasksResources.CPU, "ProvisioningTaskCpu", provisioningTasksResources.CPU, "Ratio:", cpuRatio)
-	memoryRatio := 1. + float64(provisioningTasksResources.Memory)/float64(allTasksMemory)
+	memoryRatio := float64(allTasksMemory) / float64(runningTasksResources.Memory)
 	fmt.Println("RunningTasksMemory:", runningTasksResources.Memory, "ProvisioningTaskMemory", provisioningTasksResources.Memory, "Ratio:", memoryRatio)
 	scaleRatio := math.Max(cpuRatio, memoryRatio)
 	fmt.Println("ScaleRatio:", scaleRatio)
