@@ -151,7 +151,7 @@ func ScaleUp() {
 		log.Println("Error while getting instance count", err)
 	}
 
-	scaledDesiredCount := int64(math.Ceil(scaleRatio*float64(curentInstanceCount))) + curentInstanceCount
+	scaledDesiredCount := int64(math.Ceil(float64(curentInstanceCount) * scaleRatio))
 	fmt.Println("ScaledDesiredCount:", scaledDesiredCount, "CurrentInstacneCount", curentInstanceCount)
 	setDesiredCapacity(autoscalingSvc, scaledDesiredCount)
 }
