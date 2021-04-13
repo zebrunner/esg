@@ -91,7 +91,6 @@ func init() {
 	flag.IntVar(&service.MaxMemoryReservation, "max-memory-reservation", 8192, "AWS maximum memory reservation limitation for session")
 	flag.IntVar(&service.MinCpu, "min-cpu", 512, "AWS minimum CPU limitation for session")
 	flag.IntVar(&service.MaxCpu, "max-cpu", 4096, "AWS maximum CPU limitation for session")
-	flag.IntVar(&service.AwsInitDesiredCapacity, "aws-init-desired-capacity", 2, "Initial value for autoscaling group to scale up from 0 instances")
 
 	flag.Parse()
 
