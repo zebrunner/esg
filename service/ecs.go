@@ -312,7 +312,8 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 			aws.String(taskId),
 		},
 	}
-	time.Sleep(5 * time.Second)
+	time.Sleep(15 * time.Second)
+	// Check if task is in provisioning in running or provisioning task
 	ScaleUp()
 
 	err = svc.WaitUntilTasksRunning(describeTaskInput)
