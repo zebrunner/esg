@@ -2,7 +2,6 @@ package service
 
 import (
 	"errors"
-	"fmt"
 	"log"
 	"math"
 	"strconv"
@@ -82,12 +81,12 @@ func setDesiredCapacity(autoscalingService *autoscaling.AutoScaling, newDesiredC
 	}
 	describeAutoScalingGroupsOutput, err := autoscalingService.DescribeAutoScalingGroups(describeAutoScalingGroupsInput)
 	if err != nil {
-		log.Println("cant describe autoscaling group", err)
+		log.Println("Can't describe autoscaling group", err)
 		return
 	}
 	autoScalingGroup := describeAutoScalingGroupsOutput.AutoScalingGroups[0]
 	if newDesiredCapacity < *autoScalingGroup.DesiredCapacity {
-		log.Printf("[WARN] Scaled down not allowed")
+		log.Printf("[WARN] Scale down not allowed")
 		return
 	}
 
@@ -138,11 +137,8 @@ func ScaleUp() {
 	allTasksCPU := runningTasksResources.CPU + provisioningTasksResources.CPU
 	allTasksMemory := runningTasksResources.Memory + provisioningTasksResources.Memory
 	cpuRatio := float64(allTasksCPU) / float64(runningTasksResources.CPU)
-	fmt.Println("RunningTasksCpu:", runningTasksResources.CPU, "ProvisioningTaskCpu", provisioningTasksResources.CPU, "Ratio:", cpuRatio)
 	memoryRatio := float64(allTasksMemory) / float64(runningTasksResources.Memory)
-	fmt.Println("RunningTasksMemory:", runningTasksResources.Memory, "ProvisioningTaskMemory", provisioningTasksResources.Memory, "Ratio:", memoryRatio)
 	scaleRatio := math.Max(cpuRatio, memoryRatio)
-	fmt.Println("ScaleRatio:", scaleRatio)
 
 	curentInstanceCount, err := getInstanceCount(svc)
 	if err != nil {
@@ -150,6 +146,5 @@ func ScaleUp() {
 	}
 
 	scaledDesiredCount := int64(math.Ceil(float64(curentInstanceCount) * scaleRatio))
-	fmt.Println("ScaledDesiredCount:", scaledDesiredCount, "CurrentInstacneCount", curentInstanceCount)
 	setDesiredCapacity(autoscalingSvc, scaledDesiredCount)
 }
