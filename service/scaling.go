@@ -36,7 +36,7 @@ func getInstanceCount(svc *ecs.ECS) (int64, error) {
 	return int64(instanceCount), nil
 }
 
-func getTasksResources(svc *ecs.ECS, taskStatus string) (*Resources, error) {
+func getTasks(svc *ecs.ECS) ([]*ecs.Task, error) {
 	listTasksInput := &ecs.ListTasksInput{
 		Cluster: &AwsCluster,
 	}
@@ -55,28 +55,25 @@ func getTasksResources(svc *ecs.ECS, taskStatus string) (*Resources, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Calculate provisioning tasks resources
-	var CPU int64 = 0
-	var Memory int64 = 0
-	for _, task := range describeTasksResult.Tasks {
-		if *task.LastStatus == taskStatus {
-			taskCPU, err := strconv.ParseInt(*task.Cpu, 10, 64)
-			if err != nil {
-				return nil, err
-			}
-			taskMemory, err := strconv.ParseInt(*task.Memory, 10, 64)
-			if err != nil {
-				return nil, err
-			}
-			CPU += taskCPU
-			Memory += taskMemory
+
+	return describeTasksResult.Tasks, nil
+}
+
+func getTasksResources(tasks []*ecs.Task, status string) Resources {
+	resources := Resources{
+		CPU:    0,
+		Memory: 0,
+	}
+	for _, task := range tasks {
+		taskCpu, cpuErr := strconv.Atoi(*task.Cpu)
+		taskMemory, memoryErr := strconv.Atoi(*task.Memory)
+		if *task.LastStatus == status && cpuErr == nil && memoryErr == nil {
+			resources.CPU += int64(taskCpu)
+			resources.Memory += int64(taskMemory)
 		}
 	}
 
-	return &Resources{
-		CPU:    CPU,
-		Memory: Memory,
-	}, nil
+	return resources
 }
 
 func setDesiredCapacity(autoscalingService *autoscaling.AutoScaling, newDesiredCapacity int64) {
@@ -119,17 +116,18 @@ func ScaleUp() {
 	svc := ecs.New(session)
 	autoscalingSvc := autoscaling.New(session)
 
-	runningTasksResources, err := getTasksResources(svc, "RUNNING")
+	// TODO: print all tasks in log
+	tasks, err := getTasks(svc)
 	if err != nil {
-		log.Println("Error while getting running tasks resources.", err)
+		log.Println("Error while getting running tasks.", err)
 		return
 	}
+	runningTasksResources := getTasksResources(tasks, "RUNNING")
+	pendingTasksResources := getTasksResources(tasks, "PENDING")
+	runningTasksResources.CPU += pendingTasksResources.CPU
+	runningTasksResources.Memory += pendingTasksResources.Memory
 
-	provisioningTasksResources, err := getTasksResources(svc, "PROVISIONING")
-	if err != nil {
-		log.Println("Error while getting provisioning tasks resources.", err)
-		return
-	}
+	provisioningTasksResources := getTasksResources(tasks, "PROVISIONING")
 
 	// All tasks is running
 	if provisioningTasksResources.CPU == 0 && provisioningTasksResources.Memory == 0 {
