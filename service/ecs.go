@@ -154,7 +154,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 			{
 				Name:              aws.String("video-recorder"),
 				Image:             aws.String("selenoid/video-recorder:latest-release"),
-				Essential:         aws.Bool(true), //If the essential parameter of a container is marked as true, the failure of that container will stop the task.
+				Essential:         aws.Bool(false), //If the essential parameter of a container is marked as true, the failure of that container will stop the task.
 				Cpu:               aws.Int64(256),
 				Memory:            aws.Int64(768),
 				MemoryReservation: aws.Int64(768),
@@ -162,6 +162,12 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 				Links: []*string{
 					aws.String(browserContainerName),
 				},
+//                                DependsOn: []*ecs.ContainerDependency{
+//                                        &ecs.ContainerDependency{
+//                                                ContainerName: aws.String(browserContainerName),
+//                                                Condition: aws.String("START"),
+//                                        },
+//                                },
 				Environment: []*ecs.KeyValuePair{
 					//TODO: provide extra values from caps
 					&ecs.KeyValuePair{
@@ -183,6 +189,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 				PortMappings: []*ecs.PortMapping{},
 			},
 		},
+
 		Family: aws.String(taskDefFamily),
 		Volumes: []*ecs.Volume{
 			&ecs.Volume{
@@ -197,12 +204,6 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 				},
 				Name: aws.String(sharedVolume),
 			},
-			//			&ecs.Volume{
-			//				Host: &ecs.HostVolumeProperties{
-			//					SourcePath: aws.String(sharedVideoFolder),
-			//				},
-			//				Name: aws.String(sharedVideoVolume),
-			//			},
 		},
 		TaskRoleArn: aws.String(""),
 	}
@@ -414,32 +415,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 		HostPort: hostPort,
 		Cancel: func() {
 			RemoveTask(ctx, requestId, taskArn)
-			//TODO: review old functionality and do extra cleanup if needed
-			/*
-				if d.LogOutputDir != "" && (d.SaveAllLogs || d.Log) {
-					r, err := d.Client.ContainerLogs(ctx, browserContainerId, types.ContainerLogsOptions{
-						Timestamps: true,
-						ShowStdout: true,
-						ShowStderr: true,
-					})
-					if err != nil {
-						log.Printf("[%d] [FAILED_TO_COPY_LOGS] [%s] [Failed to capture container logs: %v]", requestId, browserContainerId, err)
-						return
-					}
-					defer r.Close()
-					filename := filepath.Join(d.LogOutputDir, d.LogName)
-					f, err := os.Create(filename)
-					if err != nil {
-						log.Printf("[%d] [FAILED_TO_COPY_LOGS] [%s] [Failed to create log file %s: %v]", requestId, browserContainerId, filename, err)
-						return
-					}
-					defer f.Close()
-					_, err = stdcopy.StdCopy(f, f, r)
-					if err != nil {
-						log.Printf("[%d] [FAILED_TO_COPY_LOGS] [%s] [Failed to copy data to log file %s: %v]", requestId, browserContainerId, filename, err)
-					}
-				}
-			*/
+                        UploadArtifacts(uuid.String(), sharedFolder, sharedVolume)
 		},
 	}
 
@@ -604,3 +580,99 @@ func RemoveTask(ctx context.Context, requestId uint64, taskArn string) {
 		log.Printf("[%d] [TASK_DEFINITION_REMOVED] [%s]", requestId, *resultTaskDeregister.TaskDefinition.TaskDefinitionArn)
 	}
 }
+
+
+func UploadArtifacts(uuid string, sharedFolder string, sharedVolume string) {
+	//TODO: verify that AWS S3 integration parameters are available and exit if not
+
+        log.Printf("S3_UPLOADER for session: [%s]", uuid)
+        //create ECS task definition based on capabilities
+        svc := ecs.New(awsSession.New(&aws.Config{Region: &AwsRegion, MaxRetries: &AwsRetry}))
+        taskDefinitionInput := &ecs.RegisterTaskDefinitionInput{
+                NetworkMode: aws.String("bridge"),
+                ContainerDefinitions: []*ecs.ContainerDefinition{
+                             {
+                                Name:              aws.String("s3-cli"),
+                                Image:             aws.String("zebrunner/s3-cli"),
+                                Essential:         aws.Bool(true), //If the essential parameter of a container is marked as true, the failure of that container will stop the task.
+                                Cpu:               aws.Int64(128),
+                                Memory:            aws.Int64(128),
+                                MemoryReservation: aws.Int64(128),
+                                Privileged:        aws.Bool(false), //no need privileged mode for video-recording container
+                                Environment: []*ecs.KeyValuePair{
+                                        &ecs.KeyValuePair{
+                                                Name:  aws.String("UUID"),
+                                                Value: aws.String(uuid),
+                                        },
+                                        &ecs.KeyValuePair{
+                                                Name:  aws.String("LOG_FOLDER"),
+                                                Value: aws.String(sharedFolder),
+                                        },
+                                        &ecs.KeyValuePair{
+                                                Name:  aws.String("BUCKET"),
+                                                Value: aws.String(""),
+                                        },
+                                        &ecs.KeyValuePair{
+                                                Name:  aws.String("TENANT"),
+                                                Value: aws.String(""),
+                                        },
+                                        &ecs.KeyValuePair{
+                                                Name:  aws.String("AWS_ACCESS_KEY_ID"),
+                                                Value: aws.String(""),
+                                        },
+                                        &ecs.KeyValuePair{
+                                                Name:  aws.String("AWS_SECRET_ACCESS_KEY"),
+                                                Value: aws.String(""),
+                                        },
+                                        &ecs.KeyValuePair{
+                                                Name:  aws.String("AWS_DEFAULT_REGION"),
+                                                Value: &AwsRegion,
+                                        },
+
+                                },
+                                MountPoints: []*ecs.MountPoint{
+                                        &ecs.MountPoint{
+                                                ContainerPath: aws.String("/tmp/log"),
+                                                ReadOnly:      aws.Bool(false),
+                                                SourceVolume:  aws.String(sharedVolume),
+                                        },
+                                },
+                                PortMappings: []*ecs.PortMapping{},
+                        },
+					},
+                Family: aws.String("s3-cli"),
+                Volumes: []*ecs.Volume{
+                        &ecs.Volume{
+                                Host: &ecs.HostVolumeProperties{
+                                        SourcePath: aws.String(sharedFolder),
+                                },
+                                Name: aws.String(sharedVolume),
+                        },
+                },
+                TaskRoleArn: aws.String(""),
+        }
+
+        resultTaskDefinition, err := svc.RegisterTaskDefinition(taskDefinitionInput)
+        if err != nil {
+		fmt.Errorf("Unable to create s3-cli task definition: %v", err)
+                return
+        }
+
+        family := *resultTaskDefinition.TaskDefinition.Family
+        revision := *resultTaskDefinition.TaskDefinition.Revision
+
+        runTaskInput := &ecs.RunTaskInput{
+                Cluster:        &AwsCluster,
+                TaskDefinition: aws.String(family + ":" + strconv.FormatInt(revision, 10)),
+        }
+
+        resultRunTask, err := svc.RunTask(runTaskInput)
+        if err != nil {
+		fmt.Errorf("Unable to run task: %v", err)
+               return
+        }
+
+        log.Printf("S3_UPLOADER for session: [%s]; %v", uuid, resultRunTask)
+	return
+}
+
