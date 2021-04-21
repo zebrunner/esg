@@ -146,13 +146,13 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 				},
 			},
 			{
-				Name:              aws.String("video-recorder"),
-				Image:             aws.String("zebrunner/video-recorder:latest"),
+				Name:              aws.String("artifacts-uploader"),
+				Image:             aws.String("zebrunner/artifacts-uploader"),
 				Essential:         aws.Bool(false), //If the essential parameter of a container is marked as true, the failure of that container will stop the task.
 				Cpu:               aws.Int64(256),
 				Memory:            aws.Int64(768),
 				MemoryReservation: aws.Int64(768),
-				Privileged:        aws.Bool(false), //no need privileged mode for video-recording container
+				Privileged:        aws.Bool(false), //no need privileged mode for artifacts-uploader/video-recording container
 				Links: []*string{
 					aws.String(browserContainerName),
 				},
@@ -168,11 +168,11 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
                                         },
                                         &ecs.KeyValuePair{
                                                 Name:  aws.String("BUCKET"),
-                                                Value: aws.String("zebrunner-stage"),
+                                                Value: aws.String(""),
                                         },
                                         &ecs.KeyValuePair{
                                                 Name:  aws.String("TENANT"),
-                                                Value: aws.String("esg"),
+                                                Value: aws.String(""),
                                         },
                                         &ecs.KeyValuePair{
                                                 Name:  aws.String("AWS_ACCESS_KEY_ID"),
