@@ -219,7 +219,6 @@ func create(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("[%d] [%s] [%s] [ERROR_READING_REQUEST] [%v]", requestId, user, remote, err)
 		util.JsonError(w, err.Error(), http.StatusBadRequest)
-		queue.Drop()
 		return
 	}
 	var browser struct {
@@ -233,7 +232,6 @@ func create(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("[%d] [%s] [%s] [BAD_JSON_FORMAT] [%v]", requestId, user, remote, err)
 		util.JsonError(w, err.Error(), http.StatusBadRequest)
-		queue.Drop()
 		return
 	}
 	if browser.W3CCaps.Caps.BrowserName() != "" && browser.Caps.BrowserName() == "" {
@@ -256,14 +254,12 @@ func create(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Printf("[%d] [%s] [%s] [BAD_SESSION_TIMEOUT] [%s]", requestId, user, remote, caps.SessionTimeout)
 			util.JsonError(w, err.Error(), http.StatusBadRequest)
-			queue.Drop()
 			return
 		}
 		resolution, err := getScreenResolution(caps.ScreenResolution)
 		if err != nil {
 			log.Printf("[%d] [%s] [%s] [BAD_SCREEN_RESOLUTION] [%s]", requestId, user, remote, caps.ScreenResolution)
 			util.JsonError(w, err.Error(), http.StatusBadRequest)
-			queue.Drop()
 			return
 		}
 		caps.ScreenResolution = resolution
@@ -271,7 +267,6 @@ func create(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Printf("[%d] [%s] [%s] [BAD_VIDEO_SCREEN_SIZE] [%s]", requestId, user, remote, caps.VideoScreenSize)
 			util.JsonError(w, err.Error(), http.StatusBadRequest)
-			queue.Drop()
 			return
 		}
 		caps.VideoScreenSize = videoScreenSize
@@ -287,14 +282,12 @@ func create(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		log.Printf("[%d] [%s] [%s] [ENVIRONMENT_NOT_AVAILABLE] [%s] [%s]", requestId, user, remote, caps.BrowserName(), caps.Version)
 		util.JsonError(w, "Requested environment is not available", http.StatusBadRequest)
-		queue.Drop()
 		return
 	}
 	startedService, err := starter.StartWithCancel()
 	if err != nil {
 		log.Printf("[%d] [%s] [%s] [SERVICE_STARTUP_FAILED] [%v]", requestId, user, remote, err)
 		util.JsonError(w, err.Error(), http.StatusInternalServerError)
-		queue.Drop()
 		return
 	}
 	log.Printf("[%d] [%s] [%s] [SERVICE_TASK_ID] [%v]", requestId, user, remote, startedService.TaskID)
@@ -318,7 +311,6 @@ func create(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-r.Context().Done():
 			log.Printf("[%d] {%s] [%s] [CLIENT_DISCONNECTED]", requestId, user, remote)
-			queue.Drop()
 			cancel()
 			return
 		default:
@@ -333,21 +325,18 @@ func create(w http.ResponseWriter, r *http.Request) {
 				value, ok := resp["value"]
 				if !ok {
 					protocolError()
-					queue.Drop()
 					cancel()
 					return
 				}
 				valueMap, ok := value.(map[string]interface{})
 				if !ok {
 					protocolError()
-					queue.Drop()
 					cancel()
 					return
 				}
 				sess, ok = valueMap["sessionId"].(string)
 				if !ok {
 					protocolError()
-					queue.Drop()
 					cancel()
 					return
 				}
@@ -364,7 +353,6 @@ func create(w http.ResponseWriter, r *http.Request) {
 			break
 		} else {
 			log.Printf("[%d] [%s] [%s] [SESSION_FAILED]", requestId, user, remote)
-			queue.Drop()
 			cancel()
 			return
 		}
@@ -428,7 +416,6 @@ func create(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		fmt.Println("Session not cached", err)
 	}
-	queue.Create()
 	log.Printf("[%d] [%s] [%s] [SESSION_CREATED] [%s] [%d] [%.2fs]", requestId, user, remote, s.ID, i, util.SecondsSince(sessionStartTime))
 }
 
@@ -548,7 +535,6 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 					cancel = sess.Cancel
 					sessions.Remove(sessionID)
 					rdb.Del(context.Background(), sessionID).Result()
-					queue.Release()
 					log.Printf("[%d] [SESSION_DELETED] [%s]", requestId, sessionID)
 				} else {
 					//					sess.TimeoutCh = onTimeout(sess.Timeout, func() {

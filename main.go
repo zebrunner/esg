@@ -6,13 +6,10 @@ import (
 	"flag"
 	"log"
 
-	//	"net"
 	"net/http"
 	"os"
 	"os/signal"
 
-	//	"path"
-	//	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -23,15 +20,10 @@ import (
 
 	"path/filepath"
 
-	//	ggr "github.com/aerokube/ggr/config"
-	//	"github.com/aerokube/selenoid/config"
-	"github.com/aerokube/selenoid/protect"
 	"github.com/aerokube/selenoid/service"
 	"github.com/aerokube/selenoid/session"
 	"github.com/aerokube/selenoid/upload"
 	"github.com/aerokube/util"
-	//	"github.com/aerokube/util/docker"
-	//	"github.com/docker/docker/client"
 )
 
 var (
@@ -52,7 +44,6 @@ var (
 	videoRecorderImage       string
 	logOutputDir             string
 	saveAllLogs              bool
-	queue                    *protect.Queue
 	manager                  service.Manager
 
 	startTime = time.Now()
@@ -65,7 +56,6 @@ var (
 func init() {
 	flag.BoolVar(&enableFileUpload, "enable-file-upload", false, "File upload support")
 	flag.StringVar(&listen, "listen", ":4444", "Network address to accept connections")
-	flag.IntVar(&limit, "limit", 5000, "Simultaneous task container runs. See https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-quotas.html for details")
 	flag.IntVar(&retryCount, "retry-count", 1, "New session attempts retry count")
 	flag.DurationVar(&timeout, "timeout", 60*time.Second, "Session idle timeout in time.Duration format")
 	flag.DurationVar(&maxTimeout, "max-timeout", 1*time.Hour, "Maximum valid session idle timeout in time.Duration format")
@@ -104,7 +94,6 @@ func init() {
 	if err != nil {
 		log.Fatalf("[-] [INIT] [%s: %v]", os.Args[0], err)
 	}
-	queue = protect.New(limit, false)
 	videoOutputDir, err = filepath.Abs(videoOutputDir)
 	if err != nil {
 		log.Fatalf("[-] [INIT] [Invalid video output dir %s: %v]", videoOutputDir, err)
@@ -165,7 +154,7 @@ var seleniumPaths = struct {
 
 func selenium() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc(seleniumPaths.CreateSession, queue.Try(queue.Check(queue.Protect(post(create)))))
+	mux.HandleFunc(seleniumPaths.CreateSession, post(create))
 	mux.HandleFunc(seleniumPaths.ProxySession, proxy)
 	mux.HandleFunc(paths.Status, status)
 	mux.HandleFunc(paths.Welcome, welcome)

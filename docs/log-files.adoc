@@ -65,7 +65,7 @@ The following statuses are available:
 | LOG_LISTING | Received a request to list all log files
 | LOG_ERROR | An error occurred when post-processing session logs
 | METADATA | Metadata processing messages
-| NEW_REQUEST | New user request arrived and was placed to queue
+| NEW_REQUEST | New user request arrived and was placed to ECS
 | NEW_REQUEST_ACCEPTED | Started processing new user request
 | PROCESS_STARTED | Driver process successfully started
 | PROXY_TO | Starting to proxy requests to running container or driver process
