@@ -22,7 +22,6 @@ import (
 
 	"github.com/aerokube/selenoid/service"
 	"github.com/aerokube/selenoid/session"
-	"github.com/aerokube/selenoid/upload"
 	"github.com/aerokube/util"
 )
 
@@ -118,8 +117,6 @@ func init() {
 			log.Printf("[-] [INIT] [Saving all logs]")
 		}
 	}
-
-	upload.Init()
 
 	environment := service.Environment{
 		StartupTimeout:       serviceStartupTimeout,
