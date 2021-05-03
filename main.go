@@ -83,6 +83,8 @@ func init() {
 
 	flag.Parse()
 
+	InitESG()
+
 	if version {
 		showVersion()
 		os.Exit(0)

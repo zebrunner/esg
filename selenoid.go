@@ -52,11 +52,7 @@ var (
 	}
 	num     uint64
 	numLock sync.RWMutex
-	rdb     = redis.NewClient(&redis.Options{
-		Addr:     service.AwsElasticCache,
-		Password: "",
-		DB:       0,
-	})
+	rdb     *redis.Client
 )
 
 type request struct {
@@ -76,6 +72,14 @@ type CachedSession struct {
 	Timeout  time.Duration
 	Started  time.Time
 	TaskID   string
+}
+
+func InitESG() {
+        rdb = redis.NewClient(&redis.Options{
+                Addr:     service.AwsElasticCache,
+                Password: "",
+                DB:       0,
+        })
 }
 
 func (s CachedSession) MarshalBinary() ([]byte, error) {
