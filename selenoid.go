@@ -289,13 +289,9 @@ func create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var tenant string
-	requestUrl := r.URL.Hostname()
-	if strings.Contains(requestUrl, "@") {
-		authData := strings.Split(requestUrl, "@")[0]
-		tenant = strings.Split(authData, ":")[0]
-		// password := strings.Split(authData, ":")[1]
-	} else {
+	// tenant, password, ok
+	tenant, _, ok := r.BasicAuth()
+	if !ok {
 		tenant = service.Tenant
 	}
 
