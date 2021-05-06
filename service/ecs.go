@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	//	"github.com/docker/go-units"
 	"log"
 	"math/rand"
 	"net/url"
@@ -14,11 +13,6 @@ import (
 	"github.com/aerokube/selenoid/session"
 	"github.com/aerokube/util"
 
-	//	ctr "github.com/docker/docker/api/types/container"
-	//	"github.com/docker/docker/client"
-
-	//	"os"
-	//	"path/filepath"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -147,7 +141,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 			},
 			{
 				Name:              aws.String("artifacts-uploader"),
-				Image:             aws.String("zebrunner/artifacts-uploader"),
+				Image:             aws.String("public.ecr.aws/l1q2y2l2/artifacts-uploader:latest"),
 				Essential:         aws.Bool(false), //If the essential parameter of a container is marked as true, the failure of that container will stop the task.
 				Cpu:               aws.Int64(256),
 				Memory:            aws.Int64(768),
@@ -386,8 +380,8 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 	}
 	privateIpAddress := *resultInstance.Reservations[0].Instances[0].PrivateIpAddress
 	log.Printf("[%d] [INSTANCE_PRIVATE_IP] [%s]", requestId, privateIpAddress)
-	publicIpAddress := *resultInstance.Reservations[0].Instances[0].PublicIpAddress
-	log.Printf("[%d] [INSTANCE_PUBLIC_IP] [%s]", requestId, publicIpAddress)
+//	publicIpAddress := *resultInstance.Reservations[0].Instances[0].PublicIpAddress
+//	log.Printf("[%d] [INSTANCE_PUBLIC_IP] [%s]", requestId, publicIpAddress)
 
 	browserTaskStartTime := time.Now()
 	log.Printf("[%d] [TASK_STARTED] [%s] [%s] [%.2fs]", requestId, imageUrl, taskId, util.SecondsSince(browserTaskStartTime))
@@ -425,7 +419,7 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 		},
 	}
 
-	log.Printf("[%d] [TASK_SERVICE_DETAILS] [%s]", requestId, s)
+	//log.Printf("[%d] [TASK_SERVICE_DETAILS] [%s]", requestId, s)
 	return &s, nil
 }
 
