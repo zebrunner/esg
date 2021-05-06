@@ -24,7 +24,6 @@ type Environment struct {
 	VideoContainerImage  string
 	LogOutputDir         string
 	SaveAllLogs          bool
-	AwsRegion            string
 }
 
 const (
@@ -89,7 +88,7 @@ func (m *DefaultManager) Find(caps session.Caps, requestId uint64) (Starter, boo
 
 	log.Printf("[%d] [LOCATING_SERVICE] [%s] [%s]", requestId, browser, version)
 
-	org := "zebrunner"
+	org := "public.ecr.aws/l1q2y2l2" //public zebrunner ECR docker registry
 	if browser == "MicrosoftEdge" {
 		browser = "edge"
 	}
