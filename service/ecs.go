@@ -39,7 +39,7 @@ type ecsPortConfig struct {
 }
 
 // StartWithCancel - Starter interface implementation
-func (d *Task) StartWithCancel() (*StartedService, error) {
+func (d *Task) StartWithCancel(tenant string) (*StartedService, error) {
 	requestId := d.RequestId
 
 	portConfig, err := getEcsPortConfig()
@@ -107,10 +107,10 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 				},
 				Environment: []*ecs.KeyValuePair{
 					//TODO: provide extra values from caps
-                                        &ecs.KeyValuePair{
-                                                Name:  aws.String("UUID"),
-                                                Value: aws.String(uuid),
-                                        },
+					&ecs.KeyValuePair{
+						Name:  aws.String("UUID"),
+						Value: aws.String(uuid),
+					},
 					&ecs.KeyValuePair{
 						Name:  aws.String("VERBOSE"),
 						Value: aws.String("1"),
@@ -156,30 +156,30 @@ func (d *Task) StartWithCancel() (*StartedService, error) {
 						Name:  aws.String("BROWSER_CONTAINER_NAME"),
 						Value: aws.String(browserContainerName),
 					},
-                                        &ecs.KeyValuePair{
-                                                Name:  aws.String("UUID"),
-                                                Value: aws.String(uuid),
-                                        },
-                                        &ecs.KeyValuePair{
-                                                Name:  aws.String("BUCKET"),
-                                                Value: aws.String(""),
-                                        },
-                                        &ecs.KeyValuePair{
-                                                Name:  aws.String("TENANT"),
-                                                Value: aws.String(""),
-                                        },
-                                        &ecs.KeyValuePair{
-                                                Name:  aws.String("AWS_ACCESS_KEY_ID"),
-                                                Value: aws.String(""),
-                                        },
-                                        &ecs.KeyValuePair{
-                                                Name:  aws.String("AWS_SECRET_ACCESS_KEY"),
-                                                Value: aws.String(""),
-                                        },
-                                        &ecs.KeyValuePair{
-                                                Name:  aws.String("AWS_DEFAULT_REGION"),
-                                                Value: &AwsRegion,
-                                        },
+					&ecs.KeyValuePair{
+						Name:  aws.String("UUID"),
+						Value: aws.String(uuid),
+					},
+					&ecs.KeyValuePair{
+						Name:  aws.String("BUCKET"),
+						Value: &S3Bucket,
+					},
+					&ecs.KeyValuePair{
+						Name:  aws.String("TENANT"),
+						Value: &tenant,
+					},
+					&ecs.KeyValuePair{
+						Name:  aws.String("AWS_ACCESS_KEY_ID"),
+						Value: &AwsAccessKeyID,
+					},
+					&ecs.KeyValuePair{
+						Name:  aws.String("AWS_SECRET_ACCESS_KEY"),
+						Value: &AwsSecretAccessKey,
+					},
+					&ecs.KeyValuePair{
+						Name:  aws.String("AWS_DEFAULT_REGION"),
+						Value: &AwsRegion,
+					},
 				},
 				MountPoints: []*ecs.MountPoint{
 					&ecs.MountPoint{
@@ -580,4 +580,3 @@ func RemoveTask(ctx context.Context, requestId uint64, taskArn string) {
 		log.Printf("[%d] [TASK_DEFINITION_REMOVED] [%s]", requestId, *resultTaskDeregister.TaskDefinition.TaskDefinitionArn)
 	}
 }
-

@@ -75,11 +75,11 @@ type CachedSession struct {
 }
 
 func InitESG() {
-        rdb = redis.NewClient(&redis.Options{
-                Addr:     service.AwsElasticCache,
-                Password: "",
-                DB:       0,
-        })
+	rdb = redis.NewClient(&redis.Options{
+		Addr:     service.AwsElasticCache,
+		Password: "",
+		DB:       0,
+	})
 }
 
 func (s CachedSession) MarshalBinary() ([]byte, error) {
@@ -288,7 +288,18 @@ func create(w http.ResponseWriter, r *http.Request) {
 		util.JsonError(w, "Requested environment is not available", http.StatusBadRequest)
 		return
 	}
-	startedService, err := starter.StartWithCancel()
+
+	var tenant string
+	requestUrl := r.URL.Hostname()
+	if strings.Contains(requestUrl, "@") {
+		authData := strings.Split(requestUrl, "@")[0]
+		tenant = strings.Split(authData, ":")[0]
+		// password := strings.Split(authData, ":")[1]
+	} else {
+		tenant = service.Tenant
+	}
+
+	startedService, err := starter.StartWithCancel(tenant)
 	if err != nil {
 		log.Printf("[%d] [%s] [%s] [SERVICE_STARTUP_FAILED] [%v]", requestId, user, remote, err)
 		util.JsonError(w, err.Error(), http.StatusInternalServerError)
