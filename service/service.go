@@ -42,6 +42,10 @@ var (
 	MaxMemoryReservation int
 	MinCpu               int
 	MaxCpu               int
+	S3Bucket             string
+	Tenant               string
+	AwsAccessKeyID       string
+	AwsSecretAccessKey   string
 )
 
 // ServiceBase - stores fields required by all services
@@ -61,7 +65,7 @@ type StartedService struct {
 
 // Starter - interface to create session with cancellation ability
 type Starter interface {
-	StartWithCancel() (*StartedService, error)
+	StartWithCancel(tenant string) (*StartedService, error)
 }
 
 // Manager - interface to choose appropriate starter
