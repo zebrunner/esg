@@ -81,7 +81,7 @@ func init() {
 	flag.IntVar(&service.MinCpu, "min-cpu", 512, "AWS minimum CPU limitation for session")
 	flag.IntVar(&service.MaxCpu, "max-cpu", 4096, "AWS maximum CPU limitation for session")
 	flag.StringVar(&service.S3Bucket, "s3-bucket", "", "S3 Bucket name for pushing artifacts")
-	flag.StringVar(&service.Tenant, "tenant", "zebrunner", "Zebrunner tenant name")
+	flag.StringVar(&service.Tenant, "tenant", "", "Zebrunner tenant name")
 	flag.StringVar(&service.AwsAccessKeyID, "aws-access-key-id", "", "Access key for S3 bucket")
 	flag.StringVar(&service.AwsSecretAccessKey, "aws-secret-access-key", "", "Secret key for S3 bucket")
 
