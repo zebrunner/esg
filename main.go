@@ -20,9 +20,9 @@ import (
 
 	"path/filepath"
 
-	"github.com/aerokube/selenoid/service"
-	"github.com/aerokube/selenoid/session"
 	"github.com/aerokube/util"
+	"github.com/zebrunner/esg/service"
+	"github.com/zebrunner/esg/session"
 )
 
 var (

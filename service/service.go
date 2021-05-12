@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/aerokube/selenoid/session"
+	"github.com/zebrunner/esg/session"
 )
 
 // Environment - all settings that influence browser startup

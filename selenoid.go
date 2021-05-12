@@ -23,12 +23,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aerokube/selenoid/event"
-	"github.com/aerokube/selenoid/service"
 	"github.com/imdario/mergo"
+	"github.com/zebrunner/esg/event"
+	"github.com/zebrunner/esg/service"
 
-	"github.com/aerokube/selenoid/session"
 	"github.com/aerokube/util"
+	"github.com/zebrunner/esg/session"
 
 	//	"github.com/docker/docker/api/types"
 	//	"github.com/docker/docker/pkg/stdcopy"

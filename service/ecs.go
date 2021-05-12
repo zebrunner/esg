@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/aerokube/selenoid/session"
+	"github.com/zebrunner/esg/session"
 	"github.com/aerokube/util"
 
 	"strings"
