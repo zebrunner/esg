@@ -24,8 +24,10 @@ import (
 	"time"
 
 	"github.com/imdario/mergo"
+	"github.com/zebrunner/esg/auth"
 	"github.com/zebrunner/esg/event"
 	"github.com/zebrunner/esg/service"
+	"github.com/zebrunner/esg/webserver"
 
 	"github.com/aerokube/util"
 	"github.com/zebrunner/esg/session"
@@ -185,12 +187,6 @@ func createSession(ctx context.Context, sessionUrl string, header http.Header, b
 	return reply, browserStarted
 }
 
-func reply(w http.ResponseWriter, msg map[string]interface{}, status int) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(msg)
-}
-
 func errMsg(msg string) map[string]interface{} {
 	return map[string]interface{}{
 		"value": map[string]string{
@@ -215,6 +211,19 @@ func getSerial() uint64 {
 }
 
 func create(w http.ResponseWriter, r *http.Request) {
+	if tenant, password, ok := r.BasicAuth(); ok {
+		err := auth.CheckAuth(tenant, password)
+		if err != nil {
+			webserver.JsonError(w, err)
+		}
+	} else {
+		webserver.JsonError(w, &webserver.HTTPError{
+			Message: "Authorization data not found. Check that you have provided tenant:password before hub url",
+			Status:  http.StatusUnauthorized,
+		})
+		return
+	}
+
 	sessionStartTime := time.Now()
 	requestId := serial()
 	user, remote := util.RequestInfo(r)
@@ -330,7 +339,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 			sess, ok := resp["sessionId"].(string)
 			if !ok {
 				protocolError := func() {
-					reply(w, errMsg("protocol error"), http.StatusBadGateway)
+					webserver.Reply(w, errMsg("protocol error"), http.StatusBadGateway)
 					log.Printf("[%d] [%s] [%s] [BAD_RESPONSE]\n", requestId, user, remote)
 				}
 				value, ok := resp["value"]
@@ -360,7 +369,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 				s.ID = sess
 				resp["sessionId"] = s.ID
 			}
-			reply(w, resp, http.StatusOK)
+			webserver.Reply(w, resp, http.StatusOK)
 			break
 		} else {
 			log.Printf("[%d] [%s] [%s] [SESSION_FAILED]", requestId, user, remote)

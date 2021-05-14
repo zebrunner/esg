@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 
 	"github.com/aerokube/util"
+	"github.com/zebrunner/esg/auth"
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/session"
 )
@@ -44,6 +45,7 @@ var (
 	logOutputDir             string
 	saveAllLogs              bool
 	manager                  service.Manager
+	dbConnectionString       string
 
 	startTime = time.Now()
 
@@ -84,6 +86,7 @@ func init() {
 	flag.StringVar(&service.Tenant, "tenant", "", "Zebrunner tenant name")
 	flag.StringVar(&service.AwsAccessKeyID, "aws-access-key-id", "", "Access key for S3 bucket")
 	flag.StringVar(&service.AwsSecretAccessKey, "aws-secret-access-key", "", "Secret key for S3 bucket")
+	flag.StringVar(&dbConnectionString, "db-connection", "", "Connection string for database")
 
 	flag.Parse()
 
@@ -217,7 +220,7 @@ func deleteFileIfExists(requestId uint64, w http.ResponseWriter, r *http.Request
 }
 
 var paths = struct {
-	Video, VNC, Logs, Devtools, Download, Clipboard, File, Ping, Status, Error, WdHub, Welcome string
+	Video, VNC, Logs, Devtools, Download, Clipboard, File, Ping, Status, Error, WdHub, Welcome, Auth string
 }{
 	Video:     "/video/",
 	VNC:       "/vnc/",
@@ -231,6 +234,7 @@ var paths = struct {
 	Error:     "/error",
 	WdHub:     "/wd/hub",
 	Welcome:   "/",
+	Auth:      "/auth",
 }
 
 func handler() http.Handler {
@@ -260,6 +264,10 @@ func handler() http.Handler {
 		root.HandleFunc(paths.File, fileUpload)
 	}
 	root.HandleFunc(paths.Welcome, welcome)
+
+	root.HandleFunc(paths.Auth, auth.TenantHandler)
+	root.HandleFunc(paths.Auth+"/activation", auth.ActivationTenantHandler)
+	root.HandleFunc(paths.Auth+"/refresh", auth.RefreshTenantHandler)
 	return root
 }
 
@@ -271,6 +279,12 @@ func showVersion() {
 func main() {
 	log.Printf("[-] [INIT] [Timezone: %s]", time.Local)
 	log.Printf("[-] [INIT] [Listening on %s]", listen)
+
+	db, err := auth.InitConnection(dbConnectionString)
+	if err != nil {
+		log.Printf("[-] [INIT] [Failed to start. Problem with db connection: %v]", err)
+	}
+	defer db.Close()
 
 	stop := make(chan os.Signal)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
