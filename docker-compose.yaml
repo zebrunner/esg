@@ -1,0 +1,28 @@
+version: "3.9"
+services: 
+  grid:
+    container_name: esg-grid
+    build: .
+    ports: 
+        - "4444:4444"
+        - "4445:4445"
+    links:
+      - redis
+      - db
+    command: ./entrypoint.sh
+  db:
+    image: postgres:13
+    container_name: esg-postgres
+    command: postgres -c 'max_connections=200'
+    volumes:
+      - "pgdata-volume:/var/lib/postgresql/data"
+    environment: 
+      POSTGRES_PASSWORD: postgres
+    restart: always
+    ports: 
+      - "5431:5432"
+  redis:
+    image: redis:6
+    container_name: esg-redis
+volumes:
+  pgdata-volume:

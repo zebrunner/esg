@@ -1,7 +1,13 @@
-FROM alpine:3.8
+FROM golang:1.14-alpine
 
-RUN apk add -U ca-certificates tzdata mailcap && rm -Rf /var/cache/apk/*
-COPY selenoid /usr/bin
+RUN apk add -U ca-certificates tzdata mailcap curl && rm -Rf /var/cache/apk/*
 
-EXPOSE 4444
-ENTRYPOINT ["/usr/bin/selenoid", "-listen", ":4444", "-conf", "/etc/selenoid/browsers.json", "-video-output-dir", "/opt/selenoid/video/"]
+# Install migrate tool
+RUN curl -L https://github.com/golang-migrate/migrate/releases/download/v4.14.1/migrate.linux-amd64.tar.gz | tar -xvz
+RUN cp migrate.linux-amd64 /usr/bin/migrate
+RUN echo $PATH
+
+# Build esg
+COPY ./ /esg
+WORKDIR /esg
+RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build
