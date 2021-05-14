@@ -19,6 +19,8 @@ services:
     environment: 
       POSTGRES_PASSWORD: postgres
     restart: always
+    ports: 
+      - "5432:5432"
   redis:
     image: redis:6
     container_name: esg-redis

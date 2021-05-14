@@ -30,19 +30,4 @@ if [ $status -ne 0 ]; then
   exit $status
 fi
 
-# Naive check runs checks once a minute to see if either of the processes exited.
-# more than one service in a container. The container exits with an error
-# if it detects that either of the processes has exited.
-# Otherwise it loops forever, waking up every 60 seconds
-while sleep 60; do
-  ps aux | grep ./esg | grep :4444
-  PROCESS_1_STATUS=$?
-  ps aux | grep ./esg | grep :4445
-  PROCESS_2_STATUS=$?
-  # If the greps above find anything, they exit with 0 status
-  # If they are not both 0, then something is wrong
-  if [ $PROCESS_1_STATUS -ne 0 -o $PROCESS_2_STATUS -ne 0 ]; then
-    echo "One of the processes has already exited."
-    exit 1
-  fi
-done
+tail -f esg.log

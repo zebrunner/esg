@@ -44,6 +44,13 @@ func InitConnection(connectionString string) (*sqlx.DB, error) {
 }
 
 func CreateTenant(name string) (string, error) {
+	dbTenant, _ := GetTenant(name)
+	if dbTenant != nil {
+		return "", &webserver.HTTPError{
+			Message: "Tenant with this name already exists",
+			Status:  http.StatusBadRequest,
+		}
+	}
 	pwd, err := generatePassword()
 	if err != nil {
 		return "", err
@@ -64,7 +71,7 @@ func CreateTenant(name string) (string, error) {
 }
 
 func GetTenant(name string) (*Tenant, error) {
-	getQuery := `SELECT id, name, password, is_active FROM tenants WHERE deleted_at IS NULL AND name = $1`
+	getQuery := `SELECT id, name, password, is_active FROM tenants WHERE is_deleted = false AND name = $1`
 	tenant := Tenant{}
 	err := db.Get(&tenant, getQuery, name)
 	if err != nil {
@@ -119,7 +126,7 @@ func DeleteTenant(name string) error {
 	if err != nil {
 		return err
 	}
-	deleteQuery := `UPDATE tenants SET deleted_at = now() WHERE id = $1`
+	deleteQuery := `UPDATE tenants SET is_deleted=true WHERE id = $1`
 	db.Exec(deleteQuery, tenant.ID)
 	return nil
 }

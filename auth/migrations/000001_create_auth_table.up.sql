@@ -5,7 +5,5 @@ CREATE TABLE IF NOT EXISTS tenants(
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     is_active BOOLEAN DEFAULT true,
     updated_at TIMESTAMP,
-    deleted_at TIMESTAMP
+    is_deleted BOOLEAN DEFAULT false
 );
-
-CREATE INDEX mult_col_idx_tenants ON tenants(name, deleted_at);

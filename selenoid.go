@@ -215,6 +215,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 		err := auth.CheckAuth(tenant, password)
 		if err != nil {
 			webserver.JsonError(w, err)
+			return
 		}
 	} else {
 		webserver.JsonError(w, &webserver.HTTPError{
