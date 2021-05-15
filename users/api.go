@@ -1,4 +1,4 @@
-package auth
+package users
 
 import (
 	"net/http"
@@ -22,7 +22,7 @@ func UserHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		response := map[string]interface{}{
-			"password": password,
+			"access-token": password,
 		}
 		webserver.Reply(w, response, http.StatusOK)
 	} else if r.Method == "DELETE" {
@@ -50,7 +50,7 @@ func RefreshUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response := map[string]interface{}{
-		"password": password,
+		"access-token": password,
 	}
 	webserver.Reply(w, response, http.StatusOK)
 }

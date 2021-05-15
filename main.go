@@ -21,9 +21,9 @@ import (
 	"path/filepath"
 
 	"github.com/aerokube/util"
-	"github.com/zebrunner/esg/auth"
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/session"
+	"github.com/zebrunner/esg/users"
 )
 
 var (
@@ -220,7 +220,7 @@ func deleteFileIfExists(requestId uint64, w http.ResponseWriter, r *http.Request
 }
 
 var paths = struct {
-	Video, VNC, Logs, Devtools, Download, Clipboard, File, Ping, Status, Error, WdHub, Welcome, Auth string
+	Video, VNC, Logs, Devtools, Download, Clipboard, File, Ping, Status, Error, WdHub, Welcome, Users string
 }{
 	Video:     "/video/",
 	VNC:       "/vnc/",
@@ -234,7 +234,7 @@ var paths = struct {
 	Error:     "/error",
 	WdHub:     "/wd/hub",
 	Welcome:   "/",
-	Auth:      "/auth",
+	Users:     "/users",
 }
 
 func handler() http.Handler {
@@ -265,9 +265,9 @@ func handler() http.Handler {
 	}
 	root.HandleFunc(paths.Welcome, welcome)
 
-	root.HandleFunc(paths.Auth, auth.UserHandler)
-	root.HandleFunc(paths.Auth+"/activation", auth.ActivationUserHandler)
-	root.HandleFunc(paths.Auth+"/refresh", auth.RefreshUserHandler)
+	root.HandleFunc(paths.Users, users.UserHandler)
+	root.HandleFunc(paths.Users+"/activation", users.ActivationUserHandler)
+	root.HandleFunc(paths.Users+"/refresh-token", users.RefreshUserHandler)
 	return root
 }
 
@@ -280,7 +280,7 @@ func main() {
 	log.Printf("[-] [INIT] [Timezone: %s]", time.Local)
 	log.Printf("[-] [INIT] [Listening on %s]", listen)
 
-	db, err := auth.InitConnection(dbConnectionString)
+	db, err := users.InitConnection(dbConnectionString)
 	if err != nil {
 		log.Printf("[-] [INIT] [Failed to start. Problem with db connection: %v]", err)
 	}

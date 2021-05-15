@@ -24,9 +24,9 @@ import (
 	"time"
 
 	"github.com/imdario/mergo"
-	"github.com/zebrunner/esg/auth"
 	"github.com/zebrunner/esg/event"
 	"github.com/zebrunner/esg/service"
+	"github.com/zebrunner/esg/users"
 	"github.com/zebrunner/esg/webserver"
 
 	"github.com/aerokube/util"
@@ -212,7 +212,7 @@ func getSerial() uint64 {
 
 func create(w http.ResponseWriter, r *http.Request) {
 	if username, password, ok := r.BasicAuth(); ok {
-		err := auth.CheckAuth(username, password)
+		err := users.CheckAuth(username, password)
 		if err != nil {
 			webserver.JsonError(w, err)
 			return
