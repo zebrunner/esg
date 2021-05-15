@@ -211,15 +211,15 @@ func getSerial() uint64 {
 }
 
 func create(w http.ResponseWriter, r *http.Request) {
-	if tenant, password, ok := r.BasicAuth(); ok {
-		err := auth.CheckAuth(tenant, password)
+	if username, password, ok := r.BasicAuth(); ok {
+		err := auth.CheckAuth(username, password)
 		if err != nil {
 			webserver.JsonError(w, err)
 			return
 		}
 	} else {
 		webserver.JsonError(w, &webserver.HTTPError{
-			Message: "Authorization data not found. Check that you have provided tenant:password before hub url",
+			Message: "Authorization data not found. Check that you have provided username:password before hub url",
 			Status:  http.StatusUnauthorized,
 		})
 		return
@@ -299,13 +299,13 @@ func create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// tenant, password, ok
-	tenant, _, ok := r.BasicAuth()
+	// username, password, ok
+	username, _, ok := r.BasicAuth()
 	if !ok {
-		tenant = service.Tenant
+		username = service.Tenant
 	}
 
-	startedService, err := starter.StartWithCancel(tenant)
+	startedService, err := starter.StartWithCancel(username)
 	if err != nil {
 		log.Printf("[%d] [%s] [%s] [SERVICE_STARTUP_FAILED] [%v]", requestId, user, remote, err)
 		util.JsonError(w, err.Error(), http.StatusInternalServerError)

@@ -15,7 +15,7 @@ var (
 	db *sqlx.DB
 )
 
-type Tenant struct {
+type User struct {
 	ID        int `db:"id"`
 	Name      string
 	Password  string
@@ -43,11 +43,11 @@ func InitConnection(connectionString string) (*sqlx.DB, error) {
 	return db, nil
 }
 
-func CreateTenant(name string) (string, error) {
-	dbTenant, _ := GetTenant(name)
-	if dbTenant != nil {
+func CreateUser(name string) (string, error) {
+	dbUser, _ := GetUser(name)
+	if dbUser != nil {
 		return "", &webserver.HTTPError{
-			Message: "Tenant with this name already exists",
+			Message: "User with this name already exists",
 			Status:  http.StatusBadRequest,
 		}
 	}
@@ -61,7 +61,7 @@ func CreateTenant(name string) (string, error) {
 		return "", err
 	}
 
-	createQuery := `INSERT INTO tenants (name, password) VALUES ($1, $2)`
+	createQuery := `INSERT INTO users (name, password) VALUES ($1, $2)`
 	_, err = db.Exec(createQuery, name, string(passwordHash))
 	if err != nil {
 		return "", err
@@ -70,10 +70,10 @@ func CreateTenant(name string) (string, error) {
 	return pwd, nil
 }
 
-func GetTenant(name string) (*Tenant, error) {
-	getQuery := `SELECT id, name, password, is_active FROM tenants WHERE is_deleted = false AND name = $1`
-	tenant := Tenant{}
-	err := db.Get(&tenant, getQuery, name)
+func GetUser(name string) (*User, error) {
+	getQuery := `SELECT id, name, password, is_active FROM users WHERE is_deleted = false AND name = $1`
+	user := User{}
+	err := db.Get(&user, getQuery, name)
 	if err != nil {
 		if err.Error() == "sql: no rows in result set" {
 			return nil, &webserver.HTTPError{
@@ -84,16 +84,16 @@ func GetTenant(name string) (*Tenant, error) {
 			return nil, err
 		}
 	}
-	return &tenant, nil
+	return &user, nil
 }
 
-func ActivationTenant(name string, isActive bool) error {
-	tenant, err := GetTenant(name)
+func ActivationUser(name string, isActive bool) error {
+	user, err := GetUser(name)
 	if err != nil {
 		return err
 	}
-	invalidateQuery := `UPDATE tenants SET is_active = $1, updated_at = now() WHERE tenants.id = $2`
-	_, err = db.Exec(invalidateQuery, isActive, tenant.ID)
+	invalidateQuery := `UPDATE users SET is_active = $1, updated_at = now() WHERE users.id = $2`
+	_, err = db.Exec(invalidateQuery, isActive, user.ID)
 	if err != nil {
 		return err
 	}
@@ -101,7 +101,7 @@ func ActivationTenant(name string, isActive bool) error {
 }
 
 func RefreshToken(name string) (string, error) {
-	tenant, err := GetTenant(name)
+	user, err := GetUser(name)
 	if err != nil {
 		return "", err
 	}
@@ -113,38 +113,38 @@ func RefreshToken(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	refreshQuery := `UPDATE tenants SET password = $1, updated_at = now() WHERE id = $2`
-	_, err = db.Exec(refreshQuery, passwordHash, tenant.ID)
+	refreshQuery := `UPDATE users SET password = $1, updated_at = now() WHERE id = $2`
+	_, err = db.Exec(refreshQuery, passwordHash, user.ID)
 	if err != nil {
 		return "", err
 	}
 	return password, nil
 }
 
-func DeleteTenant(name string) error {
-	tenant, err := GetTenant(name)
+func DeleteUser(name string) error {
+	user, err := GetUser(name)
 	if err != nil {
 		return err
 	}
-	deleteQuery := `UPDATE tenants SET is_deleted=true WHERE id = $1`
-	db.Exec(deleteQuery, tenant.ID)
+	deleteQuery := `UPDATE users SET is_deleted=true WHERE id = $1`
+	db.Exec(deleteQuery, user.ID)
 	return nil
 }
 
 func CheckAuth(name, password string) error {
 	authenticationError := &webserver.HTTPError{
 		Status:  http.StatusUnauthorized,
-		Message: "Invalid tenant or password",
+		Message: "Invalid username or password",
 	}
-	tenant, err := GetTenant(name)
+	user, err := GetUser(name)
 	if err != nil {
 		return authenticationError
 	}
-	err = bcrypt.CompareHashAndPassword([]byte(tenant.Password), []byte(password))
+	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	if err != nil {
 		return authenticationError
 	}
-	if !tenant.IsActive {
+	if !user.IsActive {
 		authenticationError.Message = "User deactivated, authorization not alowed."
 		return authenticationError
 	}

@@ -8,15 +8,15 @@ import (
 	"github.com/zebrunner/esg/webserver"
 )
 
-func TenantHandler(w http.ResponseWriter, r *http.Request) {
-	tenant := r.URL.Query().Get("tenant")
-	if tenant == "" {
-		util.JsonError(w, "tenant query parameter not found", http.StatusBadRequest)
+func UserHandler(w http.ResponseWriter, r *http.Request) {
+	username := r.URL.Query().Get("username")
+	if username == "" {
+		util.JsonError(w, "username query parameter not found", http.StatusBadRequest)
 		return
 	}
 
 	if r.Method == "POST" {
-		password, err := CreateTenant(tenant)
+		password, err := CreateUser(username)
 		if err != nil {
 			webserver.JsonError(w, err)
 			return
@@ -26,7 +26,7 @@ func TenantHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		webserver.Reply(w, response, http.StatusOK)
 	} else if r.Method == "DELETE" {
-		err := DeleteTenant(tenant)
+		err := DeleteUser(username)
 		if err != nil {
 			webserver.JsonError(w, err)
 			return
@@ -34,17 +34,17 @@ func TenantHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func RefreshTenantHandler(w http.ResponseWriter, r *http.Request) {
-	tenant := r.URL.Query().Get("tenant")
-	if tenant == "" {
+func RefreshUserHandler(w http.ResponseWriter, r *http.Request) {
+	user := r.URL.Query().Get("username")
+	if user == "" {
 		httpErr := webserver.HTTPError{
 			Status:  http.StatusBadRequest,
-			Message: "tenant query parameter not found",
+			Message: "username query parameter not found",
 		}
 		webserver.JsonError(w, &httpErr)
 		return
 	}
-	password, err := RefreshToken(tenant)
+	password, err := RefreshToken(user)
 	if err != nil {
 		webserver.JsonError(w, err)
 		return
@@ -55,12 +55,12 @@ func RefreshTenantHandler(w http.ResponseWriter, r *http.Request) {
 	webserver.Reply(w, response, http.StatusOK)
 }
 
-func ActivationTenantHandler(w http.ResponseWriter, r *http.Request) {
-	tenant := r.URL.Query().Get("tenant")
-	if tenant == "" {
+func ActivationUserHandler(w http.ResponseWriter, r *http.Request) {
+	user := r.URL.Query().Get("username")
+	if user == "" {
 		httpErr := webserver.HTTPError{
 			Status:  http.StatusBadRequest,
-			Message: "tenant query parameter not found",
+			Message: "username query parameter not found",
 		}
 		webserver.JsonError(w, &httpErr)
 		return
@@ -75,7 +75,7 @@ func ActivationTenantHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = ActivationTenant(tenant, isActive)
+	err = ActivationUser(user, isActive)
 	if err != nil {
 		webserver.JsonError(w, err)
 		return

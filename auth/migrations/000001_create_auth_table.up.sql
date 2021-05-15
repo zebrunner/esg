@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS tenants(
+CREATE TABLE IF NOT EXISTS users(
     id serial PRIMARY KEY,
     name VARCHAR (300),
     password VARCHAR (100) NOT NULL,

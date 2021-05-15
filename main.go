@@ -265,9 +265,9 @@ func handler() http.Handler {
 	}
 	root.HandleFunc(paths.Welcome, welcome)
 
-	root.HandleFunc(paths.Auth, auth.TenantHandler)
-	root.HandleFunc(paths.Auth+"/activation", auth.ActivationTenantHandler)
-	root.HandleFunc(paths.Auth+"/refresh", auth.RefreshTenantHandler)
+	root.HandleFunc(paths.Auth, auth.UserHandler)
+	root.HandleFunc(paths.Auth+"/activation", auth.ActivationUserHandler)
+	root.HandleFunc(paths.Auth+"/refresh", auth.RefreshUserHandler)
 	return root
 }
 

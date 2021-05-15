@@ -65,7 +65,7 @@ type StartedService struct {
 
 // Starter - interface to create session with cancellation ability
 type Starter interface {
-	StartWithCancel(tenant string) (*StartedService, error)
+	StartWithCancel(username string) (*StartedService, error)
 }
 
 // Manager - interface to choose appropriate starter
