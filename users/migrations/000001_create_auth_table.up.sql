@@ -7,3 +7,5 @@ CREATE TABLE IF NOT EXISTS users(
     updated_at TIMESTAMP,
     is_deleted BOOLEAN DEFAULT false
 );
+
+CREATE UNIQUE INDEX users_name_idx ON users (name) WHERE NOT is_deleted;
