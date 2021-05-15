@@ -4,8 +4,8 @@ package main
 
 import (
 	"encoding/json"
-	"github.com/aerokube/selenoid/event"
-	"github.com/aerokube/selenoid/session"
+	"github.com/zebrunner/esg/event"
+	"github.com/zebrunner/esg/session"
 	"io/ioutil"
 	"log"
 	"path/filepath"

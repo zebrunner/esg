@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/zebrunner/esg/session"
 	"github.com/aerokube/util"
+	"github.com/zebrunner/esg/session"
 
 	"strings"
 
@@ -39,7 +39,7 @@ type ecsPortConfig struct {
 }
 
 // StartWithCancel - Starter interface implementation
-func (d *Task) StartWithCancel(tenant string) (*StartedService, error) {
+func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	requestId := d.RequestId
 
 	portConfig, err := getEcsPortConfig()
@@ -166,7 +166,7 @@ func (d *Task) StartWithCancel(tenant string) (*StartedService, error) {
 					},
 					&ecs.KeyValuePair{
 						Name:  aws.String("TENANT"),
-						Value: &tenant,
+						Value: &username,
 					},
 					&ecs.KeyValuePair{
 						Name:  aws.String("AWS_ACCESS_KEY_ID"),
@@ -380,8 +380,8 @@ func (d *Task) StartWithCancel(tenant string) (*StartedService, error) {
 	}
 	privateIpAddress := *resultInstance.Reservations[0].Instances[0].PrivateIpAddress
 	log.Printf("[%d] [INSTANCE_PRIVATE_IP] [%s]", requestId, privateIpAddress)
-//	publicIpAddress := *resultInstance.Reservations[0].Instances[0].PublicIpAddress
-//	log.Printf("[%d] [INSTANCE_PUBLIC_IP] [%s]", requestId, publicIpAddress)
+	//	publicIpAddress := *resultInstance.Reservations[0].Instances[0].PublicIpAddress
+	//	log.Printf("[%d] [INSTANCE_PUBLIC_IP] [%s]", requestId, publicIpAddress)
 
 	browserTaskStartTime := time.Now()
 	log.Printf("[%d] [TASK_STARTED] [%s] [%s] [%.2fs]", requestId, imageUrl, taskId, util.SecondsSince(browserTaskStartTime))
