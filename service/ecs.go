@@ -443,19 +443,44 @@ func getFailReason(svc *ecs.ECS, taskId string) (*string, error) {
 	return &resultReason, nil
 }
 
-func GetTaskInfo(instanceID string, taskID string) {
+func GetTasksCount() (*map[string]int, error) {
 	svc := ecs.New(awsSession.New(&aws.Config{Region: &AwsRegion, MaxRetries: &AwsRetry}))
-	input := &ecs.ListTasksInput{
-		Cluster:           &AwsCluster,
-		ContainerInstance: aws.String(instanceID),
+	listInput := ecs.ListTasksInput{
+		Cluster: &AwsCluster,
 	}
-	fmt.Println(instanceID)
-	result, err := svc.ListTasks(input)
-	if err != nil {
-		log.Printf("[GET TASK INFO ERROR] %v", err)
-	} else {
-		fmt.Println("TASK LIST RESULT", result)
+
+	var tasks []*ecs.Task
+	for {
+		listResult, err := svc.ListTasks(&listInput)
+		if err != nil {
+			log.Printf("[ERROR] [ListTasks] %v", err)
+			return nil, err
+		}
+		listInput.NextToken = listResult.NextToken
+
+		describeInput := ecs.DescribeTasksInput{
+			Cluster: &AwsCluster,
+			Include: []*string{aws.String("LastStatus")},
+			Tasks: listResult.TaskArns,
+		}
+		describeResult, err := svc.DescribeTasks(&describeInput)
+		if err != nil {
+			log.Printf("[ERROR] [DescribeTasks] %v", err)
+			return nil, err
+		}
+		tasks = append(tasks, describeResult.Tasks...)
+
+		if listInput.NextToken == nil {
+			break
+		}
 	}
+
+	result := map[string]int{}
+	for _, task := range tasks {
+		result[*task.LastStatus] += 1
+	}
+
+	return &result, nil
 }
 
 func getEcsPortConfig() (*ecsPortConfig, error) {

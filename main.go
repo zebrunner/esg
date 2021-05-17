@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"github.com/zebrunner/esg/webserver"
 	"log"
 
 	"net/http"
@@ -186,6 +187,18 @@ func ping(w http.ResponseWriter, _ *http.Request) {
 	}{time.Since(startTime).String(), getSerial(), gitRevision})
 }
 
+func clusterStatus(w http.ResponseWriter, r *http.Request) {
+	status, err := service.GetTasksCount()
+	if err != nil {
+		webserver.JsonError(w, err)
+	}
+
+	err = json.NewEncoder(w).Encode(status)
+	if err != nil {
+		webserver.JsonError(w, err)
+	}
+}
+
 func video(w http.ResponseWriter, r *http.Request) {
 	requestId := serial()
 	if r.Method == http.MethodDelete {
@@ -249,10 +262,7 @@ func handler() http.Handler {
 	root.HandleFunc(paths.Error, func(w http.ResponseWriter, r *http.Request) {
 		util.JsonError(w, "Session timed out or not found", http.StatusNotFound)
 	})
-	root.HandleFunc(paths.Status, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Add("Content-Type", "application/json")
-		json.NewEncoder(w).Encode("TODO: think what can we return in state without config...")
-	})
+	root.HandleFunc(paths.Status, clusterStatus)
 	root.HandleFunc(paths.Ping, ping)
 	root.Handle(paths.VNC, websocket.Handler(vnc))
 	root.HandleFunc(paths.Logs, logs)
