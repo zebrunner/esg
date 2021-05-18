@@ -1,18 +1,16 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
 	"flag"
-	"github.com/zebrunner/esg/webserver"
+	"github.com/gin-gonic/gin"
+	"github.com/zebrunner/esg/utils"
+
+	//"github.com/zebrunner/esg/webserver"
 	"log"
 
 	"net/http"
 	"os"
-	"os/signal"
-
 	"strings"
-	"syscall"
 	"time"
 
 	"golang.org/x/net/websocket"
@@ -22,9 +20,9 @@ import (
 	"path/filepath"
 
 	"github.com/aerokube/util"
+	"github.com/zebrunner/esg/handlers"
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/session"
-	"github.com/zebrunner/esg/users"
 )
 
 var (
@@ -47,8 +45,6 @@ var (
 	saveAllLogs              bool
 	manager                  service.Manager
 	dbConnectionString       string
-
-	startTime = time.Now()
 
 	version     bool
 	gitRevision = "HEAD"
@@ -91,12 +87,7 @@ func init() {
 
 	flag.Parse()
 
-	InitESG()
-
-	if version {
-		showVersion()
-		os.Exit(0)
-	}
+	handlers.InitESG()
 
 	var err error
 	hostname, err = os.Hostname()
@@ -161,10 +152,10 @@ var seleniumPaths = struct {
 
 func selenium() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc(seleniumPaths.CreateSession, post(create))
-	mux.HandleFunc(seleniumPaths.ProxySession, proxy)
-	mux.HandleFunc(paths.Status, status)
-	mux.HandleFunc(paths.Welcome, welcome)
+	//mux.HandleFunc(seleniumPaths.CreateSession, post(create))
+	mux.HandleFunc(seleniumPaths.ProxySession, handlers.proxy)
+	//mux.HandleFunc(paths.Status, status)
+	//mux.HandleFunc(paths.Welcome, welcome)
 	return mux
 }
 
@@ -178,36 +169,15 @@ func post(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func ping(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Add("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(struct {
-		Uptime      string `json:"uptime"`
-		NumRequests uint64 `json:"numRequests"`
-		Version     string `json:"version"`
-	}{time.Since(startTime).String(), getSerial(), gitRevision})
-}
-
-func clusterStatus(w http.ResponseWriter, r *http.Request) {
-	status, err := service.GetTasksCount()
-	if err != nil {
-		webserver.JsonError(w, err)
-	}
-
-	err = json.NewEncoder(w).Encode(status)
-	if err != nil {
-		webserver.JsonError(w, err)
-	}
-}
-
 func video(w http.ResponseWriter, r *http.Request) {
-	requestId := serial()
+	requestId := handlers.serial()
 	if r.Method == http.MethodDelete {
 		deleteFileIfExists(requestId, w, r, videoOutputDir, paths.Video, "DELETED_VIDEO_FILE")
 		return
 	}
 	user, remote := util.RequestInfo(r)
-	if _, ok := r.URL.Query()[jsonParam]; ok {
-		listFilesAsJson(requestId, w, videoOutputDir, "VIDEO_ERROR")
+	if _, ok := r.URL.Query()[handlers.jsonParam]; ok {
+		handlers.listFilesAsJson(requestId, w, videoOutputDir, "VIDEO_ERROR")
 		return
 	}
 	log.Printf("[%d] [VIDEO_LISTING] [%s] [%s]", requestId, user, remote)
@@ -255,69 +225,122 @@ func handler() http.Handler {
 	root.HandleFunc(paths.WdHub+"/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Content-Type", "application/json")
 		r.URL.Scheme = "http"
-		r.URL.Host = (&request{r}).localaddr()
+		r.URL.Host = (&handlers.request{r}).localaddr()
 		r.URL.Path = strings.TrimPrefix(r.URL.Path, paths.WdHub)
 		selenium().ServeHTTP(w, r)
 	})
 	root.HandleFunc(paths.Error, func(w http.ResponseWriter, r *http.Request) {
 		util.JsonError(w, "Session timed out or not found", http.StatusNotFound)
 	})
-	root.HandleFunc(paths.Status, clusterStatus)
-	root.HandleFunc(paths.Ping, ping)
-	root.Handle(paths.VNC, websocket.Handler(vnc))
-	root.HandleFunc(paths.Logs, logs)
+	//root.HandleFunc(paths.Status, clusterStatus)
+	//root.HandleFunc(paths.Ping, ping)
+	root.Handle(paths.VNC, websocket.Handler(handlers.vnc))
+	root.HandleFunc(paths.Logs, handlers.logs)
 	root.HandleFunc(paths.Video, video)
-	root.HandleFunc(paths.Download, reverseProxy(func(sess *session.Session) string { return sess.HostPort.Fileserver }, "DOWNLOADING_FILE"))
-	root.HandleFunc(paths.Clipboard, reverseProxy(func(sess *session.Session) string { return sess.HostPort.Clipboard }, "CLIPBOARD"))
-	root.HandleFunc(paths.Devtools, reverseProxy(func(sess *session.Session) string { return sess.HostPort.Devtools }, "DEVTOOLS"))
+	root.HandleFunc(paths.Download, handlers.reverseProxy(func(sess *session.Session) string { return sess.HostPort.Fileserver }, "DOWNLOADING_FILE"))
+	root.HandleFunc(paths.Clipboard, handlers.reverseProxy(func(sess *session.Session) string { return sess.HostPort.Clipboard }, "CLIPBOARD"))
+	root.HandleFunc(paths.Devtools, handlers.reverseProxy(func(sess *session.Session) string { return sess.HostPort.Devtools }, "DEVTOOLS"))
 	if enableFileUpload {
-		root.HandleFunc(paths.File, fileUpload)
+		root.HandleFunc(paths.File, handlers.fileUpload)
 	}
-	root.HandleFunc(paths.Welcome, welcome)
+	//root.HandleFunc(paths.Welcome, welcome)
 
-	root.HandleFunc(paths.Users, users.UserHandler)
-	root.HandleFunc(paths.Users+"/activation", users.ActivationUserHandler)
-	root.HandleFunc(paths.Users+"/refresh-token", users.RefreshUserHandler)
+	//root.HandleFunc(paths.Users, users.UserHandler)
+	//root.HandleFunc(paths.Users+"/activation", users.ActivationUserHandler)
+	//root.HandleFunc(paths.Users+"/refresh-token", users.RefreshUserHandler)
 	return root
 }
 
-func showVersion() {
-	fmt.Printf("Git Revision: %s\n", gitRevision)
-	fmt.Printf("UTC Build Time: %s\n", buildStamp)
+func ErrorHandler(c *gin.Context) {
+	c.Next()
+	if c.Errors.Last() == nil {
+		return
+	}
+
+	log.Println(c.Errors.String())
+	status := http.StatusInternalServerError
+	message := "Internal server error happened. All error details collected in logs"
+	var meta interface{}
+	publicError := c.Errors.ByType(gin.ErrorTypePublic).Last()
+	if publicError != nil {
+		httpError, ok := publicError.Err.(*utils.HTTPError)
+		if ok {
+			status = httpError.Status
+			message = httpError.Message
+		}
+		meta = publicError.Meta
+	}
+	c.JSON(status, utils.ErrorResponse{
+		Error:  message,
+		Payload: meta,
+	})
 }
+
+func registerRoutes() {
+	r := gin.Default()
+
+	r.Use(ErrorHandler)
+
+	r.GET("/welcome", handlers.Welcome)
+	r.GET("/status", handlers.ClusterStatus)
+	r.GET("/ping", handlers.Ping)
+
+	r.POST("/users", handlers.CreateUser)
+	r.DELETE("/users/:username", handlers.DeleteUser)
+	r.PUT("/users/:username/refresh-token", handlers.RefreshToken)
+	r.PUT("/users/:username/activation", handlers.UserActivation)
+
+	err := r.Run(listen)
+	if err != nil {
+		log.Printf("[ERROR] Wrror while startup %v", err)
+	}
+}
+
+//func main() {
+//	log.Printf("[-] [INIT] [Timezone: %s]", time.Local)
+//	log.Printf("[-] [INIT] [Listening on %s]", listen)
+//
+//	db, err := users.InitConnection(dbConnectionString)
+//	if err != nil {
+//		log.Printf("[-] [INIT] [Failed to start. Problem with db connection: %v]", err)
+//	}
+//	defer db.Close()
+//
+//	stop := make(chan os.Signal)
+//	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+//
+//	server := &http.Server{
+//		Addr:    listen,
+//		Handler: handler(),
+//	}
+//	e := make(chan error)
+//	go func() {
+//		e <- server.ListenAndServe()
+//	}()
+//	select {
+//	case err := <-e:
+//		log.Fatalf("[-] [INIT] [Failed to start: %v]", err)
+//	case <-stop:
+//	}
+//
+//	log.Printf("[-] [SHUTTING_DOWN] [%s]", gracefulPeriod)
+//	ctx, cancel := context.WithTimeout(context.Background(), gracefulPeriod)
+//	defer cancel()
+//	if err := server.Shutdown(ctx); err != nil {
+//		log.Fatalf("[-] [SHUTTING_DOWN] [Failed to shut down: %v]", err)
+//	}
+//}
 
 func main() {
 	log.Printf("[-] [INIT] [Timezone: %s]", time.Local)
 	log.Printf("[-] [INIT] [Listening on %s]", listen)
 
-	db, err := users.InitConnection(dbConnectionString)
+	db, err := service.InitConnection(dbConnectionString)
 	if err != nil {
 		log.Printf("[-] [INIT] [Failed to start. Problem with db connection: %v]", err)
 	}
+	service.DB = db
 	defer db.Close()
 
-	stop := make(chan os.Signal)
-	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-
-	server := &http.Server{
-		Addr:    listen,
-		Handler: handler(),
-	}
-	e := make(chan error)
-	go func() {
-		e <- server.ListenAndServe()
-	}()
-	select {
-	case err := <-e:
-		log.Fatalf("[-] [INIT] [Failed to start: %v]", err)
-	case <-stop:
-	}
-
-	log.Printf("[-] [SHUTTING_DOWN] [%s]", gracefulPeriod)
-	ctx, cancel := context.WithTimeout(context.Background(), gracefulPeriod)
-	defer cancel()
-	if err := server.Shutdown(ctx); err != nil {
-		log.Fatalf("[-] [SHUTTING_DOWN] [Failed to shut down: %v]", err)
-	}
-
+	registerRoutes()
 }

@@ -1,4 +1,4 @@
-package main
+package handlers
 
 import (
 	"archive/zip"
@@ -8,6 +8,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/gin-gonic/gin"
+	"github.com/zebrunner/esg/utils"
 	"io"
 	"io/ioutil"
 	"log"
@@ -26,8 +28,6 @@ import (
 	"github.com/imdario/mergo"
 	"github.com/zebrunner/esg/event"
 	"github.com/zebrunner/esg/service"
-	"github.com/zebrunner/esg/users"
-	"github.com/zebrunner/esg/webserver"
 
 	"github.com/aerokube/util"
 	"github.com/zebrunner/esg/session"
@@ -99,7 +99,7 @@ func CreateSessionFromCache(sessionID string, r *http.Request, requestId uint64)
 		return nil, fmt.Errorf("Cant unmarshal redis data", err)
 	}
 
-	sessionTimeout, err := getSessionTimeout(s.Caps.SessionTimeout, maxTimeout, timeout)
+	sessionTimeout, err := getSessionTimeout(s.Caps.SessionTimeout, main.maxTimeout, main.timeout)
 	if err != nil {
 		log.Println(err)
 	}
@@ -156,7 +156,7 @@ func createSession(ctx context.Context, sessionUrl string, header http.Header, b
 		}
 	}
 	req.Header.Del("Accept-Encoding")
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	ctx, cancel := context.WithTimeout(ctx, main.timeout)
 	defer cancel()
 	req = req.WithContext(ctx)
 	req.Header.Set("Content-Type", "application/json")
@@ -210,21 +210,8 @@ func getSerial() uint64 {
 	return num
 }
 
-func create(w http.ResponseWriter, r *http.Request) {
-	if username, password, ok := r.BasicAuth(); ok {
-		err := users.CheckAuth(username, password)
-		if err != nil {
-			webserver.JsonError(w, err)
-			return
-		}
-	} else {
-		webserver.JsonError(w, &webserver.HTTPError{
-			Message: "Authorization data not found. Check that you have provided username:password before hub url",
-			Status:  http.StatusUnauthorized,
-		})
-		return
-	}
-
+func create(c *gin.Context) {
+	r := c.Request
 	sessionStartTime := time.Now()
 	requestId := serial()
 	user, remote := util.RequestInfo(r)
@@ -232,7 +219,10 @@ func create(w http.ResponseWriter, r *http.Request) {
 	r.Body.Close()
 	if err != nil {
 		log.Printf("[%d] [%s] [%s] [ERROR_READING_REQUEST] [%v]", requestId, user, remote, err)
-		util.JsonError(w, err.Error(), http.StatusBadRequest)
+		c.Error(&utils.HTTPError{
+			Status: http.StatusBadRequest,
+			Message: err.Error(),
+		})
 		return
 	}
 	var browser struct {
@@ -245,7 +235,10 @@ func create(w http.ResponseWriter, r *http.Request) {
 	err = json.Unmarshal(body, &browser)
 	if err != nil {
 		log.Printf("[%d] [%s] [%s] [BAD_JSON_FORMAT] [%v]", requestId, user, remote, err)
-		util.JsonError(w, err.Error(), http.StatusBadRequest)
+		c.Error(&utils.HTTPError{
+			Status: http.StatusBadRequest,
+			Message: err.Error(),
+		})
 		return
 	}
 	if browser.W3CCaps.Caps.BrowserName() != "" && browser.Caps.BrowserName() == "" {
@@ -264,38 +257,50 @@ func create(w http.ResponseWriter, r *http.Request) {
 		caps = browser.Caps
 		mergo.Merge(&caps, *fmc)
 		caps.ProcessExtensionCapabilities()
-		sessionTimeout, err = getSessionTimeout(caps.SessionTimeout, maxTimeout, timeout)
+		sessionTimeout, err = getSessionTimeout(caps.SessionTimeout, main.maxTimeout, main.timeout)
 		if err != nil {
 			log.Printf("[%d] [%s] [%s] [BAD_SESSION_TIMEOUT] [%s]", requestId, user, remote, caps.SessionTimeout)
-			util.JsonError(w, err.Error(), http.StatusBadRequest)
+			c.Error(&utils.HTTPError{
+				Status: http.StatusBadRequest,
+				Message: err.Error(),
+			})
 			return
 		}
 		resolution, err := getScreenResolution(caps.ScreenResolution)
 		if err != nil {
 			log.Printf("[%d] [%s] [%s] [BAD_SCREEN_RESOLUTION] [%s]", requestId, user, remote, caps.ScreenResolution)
-			util.JsonError(w, err.Error(), http.StatusBadRequest)
+			c.Error(&utils.HTTPError{
+				Status: http.StatusBadRequest,
+				Message: err.Error(),
+			})
 			return
 		}
 		caps.ScreenResolution = resolution
 		videoScreenSize, err := getVideoScreenSize(caps.VideoScreenSize, resolution)
 		if err != nil {
 			log.Printf("[%d] [%s] [%s] [BAD_VIDEO_SCREEN_SIZE] [%s]", requestId, user, remote, caps.VideoScreenSize)
-			util.JsonError(w, err.Error(), http.StatusBadRequest)
+			c.Error(&utils.HTTPError{
+				Status: http.StatusBadRequest,
+				Message: err.Error(),
+			})
 			return
 		}
 		caps.VideoScreenSize = videoScreenSize
 		finalLogName = caps.LogName
-		if logOutputDir != "" && (saveAllLogs || caps.Log) {
-			caps.LogName = getTemporaryFileName(logOutputDir, logFileExtension)
+		if main.logOutputDir != "" && (main.saveAllLogs || caps.Log) {
+			caps.LogName = getTemporaryFileName(main.logOutputDir, logFileExtension)
 		}
-		starter, ok = manager.Find(caps, requestId)
+		starter, ok = main.manager.Find(caps, requestId)
 		if ok {
 			break
 		}
 	}
 	if !ok {
 		log.Printf("[%d] [%s] [%s] [ENVIRONMENT_NOT_AVAILABLE] [%s] [%s]", requestId, user, remote, caps.BrowserName(), caps.Version)
-		util.JsonError(w, "Requested environment is not available", http.StatusBadRequest)
+		c.Error(&utils.HTTPError{
+			Status: http.StatusBadRequest,
+			Message: "Requested environment is not available",
+		})
 		return
 	}
 
@@ -308,7 +313,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 	startedService, err := starter.StartWithCancel(username)
 	if err != nil {
 		log.Printf("[%d] [%s] [%s] [SERVICE_STARTUP_FAILED] [%v]", requestId, user, remote, err)
-		util.JsonError(w, err.Error(), http.StatusInternalServerError)
+		c.Error(err)
 		return
 	}
 	log.Printf("[%d] [%s] [%s] [SERVICE_TASK_ID] [%v]", requestId, user, remote, startedService.TaskID)
@@ -340,7 +345,10 @@ func create(w http.ResponseWriter, r *http.Request) {
 			sess, ok := resp["sessionId"].(string)
 			if !ok {
 				protocolError := func() {
-					webserver.Reply(w, errMsg("protocol error"), http.StatusBadGateway)
+					c.Error(&utils.HTTPError{
+						Status: http.StatusBadGateway,
+						Message: "protocol error",
+					})
 					log.Printf("[%d] [%s] [%s] [BAD_RESPONSE]\n", requestId, user, remote)
 				}
 				value, ok := resp["value"]
@@ -370,7 +378,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 				s.ID = sess
 				resp["sessionId"] = s.ID
 			}
-			webserver.Reply(w, resp, http.StatusOK)
+			c.JSON(http.StatusOK, resp)
 			break
 		} else {
 			log.Printf("[%d] [%s] [%s] [SESSION_FAILED]", requestId, user, remote)
@@ -399,15 +407,15 @@ func create(w http.ResponseWriter, r *http.Request) {
 			SessionId: sessionId,
 			Session:   sess,
 		}
-		if logOutputDir != "" && (saveAllLogs || caps.Log) {
+		if main.logOutputDir != "" && (main.saveAllLogs || caps.Log) {
 			//The following logic will fail if -capture-driver-logs is enabled and a session is requested in driver mode.
 			//Specifying both -log-output-dir and -capture-driver-logs in that case is considered a misconfiguration.
-			oldLogName := filepath.Join(logOutputDir, caps.LogName)
+			oldLogName := filepath.Join(main.logOutputDir, caps.LogName)
 			if finalLogName == "" {
 				finalLogName = sessionId + logFileExtension
 				e.Session.Caps.LogName = finalLogName
 			}
-			newLogName := filepath.Join(logOutputDir, finalLogName)
+			newLogName := filepath.Join(main.logOutputDir, finalLogName)
 			err := os.Rename(oldLogName, newLogName)
 			if err != nil {
 				log.Printf("[%d] [LOG_ERROR] [%s]", requestId, fmt.Sprintf("Failed to rename %s to %s: %v", oldLogName, newLogName, err))
@@ -423,7 +431,7 @@ func create(w http.ResponseWriter, r *http.Request) {
 		event.SessionStopped(event.StoppedSession{e})
 	}
 	sess.Cancel = cancelAndRenameFiles
-	sessions.Put(s.ID, sess)
+	main.sessions.Put(s.ID, sess)
 	redisSession := CachedSession{
 		Quota:    sess.Quota,
 		Caps:     sess.Caps,
@@ -533,7 +541,7 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 			//TODO: candidate to hide on verbose log level
 			log.Printf("[%d] [PROXY_TO] [%s]", requestId, r.URL.Path)
 			var err error = nil
-			sess, ok := sessions.Get(sessionID)
+			sess, ok := main.sessions.Get(sessionID)
 			if !ok {
 				sess, err = CreateSessionFromCache(sessionID, r, requestId)
 				if err != nil {
@@ -550,18 +558,18 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 					close(sess.TimeoutCh)
 				}
 				if r.Method == http.MethodDelete && len(fragments) == 3 {
-					if enableFileUpload {
+					if main.enableFileUpload {
 						os.RemoveAll(filepath.Join(os.TempDir(), sessionID))
 					}
 					cancel = sess.Cancel
-					sessions.Remove(sessionID)
+					main.sessions.Remove(sessionID)
 					rdb.Del(context.Background(), sessionID).Result()
 					log.Printf("[%d] [SESSION_DELETED] [%s]", requestId, sessionID)
 				} else {
 					//					sess.TimeoutCh = onTimeout(sess.Timeout, func() {
 					//						request{r}.session(sessionID).Delete(sess.TaskID)
 					//					})
-					if len(fragments) == 4 && fragments[len(fragments)-1] == "file" && enableFileUpload {
+					if len(fragments) == 4 && fragments[len(fragments)-1] == "file" && main.enableFileUpload {
 						r.Header.Set("X-Selenoid-File", filepath.Join(os.TempDir(), sessionID))
 						r.URL.Path = "/file"
 						return
@@ -570,7 +578,7 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 				r.URL.Host, r.URL.Path = sess.URL.Host, path.Clean(sess.URL.Path+r.URL.Path)
 				return
 			}
-			r.URL.Path = paths.Error
+			r.URL.Path = main.paths.Error
 		},
 		ErrorHandler: defaultErrorHandler(requestId),
 	}).ServeHTTP(w, r)
@@ -588,7 +596,7 @@ func reverseProxy(hostFn func(sess *session.Session) string, status string) func
 	return func(w http.ResponseWriter, r *http.Request) {
 		requestId := serial()
 		sid, remainingPath := splitRequestPath(r.URL.Path)
-		sess, ok := sessions.Get(sid)
+		sess, ok := main.sessions.Get(sid)
 		if ok {
 			(&httputil.ReverseProxy{
 				Director: func(r *http.Request) {
@@ -667,7 +675,7 @@ func vnc(wsconn *websocket.Conn) {
 	defer wsconn.Close()
 	requestId := serial()
 	sid, _ := splitRequestPath(wsconn.Request().URL.Path)
-	sess, ok := sessions.Get(sid)
+	sess, ok := main.sessions.Get(sid)
 	if ok {
 		vncHostPort := sess.HostPort.VNC
 		if vncHostPort != "" {
@@ -701,19 +709,19 @@ const (
 
 func logs(w http.ResponseWriter, r *http.Request) {
 	requestId := serial()
-	fileNameOrSessionID := strings.TrimPrefix(r.URL.Path, paths.Logs)
-	if logOutputDir != "" && (fileNameOrSessionID == "" || strings.HasSuffix(fileNameOrSessionID, logFileExtension)) {
+	fileNameOrSessionID := strings.TrimPrefix(r.URL.Path, main.paths.Logs)
+	if main.logOutputDir != "" && (fileNameOrSessionID == "" || strings.HasSuffix(fileNameOrSessionID, logFileExtension)) {
 		if r.Method == http.MethodDelete {
-			deleteFileIfExists(requestId, w, r, logOutputDir, paths.Logs, "DELETED_LOG_FILE")
+			main.deleteFileIfExists(requestId, w, r, main.logOutputDir, main.paths.Logs, "DELETED_LOG_FILE")
 			return
 		}
 		user, remote := util.RequestInfo(r)
 		if _, ok := r.URL.Query()[jsonParam]; ok {
-			listFilesAsJson(requestId, w, logOutputDir, "LOG_ERROR")
+			listFilesAsJson(requestId, w, main.logOutputDir, "LOG_ERROR")
 			return
 		}
 		log.Printf("[%d] [LOG_LISTING] [%s] [%s]", requestId, user, remote)
-		fileServer := http.StripPrefix(paths.Logs, http.FileServer(http.Dir(logOutputDir)))
+		fileServer := http.StripPrefix(main.paths.Logs, http.FileServer(http.Dir(main.logOutputDir)))
 		fileServer.ServeHTTP(w, r)
 		return
 	}
@@ -723,7 +731,7 @@ func logs(w http.ResponseWriter, r *http.Request) {
 func listFilesAsJson(requestId uint64, w http.ResponseWriter, dir string, errStatus string) {
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
-		log.Printf("[%d] [%s] [%s]", requestId, errStatus, fmt.Sprintf("Failed to list directory %s: %v", logOutputDir, err))
+		log.Printf("[%d] [%s] [%s]", requestId, errStatus, fmt.Sprintf("Failed to list directory %s: %v", main.logOutputDir, err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -739,7 +747,7 @@ func streamLogs(wsconn *websocket.Conn) {
 	defer wsconn.Close()
 	requestId := serial()
 	sid, _ := splitRequestPath(wsconn.Request().URL.Path)
-	sess, ok := sessions.Get(sid)
+	sess, ok := main.sessions.Get(sid)
 	if ok && sess.Container != nil {
 		log.Printf("[%d] [CONTAINER_LOGS] [%s]", requestId, sess.Container.ID)
 		/*
@@ -760,25 +768,6 @@ func streamLogs(wsconn *websocket.Conn) {
 		*/
 	} else {
 		log.Printf("[%d] [SESSION_NOT_FOUND] [%s]", requestId, sid)
-	}
-}
-
-func status(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	ready := limit > sessions.Len()
-	json.NewEncoder(w).Encode(
-		map[string]interface{}{
-			"value": map[string]interface{}{
-				"message": fmt.Sprintf("Selenoid %s built at %s", gitRevision, buildStamp),
-				"ready":   ready,
-			},
-		})
-}
-
-func welcome(w http.ResponseWriter, r *http.Request) {
-	_, err := w.Write([]byte(fmt.Sprintf("Welcome to Zebrunner Elastic Selenoid Grid!")))
-	if err != nil {
-		log.Printf("[ERROR] %s %v", r.URL.String(), err)
 	}
 }
 

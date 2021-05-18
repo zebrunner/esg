@@ -443,7 +443,7 @@ func getFailReason(svc *ecs.ECS, taskId string) (*string, error) {
 	return &resultReason, nil
 }
 
-func GetTasksCount() (*map[string]int, error) {
+func GetTasksCount() (*map[string]interface{}, error) {
 	svc := ecs.New(awsSession.New(&aws.Config{Region: &AwsRegion, MaxRetries: &AwsRetry}))
 	listInput := ecs.ListTasksInput{
 		Cluster: &AwsCluster,
@@ -456,11 +456,13 @@ func GetTasksCount() (*map[string]int, error) {
 			log.Printf("[ERROR] [ListTasks] %v", err)
 			return nil, err
 		}
+		if len(listResult.TaskArns) == 0 {
+			break
+		}
 		listInput.NextToken = listResult.NextToken
 
 		describeInput := ecs.DescribeTasksInput{
 			Cluster: &AwsCluster,
-			Include: []*string{aws.String("LastStatus")},
 			Tasks: listResult.TaskArns,
 		}
 		describeResult, err := svc.DescribeTasks(&describeInput)
@@ -475,12 +477,23 @@ func GetTasksCount() (*map[string]int, error) {
 		}
 	}
 
-	result := map[string]int{}
+	result := map[string]int{
+		"PROVISIONING": 0,
+		"PENDING": 0,
+		"ACTIVATING": 0,
+		"RUNNING": 0,
+		"DEACTIVATING": 0,
+		"STOPPING": 0,
+		"DEPROVISIONING": 0,
+		"STOPPED": 0,
+	}
 	for _, task := range tasks {
 		result[*task.LastStatus] += 1
 	}
 
-	return &result, nil
+	return &map[string]interface{}{
+		"tasks": result,
+	}, nil
 }
 
 func getEcsPortConfig() (*ecsPortConfig, error) {
