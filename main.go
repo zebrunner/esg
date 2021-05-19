@@ -180,7 +180,6 @@ func video(w http.ResponseWriter, r *http.Request) {
 	}
 	user, remote := util.RequestInfo(r)
 	if _, ok := r.URL.Query()[handlers.JsonParam]; ok {
-		//handlers.listFilesAsJson(requestId, w, videoOutputDir, "VIDEO_ERROR")
 		handlers.ListFilesAsJson(w, handlers.VideoOutputDir, "VIDEO_ERROR")
 		return
 	}
@@ -219,7 +218,7 @@ var paths = struct {
 	File:      "/file",
 	//Ping:      "/ping",
 	Error:     "/error",
-	WdHub:     "/wd/hub",
+	//WdHub:     "/wd/hub",
 	//Welcome:   "/",
 	//Users:     "/users",
 }
@@ -239,7 +238,7 @@ func handler() http.Handler {
 	//root.HandleFunc(paths.Status, clusterStatus)
 	//root.HandleFunc(paths.Ping, ping)
 	root.Handle(paths.VNC, websocket.Handler(handlers.Vnc))
-	root.HandleFunc(paths.Logs, handlers.Logs)
+	//root.HandleFunc(paths.Logs, handlers.Logs)
 	root.HandleFunc(paths.Video, video)
 	root.HandleFunc(paths.Download, handlers.ReverseProxy(func(sess *session.Session) string { return sess.HostPort.Fileserver }, "DOWNLOADING_FILE"))
 	root.HandleFunc(paths.Clipboard, handlers.ReverseProxy(func(sess *session.Session) string { return sess.HostPort.Clipboard }, "CLIPBOARD"))
@@ -312,6 +311,8 @@ func registerRoutes() {
 	r.Any("/wd/hub/*action", ReverseProxy())
 	r.POST("/session", handlers.Create)
 	r.Any("/session/*action", handlers.Proxy)
+	r.GET("/logs/:session", handlers.Logs)
+	r.GET("/video/:session", handlers.Video)
 
 	err := r.Run(listen)
 	if err != nil {

@@ -733,26 +733,64 @@ const (
 	JsonParam = "json"
 )
 
-func Logs(w http.ResponseWriter, r *http.Request) {
-	//requestId := serial()
-	//fileNameOrSessionID := strings.TrimPrefix(r.URL.Path, paths.Logs)
-	fileNameOrSessionID := strings.TrimPrefix(r.URL.Path, "/logs")
-	if LogOutputDir != "" && (fileNameOrSessionID == "" || strings.HasSuffix(fileNameOrSessionID, logFileExtension)) {
-		if r.Method == http.MethodDelete {
-			deleteFileIfExists(w, r, LogOutputDir, "/logs", "DELETED_LOG_FILE")
-			return
-		}
-		user, remote := util.RequestInfo(r)
-		if _, ok := r.URL.Query()[JsonParam]; ok {
-			ListFilesAsJson(w, LogOutputDir, "LOG_ERROR")
-			return
-		}
-		log.Printf("[LOG_LISTING] [%s] [%s]", user, remote)
-		fileServer := http.StripPrefix("/logs", http.FileServer(http.Dir(LogOutputDir)))
-		fileServer.ServeHTTP(w, r)
+//func Logs(w http.ResponseWriter, r *http.Request) {
+//	//requestId := serial()
+//	//fileNameOrSessionID := strings.TrimPrefix(r.URL.Path, paths.Logs)
+//	fileNameOrSessionID := strings.TrimPrefix(r.URL.Path, "/logs")
+//	if LogOutputDir != "" && (fileNameOrSessionID == "" || strings.HasSuffix(fileNameOrSessionID, logFileExtension)) {
+//		if r.Method == http.MethodDelete {
+//			deleteFileIfExists(w, r, LogOutputDir, "/logs", "DELETED_LOG_FILE")
+//			return
+//		}
+//		user, remote := util.RequestInfo(r)
+//		if _, ok := r.URL.Query()[JsonParam]; ok {
+//			ListFilesAsJson(w, LogOutputDir, "LOG_ERROR")
+//			return
+//		}
+//		log.Printf("[LOG_LISTING] [%s] [%s]", user, remote)
+//		fileServer := http.StripPrefix("/logs", http.FileServer(http.Dir(LogOutputDir)))
+//		fileServer.ServeHTTP(w, r)
+//		return
+//	}
+//	websocket.Handler(streamLogs).ServeHTTP(w, r)
+//}
+
+func Logs(c *gin.Context) {
+	user, _, ok := c.Request.BasicAuth()
+	if !ok {
+		c.Error(&utils.HTTPError{
+			Status: http.StatusBadRequest,
+			Message: "Auth data not provided"},
+		).SetType(gin.ErrorTypePublic)
 		return
 	}
-	websocket.Handler(streamLogs).ServeHTTP(w, r)
+	sessionID := c.Param("session")
+	logFile := strings.Join([]string{user, "artifacts", "test-sessions", sessionID, "session.log"}, "/")
+	presignedUrl, err := service.GeneratePreSignedURL(logFile)
+	if err != nil {
+		log.Printf("[URL GENERATION FAILED] %v", err)
+		return
+	}
+	c.Redirect(http.StatusFound, presignedUrl)
+}
+
+func Video(c *gin.Context) {
+	user, _, ok := c.Request.BasicAuth()
+	if !ok {
+		c.Error(&utils.HTTPError{
+			Status: http.StatusBadRequest,
+			Message: "Auth data not provided"},
+		).SetType(gin.ErrorTypePublic)
+		return
+	}
+	sessionID := c.Param("session")
+	videoFile := strings.Join([]string{user, "artifacts", "test-sessions", sessionID, "video.mp4"}, "/")
+	presignedUrl, err := service.GeneratePreSignedURL(videoFile)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	c.Redirect(http.StatusFound, presignedUrl)
 }
 
 func ListFilesAsJson(w http.ResponseWriter, dir string, errStatus string) {

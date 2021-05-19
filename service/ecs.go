@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"github.com/aws/aws-sdk-go/service/s3"
 
 	"log"
 	"math/rand"
@@ -616,4 +617,22 @@ func RemoveTask(taskArn string) {
 	} else {
 		log.Printf("[TASK_DEFINITION_REMOVED] [%s]", *resultTaskDeregister.TaskDefinition.TaskDefinitionArn)
 	}
+}
+
+func GeneratePreSignedURL(key string) (string, error) {
+	sess, err := awsSession.NewSession(&aws.Config{Region: &AwsRegion})
+	if err != nil {
+		return "", err
+	}
+	s3Svc := s3.New(sess)
+	req, _ := s3Svc.GetObjectRequest(&s3.GetObjectInput{
+		Bucket: &S3Bucket,
+		Key: &key,
+	})
+	urlStr, err := req.Presign(10*time.Minute)
+	if err != nil {
+		return "", err
+	}
+
+	return urlStr, nil
 }
