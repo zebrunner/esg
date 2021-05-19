@@ -1,7 +1,6 @@
 package service
 
 import (
-	"context"
 	"fmt"
 
 	"log"
@@ -46,7 +45,7 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	if err != nil {
 		return nil, fmt.Errorf("configuring ports: %v", err)
 	}
-	ctx := context.Background()
+	//ctx := context.Background()
 	/*	log.Printf("[%d] [CREATING_CONTAINER] [%s]", requestId, image)
 		hostConfig := ctr.HostConfig{
 			ExtraHosts: getExtraHosts(d.Service, d.Caps),
@@ -320,7 +319,7 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 
 	err = svc.WaitUntilTasksRunning(describeTaskInput)
 	if err != nil {
-		RemoveTask(ctx, requestId, taskArn)
+		RemoveTask(taskArn)
 		failReason, reasonErr := getFailReason(svc, taskId)
 		if reasonErr == nil {
 			return nil, fmt.Errorf("Unable to wait until task is running: %v", *failReason)
@@ -331,7 +330,7 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 
 	resultDescribeTask, err := svc.DescribeTasks(describeTaskInput)
 	if err != nil {
-		RemoveTask(ctx, requestId, taskArn)
+		RemoveTask(taskArn)
 		return nil, fmt.Errorf("Unable to describe task: %v", err)
 		//        } else {
 		//            log.Printf("[%d] [TASK_DESCRIBE] [%s]", requestId, resultDescribeTask)
@@ -352,7 +351,7 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	}
 	resultContainerInstance, err := svc.DescribeContainerInstances(containerInstanceInput)
 	if err != nil {
-		RemoveTask(ctx, requestId, taskArn)
+		RemoveTask(taskArn)
 		return nil, fmt.Errorf("Unable to get container instance details: %v", err)
 		//        } else {
 		//           log.Printf("[%d] [TASK_CONTAINER_INSTANCE_DETAILS] [%s]", requestId, resultContainerInstance)
@@ -373,20 +372,20 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	svcEc2 := ec2.New(awsSession.New(&aws.Config{Region: &AwsRegion}))
 	resultInstance, err := svcEc2.DescribeInstances(instanceInput)
 	if err != nil {
-		RemoveTask(ctx, requestId, taskArn)
+		RemoveTask(taskArn)
 		return nil, fmt.Errorf("Unable to get instance details: %v", err)
 		//        } else {
 		//           log.Printf("[%d] [TASK_INSTANCE_DETAILS] [%s]", requestId, resultInstance)
 	}
 	privateIpAddress := *resultInstance.Reservations[0].Instances[0].PrivateIpAddress
 	log.Printf("[%d] [INSTANCE_PRIVATE_IP] [%s]", requestId, privateIpAddress)
-	//	publicIpAddress := *resultInstance.Reservations[0].Instances[0].PublicIpAddress
-	//	log.Printf("[%d] [INSTANCE_PUBLIC_IP] [%s]", requestId, publicIpAddress)
+	publicIpAddress := *resultInstance.Reservations[0].Instances[0].PublicIpAddress
+	log.Printf("[%d] [INSTANCE_PUBLIC_IP] [%s]", requestId, publicIpAddress)
 
 	browserTaskStartTime := time.Now()
 	log.Printf("[%d] [TASK_STARTED] [%s] [%s] [%.2fs]", requestId, imageUrl, taskId, util.SecondsSince(browserTaskStartTime))
 
-	hostPort := getTaskHostPort(d.Caps, privateIpAddress, portConfig)
+	hostPort := getTaskHostPort(d.Caps, publicIpAddress, portConfig)
 	log.Printf("[%d] [HOST_PORT] [%s]", requestId, hostPort)
 
 	u := &url.URL{Scheme: "http", Host: hostPort.Selenium, Path: d.Service.Path}
@@ -395,7 +394,7 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	serviceStartTime := time.Now()
 	err = wait(u.String(), d.StartupTimeout)
 	if err != nil {
-		RemoveTask(ctx, requestId, taskArn)
+		RemoveTask(taskArn)
 		return nil, fmt.Errorf("wait: %v", err)
 	}
 	log.Printf("[%d] [SERVICE_STARTED] [%s] [%s] [%.2fs]", requestId, imageUrl, taskId, util.SecondsSince(serviceStartTime))
@@ -415,7 +414,7 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 		TaskID:   taskId,
 		HostPort: hostPort,
 		Cancel: func() {
-			RemoveTask(ctx, requestId, taskArn)
+			RemoveTask(taskArn)
 		},
 	}
 
@@ -587,8 +586,8 @@ func getTaskHostPort(caps session.Caps, taskIP string, pc *ecsPortConfig) sessio
 	return hp
 }
 
-func RemoveTask(ctx context.Context, requestId uint64, taskArn string) {
-	log.Printf("[%d] [REMOVING_TASK] [%s]", requestId, taskArn)
+func RemoveTask(taskArn string) {
+	log.Printf("[%d] [REMOVING_TASK] [%s]", taskArn)
 
 	//TODO: parametrize region
 	// #33: increased number of retries to fix "ThrottlingException: Rate exceeded"
@@ -602,7 +601,7 @@ func RemoveTask(ctx context.Context, requestId uint64, taskArn string) {
 
 	resultStopTask, err := svc.StopTask(stopTaskInput)
 	if err != nil {
-		log.Printf("[%d] [FAILED_TO_STOP_TASK] [%s] [%v]", requestId, taskArn, err)
+		log.Printf("[FAILED_TO_STOP_TASK] [%s] [%v]", taskArn, err)
 		return
 	}
 	taskDefinitionArn := *resultStopTask.Task.TaskDefinitionArn
@@ -612,9 +611,9 @@ func RemoveTask(ctx context.Context, requestId uint64, taskArn string) {
 	}
 	resultTaskDeregister, err := svc.DeregisterTaskDefinition(taskDeregisterInput)
 	if err != nil {
-		log.Printf("[%d] [FAILED_TO_DEREGISTER_TASK_DEFINITION] [%s] [%v]", requestId, taskDefinitionArn, err)
+		log.Printf("[FAILED_TO_DEREGISTER_TASK_DEFINITION] [%s] [%v]", taskDefinitionArn, err)
 		return
 	} else {
-		log.Printf("[%d] [TASK_DEFINITION_REMOVED] [%s]", requestId, *resultTaskDeregister.TaskDefinition.TaskDefinitionArn)
+		log.Printf("[TASK_DEFINITION_REMOVED] [%s]", *resultTaskDeregister.TaskDefinition.TaskDefinitionArn)
 	}
 }

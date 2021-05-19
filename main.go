@@ -4,6 +4,7 @@ import (
 	"flag"
 	"github.com/gin-gonic/gin"
 	"github.com/zebrunner/esg/utils"
+	"net/http/httputil"
 
 	//"github.com/zebrunner/esg/webserver"
 	"log"
@@ -26,46 +27,46 @@ import (
 )
 
 var (
-	hostname                 string
-	enableFileUpload         bool
+	//hostname                 string
+	//enableFileUpload         bool
 	listen                   string
-	timeout                  time.Duration
-	maxTimeout               time.Duration
-	newSessionAttemptTimeout time.Duration
-	sessionDeleteTimeout     time.Duration
-	serviceStartupTimeout    time.Duration
+	//timeout                  time.Duration
+	//maxTimeout               time.Duration
+	//newSessionAttemptTimeout time.Duration
+	//sessionDeleteTimeout     time.Duration
+	//serviceStartupTimeout    time.Duration
 	gracefulPeriod           time.Duration
-	limit                    int
+	//limit                    int
 	retryCount               int
-	sessions                 = session.NewMap()
-	captureDriverLogs        bool
-	videoOutputDir           string
-	videoRecorderImage       string
-	logOutputDir             string
-	saveAllLogs              bool
-	manager                  service.Manager
+	//sessions                 = session.NewMap()
+	//captureDriverLogs        bool
+	//videoOutputDir           string
+	//videoRecorderImage       string
+	//logOutputDir             string
+	//saveAllLogs              bool
+	//manager                  service.Manager
 	dbConnectionString       string
 
 	version     bool
-	gitRevision = "HEAD"
-	buildStamp  = "unknown"
+	//gitRevision = "HEAD"
+	//buildStamp  = "unknown"
 )
 
 func init() {
-	flag.BoolVar(&enableFileUpload, "enable-file-upload", false, "File upload support")
+	flag.BoolVar(&handlers.EnableFileUpload, "enable-file-upload", false, "File upload support")
 	flag.StringVar(&listen, "listen", ":4444", "Network address to accept connections")
 	flag.IntVar(&retryCount, "retry-count", 1, "New session attempts retry count")
-	flag.DurationVar(&timeout, "timeout", 60*time.Second, "Session idle timeout in time.Duration format")
-	flag.DurationVar(&maxTimeout, "max-timeout", 1*time.Hour, "Maximum valid session idle timeout in time.Duration format")
-	flag.DurationVar(&newSessionAttemptTimeout, "session-attempt-timeout", 30*time.Second, "New session attempt timeout in time.Duration format")
-	flag.DurationVar(&sessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
-	flag.DurationVar(&serviceStartupTimeout, "service-startup-timeout", 30*time.Second, "Service startup timeout in time.Duration format")
+	flag.DurationVar(&handlers.Timeout, "timeout", 60*time.Second, "Session idle timeout in time.Duration format")
+	flag.DurationVar(&handlers.MaxTimeout, "max-timeout", 1*time.Hour, "Maximum valid session idle timeout in time.Duration format")
+	//flag.DurationVar(&handlers.newSessionAttemptTimeout, "session-attempt-timeout", 30*time.Second, "New session attempt timeout in time.Duration format")
+	flag.DurationVar(&handlers.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
+	flag.DurationVar(&handlers.ServiceStartupTimeout, "service-startup-timeout", 30*time.Second, "Service startup timeout in time.Duration format")
 	flag.BoolVar(&version, "version", false, "Show version and exit")
-	flag.BoolVar(&captureDriverLogs, "capture-driver-logs", false, "Whether to add driver process logs to Selenoid output")
-	flag.StringVar(&videoOutputDir, "video-output-dir", "video", "Directory to save recorded video to")
-	flag.StringVar(&videoRecorderImage, "video-recorder-image", "selenoid/video-recorder:latest-release", "Image to use as video recorder")
-	flag.StringVar(&logOutputDir, "log-output-dir", "", "Directory to save session log to")
-	flag.BoolVar(&saveAllLogs, "save-all-logs", false, "Whether to save all logs without considering capabilities")
+	flag.BoolVar(&handlers.CaptureDriverLogs, "capture-driver-logs", false, "Whether to add driver process logs to Selenoid output")
+	flag.StringVar(&handlers.VideoOutputDir, "video-output-dir", "video", "Directory to save recorded video to")
+	flag.StringVar(&handlers.VideoRecorderImage, "video-recorder-image", "selenoid/video-recorder:latest-release", "Image to use as video recorder")
+	flag.StringVar(&handlers.LogOutputDir, "log-output-dir", "", "Directory to save session log to")
+	flag.BoolVar(&handlers.SaveAllLogs, "save-all-logs", false, "Whether to save all logs without considering capabilities")
 	flag.DurationVar(&gracefulPeriod, "graceful-period", 300*time.Second, "graceful shutdown period in time.Duration format, e.g. 300s or 500ms")
 	// AWS Related args
 	flag.StringVar(&service.AwsRegion, "aws-region", "us-east-1", "AWS region name")
@@ -88,46 +89,47 @@ func init() {
 	flag.Parse()
 
 	handlers.InitESG()
+	handlers.InitManager()
 
 	var err error
-	hostname, err = os.Hostname()
+	//hostname, err = os.Hostname()
+	//if err != nil {
+	//	log.Fatalf("[-] [INIT] [%s: %v]", os.Args[0], err)
+	//}
+	handlers.VideoOutputDir, err = filepath.Abs(handlers.VideoOutputDir)
 	if err != nil {
-		log.Fatalf("[-] [INIT] [%s: %v]", os.Args[0], err)
+		log.Fatalf("[-] [INIT] [Invalid video output dir %s: %v]", handlers.VideoOutputDir, err)
 	}
-	videoOutputDir, err = filepath.Abs(videoOutputDir)
+	err = os.MkdirAll(handlers.VideoOutputDir, os.FileMode(0644))
 	if err != nil {
-		log.Fatalf("[-] [INIT] [Invalid video output dir %s: %v]", videoOutputDir, err)
+		log.Fatalf("[-] [INIT] [Failed to create video output dir %s: %v]", handlers.VideoOutputDir, err)
 	}
-	err = os.MkdirAll(videoOutputDir, os.FileMode(0644))
-	if err != nil {
-		log.Fatalf("[-] [INIT] [Failed to create video output dir %s: %v]", videoOutputDir, err)
-	}
-	log.Printf("[-] [INIT] [Video Dir: %s]", videoOutputDir)
+	log.Printf("[-] [INIT] [Video Dir: %s]", handlers.VideoOutputDir)
 
-	if logOutputDir != "" {
-		logOutputDir, err = filepath.Abs(logOutputDir)
+	if handlers.LogOutputDir != "" {
+		handlers.LogOutputDir, err = filepath.Abs(handlers.LogOutputDir)
 		if err != nil {
-			log.Fatalf("[-] [INIT] [Invalid log output dir %s: %v]", logOutputDir, err)
+			log.Fatalf("[-] [INIT] [Invalid log output dir %s: %v]", handlers.LogOutputDir, err)
 		}
-		err = os.MkdirAll(logOutputDir, os.FileMode(0644))
+		err = os.MkdirAll(handlers.LogOutputDir, os.FileMode(0644))
 		if err != nil {
-			log.Fatalf("[-] [INIT] [Failed to create log output dir %s: %v]", logOutputDir, err)
+			log.Fatalf("[-] [INIT] [Failed to create log output dir %s: %v]", handlers.LogOutputDir, err)
 		}
-		log.Printf("[-] [INIT] [Logs Dir: %s]", logOutputDir)
-		if saveAllLogs {
+		log.Printf("[-] [INIT] [Logs Dir: %s]", handlers.LogOutputDir)
+		if handlers.SaveAllLogs {
 			log.Printf("[-] [INIT] [Saving all logs]")
 		}
 	}
 
-	environment := service.Environment{
-		StartupTimeout:       serviceStartupTimeout,
-		SessionDeleteTimeout: sessionDeleteTimeout,
-		CaptureDriverLogs:    captureDriverLogs,
-		VideoOutputDir:       videoOutputDir,
-		VideoContainerImage:  videoRecorderImage,
-		LogOutputDir:         logOutputDir,
-		SaveAllLogs:          saveAllLogs,
-	}
+	//environment := service.Environment{
+	//	StartupTimeout:       serviceStartupTimeout,
+	//	SessionDeleteTimeout: sessionDeleteTimeout,
+	//	CaptureDriverLogs:    captureDriverLogs,
+	//	VideoOutputDir:       videoOutputDir,
+	//	VideoContainerImage:  videoRecorderImage,
+	//	LogOutputDir:         logOutputDir,
+	//	SaveAllLogs:          saveAllLogs,
+	//}
 	/*
 		dockerHost := os.Getenv("DOCKER_HOST")
 		if dockerHost == "" {
@@ -140,24 +142,24 @@ func init() {
 		ip, _, _ := net.SplitHostPort(u.Host)
 		environment.IP = ip
 	*/
-	manager = &service.DefaultManager{Environment: &environment}
+	//manager = &service.DefaultManager{Environment: &environment}
 }
 
-var seleniumPaths = struct {
-	CreateSession, ProxySession string
-}{
-	CreateSession: "/session",
-	ProxySession:  "/session/",
-}
+//var seleniumPaths = struct {
+//	CreateSession, ProxySession string
+//}{
+//	CreateSession: "/session",
+//	ProxySession:  "/session/",
+//}
 
-func selenium() http.Handler {
-	mux := http.NewServeMux()
-	//mux.HandleFunc(seleniumPaths.CreateSession, post(create))
-	mux.HandleFunc(seleniumPaths.ProxySession, handlers.proxy)
-	//mux.HandleFunc(paths.Status, status)
-	//mux.HandleFunc(paths.Welcome, welcome)
-	return mux
-}
+//func selenium() http.Handler {
+//	mux := http.NewServeMux()
+//	mux.HandleFunc(seleniumPaths.CreateSession, post(create))
+//	mux.HandleFunc(seleniumPaths.ProxySession, handlers.Proxy)
+//	mux.HandleFunc(paths.Status, status)
+//	mux.HandleFunc(paths.Welcome, welcome)
+//	return mux
+//}
 
 func post(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -170,22 +172,24 @@ func post(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func video(w http.ResponseWriter, r *http.Request) {
-	requestId := handlers.serial()
+	//requestId := handlers.serial()
 	if r.Method == http.MethodDelete {
-		deleteFileIfExists(requestId, w, r, videoOutputDir, paths.Video, "DELETED_VIDEO_FILE")
+		//deleteFileIfExists(requestId, w, r, videoOutputDir, paths.Video, "DELETED_VIDEO_FILE")
+		deleteFileIfExists(w, r, handlers.VideoOutputDir, paths.Video, "DELETED_VIDEO_FILE")
 		return
 	}
 	user, remote := util.RequestInfo(r)
-	if _, ok := r.URL.Query()[handlers.jsonParam]; ok {
-		handlers.listFilesAsJson(requestId, w, videoOutputDir, "VIDEO_ERROR")
+	if _, ok := r.URL.Query()[handlers.JsonParam]; ok {
+		//handlers.listFilesAsJson(requestId, w, videoOutputDir, "VIDEO_ERROR")
+		handlers.ListFilesAsJson(w, handlers.VideoOutputDir, "VIDEO_ERROR")
 		return
 	}
-	log.Printf("[%d] [VIDEO_LISTING] [%s] [%s]", requestId, user, remote)
-	fileServer := http.StripPrefix(paths.Video, http.FileServer(http.Dir(videoOutputDir)))
+	log.Printf("[VIDEO_LISTING] [%s] [%s]", user, remote)
+	fileServer := http.StripPrefix(paths.Video, http.FileServer(http.Dir(handlers.VideoOutputDir)))
 	fileServer.ServeHTTP(w, r)
 }
 
-func deleteFileIfExists(requestId uint64, w http.ResponseWriter, r *http.Request, dir string, prefix string, status string) {
+func deleteFileIfExists(w http.ResponseWriter, r *http.Request, dir string, prefix string, status string) {
 	user, remote := util.RequestInfo(r)
 	fileName := strings.TrimPrefix(r.URL.Path, prefix)
 	filePath := filepath.Join(dir, fileName)
@@ -199,7 +203,7 @@ func deleteFileIfExists(requestId uint64, w http.ResponseWriter, r *http.Request
 		http.Error(w, fmt.Sprintf("Failed to delete file %s: %v", filePath, err), http.StatusInternalServerError)
 		return
 	}
-	log.Printf("[%d] [%s] [%s] [%s] [%s]", requestId, status, user, remote, fileName)
+	log.Printf("[%s] [%s] [%s] [%s]", status, user, remote, fileName)
 }
 
 var paths = struct {
@@ -211,38 +215,38 @@ var paths = struct {
 	Devtools:  "/devtools/",
 	Download:  "/download/",
 	Clipboard: "/clipboard/",
-	Status:    "/status",
+	//Status:    "/status",
 	File:      "/file",
-	Ping:      "/ping",
+	//Ping:      "/ping",
 	Error:     "/error",
 	WdHub:     "/wd/hub",
-	Welcome:   "/",
-	Users:     "/users",
+	//Welcome:   "/",
+	//Users:     "/users",
 }
 
 func handler() http.Handler {
 	root := http.NewServeMux()
-	root.HandleFunc(paths.WdHub+"/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Add("Content-Type", "application/json")
-		r.URL.Scheme = "http"
-		r.URL.Host = (&handlers.request{r}).localaddr()
-		r.URL.Path = strings.TrimPrefix(r.URL.Path, paths.WdHub)
-		selenium().ServeHTTP(w, r)
-	})
+	//root.HandleFunc(paths.WdHub+"/", func(w http.ResponseWriter, r *http.Request) {
+	//	w.Header().Add("Content-Type", "application/json")
+	//	r.URL.Scheme = "http"
+	//	r.URL.Host = (&handlers.Request{r}).Localaddr()
+	//	r.URL.Path = strings.TrimPrefix(r.URL.Path, paths.WdHub)
+	//	selenium().ServeHTTP(w, r)
+	//})
 	root.HandleFunc(paths.Error, func(w http.ResponseWriter, r *http.Request) {
 		util.JsonError(w, "Session timed out or not found", http.StatusNotFound)
 	})
 	//root.HandleFunc(paths.Status, clusterStatus)
 	//root.HandleFunc(paths.Ping, ping)
-	root.Handle(paths.VNC, websocket.Handler(handlers.vnc))
-	root.HandleFunc(paths.Logs, handlers.logs)
+	root.Handle(paths.VNC, websocket.Handler(handlers.Vnc))
+	root.HandleFunc(paths.Logs, handlers.Logs)
 	root.HandleFunc(paths.Video, video)
-	root.HandleFunc(paths.Download, handlers.reverseProxy(func(sess *session.Session) string { return sess.HostPort.Fileserver }, "DOWNLOADING_FILE"))
-	root.HandleFunc(paths.Clipboard, handlers.reverseProxy(func(sess *session.Session) string { return sess.HostPort.Clipboard }, "CLIPBOARD"))
-	root.HandleFunc(paths.Devtools, handlers.reverseProxy(func(sess *session.Session) string { return sess.HostPort.Devtools }, "DEVTOOLS"))
-	if enableFileUpload {
-		root.HandleFunc(paths.File, handlers.fileUpload)
-	}
+	root.HandleFunc(paths.Download, handlers.ReverseProxy(func(sess *session.Session) string { return sess.HostPort.Fileserver }, "DOWNLOADING_FILE"))
+	root.HandleFunc(paths.Clipboard, handlers.ReverseProxy(func(sess *session.Session) string { return sess.HostPort.Clipboard }, "CLIPBOARD"))
+	root.HandleFunc(paths.Devtools, handlers.ReverseProxy(func(sess *session.Session) string { return sess.HostPort.Devtools }, "DEVTOOLS"))
+	//if enableFileUpload {
+	//	root.HandleFunc(paths.File, handlers.FileUpload)
+	//}
 	//root.HandleFunc(paths.Welcome, welcome)
 
 	//root.HandleFunc(paths.Users, users.UserHandler)
@@ -276,6 +280,21 @@ func ErrorHandler(c *gin.Context) {
 	})
 }
 
+func ReverseProxy() gin.HandlerFunc {
+	// TODO: Replace hardcoded target
+	target := "localhost:4442"
+	return func(c *gin.Context) {
+		director := func(req *http.Request) {
+			req.URL.Scheme = "http"
+			req.URL.Host = target
+			req.URL.Path = strings.TrimPrefix(req.URL.Path, "/wd/hub")
+			req.Host = target
+		}
+		proxy := &httputil.ReverseProxy{Director: director}
+		proxy.ServeHTTP(c.Writer, c.Request)
+	}
+}
+
 func registerRoutes() {
 	r := gin.Default()
 
@@ -289,6 +308,10 @@ func registerRoutes() {
 	r.DELETE("/users/:username", handlers.DeleteUser)
 	r.PUT("/users/:username/refresh-token", handlers.RefreshToken)
 	r.PUT("/users/:username/activation", handlers.UserActivation)
+
+	r.Any("/wd/hub/*action", ReverseProxy())
+	r.POST("/session", handlers.Create)
+	r.Any("/session/*action", handlers.Proxy)
 
 	err := r.Run(listen)
 	if err != nil {
