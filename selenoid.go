@@ -775,9 +775,11 @@ func status(w http.ResponseWriter, _ *http.Request) {
 		})
 }
 
-func welcome(w http.ResponseWriter, _ *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(fmt.Sprintf("You are using Selenoid %s!", gitRevision)))
+func welcome(w http.ResponseWriter, r *http.Request) {
+	_, err := w.Write([]byte(fmt.Sprintf("Welcome to Zebrunner Elastic Selenoid Grid!")))
+	if err != nil {
+		log.Printf("[ERROR] %s %v", r.URL.String(), err)
+	}
 }
 
 func onTimeout(t time.Duration, f func()) chan struct{} {

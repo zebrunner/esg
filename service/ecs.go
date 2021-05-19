@@ -94,12 +94,12 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 				MemoryReservation: &memoryReservation,
 				Privileged:        aws.Bool(true), //privileged mode is needed to start browser driver correctly
 				MountPoints: []*ecs.MountPoint{
-					&ecs.MountPoint{
+					{
 						ContainerPath: aws.String("/dev/shm"),
 						ReadOnly:      aws.Bool(false),
 						SourceVolume:  aws.String("devshm"),
 					},
-					&ecs.MountPoint{
+					{
 						ContainerPath: aws.String("/tmp/log"),
 						ReadOnly:      aws.Bool(false),
 						SourceVolume:  aws.String(sharedVolume),
@@ -107,33 +107,33 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 				},
 				Environment: []*ecs.KeyValuePair{
 					//TODO: provide extra values from caps
-					&ecs.KeyValuePair{
+					{
 						Name:  aws.String("UUID"),
 						Value: aws.String(uuid),
 					},
-					&ecs.KeyValuePair{
+					{
 						Name:  aws.String("VERBOSE"),
 						Value: aws.String("1"),
 					},
 				},
 				PortMappings: []*ecs.PortMapping{
-					&ecs.PortMapping{
+					{
 						ContainerPort: aws.Int64(d.Service.Port),
 						HostPort:      aws.Int64(portConfig.SeleniumPort),
 					},
-					&ecs.PortMapping{
+					{
 						ContainerPort: aws.Int64(5900),
 						HostPort:      aws.Int64(portConfig.VNCPort),
 					},
-					&ecs.PortMapping{
+					{
 						ContainerPort: aws.Int64(7070),
 						HostPort:      aws.Int64(portConfig.DevtoolsPort),
 					},
-					&ecs.PortMapping{
+					{
 						ContainerPort: aws.Int64(8080),
 						HostPort:      aws.Int64(portConfig.FileserverPort),
 					},
-					&ecs.PortMapping{
+					{
 						ContainerPort: aws.Int64(9090),
 						HostPort:      aws.Int64(portConfig.ClipboardPort),
 					},
@@ -152,37 +152,37 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 				},
 				Environment: []*ecs.KeyValuePair{
 					//TODO: provide extra values from caps
-					&ecs.KeyValuePair{
+					{
 						Name:  aws.String("BROWSER_CONTAINER_NAME"),
 						Value: aws.String(browserContainerName),
 					},
-					&ecs.KeyValuePair{
+					{
 						Name:  aws.String("UUID"),
 						Value: aws.String(uuid),
 					},
-					&ecs.KeyValuePair{
+					{
 						Name:  aws.String("BUCKET"),
 						Value: &S3Bucket,
 					},
-					&ecs.KeyValuePair{
+					{
 						Name:  aws.String("TENANT"),
 						Value: &username,
 					},
-					&ecs.KeyValuePair{
+					{
 						Name:  aws.String("AWS_ACCESS_KEY_ID"),
 						Value: &AwsAccessKeyID,
 					},
-					&ecs.KeyValuePair{
+					{
 						Name:  aws.String("AWS_SECRET_ACCESS_KEY"),
 						Value: &AwsSecretAccessKey,
 					},
-					&ecs.KeyValuePair{
+					{
 						Name:  aws.String("AWS_DEFAULT_REGION"),
 						Value: &AwsRegion,
 					},
 				},
 				MountPoints: []*ecs.MountPoint{
-					&ecs.MountPoint{
+					{
 						ContainerPath: aws.String("/data"),
 						ReadOnly:      aws.Bool(false),
 						SourceVolume:  aws.String(sharedVolume),
@@ -193,13 +193,13 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 		},
 		Family: aws.String(taskDefFamily),
 		Volumes: []*ecs.Volume{
-			&ecs.Volume{
+			{
 				Host: &ecs.HostVolumeProperties{
 					SourcePath: aws.String("/dev/shm"),
 				},
 				Name: aws.String("devshm"),
 			},
-			&ecs.Volume{
+			{
 				Host: &ecs.HostVolumeProperties{
 					SourcePath: aws.String(sharedFolder),
 				},
