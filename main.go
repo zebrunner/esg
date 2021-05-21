@@ -208,16 +208,16 @@ func deleteFileIfExists(w http.ResponseWriter, r *http.Request, dir string, pref
 var paths = struct {
 	Video, VNC, Logs, Devtools, Download, Clipboard, File, Ping, Status, Error, WdHub, Welcome, Users string
 }{
-	Video:     "/video/",
+	//Video:     "/video/",
 	VNC:       "/vnc/",
-	Logs:      "/logs/",
+	//Logs:      "/logs/",
 	Devtools:  "/devtools/",
 	Download:  "/download/",
 	Clipboard: "/clipboard/",
 	//Status:    "/status",
 	File:      "/file",
 	//Ping:      "/ping",
-	Error:     "/error",
+	//Error:     "/error",
 	//WdHub:     "/wd/hub",
 	//Welcome:   "/",
 	//Users:     "/users",
@@ -239,7 +239,7 @@ func handler() http.Handler {
 	//root.HandleFunc(paths.Ping, ping)
 	root.Handle(paths.VNC, websocket.Handler(handlers.Vnc))
 	//root.HandleFunc(paths.Logs, handlers.Logs)
-	root.HandleFunc(paths.Video, video)
+	//root.HandleFunc(paths.Video, video)
 	root.HandleFunc(paths.Download, handlers.ReverseProxy(func(sess *session.Session) string { return sess.HostPort.Fileserver }, "DOWNLOADING_FILE"))
 	root.HandleFunc(paths.Clipboard, handlers.ReverseProxy(func(sess *session.Session) string { return sess.HostPort.Clipboard }, "CLIPBOARD"))
 	root.HandleFunc(paths.Devtools, handlers.ReverseProxy(func(sess *session.Session) string { return sess.HostPort.Devtools }, "DEVTOOLS"))
@@ -299,7 +299,7 @@ func registerRoutes() {
 
 	r.Use(ErrorHandler)
 
-	r.GET("/welcome", handlers.Welcome)
+	r.GET("/", handlers.Welcome)
 	r.GET("/status", handlers.ClusterStatus)
 	r.GET("/ping", handlers.Ping)
 

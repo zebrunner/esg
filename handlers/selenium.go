@@ -645,56 +645,60 @@ func splitRequestPath(p string) (string, string) {
 	return fragments[2], slash + strings.Join(fragments[3:], slash)
 }
 
-func FileUpload(w http.ResponseWriter, r *http.Request) {
-	var jsonRequest struct {
-		File []byte `json:"file"`
+func File(c *gin.Context) {
+	var body struct {
+		File []byte `json:"file" binding:"required"`
 	}
-	err := json.NewDecoder(r.Body).Decode(&jsonRequest)
+	err := c.ShouldBindJSON(&body)
 	if err != nil {
-		util.JsonError(w, err.Error(), http.StatusBadRequest)
+		c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
-	z, err := zip.NewReader(bytes.NewReader(jsonRequest.File), int64(len(jsonRequest.File)))
+	z, err := zip.NewReader(bytes.NewReader(body.File), int64(len(body.File)))
 	if err != nil {
-		util.JsonError(w, err.Error(), http.StatusBadRequest)
+		c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
 	if len(z.File) != 1 {
-		util.JsonError(w, fmt.Sprintf("Expected there to be only 1 file. There were: %d", len(z.File)), http.StatusBadRequest)
+		c.Error(&utils.HTTPError{
+			Status: http.StatusBadRequest,
+			Message: fmt.Sprintf("Expected there to be only 1 file. There were: %d", len(z.File)),
+		}).SetType(gin.ErrorTypePublic)
 		return
 	}
 	file := z.File[0]
 	src, err := file.Open()
 	if err != nil {
-		util.JsonError(w, err.Error(), http.StatusBadRequest)
+		c.Error(&utils.HTTPError{
+			Status: http.StatusBadRequest,
+			Message: err.Error(),
+		}).SetType(gin.ErrorTypePublic)
 		return
 	}
 	defer src.Close()
-	dir := r.Header.Get("X-Selenoid-File")
+
+	dir := c.GetHeader("X-Selenoid-File")
 	err = os.MkdirAll(dir, 0755)
 	if err != nil {
-		util.JsonError(w, err.Error(), http.StatusInternalServerError)
+		c.Error(err)
 		return
 	}
 	fileName := filepath.Join(dir, file.Name)
 	dst, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
-		util.JsonError(w, err.Error(), http.StatusInternalServerError)
+		c.Error(err)
 		return
 	}
 	defer dst.Close()
 	_, err = io.Copy(dst, src)
 	if err != nil {
-		util.JsonError(w, err.Error(), http.StatusInternalServerError)
+		c.Error(err)
 		return
 	}
 
-	reply := struct {
-		V string `json:"value"`
-	}{
-		V: fileName,
-	}
-	json.NewEncoder(w).Encode(reply)
+	c.JSON(http.StatusOK, gin.H{
+		"value": fileName,
+	})
 }
 
 func Vnc(wsconn *websocket.Conn) {
@@ -732,28 +736,6 @@ func Vnc(wsconn *websocket.Conn) {
 const (
 	JsonParam = "json"
 )
-
-//func Logs(w http.ResponseWriter, r *http.Request) {
-//	//requestId := serial()
-//	//fileNameOrSessionID := strings.TrimPrefix(r.URL.Path, paths.Logs)
-//	fileNameOrSessionID := strings.TrimPrefix(r.URL.Path, "/logs")
-//	if LogOutputDir != "" && (fileNameOrSessionID == "" || strings.HasSuffix(fileNameOrSessionID, logFileExtension)) {
-//		if r.Method == http.MethodDelete {
-//			deleteFileIfExists(w, r, LogOutputDir, "/logs", "DELETED_LOG_FILE")
-//			return
-//		}
-//		user, remote := util.RequestInfo(r)
-//		if _, ok := r.URL.Query()[JsonParam]; ok {
-//			ListFilesAsJson(w, LogOutputDir, "LOG_ERROR")
-//			return
-//		}
-//		log.Printf("[LOG_LISTING] [%s] [%s]", user, remote)
-//		fileServer := http.StripPrefix("/logs", http.FileServer(http.Dir(LogOutputDir)))
-//		fileServer.ServeHTTP(w, r)
-//		return
-//	}
-//	websocket.Handler(streamLogs).ServeHTTP(w, r)
-//}
 
 func Logs(c *gin.Context) {
 	user, _, ok := c.Request.BasicAuth()
@@ -806,33 +788,6 @@ func ListFilesAsJson(w http.ResponseWriter, dir string, errStatus string) {
 	}
 	w.Header().Add("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(ret)
-}
-
-func streamLogs(wsconn *websocket.Conn) {
-	defer wsconn.Close()
-	sid, _ := splitRequestPath(wsconn.Request().URL.Path)
-	sess, ok := sessions.Get(sid)
-	if ok && sess.Container != nil {
-		log.Printf("[%d] [CONTAINER_LOGS] [%s]", sess.Container.ID)
-		/*
-			r, err := cli.ContainerLogs(wsconn.Request().Context(), sess.Container.ID, types.ContainerLogsOptions{
-				ShowStdout: true,
-				ShowStderr: true,
-				Follow:     true,
-			})
-			if err != nil {
-				log.Printf("[%d] [CONTAINER_LOGS_ERROR] [%v]", requestId, err)
-				return
-			}
-
-			defer r.Close()
-			wsconn.PayloadType = websocket.BinaryFrame
-			stdcopy.StdCopy(wsconn, wsconn, r)
-			log.Printf("[%d] [CONTAINER_LOGS_DISCONNECTED] [%s]", requestId, sid)
-		*/
-	} else {
-		log.Printf("[SESSION_NOT_FOUND] [%s]", sid)
-	}
 }
 
 func deleteFileIfExists(w http.ResponseWriter, r *http.Request, dir string, prefix string, status string) {
