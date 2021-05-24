@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"github.com/gin-gonic/gin"
-	"github.com/zebrunner/esg/utils"
 	"golang.org/x/net/websocket"
 	"net/http/httputil"
 
@@ -143,7 +142,7 @@ func RunServer() {
 	r := gin.Default()
 
 	api := r.Group("/api")
-	api.Use(utils.APIErrorHandler)
+	api.Use(handlers.APIError)
 	{
 		api.POST("/users", handlers.CreateUser)
 		api.DELETE("/users/:username", handlers.DeleteUser)
@@ -152,7 +151,7 @@ func RunServer() {
 	}
 
 	hub := r.Group("/")
-	hub.Use(utils.SeleniumErrorHandler)
+	hub.Use(handlers.SeleniumError)
 	{
 		hub.GET("/", handlers.Welcome)
 		hub.GET("/status", handlers.ClusterStatus)
