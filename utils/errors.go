@@ -1,5 +1,12 @@
 package utils
 
+import (
+	"fmt"
+	"github.com/gin-gonic/gin"
+	"log"
+	"net/http"
+)
+
 type HTTPError struct {
 	Status  int
 	Message string
@@ -9,30 +16,70 @@ func (err *HTTPError) Error() string {
 	return err.Message
 }
 
-type ErrorResponse struct {
+type APIErrorResponse struct {
 	Error   string      `json:"error"`
 	Payload interface{} `json:"payload"`
 }
 
-//func JsonError(c *gin.Context, e error) {
-//	if httpError, ok := e.(*HTTPError); ok {
-//		body := gin.H{
-//			"status": httpError.Status,
-//			"value": map[string]interface{}{
-//				"payload": httpError.Response,
-//				"message": httpError.Message,
-//			},
-//		}
-//		c.JSON(httpError.Status, body)
-//	} else {
-//		log.Printf("[INTERNAL SERVER ERROR] [500] [%s]", e)
-//		body := gin.H{
-//			"status": http.StatusInternalServerError,
-//			"value": map[string]interface{}{
-//				"message": "Internal server error happend. Details saved in logs",
-//				"payload": nil,
-//			},
-//		}
-//		c.JSON(http.StatusInternalServerError, body)
-//	}
-//}
+type SeleniumError struct {
+	Err string
+	Message string
+}
+
+func (err *SeleniumError) Error() string {
+	return fmt.Sprintf("Error: %s. Message: %s", err.Err, err.Message)
+}
+
+func APIErrorHandler(c *gin.Context) {
+	c.Next()
+	if c.Errors.Last() == nil {
+		return
+	}
+
+	log.Println(c.Errors.String())
+	status := http.StatusInternalServerError
+	message := "Internal server error happened. All error details collected in logs"
+	var meta interface{}
+	publicError := c.Errors.ByType(gin.ErrorTypePublic).Last()
+	if publicError != nil {
+		httpError, ok := publicError.Err.(*HTTPError)
+		if ok {
+			status = httpError.Status
+			message = httpError.Message
+		}
+		meta = publicError.Meta
+	}
+	c.JSON(status, APIErrorResponse{
+		Error:  message,
+		Payload: meta,
+	})
+}
+
+func SeleniumErrorHandler(c * gin.Context) {
+	c.Next()
+	if c.Errors.Last() == nil {
+		return
+	}
+
+	log.Println(c.Errors.String())
+	status := http.StatusInternalServerError
+	message := "Internal server error happened. All error details collected in logs"
+	var meta interface{}
+	publicError := c.Errors.ByType(gin.ErrorTypePublic).Last()
+	if publicError != nil {
+		httpError, ok := publicError.Err.(*SeleniumError)
+		if ok {
+			message = httpError.Message
+		}
+		meta = publicError.Meta
+	}
+	c.JSON(status, gin.H{
+		"value": gin.H{
+			"error": "unknown error",
+			"message": message,
+			"data": meta,
+		},
+		"status": 13,
+	})
+	c.Abort()
+}

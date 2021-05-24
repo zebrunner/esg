@@ -375,8 +375,6 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	if err != nil {
 		RemoveTask(taskArn)
 		return nil, fmt.Errorf("Unable to get instance details: %v", err)
-		//        } else {
-		//           log.Printf("[%d] [TASK_INSTANCE_DETAILS] [%s]", requestId, resultInstance)
 	}
 	privateIpAddress := *resultInstance.Reservations[0].Instances[0].PrivateIpAddress
 	log.Printf("[%d] [INSTANCE_PRIVATE_IP] [%s]", requestId, privateIpAddress)
