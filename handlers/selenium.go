@@ -54,7 +54,7 @@ var (
 	}
 	num                   uint64
 	numLock               sync.RWMutex
-	rdb                   *redis.Client
+	RDB                   *redis.Client
 	sessions              = session.NewMap()
 	Timeout               time.Duration
 	MaxTimeout            time.Duration
@@ -101,20 +101,12 @@ type CachedSession struct {
 	TaskID   string
 }
 
-func InitESG() {
-	rdb = redis.NewClient(&redis.Options{
-		Addr:     service.AwsElasticCache,
-		Password: "",
-		DB:       0,
-	})
-}
-
 func (s CachedSession) MarshalBinary() ([]byte, error) {
 	return json.Marshal(s)
 }
 
 func CreateSessionFromCache(sessionID string, r *http.Request) (*session.Session, error) {
-	result, err := rdb.Get(context.Background(), sessionID).Result()
+	result, err := RDB.Get(context.Background(), sessionID).Result()
 	if err != nil {
 		return nil, fmt.Errorf("Error happened while getting session from cache. %v", err)
 	}
@@ -467,7 +459,7 @@ func Create(c *gin.Context) {
 		Started:  sess.Started,
 		TaskID:   startedService.TaskID,
 	}
-	err = rdb.Set(context.Background(), s.ID, redisSession, 0).Err()
+	err = RDB.Set(context.Background(), s.ID, redisSession, 0).Err()
 	if err != nil {
 		fmt.Println("Session not cached", err)
 	}
@@ -588,7 +580,7 @@ func Proxy(c *gin.Context) {
 					}
 					cancel = sess.Cancel
 					sessions.Remove(sessionID)
-					rdb.Del(context.Background(), sessionID).Result()
+					RDB.Del(context.Background(), sessionID).Result()
 					log.Printf("[SESSION_DELETED] [%s]", sessionID)
 				} else {
 					//					sess.TimeoutCh = onTimeout(sess.Timeout, func() {

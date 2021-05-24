@@ -67,7 +67,6 @@ func init() {
 
 	flag.Parse()
 
-	handlers.InitESG()
 	handlers.InitManager()
 
 	var err error
@@ -138,7 +137,7 @@ func ReverseProxy() gin.HandlerFunc {
 	}
 }
 
-func RunServer() {
+func CreateRouter() *gin.Engine {
 	r := gin.Default()
 
 	api := r.Group("/api")
@@ -169,10 +168,7 @@ func RunServer() {
 		})
 	}
 
-	err := r.Run(listen)
-	if err != nil {
-		log.Printf("[ERROR] Wrror while startup %v", err)
-	}
+	return r
 }
 
 func main() {
@@ -186,5 +182,13 @@ func main() {
 	service.DB = db
 	defer db.Close()
 
-	RunServer()
+	rdb := service.InitCache()
+	handlers.RDB = rdb
+	defer rdb.Close()
+
+	router := CreateRouter()
+	err = router.Run(listen)
+	if err != nil {
+		log.Printf("[ERROR] Wrror while startup %v", err)
+	}
 }
