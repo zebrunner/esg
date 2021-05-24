@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"github.com/zebrunner/esg/utils"
+	"log"
 	"net/http"
 
 	"github.com/jackc/pgtype"
@@ -138,10 +139,12 @@ func CheckAuth(name, password string) error {
 	}
 	user, err := GetUser(name)
 	if err != nil {
+		log.Println(err)
 		return &authenticationError
 	}
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	if err != nil {
+		log.Println(err)
 		return &authenticationError
 	}
 	if !user.IsActive {

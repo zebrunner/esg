@@ -154,11 +154,11 @@ func RunServer() {
 	hub.Use(handlers.SeleniumError)
 	{
 		hub.GET("/", handlers.Welcome)
-		hub.GET("/status", handlers.ClusterStatus)
+		hub.GET("/status", handlers.Authentication, handlers.ClusterStatus)
 		hub.GET("/ping", handlers.Ping)
 
 		hub.Any("/wd/hub/*action", ReverseProxy())
-		hub.POST("/session", handlers.Create)
+		hub.POST("/session", handlers.Authentication, handlers.Create)
 		hub.Any("/session/*action", handlers.Proxy)
 		hub.GET("/logs/:session", handlers.Logs)
 		hub.GET("/video/:session", handlers.Video)

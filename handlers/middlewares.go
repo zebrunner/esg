@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
 	"log"
 	"net/http"
@@ -32,7 +33,7 @@ func APIError(c *gin.Context) {
 	})
 }
 
-func SeleniumError(c * gin.Context) {
+func SeleniumError(c *gin.Context) {
 	c.Next()
 	if c.Errors.Last() == nil {
 		return
@@ -58,5 +59,25 @@ func SeleniumError(c * gin.Context) {
 		},
 		"status": 13,
 	})
-	c.Abort()
+}
+
+func Authentication(c *gin.Context) {
+	username, password, ok := c.Request.BasicAuth()
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"message": "Auth credentials not found",
+		})
+		c.Abort()
+		return
+	}
+
+	err := service.CheckAuth(username, password)
+	log.Printf("Error while authentication process. %v, User: %s; Password: %s", err, username, password)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"message": "Provided credentials not valid",
+		})
+		c.Abort()
+		return
+	}
 }
