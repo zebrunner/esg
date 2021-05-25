@@ -5,7 +5,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/net/websocket"
 	"net/http/httputil"
-
 	//"github.com/zebrunner/esg/webserver"
 	"log"
 
@@ -16,10 +15,8 @@ import (
 
 	"path/filepath"
 
-	"github.com/aerokube/util"
 	"github.com/zebrunner/esg/handlers"
 	"github.com/zebrunner/esg/service"
-	"github.com/zebrunner/esg/session"
 )
 
 var (
@@ -40,7 +37,7 @@ func init() {
 	//flag.DurationVar(&service.newSessionAttemptTimeout, "session-attempt-timeout", 30*time.Second, "New session attempt timeout in time.Duration format")
 	flag.DurationVar(&handlers.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
 	flag.DurationVar(&handlers.ServiceStartupTimeout, "service-startup-timeout", 30*time.Second, "Service startup timeout in time.Duration format")
-	flag.BoolVar(&version, "version", false, "Show version and exit")
+	//flag.BoolVar(&version, "version", false, "Show version and exit")
 	flag.BoolVar(&handlers.CaptureDriverLogs, "capture-driver-logs", false, "Whether to add driver process logs to Selenoid output")
 	//flag.StringVar(&handlers.VideoOutputDir, "video-output-dir", "video", "Directory to save recorded video to")
 	flag.StringVar(&handlers.VideoRecorderImage, "video-recorder-image", "selenoid/video-recorder:latest-release", "Image to use as video recorder")
@@ -99,28 +96,25 @@ func init() {
 		}
 	}
 }
+//
+//var paths = struct {
+//	Video, VNC, Logs, Devtools, Download, Clipboard, File, Ping, Status, Error, WdHub, Welcome, Users string
+//}{
+//	VNC:       "/vnc/",
+//	Devtools:  "/devtools/",
+//	Download:  "/download/",
+//	Clipboard: "/clipboard/",
+//	File:      "/file",
+//}
 
-var paths = struct {
-	Video, VNC, Logs, Devtools, Download, Clipboard, File, Ping, Status, Error, WdHub, Welcome, Users string
-}{
-	VNC:       "/vnc/",
-	Devtools:  "/devtools/",
-	Download:  "/download/",
-	Clipboard: "/clipboard/",
-	File:      "/file",
-}
-
-func handler() http.Handler {
-	root := http.NewServeMux()
-	root.HandleFunc(paths.Error, func(w http.ResponseWriter, r *http.Request) {
-		util.JsonError(w, "Session timed out or not found", http.StatusNotFound)
-	})
-	//root.Handle(paths.VNC, websocket.Handler(handlers.Vnc))
-	root.HandleFunc(paths.Download, handlers.ReverseProxy(func(sess *session.Session) string { return sess.HostPort.Fileserver }, "DOWNLOADING_FILE"))
-	root.HandleFunc(paths.Clipboard, handlers.ReverseProxy(func(sess *session.Session) string { return sess.HostPort.Clipboard }, "CLIPBOARD"))
-	root.HandleFunc(paths.Devtools, handlers.ReverseProxy(func(sess *session.Session) string { return sess.HostPort.Devtools }, "DEVTOOLS"))
-	return root
-}
+// TODO: Realize support for requests
+//func handler() http.Handler {
+//	root := http.NewServeMux()
+//	root.HandleFunc(paths.Download, handlers.ReverseProxy(func(sess *session.Session) string { return sess.HostPort.Fileserver }, "DOWNLOADING_FILE"))
+//	root.HandleFunc(paths.Clipboard, handlers.ReverseProxy(func(sess *session.Session) string { return sess.HostPort.Clipboard }, "CLIPBOARD"))
+//	root.HandleFunc(paths.Devtools, handlers.ReverseProxy(func(sess *session.Session) string { return sess.HostPort.Devtools }, "DEVTOOLS"))
+//	return root
+//}
 
 func ReverseProxy() gin.HandlerFunc {
 	// TODO: Replace hardcoded target
@@ -166,6 +160,12 @@ func CreateRouter() *gin.Engine {
 			handler := websocket.Handler(handlers.Vnc)
 			handler.ServeHTTP(c.Writer, c.Request)
 		})
+
+		hub.Any("/file/:session", handlers.File)
+
+		hub.GET("/download/:session/:file", handlers.Downloads)
+		hub.GET("/clipboard/:session", handlers.Clipboard)
+		hub.GET("/devtools/:session", handlers.Devtools)
 	}
 
 	return r

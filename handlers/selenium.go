@@ -799,6 +799,50 @@ func deleteFileIfExists(w http.ResponseWriter, r *http.Request, dir string, pref
 	log.Printf("[%s] [%s] [%s] [%s]", status, user, remote, fileName)
 }
 
+func Downloads(c *gin.Context) {
+	sessionID := c.Param("session")
+	filename := c.Param("file")
+	sess, err := CreateSessionFromCache(sessionID, c.Request)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	fileUrl := url.URL{
+		Host: sess.HostPort.Fileserver,
+		Path: filename,
+	}
+	c.Redirect(http.StatusFound, fileUrl.String())
+}
+
+func Clipboard(c *gin.Context) {
+	sessionID := c.Param("session")
+	sess, err := CreateSessionFromCache(sessionID, c.Request)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	fileUrl := url.URL{
+		Host: sess.HostPort.Clipboard,
+	}
+	c.Redirect(http.StatusFound, fileUrl.String())
+}
+
+func Devtools(c *gin.Context) {
+	sessionID := c.Param("session")
+	sess, err := CreateSessionFromCache(sessionID, c.Request)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	fileUrl := url.URL{
+		Host: sess.HostPort.Devtools,
+	}
+	c.Redirect(http.StatusFound, fileUrl.String())
+}
+
 func onTimeout(t time.Duration, f func()) chan struct{} {
 	cancel := make(chan struct{})
 	go func(cancel chan struct{}) {
