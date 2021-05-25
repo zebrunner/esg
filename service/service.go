@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"github.com/go-redis/redis/v8"
 	"log"
 	"net/http"
 	"net/url"
@@ -83,6 +84,14 @@ type Browser struct {
 	Image string
 	Path  string
 	Port  int64
+}
+
+func InitCache() *redis.Client {
+	return redis.NewClient(&redis.Options{
+		Addr:     AwsElasticCache,
+		Password: "",
+		DB:       0,
+	})
 }
 
 // Find - default implementation Manager interface

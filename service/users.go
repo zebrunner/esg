@@ -1,18 +1,20 @@
-package users
+package service
 
 import (
+	"fmt"
+	"github.com/zebrunner/esg/utils"
+	"log"
 	"net/http"
 
 	"github.com/jackc/pgtype"
 	_ "github.com/jackc/pgx/v4/stdlib"
 	"github.com/jmoiron/sqlx"
 	"github.com/sethvargo/go-password/password"
-	"github.com/zebrunner/esg/webserver"
 	"golang.org/x/crypto/bcrypt"
 )
 
 var (
-	db *sqlx.DB
+	DB *sqlx.DB
 )
 
 type User struct {
@@ -39,14 +41,13 @@ func InitConnection(connectionString string) (*sqlx.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	db = client
-	return db, nil
+	return client, nil
 }
 
 func CreateUser(name string) (string, error) {
 	dbUser, _ := GetUser(name)
 	if dbUser != nil {
-		return "", &webserver.HTTPError{
+		return "", &utils.HTTPError{
 			Message: "User with this name already exists",
 			Status:  http.StatusBadRequest,
 		}
@@ -62,7 +63,7 @@ func CreateUser(name string) (string, error) {
 	}
 
 	createQuery := `INSERT INTO users (name, password) VALUES ($1, $2)`
-	_, err = db.Exec(createQuery, name, string(passwordHash))
+	_, err = DB.Exec(createQuery, name, string(passwordHash))
 	if err != nil {
 		return "", err
 	}
@@ -73,12 +74,12 @@ func CreateUser(name string) (string, error) {
 func GetUser(name string) (*User, error) {
 	getQuery := `SELECT id, name, password, is_active FROM users WHERE is_deleted = false AND name = $1`
 	user := User{}
-	err := db.Get(&user, getQuery, name)
+	err := DB.Get(&user, getQuery, name)
 	if err != nil {
 		if err.Error() == "sql: no rows in result set" {
-			return nil, &webserver.HTTPError{
-				Status:  404,
-				Message: err.Error(),
+			return nil, &utils.HTTPError{
+				Status:  http.StatusNotFound,
+				Message: fmt.Sprintf("User with name %s not found", name),
 			}
 		} else {
 			return nil, err
@@ -93,7 +94,7 @@ func ActivationUser(name string, isActive bool) error {
 		return err
 	}
 	invalidateQuery := `UPDATE users SET is_active = $1, updated_at = now() WHERE users.id = $2`
-	_, err = db.Exec(invalidateQuery, isActive, user.ID)
+	_, err = DB.Exec(invalidateQuery, isActive, user.ID)
 	if err != nil {
 		return err
 	}
@@ -105,20 +106,20 @@ func RefreshToken(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	password, err := generatePassword()
+	pwd, err := generatePassword()
 	if err != nil {
 		return "", err
 	}
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(pwd), bcrypt.DefaultCost)
 	if err != nil {
 		return "", err
 	}
 	refreshQuery := `UPDATE users SET password = $1, updated_at = now() WHERE id = $2`
-	_, err = db.Exec(refreshQuery, passwordHash, user.ID)
+	_, err = DB.Exec(refreshQuery, passwordHash, user.ID)
 	if err != nil {
 		return "", err
 	}
-	return password, nil
+	return pwd, nil
 }
 
 func DeleteUser(name string) error {
@@ -127,26 +128,28 @@ func DeleteUser(name string) error {
 		return err
 	}
 	deleteQuery := `UPDATE users SET is_deleted=true WHERE id = $1`
-	db.Exec(deleteQuery, user.ID)
+	DB.Exec(deleteQuery, user.ID)
 	return nil
 }
 
 func CheckAuth(name, password string) error {
-	authenticationError := &webserver.HTTPError{
+	authenticationError := utils.HTTPError{
 		Status:  http.StatusUnauthorized,
 		Message: "Invalid username or password",
 	}
 	user, err := GetUser(name)
 	if err != nil {
-		return authenticationError
+		log.Println(err)
+		return &authenticationError
 	}
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	if err != nil {
-		return authenticationError
+		log.Println(err)
+		return &authenticationError
 	}
 	if !user.IsActive {
 		authenticationError.Message = "User deactivated, authorization not alowed."
-		return authenticationError
+		return &authenticationError
 	}
 	return nil
 }
