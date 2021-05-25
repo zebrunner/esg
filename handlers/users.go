@@ -12,7 +12,7 @@ type CreateUserModel struct {
 }
 
 type UserActivationModel struct {
-	IsActive bool `json:"is_active" binding:"required" type:"bool"`
+	IsActive bool `json:"is_active" type:"bool"`
 }
 
 func CreateUser(c *gin.Context) {
@@ -93,7 +93,7 @@ func UserActivation(c *gin.Context) {
 		return
 	}
 
-	err = service.ActivationUser(user, true)
+	err = service.ActivationUser(user, body.IsActive)
 	if err != nil {
 		c.Error(err).SetType(gin.ErrorTypePublic)
 		return
