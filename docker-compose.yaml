@@ -1,4 +1,4 @@
-version: "3.9"
+version: "3.3"
 services: 
   grid:
     container_name: esg-grid
@@ -6,6 +6,8 @@ services:
     ports: 
         - "4444:4444"
         - "4445:4445"
+    volumes:
+      - "/home/ubuntu/.aws:/root/.aws"
     links:
       - redis
       - db
