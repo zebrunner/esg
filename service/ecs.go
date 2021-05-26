@@ -384,7 +384,7 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	browserTaskStartTime := time.Now()
 	log.Printf("[%d] [TASK_STARTED] [%s] [%s] [%.2fs]", requestId, imageUrl, taskId, util.SecondsSince(browserTaskStartTime))
 
-	hostPort := getTaskHostPort(d.Caps, publicIpAddress, portConfig)
+	hostPort := getTaskHostPort(d.Caps, privateIpAddress, portConfig)
 	log.Printf("[%d] [HOST_PORT] [%s]", requestId, hostPort)
 
 	u := &url.URL{Scheme: "http", Host: hostPort.Selenium, Path: d.Service.Path}
@@ -461,7 +461,7 @@ func GetTasksCount() (*map[string]interface{}, error) {
 
 		describeInput := ecs.DescribeTasksInput{
 			Cluster: &AwsCluster,
-			Tasks: listResult.TaskArns,
+			Tasks:   listResult.TaskArns,
 		}
 		describeResult, err := svc.DescribeTasks(&describeInput)
 		if err != nil {
@@ -476,14 +476,14 @@ func GetTasksCount() (*map[string]interface{}, error) {
 	}
 
 	result := map[string]int{
-		"PROVISIONING": 0,
-		"PENDING": 0,
-		"ACTIVATING": 0,
-		"RUNNING": 0,
-		"DEACTIVATING": 0,
-		"STOPPING": 0,
+		"PROVISIONING":   0,
+		"PENDING":        0,
+		"ACTIVATING":     0,
+		"RUNNING":        0,
+		"DEACTIVATING":   0,
+		"STOPPING":       0,
 		"DEPROVISIONING": 0,
-		"STOPPED": 0,
+		"STOPPED":        0,
 	}
 	for _, task := range tasks {
 		result[*task.LastStatus] += 1
@@ -625,9 +625,9 @@ func GeneratePreSignedURL(key string) (string, error) {
 	s3Svc := s3.New(sess)
 	req, _ := s3Svc.GetObjectRequest(&s3.GetObjectInput{
 		Bucket: &S3Bucket,
-		Key: &key,
+		Key:    &key,
 	})
-	urlStr, err := req.Presign(10*time.Minute)
+	urlStr, err := req.Presign(10 * time.Minute)
 	if err != nil {
 		return "", err
 	}

@@ -20,12 +20,12 @@ import (
 )
 
 var (
-	listen                   string
-	gracefulPeriod           time.Duration
-	retryCount               int
-	dbConnectionString       string
+	listen             string
+	gracefulPeriod     time.Duration
+	retryCount         int
+	dbConnectionString string
 
-	version     bool
+	version bool
 )
 
 func init() {
@@ -96,6 +96,7 @@ func init() {
 		}
 	}
 }
+
 //
 //var paths = struct {
 //	Video, VNC, Logs, Devtools, Download, Clipboard, File, Ping, Status, Error, WdHub, Welcome, Users string
@@ -118,7 +119,7 @@ func init() {
 
 func ReverseProxy() gin.HandlerFunc {
 	// TODO: Replace hardcoded target
-	target := "localhost:4442"
+	target := "localhost" + listen
 	return func(c *gin.Context) {
 		director := func(req *http.Request) {
 			req.URL.Scheme = "http"
