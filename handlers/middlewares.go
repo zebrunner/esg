@@ -1,11 +1,12 @@
 package handlers
 
 import (
+	"log"
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
-	"log"
-	"net/http"
 )
 
 func APIError(c *gin.Context) {
@@ -28,7 +29,7 @@ func APIError(c *gin.Context) {
 		meta = publicError.Meta
 	}
 	c.JSON(status, utils.APIErrorResponse{
-		Error:  message,
+		Error:   message,
 		Payload: meta,
 	})
 }
@@ -53,9 +54,9 @@ func SeleniumError(c *gin.Context) {
 	}
 	c.JSON(status, gin.H{
 		"value": gin.H{
-			"error": "unknown error",
+			"error":   "unknown error",
 			"message": message,
-			"data": meta,
+			"data":    meta,
 		},
 		"status": 13,
 	})
@@ -72,8 +73,8 @@ func Authentication(c *gin.Context) {
 	}
 
 	err := service.CheckAuth(username, password)
-	log.Printf("Error while authentication process. %v, User: %s; Password: %s", err, username, password)
 	if err != nil {
+		log.Printf("Error while authentication process. %v, User: %s; Password: %s", err, username, password)
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"message": "Provided credentials not valid",
 		})
