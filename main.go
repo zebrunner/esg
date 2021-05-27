@@ -165,7 +165,10 @@ func CreateRouter() *gin.Engine {
 		hub.Any("/file/:session", handlers.File)
 
 		hub.GET("/download/:session/:file", handlers.Downloads)
+
 		hub.GET("/clipboard/:session", handlers.Clipboard)
+		hub.POST("/clipboard/:session", handlers.Clipboard)
+
 		hub.GET("/devtools/:session", handlers.Devtools)
 	}
 

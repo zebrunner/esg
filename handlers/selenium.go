@@ -823,10 +823,13 @@ func Clipboard(c *gin.Context) {
 		return
 	}
 
-	fileUrl := url.URL{
-		Host: sess.HostPort.Clipboard,
+	director := func(req *http.Request) {
+		req.URL.Scheme = "http"
+		req.URL.Host = sess.HostPort.Clipboard
+		req.Host = sess.HostPort.Clipboard
 	}
-	c.Redirect(http.StatusFound, fileUrl.String())
+	proxy := &httputil.ReverseProxy{Director: director}
+	proxy.ServeHTTP(c.Writer, c.Request)
 }
 
 func Devtools(c *gin.Context) {
