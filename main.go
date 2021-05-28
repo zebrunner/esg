@@ -161,6 +161,10 @@ func CreateRouter() *gin.Engine {
 			handler := websocket.Handler(handlers.Vnc)
 			handler.ServeHTTP(c.Writer, c.Request)
 		})
+		hub.GET("/ws/vnc/:session", func(c *gin.Context) {
+			handler := websocket.Handler(handlers.Vnc)
+			handler.ServeHTTP(c.Writer, c.Request)
+		})
 
 		hub.Any("/file/:session", handlers.File)
 
