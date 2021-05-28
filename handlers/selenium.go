@@ -808,11 +808,15 @@ func Downloads(c *gin.Context) {
 		return
 	}
 
-	fileUrl := url.URL{
-		Host: sess.HostPort.Fileserver,
-		Path: filename,
+	director := func(req *http.Request) {
+		req.URL.Scheme = "http"
+		req.URL.Host = sess.HostPort.Fileserver
+		req.Host = sess.HostPort.Fileserver
+		req.URL.Path = "/" + filename
 	}
-	c.Redirect(http.StatusFound, fileUrl.String())
+	proxy := &httputil.ReverseProxy{Director: director}
+	fmt.Println(c.Request)
+	proxy.ServeHTTP(c.Writer, c.Request)
 }
 
 func Clipboard(c *gin.Context) {
