@@ -8,8 +8,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/gin-gonic/gin"
-	"github.com/zebrunner/esg/utils"
 	"io"
 	"io/ioutil"
 	"log"
@@ -24,6 +22,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/zebrunner/esg/utils"
 
 	"github.com/imdario/mergo"
 	"github.com/zebrunner/esg/event"
@@ -634,7 +635,15 @@ func ReverseProxy(hostFn func(sess *session.Session) string, status string) func
 
 func splitRequestPath(p string) (string, string) {
 	fragments := strings.Split(p, slash)
-	return fragments[2], slash + strings.Join(fragments[3:], slash)
+	vncIndex := 0
+	for i, fragment := range fragments {
+		if fragment == "vnc" {
+			vncIndex = i
+			break
+		}
+	}
+	return fragments[vncIndex+1], slash + strings.Join(fragments[vncIndex+2:], slash)
+	// return fragments[2], slash + strings.Join(fragments[3:], slash)
 }
 
 func File(c *gin.Context) {
@@ -653,7 +662,7 @@ func File(c *gin.Context) {
 	}
 	if len(z.File) != 1 {
 		c.Error(&utils.HTTPError{
-			Status: http.StatusBadRequest,
+			Status:  http.StatusBadRequest,
 			Message: fmt.Sprintf("Expected there to be only 1 file. There were: %d", len(z.File)),
 		}).SetType(gin.ErrorTypePublic)
 		return
@@ -662,7 +671,7 @@ func File(c *gin.Context) {
 	src, err := file.Open()
 	if err != nil {
 		c.Error(&utils.HTTPError{
-			Status: http.StatusBadRequest,
+			Status:  http.StatusBadRequest,
 			Message: err.Error(),
 		}).SetType(gin.ErrorTypePublic)
 		return
@@ -734,7 +743,7 @@ func Logs(c *gin.Context) {
 	user, _, ok := c.Request.BasicAuth()
 	if !ok {
 		c.Error(&utils.HTTPError{
-			Status: http.StatusBadRequest,
+			Status:  http.StatusBadRequest,
 			Message: "Auth data not provided"},
 		).SetType(gin.ErrorTypePublic)
 		return
@@ -753,7 +762,7 @@ func Video(c *gin.Context) {
 	user, _, ok := c.Request.BasicAuth()
 	if !ok {
 		c.Error(&utils.HTTPError{
-			Status: http.StatusBadRequest,
+			Status:  http.StatusBadRequest,
 			Message: "Auth data not provided"},
 		).SetType(gin.ErrorTypePublic)
 		return
