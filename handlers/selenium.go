@@ -105,7 +105,7 @@ func (s CachedSession) MarshalBinary() ([]byte, error) {
 	return json.Marshal(s)
 }
 
-func CreateSessionFromCache(sessionID string, r *http.Request) (*session.Session, error) {
+func CreateSessionFromCache(sessionID string) (*session.Session, error) {
 	result, err := RDB.Get(context.Background(), sessionID).Result()
 	if err != nil {
 		return nil, fmt.Errorf("Error happened while getting session from cache. %v", err)
@@ -127,7 +127,7 @@ func CreateSessionFromCache(sessionID string, r *http.Request) (*session.Session
 		HostPort: s.HostPort,
 		Timeout:  s.Timeout,
 		TimeoutCh: onTimeout(sessionTimeout, func() {
-			Request{r}.session(sessionID).Delete(s.TaskID)
+			Delete(s.TaskID)
 		}),
 		Started: s.Started,
 	}
@@ -156,8 +156,8 @@ func (s *sess) url() string {
 	return fmt.Sprintf("http://%s/wd/hub/session/%s", s.addr, s.id)
 }
 
-func (s *sess) Delete(taskId string) {
-	log.Printf("SESSION_TIMED_OUT: Removing ECS task forcibly: '%s' for sessionId: '%s'!", taskId, s.id)
+func Delete(taskId string) {
+	log.Printf("SESSION_TIMED_OUT: Removing ECS task forcibly: '%s'!", taskId)
 	service.RemoveTask(taskId)
 }
 
@@ -412,7 +412,7 @@ func Create(c *gin.Context) {
 		HostPort: startedService.HostPort,
 		Timeout:  sessionTimeout,
 		TimeoutCh: onTimeout(sessionTimeout, func() {
-			Request{r}.session(s.ID).Delete(startedService.TaskID)
+			Delete(startedService.TaskID)
 		}),
 		Started: time.Now(),
 	}
@@ -560,7 +560,7 @@ func Proxy(c *gin.Context) {
 			var err error = nil
 			sess, ok := sessions.Get(sessionID)
 			if !ok {
-				sess, err = CreateSessionFromCache(sessionID, r)
+				sess, err = CreateSessionFromCache(sessionID)
 				if err != nil {
 					log.Printf("Cant find session. %v", err)
 				}
@@ -697,8 +697,9 @@ func Vnc(wsconn *websocket.Conn) {
 	defer wsconn.Close()
 	requestId := serial()
 	sid, _ := splitRequestPath(wsconn.Request().URL.Path)
-	sess, ok := sessions.Get(sid)
-	if ok {
+	sess, err := CreateSessionFromCache(sid)
+	//sess, ok := sessions.Get(sid)
+	if err == nil {
 		vncHostPort := sess.HostPort.VNC
 		if vncHostPort != "" {
 			log.Printf("[%d] [VNC_ENABLED] [%s]", requestId, sid)
@@ -802,7 +803,7 @@ func deleteFileIfExists(w http.ResponseWriter, r *http.Request, dir string, pref
 func Downloads(c *gin.Context) {
 	sessionID := c.Param("session")
 	filename := c.Param("file")
-	sess, err := CreateSessionFromCache(sessionID, c.Request)
+	sess, err := CreateSessionFromCache(sessionID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -821,7 +822,7 @@ func Downloads(c *gin.Context) {
 
 func Clipboard(c *gin.Context) {
 	sessionID := c.Param("session")
-	sess, err := CreateSessionFromCache(sessionID, c.Request)
+	sess, err := CreateSessionFromCache(sessionID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -838,7 +839,7 @@ func Clipboard(c *gin.Context) {
 
 func Devtools(c *gin.Context) {
 	sessionID := c.Param("session")
-	sess, err := CreateSessionFromCache(sessionID, c.Request)
+	sess, err := CreateSessionFromCache(sessionID)
 	if err != nil {
 		c.Error(err)
 		return
