@@ -163,6 +163,9 @@ func CreateRouter() *gin.Engine {
 		})
 		hub.GET("/ws/vnc/:session", func(c *gin.Context) {
 			handler := websocket.Handler(handlers.Vnc)
+			c.Request.Header.Add("Access-Control-Allow-Origin", "*")
+			c.Request.Header.Add("X-Real-IP", c.Request.RemoteAddr)
+
 			handler.ServeHTTP(c.Writer, c.Request)
 		})
 
