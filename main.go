@@ -2,9 +2,11 @@ package main
 
 import (
 	"flag"
+	"net/http/httputil"
+
 	"github.com/gin-gonic/gin"
 	"golang.org/x/net/websocket"
-	"net/http/httputil"
+
 	//"github.com/zebrunner/esg/webserver"
 	"log"
 
@@ -14,6 +16,8 @@ import (
 	"time"
 
 	"path/filepath"
+
+	"fmt"
 
 	"github.com/zebrunner/esg/handlers"
 	"github.com/zebrunner/esg/service"
@@ -47,7 +51,7 @@ func init() {
 	// AWS Related args
 	flag.StringVar(&service.AwsRegion, "aws-region", "us-east-1", "AWS region name")
 	flag.IntVar(&service.AwsRetry, "aws-retry", 10, "AWS client retry count")
-	flag.StringVar(&service.AwsCluster, "aws-cluster", "esg-linux", "AWS cluster name")
+	flag.StringVar(&service.AwsCluster, "aws-cluster", "esg", "AWS cluster name")
 	flag.StringVar(&service.AwsElasticCache, "aws-elastic-cache", "localhost:6379", "AWS elastic cache connection URL")
 	flag.StringVar(&service.AwsAutoScalingGroup, "aws-auto-scaling-group", "esg-asg", "AWS auto scaling group name")
 	flag.IntVar(&service.MinMemory, "min-memory", 768, "AWS minimum memory limitation for session")
@@ -159,6 +163,7 @@ func CreateRouter() *gin.Engine {
 
 		hub.GET("/vnc/:session", func(c *gin.Context) {
 			handler := websocket.Handler(handlers.Vnc)
+			fmt.Printf("[VNC REQUEST] %+v", c.Request)
 			handler.ServeHTTP(c.Writer, c.Request)
 		})
 		hub.GET("/ws/vnc/:session", func(c *gin.Context) {
@@ -166,6 +171,7 @@ func CreateRouter() *gin.Engine {
 			c.Request.Header.Add("Access-Control-Allow-Origin", "*")
 			c.Request.Header.Add("X-Real-IP", c.Request.RemoteAddr)
 
+			fmt.Printf("[VNC REQUEST] %+v", c.Request)
 			handler.ServeHTTP(c.Writer, c.Request)
 		})
 

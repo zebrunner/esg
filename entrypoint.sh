@@ -7,6 +7,7 @@ migrate -path auth/migrations -database $DATABASE up
 # Start the first process
 nohup ./esg \
     -retry-count 2 \
+    -aws-cluster esg-dev \
     -aws-elastic-cache redis:6379 \
     -db-connection $DATABASE \
     -listen :4444 \
@@ -20,6 +21,7 @@ fi
 # Start the second process
 nohup ./esg \
     -retry-count 2 \
+    -aws-cluster esg-dev \
     -aws-elastic-cache redis:6379 \
     -db-connection $DATABASE \
     -listen :4445 \
