@@ -586,7 +586,7 @@ func getTaskHostPort(caps session.Caps, taskIP string, pc *ecsPortConfig) sessio
 }
 
 func RemoveTask(taskArn string) {
-	log.Printf("[%d] [REMOVING_TASK] [%s]", taskArn)
+	log.Printf("[REMOVING_TASK] [%s]", taskArn)
 
 	//TODO: parametrize region
 	// #33: increased number of retries to fix "ThrottlingException: Rate exceeded"

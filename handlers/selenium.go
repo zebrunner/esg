@@ -622,13 +622,13 @@ func ReverseProxy(hostFn func(sess *session.Session) string, status string) func
 					r.URL.Scheme = "http"
 					r.URL.Host = hostFn(sess)
 					r.URL.Path = remainingPath
-					log.Printf("[%d] [%s] [%s] [%s]", status, sid, remainingPath)
+					log.Printf("[%s] [%s] [%s]", status, sid, remainingPath)
 				},
 				ErrorHandler: defaultErrorHandler(),
 			}).ServeHTTP(w, r)
 		} else {
 			util.JsonError(w, fmt.Sprintf("Unknown session %s", sid), http.StatusNotFound)
-			log.Printf("[%d] [SESSION_NOT_FOUND] [%s]", sid)
+			log.Printf("[SESSION_NOT_FOUND] [%s]", sid)
 		}
 	}
 }
