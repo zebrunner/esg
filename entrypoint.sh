@@ -2,12 +2,14 @@
 
 # Apply all up migrations
 DATABASE="postgres://postgres:postgres@db/postgres?sslmode=disable"
-migrate -path auth/migrations -database $DATABASE up
+migrate -path migrations -database $DATABASE up
 
 # Start the first process
 nohup ./esg \
     -retry-count 2 \
+    -aws-cluster esg-dev \
     -aws-elastic-cache redis:6379 \
+    -aws-auto-scaling-group esg-dev-asg \
     -db-connection $DATABASE \
     -listen :4444 \
     -s3-bucket zebrunner.dev-assets >> ./esg.log 2>&1 &
@@ -20,7 +22,9 @@ fi
 # Start the second process
 nohup ./esg \
     -retry-count 2 \
+    -aws-cluster esg-dev \
     -aws-elastic-cache redis:6379 \
+    -aws-auto-scaling-group esg-dev-asg \
     -db-connection $DATABASE \
     -listen :4445 \
     -s3-bucket zebrunner.dev-assets >> ./esg.log 2>&1 &

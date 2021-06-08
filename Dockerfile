@@ -7,7 +7,14 @@ RUN curl -L https://github.com/golang-migrate/migrate/releases/download/v4.14.1/
 RUN cp migrate.linux-amd64 /usr/bin/migrate
 RUN echo $PATH
 
+WORKDIR /esg
+
+# Download dependencies
+COPY ./go.mod .
+COPY ./go.sum .
+RUN go mod download
+
 # Build esg
 COPY ./ /esg
-WORKDIR /esg
+
 RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build

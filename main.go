@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"flag"
+	"net/http/httputil"
+
 	"github.com/gin-gonic/gin"
 	"golang.org/x/net/websocket"
-	"net/http/httputil"
+
 	//"github.com/zebrunner/esg/webserver"
 	"log"
 
@@ -14,6 +18,8 @@ import (
 	"time"
 
 	"path/filepath"
+
+	"fmt"
 
 	"github.com/zebrunner/esg/handlers"
 	"github.com/zebrunner/esg/service"
@@ -47,7 +53,7 @@ func init() {
 	// AWS Related args
 	flag.StringVar(&service.AwsRegion, "aws-region", "us-east-1", "AWS region name")
 	flag.IntVar(&service.AwsRetry, "aws-retry", 10, "AWS client retry count")
-	flag.StringVar(&service.AwsCluster, "aws-cluster", "esg-linux", "AWS cluster name")
+	flag.StringVar(&service.AwsCluster, "aws-cluster", "esg", "AWS cluster name")
 	flag.StringVar(&service.AwsElasticCache, "aws-elastic-cache", "localhost:6379", "AWS elastic cache connection URL")
 	flag.StringVar(&service.AwsAutoScalingGroup, "aws-auto-scaling-group", "esg-asg", "AWS auto scaling group name")
 	flag.IntVar(&service.MinMemory, "min-memory", 768, "AWS minimum memory limitation for session")
@@ -159,13 +165,26 @@ func CreateRouter() *gin.Engine {
 
 		hub.GET("/vnc/:session", func(c *gin.Context) {
 			handler := websocket.Handler(handlers.Vnc)
+			fmt.Printf("[VNC REQUEST] %+v", c.Request)
+			handler.ServeHTTP(c.Writer, c.Request)
+		})
+		hub.GET("/ws/vnc/:session", func(c *gin.Context) {
+			handler := websocket.Handler(handlers.Vnc)
+			c.Request.Header.Add("Access-Control-Allow-Origin", "*")
+			c.Request.Header.Add("X-Real-IP", c.Request.RemoteAddr)
+
+			fmt.Printf("[VNC REQUEST] %+v", c.Request)
 			handler.ServeHTTP(c.Writer, c.Request)
 		})
 
 		hub.Any("/file/:session", handlers.File)
 
 		hub.GET("/download/:session/:file", handlers.Downloads)
+		hub.DELETE("/download/:session/:file", handlers.Downloads)
+
 		hub.GET("/clipboard/:session", handlers.Clipboard)
+		hub.POST("/clipboard/:session", handlers.Clipboard)
+
 		hub.GET("/devtools/:session", handlers.Devtools)
 	}
 
@@ -186,6 +205,47 @@ func main() {
 	rdb := service.InitCache()
 	handlers.RDB = rdb
 	defer rdb.Close()
+
+	go func() {
+		// TODO: Emulate session termination on selenium and try to return response
+		// TODO: Move logic outside core ESG to run separately from main processes
+		for {
+			time.Sleep(handlers.Timeout)
+			keys, err := rdb.Keys(context.Background(), "*").Result()
+			if err != nil {
+				log.Println("Error while getting list of keys", err)
+				continue
+			}
+
+			for _, key := range keys {
+				idle, err := rdb.ObjectIdleTime(context.Background(), key).Result()
+				if err != nil {
+					log.Printf("Error while getting IDLE time for session: %s. Error: %v", key, err)
+					continue
+				}
+
+				if idle > handlers.Timeout {
+					result, err := rdb.Get(context.Background(), key).Result()
+					if err != nil {
+						log.Printf("Error happened while getting session from cache. %v", err)
+						continue
+					}
+					s := handlers.CachedSession{}
+					err = json.Unmarshal([]byte(result), &s)
+					if err != nil {
+						log.Printf("Cant unmarshal redis data. Error: %v", err)
+						continue
+					}
+					log.Printf("Deleting task: %s. Reason: idle timeout", s.TaskID)
+					handlers.Delete(s.TaskID)
+					_, err = rdb.Del(context.Background(), key).Result()
+					if err != nil {
+						log.Printf("can't delete session from redis cache. Session: %s. Error: %v", key, err)
+					}
+				}
+			}
+		}
+	}()
 
 	router := CreateRouter()
 	err = router.Run(listen)

@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+
 	"github.com/aws/aws-sdk-go/service/s3"
 
 	"log"
@@ -40,8 +41,6 @@ type ecsPortConfig struct {
 
 // StartWithCancel - Starter interface implementation
 func (d *Task) StartWithCancel(username string) (*StartedService, error) {
-	requestId := d.RequestId
-
 	portConfig, err := getEcsPortConfig()
 	if err != nil {
 		return nil, fmt.Errorf("configuring ports: %v", err)
@@ -68,17 +67,17 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 
 	// Without unique nano postfix we face with AWS limitations during multi-threading execution a lot...
 	taskDefFamily := d.Caps.Name + "-" + strconv.Itoa(int(time.Now().UnixNano()))
-	log.Printf("[%d] [TASK_DEFINITION_FAMILY] [%s]", requestId, taskDefFamily)
+	log.Printf("[TASK_DEFINITION_FAMILY] [%s]", taskDefFamily)
 
 	//create ECS task definition based on capabilities
 	svc := ecs.New(awsSession.New(&aws.Config{Region: &AwsRegion, MaxRetries: &AwsRetry}))
 
 	//TODO: support GPU reservation: The number of GPU units to reserve for the container. A container instance with GPU support has 1 GPU unit for every GPU.
-	log.Printf("[%d] [CREATING_ECS_TASK_DEFINITION] [%s]", requestId, imageUrl)
+	log.Printf("[CREATING_ECS_TASK_DEFINITION] [%s]", imageUrl)
 
 	uuid := uuid.New().String()
 
-	sharedFolder := "/tmp/log"
+	sharedFolder := "/opt/zebrunner"
 	sharedVolume := "data"
 
 	browserContainerName := "browser"
@@ -100,7 +99,7 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 						SourceVolume:  aws.String("devshm"),
 					},
 					{
-						ContainerPath: aws.String("/tmp/log"),
+						ContainerPath: aws.String(sharedFolder),
 						ReadOnly:      aws.Bool(false),
 						SourceVolume:  aws.String(sharedVolume),
 					},
@@ -141,7 +140,7 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 			},
 			{
 				Name:              aws.String("artifacts-uploader"),
-				Image:             aws.String("public.ecr.aws/l1q2y2l2/artifacts-uploader:latest"),
+				Image:             aws.String("public.ecr.aws/zebrunner/artifacts-uploader:latest"),
 				Essential:         aws.Bool(false), //If the essential parameter of a container is marked as true, the failure of that container will stop the task.
 				Cpu:               aws.Int64(256),
 				Memory:            aws.Int64(768),
@@ -221,7 +220,7 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	//        log.Printf("[%d] [TASK_DEFINITION] [%s]", requestId, taskDefinition)
 
 	taskStartTime := time.Now()
-	log.Printf("[%d] [STARTING_TASK] [%s] [%s]", requestId, imageUrl, taskStartTime)
+	log.Printf("[STARTING_TASK] [%s] [%s]", imageUrl, taskStartTime)
 
 	family := *resultTaskDefinition.TaskDefinition.Family
 	revision := *resultTaskDefinition.TaskDefinition.Revision
@@ -258,10 +257,10 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	taskFailure := ""
 	for retry := 1; retry < 5; retry++ {
 		if err != nil {
-			log.Printf("[%d] [TASK_RUN_ERROR] [%s] [%d]", requestId, err, retry)
+			log.Printf("[TASK_RUN_ERROR] [%s] [%d]", err, retry)
 		} else if len(resultRunTask.Failures) > 0 {
 			taskFailure = *resultRunTask.Failures[0].Reason
-			log.Printf("[%d] [TASK_RUN_FAILURE] [%s] [%d]", requestId, taskFailure, retry)
+			log.Printf("[TASK_RUN_FAILURE] [%s] [%d]", taskFailure, retry)
 		} else {
 			// all good and we can proceed
 			taskFailure = "" //reset taskFailure if any
@@ -292,7 +291,7 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 
 	// [TASK_ARN] [arn:aws:ecs:us-east-1:659932254483:task/executor-cluster/35bab349ee55458e9182b84b999dbd1c]
 	taskArn := *resultRunTask.Tasks[0].TaskArn
-	log.Printf("[%d] [TASK_ARN] [%s]", requestId, taskArn)
+	log.Printf("[TASK_ARN] [%s]", taskArn)
 	taskId := strings.Split(taskArn, "/")[2]
 	//	log.Printf("[%d] [TASK_ID] [%s]", requestId, taskId)
 
@@ -340,9 +339,9 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	// [TASK_CONTAINER_INSTANCE] [arn:aws:ecs:us-east-1:659932254483:container-instance/executor-cluster/bf3d12885ef243f2961e88d72baa0f77]
 	containerInstanceArn := *resultDescribeTask.Tasks[0].ContainerInstanceArn
 
-	log.Printf("[%d] [TASK_CONTAINER_INSTANCE] [%s]", requestId, containerInstanceArn)
+	log.Printf("[TASK_CONTAINER_INSTANCE] [%s]", containerInstanceArn)
 	containerInstanceId := strings.Split(containerInstanceArn, "/")[2]
-	log.Printf("[%d] [TASK_CONTAINER_INSTANCE_ID] [%s]", requestId, containerInstanceId)
+	log.Printf("[TASK_CONTAINER_INSTANCE_ID] [%s]", containerInstanceId)
 
 	containerInstanceInput := &ecs.DescribeContainerInstancesInput{
 		Cluster: &AwsCluster,
@@ -360,7 +359,7 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 
 	//TODO: verify that returned number of instances is 1!
 	instanceId := *resultContainerInstance.ContainerInstances[0].Ec2InstanceId
-	log.Printf("[%d] [INSTANCE_ID] [%s]", requestId, instanceId)
+	log.Printf("[INSTANCE_ID] [%s]", instanceId)
 
 	//    fmt.Println("[AWS RESPONSE]", resultContainerInstance.ContainerInstances[0])
 
@@ -377,18 +376,18 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 		return nil, fmt.Errorf("Unable to get instance details: %v", err)
 	}
 	privateIpAddress := *resultInstance.Reservations[0].Instances[0].PrivateIpAddress
-	log.Printf("[%d] [INSTANCE_PRIVATE_IP] [%s]", requestId, privateIpAddress)
+	log.Printf("[INSTANCE_PRIVATE_IP] [%s]", privateIpAddress)
 	publicIpAddress := *resultInstance.Reservations[0].Instances[0].PublicIpAddress
-	log.Printf("[%d] [INSTANCE_PUBLIC_IP] [%s]", requestId, publicIpAddress)
+	log.Printf("[INSTANCE_PUBLIC_IP] [%s]", publicIpAddress)
 
 	browserTaskStartTime := time.Now()
-	log.Printf("[%d] [TASK_STARTED] [%s] [%s] [%.2fs]", requestId, imageUrl, taskId, util.SecondsSince(browserTaskStartTime))
+	log.Printf("[TASK_STARTED] [%s] [%s] [%.2fs]", imageUrl, taskId, util.SecondsSince(browserTaskStartTime))
 
 	hostPort := getTaskHostPort(d.Caps, privateIpAddress, portConfig)
-	log.Printf("[%d] [HOST_PORT] [%s]", requestId, hostPort)
+	log.Printf("[HOST_PORT] [%s]", hostPort)
 
 	u := &url.URL{Scheme: "http", Host: hostPort.Selenium, Path: d.Service.Path}
-	log.Printf("[%d] [CONTAINER_SERVICE_URL] [%s]", requestId, u)
+	log.Printf("[CONTAINER_SERVICE_URL] [%s]", u)
 
 	serviceStartTime := time.Now()
 	err = wait(u.String(), d.StartupTimeout)
@@ -396,8 +395,8 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 		RemoveTask(taskArn)
 		return nil, fmt.Errorf("wait: %v", err)
 	}
-	log.Printf("[%d] [SERVICE_STARTED] [%s] [%s] [%.2fs]", requestId, imageUrl, taskId, util.SecondsSince(serviceStartTime))
-	log.Printf("[%d] [PROXY_TO] [%s] [%s]", requestId, taskId, u.String())
+	log.Printf("[SERVICE_STARTED] [%s] [%s] [%.2fs]", imageUrl, taskId, util.SecondsSince(serviceStartTime))
+	log.Printf("[PROXY_TO] [%s] [%s]", taskId, u.String())
 
 	// publish all ports feature is still under question for ecs task service so empty map is ok
 	var publishedPortsInfo map[string]string
@@ -586,7 +585,7 @@ func getTaskHostPort(caps session.Caps, taskIP string, pc *ecsPortConfig) sessio
 }
 
 func RemoveTask(taskArn string) {
-	log.Printf("[%d] [REMOVING_TASK] [%s]", taskArn)
+	log.Printf("[REMOVING_TASK] [%s]", taskArn)
 
 	//TODO: parametrize region
 	// #33: increased number of retries to fix "ThrottlingException: Rate exceeded"

@@ -8,8 +8,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/gin-gonic/gin"
-	"github.com/zebrunner/esg/utils"
 	"io"
 	"io/ioutil"
 	"log"
@@ -24,6 +22,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/zebrunner/esg/utils"
 
 	"github.com/imdario/mergo"
 	"github.com/zebrunner/esg/event"
@@ -105,7 +106,7 @@ func (s CachedSession) MarshalBinary() ([]byte, error) {
 	return json.Marshal(s)
 }
 
-func CreateSessionFromCache(sessionID string, r *http.Request) (*session.Session, error) {
+func CreateSessionFromCache(sessionID string) (*session.Session, error) {
 	result, err := RDB.Get(context.Background(), sessionID).Result()
 	if err != nil {
 		return nil, fmt.Errorf("Error happened while getting session from cache. %v", err)
@@ -127,7 +128,7 @@ func CreateSessionFromCache(sessionID string, r *http.Request) (*session.Session
 		HostPort: s.HostPort,
 		Timeout:  s.Timeout,
 		TimeoutCh: onTimeout(sessionTimeout, func() {
-			Request{r}.session(sessionID).Delete(s.TaskID)
+			Delete(s.TaskID)
 		}),
 		Started: s.Started,
 	}
@@ -156,8 +157,8 @@ func (s *sess) url() string {
 	return fmt.Sprintf("http://%s/wd/hub/session/%s", s.addr, s.id)
 }
 
-func (s *sess) Delete(taskId string) {
-	log.Printf("SESSION_TIMED_OUT: Removing ECS task forcibly: '%s' for sessionId: '%s'!", taskId, s.id)
+func Delete(taskId string) {
+	log.Printf("SESSION_TIMED_OUT: Removing ECS task forcibly: '%s'!", taskId)
 	service.RemoveTask(taskId)
 }
 
@@ -412,7 +413,7 @@ func Create(c *gin.Context) {
 		HostPort: startedService.HostPort,
 		Timeout:  sessionTimeout,
 		TimeoutCh: onTimeout(sessionTimeout, func() {
-			Request{r}.session(s.ID).Delete(startedService.TaskID)
+			Delete(startedService.TaskID)
 		}),
 		Started: time.Now(),
 	}
@@ -560,7 +561,7 @@ func Proxy(c *gin.Context) {
 			var err error = nil
 			sess, ok := sessions.Get(sessionID)
 			if !ok {
-				sess, err = CreateSessionFromCache(sessionID, r)
+				sess, err = CreateSessionFromCache(sessionID)
 				if err != nil {
 					log.Printf("Cant find session. %v", err)
 				}
@@ -621,20 +622,28 @@ func ReverseProxy(hostFn func(sess *session.Session) string, status string) func
 					r.URL.Scheme = "http"
 					r.URL.Host = hostFn(sess)
 					r.URL.Path = remainingPath
-					log.Printf("[%d] [%s] [%s] [%s]", status, sid, remainingPath)
+					log.Printf("[%s] [%s] [%s]", status, sid, remainingPath)
 				},
 				ErrorHandler: defaultErrorHandler(),
 			}).ServeHTTP(w, r)
 		} else {
 			util.JsonError(w, fmt.Sprintf("Unknown session %s", sid), http.StatusNotFound)
-			log.Printf("[%d] [SESSION_NOT_FOUND] [%s]", sid)
+			log.Printf("[SESSION_NOT_FOUND] [%s]", sid)
 		}
 	}
 }
 
 func splitRequestPath(p string) (string, string) {
 	fragments := strings.Split(p, slash)
-	return fragments[2], slash + strings.Join(fragments[3:], slash)
+	vncIndex := 0
+	for i, fragment := range fragments {
+		if fragment == "vnc" {
+			vncIndex = i
+			break
+		}
+	}
+	return fragments[vncIndex+1], slash + strings.Join(fragments[vncIndex+2:], slash)
+	// return fragments[2], slash + strings.Join(fragments[3:], slash)
 }
 
 func File(c *gin.Context) {
@@ -653,7 +662,7 @@ func File(c *gin.Context) {
 	}
 	if len(z.File) != 1 {
 		c.Error(&utils.HTTPError{
-			Status: http.StatusBadRequest,
+			Status:  http.StatusBadRequest,
 			Message: fmt.Sprintf("Expected there to be only 1 file. There were: %d", len(z.File)),
 		}).SetType(gin.ErrorTypePublic)
 		return
@@ -662,7 +671,7 @@ func File(c *gin.Context) {
 	src, err := file.Open()
 	if err != nil {
 		c.Error(&utils.HTTPError{
-			Status: http.StatusBadRequest,
+			Status:  http.StatusBadRequest,
 			Message: err.Error(),
 		}).SetType(gin.ErrorTypePublic)
 		return
@@ -697,8 +706,9 @@ func Vnc(wsconn *websocket.Conn) {
 	defer wsconn.Close()
 	requestId := serial()
 	sid, _ := splitRequestPath(wsconn.Request().URL.Path)
-	sess, ok := sessions.Get(sid)
-	if ok {
+	sess, err := CreateSessionFromCache(sid)
+	//sess, ok := sessions.Get(sid)
+	if err == nil {
 		vncHostPort := sess.HostPort.VNC
 		if vncHostPort != "" {
 			log.Printf("[%d] [VNC_ENABLED] [%s]", requestId, sid)
@@ -733,7 +743,7 @@ func Logs(c *gin.Context) {
 	user, _, ok := c.Request.BasicAuth()
 	if !ok {
 		c.Error(&utils.HTTPError{
-			Status: http.StatusBadRequest,
+			Status:  http.StatusBadRequest,
 			Message: "Auth data not provided"},
 		).SetType(gin.ErrorTypePublic)
 		return
@@ -752,7 +762,7 @@ func Video(c *gin.Context) {
 	user, _, ok := c.Request.BasicAuth()
 	if !ok {
 		c.Error(&utils.HTTPError{
-			Status: http.StatusBadRequest,
+			Status:  http.StatusBadRequest,
 			Message: "Auth data not provided"},
 		).SetType(gin.ErrorTypePublic)
 		return
@@ -802,36 +812,43 @@ func deleteFileIfExists(w http.ResponseWriter, r *http.Request, dir string, pref
 func Downloads(c *gin.Context) {
 	sessionID := c.Param("session")
 	filename := c.Param("file")
-	sess, err := CreateSessionFromCache(sessionID, c.Request)
+	sess, err := CreateSessionFromCache(sessionID)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	fileUrl := url.URL{
-		Host: sess.HostPort.Fileserver,
-		Path: filename,
+	director := func(req *http.Request) {
+		req.URL.Scheme = "http"
+		req.URL.Host = sess.HostPort.Fileserver
+		req.Host = sess.HostPort.Fileserver
+		req.URL.Path = "/" + filename
 	}
-	c.Redirect(http.StatusFound, fileUrl.String())
+	proxy := &httputil.ReverseProxy{Director: director}
+	fmt.Println(c.Request)
+	proxy.ServeHTTP(c.Writer, c.Request)
 }
 
 func Clipboard(c *gin.Context) {
 	sessionID := c.Param("session")
-	sess, err := CreateSessionFromCache(sessionID, c.Request)
+	sess, err := CreateSessionFromCache(sessionID)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	fileUrl := url.URL{
-		Host: sess.HostPort.Clipboard,
+	director := func(req *http.Request) {
+		req.URL.Scheme = "http"
+		req.URL.Host = sess.HostPort.Clipboard
+		req.Host = sess.HostPort.Clipboard
 	}
-	c.Redirect(http.StatusFound, fileUrl.String())
+	proxy := &httputil.ReverseProxy{Director: director}
+	proxy.ServeHTTP(c.Writer, c.Request)
 }
 
 func Devtools(c *gin.Context) {
 	sessionID := c.Param("session")
-	sess, err := CreateSessionFromCache(sessionID, c.Request)
+	sess, err := CreateSessionFromCache(sessionID)
 	if err != nil {
 		c.Error(err)
 		return
