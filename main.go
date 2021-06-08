@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"flag"
 	"net/http/httputil"
 
@@ -203,6 +205,47 @@ func main() {
 	rdb := service.InitCache()
 	handlers.RDB = rdb
 	defer rdb.Close()
+
+	go func() {
+		// TODO: Emulate session termination on selenium and try to return response
+		// TODO: Move logic outside core ESG to run separately from main processes
+		for {
+			time.Sleep(handlers.Timeout)
+			keys, err := rdb.Keys(context.Background(), "*").Result()
+			if err != nil {
+				log.Println("Error while getting list of keys", err)
+				continue
+			}
+
+			for _, key := range keys {
+				idle, err := rdb.ObjectIdleTime(context.Background(), key).Result()
+				if err != nil {
+					log.Printf("Error while getting IDLE time for session: %s. Error: %v", key, err)
+					continue
+				}
+
+				if idle > handlers.Timeout {
+					result, err := rdb.Get(context.Background(), key).Result()
+					if err != nil {
+						log.Printf("Error happened while getting session from cache. %v", err)
+						continue
+					}
+					s := handlers.CachedSession{}
+					err = json.Unmarshal([]byte(result), &s)
+					if err != nil {
+						log.Printf("Cant unmarshal redis data. Error: %v", err)
+						continue
+					}
+					log.Printf("Deleting task: %s. Reason: idle timeout", s.TaskID)
+					handlers.Delete(s.TaskID)
+					_, err = rdb.Del(context.Background(), key).Result()
+					if err != nil {
+						log.Printf("can't delete session from redis cache. Session: %s. Error: %v", key, err)
+					}
+				}
+			}
+		}
+	}()
 
 	router := CreateRouter()
 	err = router.Run(listen)
