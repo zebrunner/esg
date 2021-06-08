@@ -2,11 +2,12 @@ package service
 
 import (
 	"fmt"
-	"github.com/go-redis/redis/v8"
 	"log"
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/go-redis/redis/v8"
 
 	"github.com/zebrunner/esg/session"
 )
@@ -101,7 +102,7 @@ func (m *DefaultManager) Find(caps session.Caps, requestId uint64) (Starter, boo
 
 	log.Printf("[%d] [LOCATING_SERVICE] [%s] [%s]", requestId, browser, version)
 
-	org := "public.ecr.aws/l1q2y2l2" //public zebrunner ECR docker registry
+	org := "public.ecr.aws/zebrunner" //public zebrunner ECR docker registry
 	if browser == "MicrosoftEdge" {
 		browser = "edge"
 	}
