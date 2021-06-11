@@ -1,10 +1,11 @@
 package handlers
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
-	"net/http"
 )
 
 type CreateUserModel struct {
@@ -12,7 +13,7 @@ type CreateUserModel struct {
 }
 
 type UserActivationModel struct {
-	IsActive bool `json:"is_active" type:"bool"`
+	IsActive bool `json:"isActive" type:"bool"`
 }
 
 func CreateUser(c *gin.Context) {
@@ -87,7 +88,7 @@ func UserActivation(c *gin.Context) {
 	err := c.ShouldBindJSON(&body)
 	if err != nil {
 		c.Error(&utils.HTTPError{
-			Status: http.StatusBadRequest,
+			Status:  http.StatusBadRequest,
 			Message: "request body is invalid",
 		}).SetType(gin.ErrorTypePublic).SetMeta(err.Error())
 		return
