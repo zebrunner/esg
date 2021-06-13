@@ -86,7 +86,7 @@ func setDesiredCapacity(autoscalingService *autoscaling.AutoScaling, newDesiredC
 	}
 	autoScalingGroup := describeAutoScalingGroupsOutput.AutoScalingGroups[0]
 	if newDesiredCapacity < *autoScalingGroup.DesiredCapacity {
-		log.Printf("[WARN] Scale down not allowed")
+		log.Printf("[WARN] Scale down not allowed. DesiredCapacity: %d", newDesiredCapacity)
 		return
 	}
 
