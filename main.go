@@ -146,7 +146,7 @@ func CreateRouter() *gin.Engine {
 	{
 		api.POST("/users", handlers.CreateUser)
 		api.DELETE("/users/:username", handlers.DeleteUser)
-		api.PUT("/users/:username/refreshToken", handlers.RefreshToken)
+		api.PUT("/users/:username/refresh-token", handlers.RefreshToken)
 		api.PUT("/users/:username/activation", handlers.UserActivation)
 	}
 
