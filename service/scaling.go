@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	awsSession "github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/autoscaling"
+	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ecs"
 )
 
@@ -33,6 +34,45 @@ func getInstanceCount(svc *ecs.ECS) (int64, error) {
 	}
 	instanceCount := len(listInstancesOutput.ContainerInstanceArns)
 	return int64(instanceCount), nil
+}
+
+func getInstanceResources() (*Resources, error) {
+	session, err := awsSession.NewSession(&aws.Config{Region: &AwsRegion, MaxRetries: &AwsRetry})
+	if err != nil {
+		return nil, err
+	}
+
+	autoscalingSvc := autoscaling.New(session, &aws.Config{Region: &AwsRegion, MaxRetries: &AwsRetry})
+	describeGroupInput := autoscaling.DescribeAutoScalingGroupsInput{
+		AutoScalingGroupNames: []*string{aws.String(AwsAutoScalingGroup)},
+	}
+	describeGroupOutput, err := autoscalingSvc.DescribeAutoScalingGroups(&describeGroupInput)
+	if err != nil {
+		return nil, err
+	}
+
+	launchConfiguration := describeGroupOutput.AutoScalingGroups[0].LaunchConfigurationName
+	describeLaunchConfigInput := autoscaling.DescribeLaunchConfigurationsInput{
+		LaunchConfigurationNames: []*string{launchConfiguration},
+	}
+	result, err := autoscalingSvc.DescribeLaunchConfigurations(&describeLaunchConfigInput)
+	if err != nil {
+		return nil, err
+	}
+
+	instanceType := result.LaunchConfigurations[0].InstanceType
+	ec2Svc := ec2.New(session, &aws.Config{Region: &AwsRegion, MaxRetries: &AwsRetry})
+	describeInstanceTypeInput := ec2.DescribeInstanceTypesInput{
+		InstanceTypes: []*string{instanceType},
+	}
+	instanceTypesResult, err := ec2Svc.DescribeInstanceTypes(&describeInstanceTypeInput)
+	if err != nil {
+		return nil, err
+	}
+
+	instanceInfo := instanceTypesResult.InstanceTypes[0]
+
+	return &Resources{CPU: *instanceInfo.VCpuInfo.DefaultCores * 1024, Memory: *instanceInfo.MemoryInfo.SizeInMiB}, nil
 }
 
 func getTasks(svc *ecs.ECS) ([]*ecs.Task, error) {
@@ -86,7 +126,7 @@ func setDesiredCapacity(autoscalingService *autoscaling.AutoScaling, newDesiredC
 	}
 	autoScalingGroup := describeAutoScalingGroupsOutput.AutoScalingGroups[0]
 	if newDesiredCapacity < *autoScalingGroup.DesiredCapacity {
-		log.Printf("[WARN] Scale down not allowed")
+		log.Printf("[WARN] Scale down not allowed. CurrentCapacity: %d, NewCapacity: %d.", *autoScalingGroup.DesiredCapacity, newDesiredCapacity)
 		return
 	}
 
@@ -114,37 +154,32 @@ func ScaleUp() {
 	}
 	svc := ecs.New(session)
 	autoscalingSvc := autoscaling.New(session)
-
-	// TODO: print all tasks in log
 	tasks, err := getTasks(svc)
 	if err != nil {
 		log.Println("Error while getting running tasks.", err)
 		return
 	}
-	runningTasksResources := getTasksResources(tasks, "RUNNING")
-	pendingTasksResources := getTasksResources(tasks, "PENDING")
-	runningTasksResources.CPU += pendingTasksResources.CPU
-	runningTasksResources.Memory += pendingTasksResources.Memory
 
 	provisioningTasksResources := getTasksResources(tasks, "PROVISIONING")
-
 	// All tasks is running
 	if provisioningTasksResources.CPU == 0 && provisioningTasksResources.Memory == 0 {
 		log.Println("There is no tasks in PROVISIONING state. No need to scale up")
 		return
 	}
 
-	allTasksCPU := runningTasksResources.CPU + provisioningTasksResources.CPU
-	allTasksMemory := runningTasksResources.Memory + provisioningTasksResources.Memory
-	cpuRatio := float64(allTasksCPU) / float64(runningTasksResources.CPU)
-	memoryRatio := float64(allTasksMemory) / float64(runningTasksResources.Memory)
-	scaleRatio := math.Max(cpuRatio, memoryRatio)
+	instanceResources, err := getInstanceResources()
+	if err != nil {
+		log.Printf("[Error] Failed to get instance resources. Error: %v", err)
+		return
+	}
+
+	cpuRatio := float64(provisioningTasksResources.CPU) / float64(instanceResources.CPU)
+	memoryRatio := float64(provisioningTasksResources.Memory) / float64(instanceResources.Memory)
 
 	curentInstanceCount, err := getInstanceCount(svc)
 	if err != nil {
 		log.Println("Error while getting instance count", err)
 	}
-
-	scaledDesiredCount := int64(math.Ceil(float64(curentInstanceCount) * scaleRatio))
-	setDesiredCapacity(autoscalingSvc, scaledDesiredCount)
+	requiredInstances := curentInstanceCount + int64(math.Ceil(math.Max(cpuRatio, memoryRatio)))
+	setDesiredCapacity(autoscalingSvc, requiredInstances)
 }
