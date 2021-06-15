@@ -34,7 +34,7 @@ func CreateUser(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"access-token": password,
+		"accessToken": password,
 	})
 }
 
@@ -70,7 +70,7 @@ func RefreshToken(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"access-token": password,
+		"accessToken": password,
 	})
 }
 
