@@ -237,7 +237,8 @@ func main() {
 						continue
 					}
 					log.Printf("Deleting task: %s. Reason: idle timeout", s.TaskID)
-					handlers.Delete(s.TaskID)
+					handlers.CloseAndRemoveSession(key)
+					// handlers.Delete(s.TaskID)
 					_, err = rdb.Del(context.Background(), key).Result()
 					if err != nil {
 						log.Printf("can't delete session from redis cache. Session: %s. Error: %v", key, err)
