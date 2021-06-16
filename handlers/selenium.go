@@ -157,45 +157,6 @@ func (s *sess) url() string {
 	return fmt.Sprintf("http://%s/wd/hub/session/%s", s.addr, s.id)
 }
 
-func CloseSession(sess *session.Session) error {
-	timeoutCtx, cancel := context.WithTimeout(context.Background(), SessionDeleteTimeout)
-	defer cancel()
-
-	client := http.Client{}
-
-	req, err := http.NewRequestWithContext(timeoutCtx, http.MethodDelete, sess.URL.Host, nil)
-	if err != nil {
-		return err
-	}
-	log.Printf("Closing session. Request: [%s %s]", req.Method, req.RequestURI)
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to cancel driver session, RequestError: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("cancel request returned not success status code. Code: %d", resp.StatusCode)
-	}
-	return nil
-}
-
-func CloseAndRemoveSession(sessionId string) {
-	sess, err := CreateSessionFromCache(sessionId)
-	if err != nil {
-		fmt.Printf("[Error] Failed to get session from cache. Error: %v", err)
-		return
-	}
-
-	err = CloseSession(sess)
-	if err != nil {
-		log.Printf("[Error] Failed to close session. Error: %v", err)
-		return
-	}
-	log.Printf("Session closed. SessionId: %s", sessionId)
-
-	sess.Cancel()
-}
-
 func Delete(taskId string) {
 	log.Printf("SESSION_TIMED_OUT: Removing ECS task forcibly: '%s'!", taskId)
 	service.RemoveTask(taskId)
