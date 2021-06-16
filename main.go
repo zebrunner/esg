@@ -1,8 +1,6 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
 	"flag"
 	"net/http/httputil"
 
@@ -30,8 +28,6 @@ var (
 	gracefulPeriod     time.Duration
 	retryCount         int
 	dbConnectionString string
-
-	version bool
 )
 
 func init() {
@@ -73,10 +69,6 @@ func init() {
 	handlers.InitManager()
 
 	var err error
-	//hostname, err = os.Hostname()
-	//if err != nil {
-	//	log.Fatalf("[-] [INIT] [%s: %v]", os.Args[0], err)
-	//}
 	handlers.VideoOutputDir, err = filepath.Abs(handlers.VideoOutputDir)
 	if err != nil {
 		log.Fatalf("[-] [INIT] [Invalid video output dir %s: %v]", handlers.VideoOutputDir, err)
@@ -102,26 +94,6 @@ func init() {
 		}
 	}
 }
-
-//
-//var paths = struct {
-//	Video, VNC, Logs, Devtools, Download, Clipboard, File, Ping, Status, Error, WdHub, Welcome, Users string
-//}{
-//	VNC:       "/vnc/",
-//	Devtools:  "/devtools/",
-//	Download:  "/download/",
-//	Clipboard: "/clipboard/",
-//	File:      "/file",
-//}
-
-// TODO: Realize support for requests
-//func handler() http.Handler {
-//	root := http.NewServeMux()
-//	root.HandleFunc(paths.Download, handlers.ReverseProxy(func(sess *session.Session) string { return sess.HostPort.Fileserver }, "DOWNLOADING_FILE"))
-//	root.HandleFunc(paths.Clipboard, handlers.ReverseProxy(func(sess *session.Session) string { return sess.HostPort.Clipboard }, "CLIPBOARD"))
-//	root.HandleFunc(paths.Devtools, handlers.ReverseProxy(func(sess *session.Session) string { return sess.HostPort.Devtools }, "DEVTOOLS"))
-//	return root
-//}
 
 func ReverseProxy() gin.HandlerFunc {
 	// TODO: Replace hardcoded target
@@ -206,46 +178,7 @@ func main() {
 	handlers.RDB = rdb
 	defer rdb.Close()
 
-	go func() {
-		// TODO: Emulate session termination on selenium and try to return response
-		// TODO: Move logic outside core ESG to run separately from main processes
-		for {
-			time.Sleep(handlers.Timeout)
-			keys, err := rdb.Keys(context.Background(), "*").Result()
-			if err != nil {
-				log.Println("Error while getting list of keys", err)
-				continue
-			}
-
-			for _, key := range keys {
-				idle, err := rdb.ObjectIdleTime(context.Background(), key).Result()
-				if err != nil {
-					log.Printf("Error while getting IDLE time for session: %s. Error: %v", key, err)
-					continue
-				}
-
-				if idle > handlers.Timeout {
-					result, err := rdb.Get(context.Background(), key).Result()
-					if err != nil {
-						log.Printf("Error happened while getting session from cache. %v", err)
-						continue
-					}
-					s := handlers.CachedSession{}
-					err = json.Unmarshal([]byte(result), &s)
-					if err != nil {
-						log.Printf("Cant unmarshal redis data. Error: %v", err)
-						continue
-					}
-					log.Printf("Deleting task: %s. Reason: idle timeout", s.TaskID)
-					handlers.Delete(s.TaskID)
-					_, err = rdb.Del(context.Background(), key).Result()
-					if err != nil {
-						log.Printf("can't delete session from redis cache. Session: %s. Error: %v", key, err)
-					}
-				}
-			}
-		}
-	}()
+	go handlers.RemoveDeadSessions()
 
 	router := CreateRouter()
 	err = router.Run(listen)
