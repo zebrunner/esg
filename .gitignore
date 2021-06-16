@@ -157,8 +157,6 @@ Temporary Items
 # End of https://www.toptal.com/developers/gitignore/api/go,visualstudiocode,intellij+all,macos
 
 coverage.*
-start.sh
-stop.sh
 *.log
 .vscode
 esg
