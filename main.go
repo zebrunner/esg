@@ -178,7 +178,7 @@ func main() {
 	handlers.RDB = rdb
 	defer rdb.Close()
 
-	go handlers.RemoveDeadSessions()
+	go handlers.ClearSessions()
 
 	router := CreateRouter()
 	err = router.Run(listen)

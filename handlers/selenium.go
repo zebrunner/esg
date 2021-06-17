@@ -872,7 +872,7 @@ func onTimeout(t time.Duration, f func()) chan struct{} {
 	return cancel
 }
 
-func RemoveDeadSessions() {
+func ClearSessions() {
 	// TODO: Emulate session termination on selenium and try to return response
 	// TODO: Move logic outside core ESG to run separately from main processes
 	for {
