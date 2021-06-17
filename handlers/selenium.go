@@ -871,3 +871,44 @@ func onTimeout(t time.Duration, f func()) chan struct{} {
 	}(cancel)
 	return cancel
 }
+
+func ClearSessions() {
+	// TODO: Emulate session termination on selenium and try to return response
+	// TODO: Move logic outside core ESG to run separately from main processes
+	for {
+		time.Sleep(Timeout)
+		keys, err := RDB.Keys(context.Background(), "*").Result()
+		if err != nil {
+			log.Println("Error while getting list of keys", err)
+			continue
+		}
+
+		for _, key := range keys {
+			idle, err := RDB.ObjectIdleTime(context.Background(), key).Result()
+			if err != nil {
+				log.Printf("Error while getting IDLE time for session: %s. Error: %v", key, err)
+				continue
+			}
+
+			if idle > Timeout {
+				result, err := RDB.Get(context.Background(), key).Result()
+				if err != nil {
+					log.Printf("Error happened while getting session from cache. %v", err)
+					continue
+				}
+				s := CachedSession{}
+				err = json.Unmarshal([]byte(result), &s)
+				if err != nil {
+					log.Printf("Cant unmarshal redis data. Error: %v", err)
+					continue
+				}
+				log.Printf("Deleting task: %s. Reason: idle timeout", s.TaskID)
+				Delete(s.TaskID)
+				_, err = RDB.Del(context.Background(), key).Result()
+				if err != nil {
+					log.Printf("can't delete session from redis cache. Session: %s. Error: %v", key, err)
+				}
+			}
+		}
+	}
+}
