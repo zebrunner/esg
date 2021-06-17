@@ -1,10 +1,11 @@
 package session
 
 import (
-	"github.com/imdario/mergo"
 	"net/url"
 	"sync"
 	"time"
+
+	"github.com/imdario/mergo"
 )
 
 // Caps - user capabilities
@@ -85,6 +86,7 @@ type Session struct {
 	TimeoutCh chan struct{}
 	Started   time.Time
 	Lock      sync.Mutex
+	TaskID    string
 }
 
 // HostPort - hold host-port values for all forwarded ports
