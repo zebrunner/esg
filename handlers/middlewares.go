@@ -53,9 +53,12 @@ func SeleniumError(c *gin.Context) {
 		meta = publicError.Meta
 	}
 	c.JSON(status, gin.H{
-		"error":   "unknown error",
-		"message": message,
-		"data":    meta,
+		"value": gin.H{
+			"error":   "unknown error",
+			"message": message,
+			"data":    meta,
+		},
+		"status": 13,
 	})
 }
 

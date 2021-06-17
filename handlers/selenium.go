@@ -157,45 +157,6 @@ func (s *sess) url() string {
 	return fmt.Sprintf("http://%s/wd/hub/session/%s", s.addr, s.id)
 }
 
-func CloseSession(sess *session.Session) error {
-	timeoutCtx, cancel := context.WithTimeout(context.Background(), SessionDeleteTimeout)
-	defer cancel()
-
-	client := http.Client{}
-
-	req, err := http.NewRequestWithContext(timeoutCtx, http.MethodDelete, sess.URL.Host, nil)
-	if err != nil {
-		return err
-	}
-	log.Printf("Closing session. Request: [%s %s]", req.Method, req.RequestURI)
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to cancel driver session, RequestError: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("cancel request returned not success status code. Code: %d", resp.StatusCode)
-	}
-	return nil
-}
-
-func CloseAndRemoveSession(sessionId string) {
-	sess, err := CreateSessionFromCache(sessionId)
-	if err != nil {
-		fmt.Printf("[Error] Failed to get session from cache. Error: %v", err)
-		return
-	}
-
-	err = CloseSession(sess)
-	if err != nil {
-		log.Printf("[Error] Failed to close session. Error: %v", err)
-		return
-	}
-	log.Printf("Session closed. SessionId: %s", sessionId)
-
-	sess.Cancel()
-}
-
 func Delete(taskId string) {
 	log.Printf("SESSION_TIMED_OUT: Removing ECS task forcibly: '%s'!", taskId)
 	service.RemoveTask(taskId)
@@ -909,4 +870,45 @@ func onTimeout(t time.Duration, f func()) chan struct{} {
 		}
 	}(cancel)
 	return cancel
+}
+
+func ClearSessions() {
+	// TODO: Emulate session termination on selenium and try to return response
+	// TODO: Move logic outside core ESG to run separately from main processes
+	for {
+		time.Sleep(Timeout)
+		keys, err := RDB.Keys(context.Background(), "*").Result()
+		if err != nil {
+			log.Println("Error while getting list of keys", err)
+			continue
+		}
+
+		for _, key := range keys {
+			idle, err := RDB.ObjectIdleTime(context.Background(), key).Result()
+			if err != nil {
+				log.Printf("Error while getting IDLE time for session: %s. Error: %v", key, err)
+				continue
+			}
+
+			if idle > Timeout {
+				result, err := RDB.Get(context.Background(), key).Result()
+				if err != nil {
+					log.Printf("Error happened while getting session from cache. %v", err)
+					continue
+				}
+				s := CachedSession{}
+				err = json.Unmarshal([]byte(result), &s)
+				if err != nil {
+					log.Printf("Cant unmarshal redis data. Error: %v", err)
+					continue
+				}
+				log.Printf("Deleting task: %s. Reason: idle timeout", s.TaskID)
+				Delete(s.TaskID)
+				_, err = RDB.Del(context.Background(), key).Result()
+				if err != nil {
+					log.Printf("can't delete session from redis cache. Session: %s. Error: %v", key, err)
+				}
+			}
+		}
+	}
 }
