@@ -2,22 +2,15 @@ package main
 
 import (
 	"flag"
-	"net/http/httputil"
-
-	"github.com/gin-gonic/gin"
-	"golang.org/x/net/websocket"
-
-	//"github.com/zebrunner/esg/webserver"
+	"fmt"
 	"log"
-
 	"net/http"
-	"os"
+	"net/http/httputil"
 	"strings"
 	"time"
 
-	"path/filepath"
-
-	"fmt"
+	"github.com/gin-gonic/gin"
+	"golang.org/x/net/websocket"
 
 	"github.com/zebrunner/esg/handlers"
 	"github.com/zebrunner/esg/service"
@@ -36,15 +29,9 @@ func init() {
 	flag.IntVar(&retryCount, "retry-count", 1, "New session attempts retry count")
 	flag.DurationVar(&handlers.Timeout, "timeout", 60*time.Second, "Session idle timeout in time.Duration format")
 	flag.DurationVar(&handlers.MaxTimeout, "max-timeout", 1*time.Hour, "Maximum valid session idle timeout in time.Duration format")
-	//flag.DurationVar(&service.newSessionAttemptTimeout, "session-attempt-timeout", 30*time.Second, "New session attempt timeout in time.Duration format")
 	flag.DurationVar(&handlers.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
 	flag.DurationVar(&handlers.ServiceStartupTimeout, "service-startup-timeout", 30*time.Second, "Service startup timeout in time.Duration format")
-	//flag.BoolVar(&version, "version", false, "Show version and exit")
-	flag.BoolVar(&handlers.CaptureDriverLogs, "capture-driver-logs", false, "Whether to add driver process logs to Selenoid output")
-	//flag.StringVar(&handlers.VideoOutputDir, "video-output-dir", "video", "Directory to save recorded video to")
 	flag.StringVar(&handlers.VideoRecorderImage, "video-recorder-image", "selenoid/video-recorder:latest-release", "Image to use as video recorder")
-	flag.StringVar(&handlers.LogOutputDir, "log-output-dir", "", "Directory to save session log to")
-	flag.BoolVar(&handlers.SaveAllLogs, "save-all-logs", false, "Whether to save all logs without considering capabilities")
 	flag.DurationVar(&gracefulPeriod, "graceful-period", 300*time.Second, "graceful shutdown period in time.Duration format, e.g. 300s or 500ms")
 	// AWS Related args
 	flag.StringVar(&service.AwsRegion, "aws-region", "us-east-1", "AWS region name")
@@ -67,32 +54,6 @@ func init() {
 	flag.Parse()
 
 	handlers.InitManager()
-
-	var err error
-	handlers.VideoOutputDir, err = filepath.Abs(handlers.VideoOutputDir)
-	if err != nil {
-		log.Fatalf("[-] [INIT] [Invalid video output dir %s: %v]", handlers.VideoOutputDir, err)
-	}
-	err = os.MkdirAll(handlers.VideoOutputDir, os.FileMode(0644))
-	if err != nil {
-		log.Fatalf("[-] [INIT] [Failed to create video output dir %s: %v]", handlers.VideoOutputDir, err)
-	}
-	log.Printf("[-] [INIT] [Video Dir: %s]", handlers.VideoOutputDir)
-
-	if handlers.LogOutputDir != "" {
-		handlers.LogOutputDir, err = filepath.Abs(handlers.LogOutputDir)
-		if err != nil {
-			log.Fatalf("[-] [INIT] [Invalid log output dir %s: %v]", handlers.LogOutputDir, err)
-		}
-		err = os.MkdirAll(handlers.LogOutputDir, os.FileMode(0644))
-		if err != nil {
-			log.Fatalf("[-] [INIT] [Failed to create log output dir %s: %v]", handlers.LogOutputDir, err)
-		}
-		log.Printf("[-] [INIT] [Logs Dir: %s]", handlers.LogOutputDir)
-		if handlers.SaveAllLogs {
-			log.Printf("[-] [INIT] [Saving all logs]")
-		}
-	}
 }
 
 func ReverseProxy() gin.HandlerFunc {
@@ -148,8 +109,6 @@ func CreateRouter() *gin.Engine {
 			fmt.Printf("[VNC REQUEST] %+v", c.Request)
 			handler.ServeHTTP(c.Writer, c.Request)
 		})
-
-		hub.Any("/file/:session", handlers.File)
 
 		hub.GET("/download/:session/:file", handlers.Downloads)
 		hub.DELETE("/download/:session/:file", handlers.Downloads)
