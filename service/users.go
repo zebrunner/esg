@@ -3,13 +3,13 @@ package service
 import (
 	"fmt"
 	"github.com/zebrunner/esg/utils"
-	"log"
 	"net/http"
 
 	"github.com/jackc/pgtype"
 	_ "github.com/jackc/pgx/v4/stdlib"
 	"github.com/jmoiron/sqlx"
 	"github.com/sethvargo/go-password/password"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
 )
 

@@ -2,7 +2,6 @@ package service
 
 import (
 	"errors"
-	"log"
 	"math"
 	"strconv"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/autoscaling"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ecs"
+	log "github.com/sirupsen/logrus"
 )
 
 type Resources struct {

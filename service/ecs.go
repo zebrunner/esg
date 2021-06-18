@@ -5,7 +5,6 @@ import (
 
 	"github.com/aws/aws-sdk-go/service/s3"
 
-	"log"
 	"math/rand"
 	"net/url"
 	"strconv"
@@ -22,6 +21,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 
 	"github.com/google/uuid"
+	log "github.com/sirupsen/logrus"
 )
 
 // Task - ecs task container manager

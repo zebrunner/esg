@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -36,6 +35,7 @@ import (
 	//	"github.com/docker/docker/api/types"
 	//	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/go-redis/redis/v8"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/websocket"
 )
 
@@ -166,7 +166,7 @@ func Delete(taskId string) {
 func CloseSession(sessionID string) {
 	sess, err := CreateSessionFromCache(sessionID)
 	if err != nil {
-		fmt.Printf("[Error] Failed to get session from cache. Error: %v", err)
+		log.WithError(err).Error("Failed to get session from cache")
 		return
 	}
 	defer sess.Cancel()
@@ -595,8 +595,6 @@ func Proxy(c *gin.Context) {
 			fragments := strings.Split(r.URL.Path, slash)
 			sessionID := fragments[2]
 
-			//TODO: candidate to hide on verbose log level
-			log.Printf("[PROXY_TO] [%s]", r.URL.Path)
 			var err error = nil
 			sess, ok := sessions.Get(sessionID)
 			if !ok {
@@ -918,34 +916,34 @@ func ClearSessions() {
 		time.Sleep(Timeout)
 		keys, err := RDB.Keys(context.Background(), "*").Result()
 		if err != nil {
-			log.Println("Error while getting list of keys", err)
+			log.WithError(err).Error("Failed to get list of keys")
 			continue
 		}
 
 		for _, key := range keys {
 			idle, err := RDB.ObjectIdleTime(context.Background(), key).Result()
 			if err != nil {
-				log.Printf("Error while getting IDLE time for session: %s. Error: %v", key, err)
+				log.WithError(err).WithField("session", key).Error("Failed to get IDLE time for session.")
 				continue
 			}
 
 			if idle > Timeout {
 				result, err := RDB.Get(context.Background(), key).Result()
 				if err != nil {
-					log.Printf("Error happened while getting session from cache. %v", err)
+					log.WithError(err).Error("Failed to get session from cache")
 					continue
 				}
 				s := CachedSession{}
 				err = json.Unmarshal([]byte(result), &s)
 				if err != nil {
-					log.Printf("Cant unmarshal redis data. Error: %v", err)
+					log.WithError(err).Error("Failed to unmarshal redis response")
 					continue
 				}
-				log.Printf("Deleting task: %s. Reason: idle timeout", s.TaskID)
+				log.WithField("task", s.TaskID).Info("Deleting task. Reson: idle temeout")
 				CloseSession(key)
 				_, err = RDB.Del(context.Background(), key).Result()
 				if err != nil {
-					log.Printf("can't delete session from redis cache. Session: %s. Error: %v", key, err)
+					log.WithError(err).WithField("session", key).Error("Failed to delete session from cache")
 				}
 			}
 		}

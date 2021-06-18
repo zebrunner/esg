@@ -2,13 +2,13 @@ package service
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"time"
 
 	"github.com/go-redis/redis/v8"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/session"
 )
 

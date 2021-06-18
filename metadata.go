@@ -7,9 +7,9 @@ import (
 	"github.com/zebrunner/esg/event"
 	"github.com/zebrunner/esg/session"
 	"io/ioutil"
-	"log"
 	"path/filepath"
 	"time"
+	log "github.com/sirupsen/logrus"
 )
 
 const metadataFileExtension = ".json"

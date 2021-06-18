@@ -8,7 +8,6 @@ import (
 	"golang.org/x/net/websocket"
 
 	//"github.com/zebrunner/esg/webserver"
-	"log"
 
 	"net/http"
 	"os"
@@ -19,6 +18,7 @@ import (
 
 	"fmt"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/handlers"
 	"github.com/zebrunner/esg/service"
 )
@@ -71,7 +71,7 @@ func init() {
 	var err error
 	handlers.VideoOutputDir, err = filepath.Abs(handlers.VideoOutputDir)
 	if err != nil {
-		log.Fatalf("[-] [INIT] [Invalid video output dir %s: %v]", handlers.VideoOutputDir, err)
+		log.WithField("videoOutputDit", handlers.VideoOutputDir).WithError(err).Fatal("Invalid video output dir")
 	}
 	err = os.MkdirAll(handlers.VideoOutputDir, os.FileMode(0644))
 	if err != nil {
@@ -111,7 +111,8 @@ func ReverseProxy() gin.HandlerFunc {
 }
 
 func CreateRouter() *gin.Engine {
-	r := gin.Default()
+	r := gin.New()
+	r.Use(gin.LoggerWithFormatter(TraceLogFromating), gin.Recovery())
 
 	api := r.Group("/api")
 	api.Use(handlers.APIError)
