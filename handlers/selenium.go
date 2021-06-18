@@ -1,11 +1,8 @@
 package handlers
 
 import (
-	"archive/zip"
 	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -59,12 +56,8 @@ var (
 	sessions              = session.NewMap()
 	Timeout               time.Duration
 	MaxTimeout            time.Duration
-	SaveAllLogs           bool
-	LogOutputDir          string
 	ServiceStartupTimeout time.Duration
 	SessionDeleteTimeout  time.Duration
-	CaptureDriverLogs     bool
-	VideoOutputDir        string
 	VideoRecorderImage    string
 	manager               service.Manager
 	EnableFileUpload      bool
@@ -74,22 +67,13 @@ func InitManager() {
 	environment := service.Environment{
 		StartupTimeout:       ServiceStartupTimeout,
 		SessionDeleteTimeout: SessionDeleteTimeout,
-		CaptureDriverLogs:    CaptureDriverLogs,
-		VideoOutputDir:       VideoOutputDir,
 		VideoContainerImage:  VideoRecorderImage,
-		LogOutputDir:         LogOutputDir,
-		SaveAllLogs:          SaveAllLogs,
 	}
 	manager = &service.DefaultManager{Environment: &environment}
 }
 
 type Request struct {
 	*http.Request
-}
-
-type sess struct {
-	addr string
-	id   string
 }
 
 type CachedSession struct {
@@ -148,14 +132,6 @@ func (r Request) Localaddr() string {
 	addr := r.Context().Value(http.LocalAddrContextKey).(net.Addr).String()
 	_, port, _ := net.SplitHostPort(addr)
 	return net.JoinHostPort("127.0.0.1", port)
-}
-
-func (r Request) session(id string) *sess {
-	return &sess{r.Localaddr(), id}
-}
-
-func (s *sess) url() string {
-	return fmt.Sprintf("http://%s/wd/hub/session/%s", s.addr, s.id)
 }
 
 func Delete(taskId string) {
@@ -244,38 +220,14 @@ func createSession(ctx context.Context, sessionUrl string, header http.Header, b
 	return reply, browserStarted
 }
 
-//func errMsg(msg string) map[string]interface{} {
-//	return map[string]interface{}{
-//		"value": map[string]string{
-//			"message": msg,
-//		},
-//		"status": 13,
-//	}
-//}
-
-func serial() uint64 {
-	numLock.Lock()
-	defer numLock.Unlock()
-	id := num
-	num++
-	return id
-}
-
-func getSerial() uint64 {
-	numLock.RLock()
-	defer numLock.RUnlock()
-	return num
-}
-
 func Create(c *gin.Context) {
 	r := c.Request
 	sessionStartTime := time.Now()
-	requestId := serial()
 	user, remote := util.RequestInfo(r)
 	body, err := ioutil.ReadAll(r.Body)
 	r.Body.Close()
 	if err != nil {
-		log.Printf("[%d] [%s] [%s] [ERROR_READING_REQUEST] [%v]", requestId, user, remote, err)
+		log.Printf("[%s] [%s] [ERROR_READING_REQUEST] [%v]", user, remote, err)
 		c.Error(&utils.HTTPError{
 			Status:  http.StatusBadRequest,
 			Message: err.Error(),
@@ -291,7 +243,7 @@ func Create(c *gin.Context) {
 	}
 	err = json.Unmarshal(body, &browser)
 	if err != nil {
-		log.Printf("[%d] [%s] [%s] [BAD_JSON_FORMAT] [%v]", requestId, user, remote, err)
+		log.Printf("[%s] [%s] [BAD_JSON_FORMAT] [%v]", user, remote, err)
 		c.Error(&utils.HTTPError{
 			Status:  http.StatusBadRequest,
 			Message: err.Error(),
@@ -309,14 +261,13 @@ func Create(c *gin.Context) {
 	var starter service.Starter
 	var ok bool
 	var sessionTimeout time.Duration
-	var finalLogName string
 	for _, fmc := range firstMatchCaps {
 		caps = browser.Caps
 		mergo.Merge(&caps, *fmc)
 		caps.ProcessExtensionCapabilities()
 		sessionTimeout, err = getSessionTimeout(caps.SessionTimeout, MaxTimeout, Timeout)
 		if err != nil {
-			log.Printf("[%d] [%s] [%s] [BAD_SESSION_TIMEOUT] [%s]", requestId, user, remote, caps.SessionTimeout)
+			log.Printf("[%s] [%s] [BAD_SESSION_TIMEOUT] [%s]", user, remote, caps.SessionTimeout)
 			c.Error(&utils.HTTPError{
 				Status:  http.StatusBadRequest,
 				Message: err.Error(),
@@ -325,7 +276,7 @@ func Create(c *gin.Context) {
 		}
 		resolution, err := getScreenResolution(caps.ScreenResolution)
 		if err != nil {
-			log.Printf("[%d] [%s] [%s] [BAD_SCREEN_RESOLUTION] [%s]", requestId, user, remote, caps.ScreenResolution)
+			log.Printf("[%s] [%s] [BAD_SCREEN_RESOLUTION] [%s]", user, remote, caps.ScreenResolution)
 			c.Error(&utils.HTTPError{
 				Status:  http.StatusBadRequest,
 				Message: err.Error(),
@@ -335,7 +286,7 @@ func Create(c *gin.Context) {
 		caps.ScreenResolution = resolution
 		videoScreenSize, err := getVideoScreenSize(caps.VideoScreenSize, resolution)
 		if err != nil {
-			log.Printf("[%d] [%s] [%s] [BAD_VIDEO_SCREEN_SIZE] [%s]", requestId, user, remote, caps.VideoScreenSize)
+			log.Printf("[%s] [%s] [BAD_VIDEO_SCREEN_SIZE] [%s]", user, remote, caps.VideoScreenSize)
 			c.Error(&utils.HTTPError{
 				Status:  http.StatusBadRequest,
 				Message: err.Error(),
@@ -343,17 +294,13 @@ func Create(c *gin.Context) {
 			return
 		}
 		caps.VideoScreenSize = videoScreenSize
-		finalLogName = caps.LogName
-		if LogOutputDir != "" && (SaveAllLogs || caps.Log) {
-			caps.LogName = getTemporaryFileName(LogOutputDir, logFileExtension)
-		}
-		starter, ok = manager.Find(caps, requestId)
+		starter, ok = manager.Find(caps)
 		if ok {
 			break
 		}
 	}
 	if !ok {
-		log.Printf("[%d] [%s] [%s] [ENVIRONMENT_NOT_AVAILABLE] [%s] [%s]", requestId, user, remote, caps.BrowserName(), caps.Version)
+		log.Printf("[%s] [%s] [ENVIRONMENT_NOT_AVAILABLE] [%s] [%s]", user, remote, caps.BrowserName(), caps.Version)
 		c.Error(&utils.HTTPError{
 			Status:  http.StatusBadRequest,
 			Message: "Requested environment is not available",
@@ -369,11 +316,11 @@ func Create(c *gin.Context) {
 
 	startedService, err := starter.StartWithCancel(username)
 	if err != nil {
-		log.Printf("[%d] [%s] [%s] [SERVICE_STARTUP_FAILED] [%v]", requestId, user, remote, err)
+		log.Printf("[%s] [%s] [SERVICE_STARTUP_FAILED] [%v]", user, remote, err)
 		c.Error(err)
 		return
 	}
-	log.Printf("[%d] [%s] [%s] [SERVICE_TASK_ID] [%v]", requestId, user, remote, startedService.TaskID)
+	log.Printf("[%s] [%s] [SERVICE_TASK_ID] [%v]", user, remote, startedService.TaskID)
 	u := startedService.Url
 	cancel := startedService.Cancel
 	i := 1
@@ -388,13 +335,12 @@ func Create(c *gin.Context) {
 		r.URL.Host, r.URL.Path = u.Host, path.Join(u.Path, r.URL.Path)
 		r.URL.Scheme = "http"
 
-		log.Printf("[%d] [%s] [%s] [SESSION_ATTEMPTED] [%s] [%d]", requestId, user, remote, u.String(), i)
+		log.Printf("[%s] [%s] [SESSION_ATTEMPTED] [%s] [%d]", user, remote, u.String(), i)
 		//TODO: show body and capabilities in verbose mode
-		//TODO: implement response updater to populate task id as part of sessionId
 		resp, status := createSession(r.Context(), r.URL.String(), r.Header, body)
 		select {
 		case <-r.Context().Done():
-			log.Printf("[%d] {%s] [%s] [CLIENT_DISCONNECTED]", requestId, user, remote)
+			log.Printf("[%s] [%s] [CLIENT_DISCONNECTED]", user, remote)
 			cancel()
 			return
 		default:
@@ -407,7 +353,7 @@ func Create(c *gin.Context) {
 						Status:  http.StatusBadGateway,
 						Message: "protocol error",
 					})
-					log.Printf("[%d] [%s] [%s] [BAD_RESPONSE]\n", requestId, user, remote)
+					log.Printf("[%s] [%s] [BAD_RESPONSE]\n", user, remote)
 				}
 				value, ok := resp["value"]
 				if !ok {
@@ -439,7 +385,7 @@ func Create(c *gin.Context) {
 			c.JSON(http.StatusOK, resp)
 			break
 		} else {
-			log.Printf("[%d] [%s] [%s] [SESSION_FAILED]", requestId, user, remote)
+			log.Printf("[%s] [%s] [SESSION_FAILED]", user, remote)
 			cancel()
 			return
 		}
@@ -461,30 +407,8 @@ func Create(c *gin.Context) {
 		cancel()
 		sessionId := s.ID
 		e := event.Event{
-			RequestId: requestId,
 			SessionId: sessionId,
 			Session:   sess,
-		}
-		if LogOutputDir != "" && (SaveAllLogs || caps.Log) {
-			//The following logic will fail if -capture-driver-logs is enabled and a session is requested in driver mode.
-			//Specifying both -log-output-dir and -capture-driver-logs in that case is considered a misconfiguration.
-			oldLogName := filepath.Join(LogOutputDir, caps.LogName)
-			if finalLogName == "" {
-				finalLogName = sessionId + logFileExtension
-				e.Session.Caps.LogName = finalLogName
-			}
-			newLogName := filepath.Join(LogOutputDir, finalLogName)
-			err := os.Rename(oldLogName, newLogName)
-			if err != nil {
-				log.Printf("[%d] [LOG_ERROR] [%s]", requestId, fmt.Sprintf("Failed to rename %s to %s: %v", oldLogName, newLogName, err))
-			} else {
-				createdFile := event.CreatedFile{
-					Event: e,
-					Name:  newLogName,
-					Type:  "log",
-				}
-				event.FileCreated(createdFile)
-			}
 		}
 		event.SessionStopped(event.StoppedSession{e})
 	}
@@ -503,13 +427,8 @@ func Create(c *gin.Context) {
 	if err != nil {
 		fmt.Println("Session not cached", err)
 	}
-	log.Printf("[%d] [%s] [%s] [SESSION_CREATED] [%s] [%d] [%.2fs]", requestId, user, remote, s.ID, i, util.SecondsSince(sessionStartTime))
+	log.Printf("[%s] [%s] [SESSION_CREATED] [%s] [%d] [%.2fs]", user, remote, s.ID, i, util.SecondsSince(sessionStartTime))
 }
-
-const (
-	videoFileExtension = ".mp4"
-	logFileExtension   = ".log"
-)
 
 var (
 	fullFormat  = regexp.MustCompile(`^([0-9]+x[0-9]+)x(8|16|24)$`)
@@ -563,24 +482,6 @@ func getSessionTimeout(sessionTimeout string, maxTimeout time.Duration, defaultT
 	return defaultTimeout, nil
 }
 
-func getTemporaryFileName(dir string, extension string) string {
-	filename := ""
-	for {
-		filename = generateRandomFileName(extension)
-		_, err := os.Stat(filepath.Join(dir, filename))
-		if err != nil {
-			break
-		}
-	}
-	return filename
-}
-
-func generateRandomFileName(extension string) string {
-	randBytes := make([]byte, 16)
-	rand.Read(randBytes)
-	return "selenoid" + hex.EncodeToString(randBytes) + extension
-}
-
 func Proxy(c *gin.Context) {
 	done := make(chan func())
 	go func() {
@@ -595,8 +496,6 @@ func Proxy(c *gin.Context) {
 			fragments := strings.Split(r.URL.Path, slash)
 			sessionID := fragments[2]
 
-			//TODO: candidate to hide on verbose log level
-			log.Printf("[PROXY_TO] [%s]", r.URL.Path)
 			var err error = nil
 			sess, ok := sessions.Get(sessionID)
 			if !ok {
@@ -623,9 +522,6 @@ func Proxy(c *gin.Context) {
 					RDB.Del(context.Background(), sessionID).Result()
 					log.Printf("[SESSION_DELETED] [%s]", sessionID)
 				} else {
-					//					sess.TimeoutCh = onTimeout(sess.Timeout, func() {
-					//						request{r}.session(sessionID).Delete(sess.TaskID)
-					//					})
 					if len(fragments) == 4 && fragments[len(fragments)-1] == "file" && EnableFileUpload {
 						r.Header.Set("X-Selenoid-File", filepath.Join(os.TempDir(), sessionID))
 						r.URL.Path = "/file"
@@ -636,7 +532,6 @@ func Proxy(c *gin.Context) {
 				r.URL.Scheme = "http"
 				return
 			}
-			//r.URL.Path = paths.Error
 			r.URL.Path = "/error"
 		},
 		ErrorHandler: defaultErrorHandler(),
@@ -685,76 +580,18 @@ func splitRequestPath(p string) (string, string) {
 	// return fragments[2], slash + strings.Join(fragments[3:], slash)
 }
 
-func File(c *gin.Context) {
-	var body struct {
-		File []byte `json:"file" binding:"required"`
-	}
-	err := c.ShouldBindJSON(&body)
-	if err != nil {
-		c.Error(err).SetType(gin.ErrorTypePublic)
-		return
-	}
-	z, err := zip.NewReader(bytes.NewReader(body.File), int64(len(body.File)))
-	if err != nil {
-		c.Error(err).SetType(gin.ErrorTypePublic)
-		return
-	}
-	if len(z.File) != 1 {
-		c.Error(&utils.HTTPError{
-			Status:  http.StatusBadRequest,
-			Message: fmt.Sprintf("Expected there to be only 1 file. There were: %d", len(z.File)),
-		}).SetType(gin.ErrorTypePublic)
-		return
-	}
-	file := z.File[0]
-	src, err := file.Open()
-	if err != nil {
-		c.Error(&utils.HTTPError{
-			Status:  http.StatusBadRequest,
-			Message: err.Error(),
-		}).SetType(gin.ErrorTypePublic)
-		return
-	}
-	defer src.Close()
-
-	dir := c.GetHeader("X-Selenoid-File")
-	err = os.MkdirAll(dir, 0755)
-	if err != nil {
-		c.Error(err)
-		return
-	}
-	fileName := filepath.Join(dir, file.Name)
-	dst, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE, 0644)
-	if err != nil {
-		c.Error(err)
-		return
-	}
-	defer dst.Close()
-	_, err = io.Copy(dst, src)
-	if err != nil {
-		c.Error(err)
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"value": fileName,
-	})
-}
-
 func Vnc(wsconn *websocket.Conn) {
 	defer wsconn.Close()
-	requestId := serial()
 	sid, _ := splitRequestPath(wsconn.Request().URL.Path)
 	sess, err := CreateSessionFromCache(sid)
-	//sess, ok := sessions.Get(sid)
 	if err == nil {
 		vncHostPort := sess.HostPort.VNC
 		if vncHostPort != "" {
-			log.Printf("[%d] [VNC_ENABLED] [%s]", requestId, sid)
+			log.Printf("[VNC_ENABLED] [%s]", sid)
 			var d net.Dialer
 			conn, err := d.DialContext(wsconn.Request().Context(), "tcp", vncHostPort)
 			if err != nil {
-				log.Printf("[%d] [VNC_ERROR] [%v]", requestId, err)
+				log.Printf("[VNC_ERROR] [%v]", err)
 				return
 			}
 			defer conn.Close()
@@ -762,15 +599,15 @@ func Vnc(wsconn *websocket.Conn) {
 			go func() {
 				io.Copy(wsconn, conn)
 				wsconn.Close()
-				log.Printf("[%d] [VNC_SESSION_CLOSED] [%s]", requestId, sid)
+				log.Printf("[VNC_SESSION_CLOSED] [%s]", sid)
 			}()
 			io.Copy(conn, wsconn)
-			log.Printf("[%d] [VNC_CLIENT_DISCONNECTED] [%s]", requestId, sid)
+			log.Printf("[VNC_CLIENT_DISCONNECTED] [%s]", sid)
 		} else {
-			log.Printf("[%d] [VNC_NOT_ENABLED] [%s]", requestId, sid)
+			log.Printf("[VNC_NOT_ENABLED] [%s]", sid)
 		}
 	} else {
-		log.Printf("[%d] [SESSION_NOT_FOUND] [%s]", requestId, sid)
+		log.Printf("[SESSION_NOT_FOUND] [%s]", sid)
 	}
 }
 
@@ -814,38 +651,6 @@ func Video(c *gin.Context) {
 		return
 	}
 	c.Redirect(http.StatusFound, presignedUrl)
-}
-
-func ListFilesAsJson(w http.ResponseWriter, dir string, errStatus string) {
-	files, err := ioutil.ReadDir(dir)
-	if err != nil {
-		log.Printf("[%s] [%s]", errStatus, fmt.Sprintf("Failed to list directory %s: %v", LogOutputDir, err))
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	var ret []string
-	for _, f := range files {
-		ret = append(ret, f.Name())
-	}
-	w.Header().Add("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(ret)
-}
-
-func deleteFileIfExists(w http.ResponseWriter, r *http.Request, dir string, prefix string, status string) {
-	user, remote := util.RequestInfo(r)
-	fileName := strings.TrimPrefix(r.URL.Path, prefix)
-	filePath := filepath.Join(dir, fileName)
-	_, err := os.Stat(filePath)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Unknown file %s", filePath), http.StatusNotFound)
-		return
-	}
-	err = os.Remove(filePath)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to delete file %s: %v", filePath, err), http.StatusInternalServerError)
-		return
-	}
-	log.Printf("[%s] [%s] [%s] [%s]", status, user, remote, fileName)
 }
 
 func Downloads(c *gin.Context) {
