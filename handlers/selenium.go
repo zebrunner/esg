@@ -172,7 +172,7 @@ func CloseSession(sessionID string) {
 	defer sess.Cancel()
 
 	client := http.Client{}
-	sess.URL.Path = path.Clean(sess.URL.Path + "/session/" + sessionID)
+	sess.URL.Path = path.Clean(sess.URL.Path + fmt.Sprintf("/session/%s", sessionID))
 	timeoutCtx, cancel := context.WithTimeout(context.Background(), SessionDeleteTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(timeoutCtx, http.MethodDelete, sess.URL.String(), nil)
