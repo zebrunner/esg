@@ -131,6 +131,7 @@ func CreateSessionFromCache(sessionID string) (*session.Session, error) {
 			Delete(s.TaskID)
 		}),
 		Started: s.Started,
+		TaskID:  s.TaskID,
 	}
 	seleniumSession.Cancel = cancelAndRenameFiles(s.TaskID)
 	return &seleniumSession, nil
@@ -160,6 +161,44 @@ func (s *sess) url() string {
 func Delete(taskId string) {
 	log.Printf("SESSION_TIMED_OUT: Removing ECS task forcibly: '%s'!", taskId)
 	service.RemoveTask(taskId)
+}
+
+func CloseSession(sessionID string) {
+	sess, err := CreateSessionFromCache(sessionID)
+	if err != nil {
+		fmt.Printf("[Error] Failed to get session from cache. Error: %v", err)
+		return
+	}
+	defer sess.Cancel()
+
+	client := http.Client{}
+	sess.URL.Path = path.Clean(sess.URL.Path + fmt.Sprintf("/session/%s", sessionID))
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), SessionDeleteTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(timeoutCtx, http.MethodDelete, sess.URL.String(), nil)
+	if err != nil {
+		log.Printf("[Error] Failed to create request. Error: %v", err)
+		return
+	}
+
+	log.Printf("Closing session. Request: [%s %s]", req.Method, req.URL)
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("[Error] Failed to cancel driver session, RequestError: %w", err)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("cancel request returned not success status code. Code: %d", resp.StatusCode)
+		return
+	}
+
+	_, err = RDB.Del(context.Background(), sessionID).Result()
+	if err != nil {
+		log.Printf("[Error] Failed to delete session from redis. Error: %v", err)
+		return
+	}
+	log.Printf("Session closed. SessionId: %s", sessionID)
 }
 
 // create() method from ggr.
@@ -903,7 +942,7 @@ func ClearSessions() {
 					continue
 				}
 				log.Printf("Deleting task: %s. Reason: idle timeout", s.TaskID)
-				Delete(s.TaskID)
+				CloseSession(key)
 				_, err = RDB.Del(context.Background(), key).Result()
 				if err != nil {
 					log.Printf("can't delete session from redis cache. Session: %s. Error: %v", key, err)
