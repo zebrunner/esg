@@ -45,16 +45,6 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	if err != nil {
 		return nil, fmt.Errorf("configuring ports: %v", err)
 	}
-	//ctx := context.Background()
-	/*	log.Printf("[%d] [CREATING_CONTAINER] [%s]", requestId, image)
-		hostConfig := ctr.HostConfig{
-			ExtraHosts: getExtraHosts(d.Service, d.Caps),
-		}
-
-		if len(d.Caps.DNSServers) > 0 {
-			hostConfig.DNS = d.Caps.DNSServers
-		}
-	*/
 
 	memory, memErr := getEcsMemory(d.Caps)
 	memoryReservation, memResErr := getEcsMemoryReservation(d.Caps)
@@ -212,12 +202,7 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	resultTaskDefinition, err := svc.RegisterTaskDefinition(taskDefinitionInput)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to create task definition: %v", err)
-		//	} else {
-		//            log.Printf("[%d] [TASK_DEFINITION] [%s]", requestId, resultTaskDefinition)
 	}
-
-	//	taskDefinition := resultTaskDefinition.TaskDefinition
-	//        log.Printf("[%d] [TASK_DEFINITION] [%s]", requestId, taskDefinition)
 
 	taskStartTime := time.Now()
 	log.Printf("[STARTING_TASK] [%s] [%s]", imageUrl, taskStartTime)
@@ -227,33 +212,12 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 
 	// Pass a context with a timeout to tell a blocking function that it should abandon its work after the timeout elapses.
 	//TODO: parametrize provision timeout
-	/*
-		provisionTimeout := 60 * time.Second
-		ctx, cancel := context.WithTimeout(context.Background(), provisionTimeout)
-		defer cancel()
-
-		select {
-		case <-time.After(10 * time.Second):
-			fmt.Println("overslept 60...")
-		case <-ctx.Done():
-			fmt.Println(ctx.Err()) // prints "context deadline exceeded"
-		}
-
-	*/
 	runTaskInput := &ecs.RunTaskInput{
 		Cluster:        &AwsCluster,
 		TaskDefinition: aws.String(family + ":" + strconv.FormatInt(revision, 10)),
 	}
 
 	resultRunTask, err := svc.RunTask(runTaskInput)
-	/*
-	   if err != nil {
-	       return nil, fmt.Errorf("Unable to run task: %v", err)
-	   } else {
-	       log.Printf("[%d] [TASK_RUN] [%s]", requestId, resultRunTask)
-	   }
-	*/
-
 	taskFailure := ""
 	for retry := 1; retry < 5; retry++ {
 		if err != nil {
@@ -280,32 +244,9 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 		return nil, fmt.Errorf("Unable to run task: %s", taskFailure)
 	}
 
-	/*
-		Failures: [{
-		      Arn: "arn:aws:ecs:us-east-1:659932254483:container-instance/829954d05541417cb21d02409e43ea10",
-		      Reason: "RESOURCE:CPU"
-		    }],
-		  Tasks: []
-		}]
-	*/
-
-	// [TASK_ARN] [arn:aws:ecs:us-east-1:659932254483:task/executor-cluster/35bab349ee55458e9182b84b999dbd1c]
 	taskArn := *resultRunTask.Tasks[0].TaskArn
 	log.Printf("[TASK_ARN] [%s]", taskArn)
 	taskId := strings.Split(taskArn, "/")[2]
-	//	log.Printf("[%d] [TASK_ID] [%s]", requestId, taskId)
-
-	time.Sleep(1 * time.Second)
-	//	time.Sleep(5 * time.Second) //TODO: organize valid waiter using startup-timeout until task is RUNNING
-	// TASK DESCRIBE contains information about actual host/port bindings. Potentially we could user taskId to setup stateless mapping
-	/*
-	   {
-	     BindIP: "0.0.0.0",
-	     ContainerPort: 4444,
-	     HostPort: 4444,
-	     Protocol: "tcp"
-	   },
-	*/
 	//TODO: wait until container starts (in response we should have valid *resultRunTask.Tasks[0].ContainerInstanceArn value
 	describeTaskInput := &ecs.DescribeTasksInput{
 		Cluster: &AwsCluster,
@@ -332,11 +273,8 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	if err != nil {
 		RemoveTask(taskArn)
 		return nil, fmt.Errorf("Unable to describe task: %v", err)
-		//        } else {
-		//            log.Printf("[%d] [TASK_DESCRIBE] [%s]", requestId, resultDescribeTask)
 	}
 
-	// [TASK_CONTAINER_INSTANCE] [arn:aws:ecs:us-east-1:659932254483:container-instance/executor-cluster/bf3d12885ef243f2961e88d72baa0f77]
 	containerInstanceArn := *resultDescribeTask.Tasks[0].ContainerInstanceArn
 
 	log.Printf("[TASK_CONTAINER_INSTANCE] [%s]", containerInstanceArn)
@@ -353,15 +291,11 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	if err != nil {
 		RemoveTask(taskArn)
 		return nil, fmt.Errorf("Unable to get container instance details: %v", err)
-		//        } else {
-		//           log.Printf("[%d] [TASK_CONTAINER_INSTANCE_DETAILS] [%s]", requestId, resultContainerInstance)
 	}
 
 	//TODO: verify that returned number of instances is 1!
 	instanceId := *resultContainerInstance.ContainerInstances[0].Ec2InstanceId
 	log.Printf("[INSTANCE_ID] [%s]", instanceId)
-
-	//    fmt.Println("[AWS RESPONSE]", resultContainerInstance.ContainerInstances[0])
 
 	instanceInput := &ec2.DescribeInstancesInput{
 		InstanceIds: []*string{
@@ -416,7 +350,6 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 		},
 	}
 
-	//log.Printf("[%d] [TASK_SERVICE_DETAILS] [%s]", requestId, s)
 	return &s, nil
 }
 
@@ -586,9 +519,6 @@ func getTaskHostPort(caps session.Caps, taskIP string, pc *ecsPortConfig) sessio
 
 func RemoveTask(taskArn string) {
 	log.Printf("[REMOVING_TASK] [%s]", taskArn)
-
-	//TODO: parametrize region
-	// #33: increased number of retries to fix "ThrottlingException: Rate exceeded"
 	svc := ecs.New(awsSession.New(&aws.Config{Region: &AwsRegion, MaxRetries: &AwsRetry}))
 
 	stopTaskInput := &ecs.StopTaskInput{

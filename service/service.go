@@ -72,7 +72,7 @@ type Starter interface {
 
 // Manager - interface to choose appropriate starter
 type Manager interface {
-	Find(caps session.Caps, requestId uint64) (Starter, bool)
+	Find(caps session.Caps) (Starter, bool)
 }
 
 // DefaultManager - struct for default implementation
@@ -96,11 +96,11 @@ func InitCache() *redis.Client {
 }
 
 // Find - default implementation Manager interface
-func (m *DefaultManager) Find(caps session.Caps, requestId uint64) (Starter, bool) {
+func (m *DefaultManager) Find(caps session.Caps) (Starter, bool) {
 	browser := caps.BrowserName()
 	version := caps.Version
 
-	log.Printf("[%d] [LOCATING_SERVICE] [%s] [%s]", requestId, browser, version)
+	log.Printf("[LOCATING_SERVICE] [%s] [%s]", browser, version)
 
 	org := "public.ecr.aws/zebrunner" //public zebrunner ECR docker registry
 	if browser == "MicrosoftEdge" {
@@ -129,8 +129,8 @@ func (m *DefaultManager) Find(caps session.Caps, requestId uint64) (Starter, boo
 		Port:  4444,
 	}
 
-	serviceBase := ServiceBase{RequestId: requestId, Service: &service}
-	log.Printf("[%d] [USING_ECS] browser: %s; service: %v", requestId, browser, service)
+	serviceBase := ServiceBase{Service: &service}
+	log.Printf("[USING_ECS] browser: %s; service: %v", browser, service)
 	return &Task{
 		ServiceBase: serviceBase,
 		Environment: *m.Environment,
