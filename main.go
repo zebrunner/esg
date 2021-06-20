@@ -124,17 +124,17 @@ func CreateRouter() *gin.Engine {
 }
 
 func main() {
-	log.Printf("[-] [INIT] [Timezone: %s]", time.Local)
-	log.Printf("[-] [INIT] [Listening on %s]", listen)
-
-	db, err := service.InitConnection(dbConnectionString)
+	db, err := service.InitDBConnection(dbConnectionString)
 	if err != nil {
-		log.Printf("[-] [INIT] [Failed to start. Problem with db connection: %v]", err)
+		log.WithError(err).Fatal("Failed to init DB client.")
 	}
 	service.DB = db
 	defer db.Close()
 
-	rdb := service.InitCache()
+	rdb, err := service.InitCache()
+	if err != nil {
+		log.WithError(err).Fatal("Failed to init Redis client")
+	}
 	handlers.RDB = rdb
 	defer rdb.Close()
 
@@ -143,6 +143,8 @@ func main() {
 	router := CreateRouter()
 	err = router.Run(listen)
 	if err != nil {
-		log.Printf("[ERROR] Wrror while startup %v", err)
+		log.WithError(err).Fatal("Failed to start server")
 	}
+
+	log.Infof("Listening on %s", listen)
 }

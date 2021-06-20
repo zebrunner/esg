@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -87,12 +88,19 @@ type Browser struct {
 	Port  int64
 }
 
-func InitCache() *redis.Client {
-	return redis.NewClient(&redis.Options{
+func InitCache() (*redis.Client, error) {
+	client := redis.NewClient(&redis.Options{
 		Addr:     AwsElasticCache,
 		Password: "",
 		DB:       0,
 	})
+
+	_, err := client.Ping(context.Background()).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	return client, nil
 }
 
 // Find - default implementation Manager interface

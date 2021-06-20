@@ -2,8 +2,9 @@ package service
 
 import (
 	"fmt"
-	"github.com/zebrunner/esg/utils"
 	"net/http"
+
+	"github.com/zebrunner/esg/utils"
 
 	"github.com/jackc/pgtype"
 	_ "github.com/jackc/pgx/v4/stdlib"
@@ -36,9 +37,15 @@ func generatePassword() (string, error) {
 	return password.Generate(passwordLength, digitCount, symbolCount, noUpper, allowRepeat)
 }
 
-func InitConnection(connectionString string) (*sqlx.DB, error) {
+func InitDBConnection(connectionString string) (*sqlx.DB, error) {
 	client, err := sqlx.Open("pgx", connectionString)
 	if err != nil {
+		return nil, err
+	}
+
+	err = client.Ping()
+	if err != nil {
+		client.Close()
 		return nil, err
 	}
 	return client, nil
