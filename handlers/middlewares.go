@@ -1,16 +1,15 @@
 package handlers
 
 import (
-	"net/http"
-
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
+	"net/http"
+	"strings"
 )
 
 func APIError(c *gin.Context) {
-	log.Info("Api error")
 	c.Next()
 	if c.Errors.Last() == nil {
 		return
@@ -38,7 +37,7 @@ func APIError(c *gin.Context) {
 		"client":   c.ClientIP(),
 		"status":   status,
 		"response": message,
-	}).Warn("Nonsuccessful response")
+	}).Warn("Error response response")
 	c.JSON(status, utils.APIErrorResponse{
 		Error:   message,
 		Payload: meta,
@@ -51,7 +50,20 @@ func SeleniumError(c *gin.Context) {
 		return
 	}
 
-	log.Println(c.Errors.String())
+	path := c.Request.URL.Path
+	if strings.HasPrefix(path, "/wd/hub/session") && len(strings.Split(path, "")) >= 3 {
+		sessionID := strings.Split(path, "/")[2]
+		c.Set("sessionID", sessionID)
+	}
+
+	for _, err := range c.Errors {
+		l := log.WithError(err)
+		if sess, ok := c.Get("sessionID"); ok {
+			l.WithField("session", sess)
+		}
+		l.Warn("Selenium error received")
+	}
+
 	status := http.StatusInternalServerError
 	message := "Internal server error happened. All error details collected in logs"
 	var meta interface{}
@@ -63,6 +75,11 @@ func SeleniumError(c *gin.Context) {
 		}
 		meta = publicError.Meta
 	}
+	log.WithFields(log.Fields{
+		"status": status,
+		"seleniumStatus": 13,
+		"seleniumError": "unknown error",
+	}).Warn("Error sent to selenium")
 	c.JSON(status, gin.H{
 		"value": gin.H{
 			"error":   "unknown error",
@@ -79,13 +96,18 @@ func Authentication(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"message": "Auth credentials not found",
 		})
+		log.WithField("client", c.ClientIP()).Warn("Auth credentials not found")
 		c.Abort()
 		return
 	}
 
 	err := service.CheckAuth(username, password)
 	if err != nil {
-		log.Printf("Error while authentication process. %v, User: %s; Password: %s", err, username, password)
+		log.WithError(err).WithFields(log.Fields{
+			"client" : c.ClientIP(),
+			"user": username,
+			"password": password,
+		}).Warn("Failed to authenticate user")
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"message": "Provided credentials not valid",
 		})
