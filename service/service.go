@@ -108,7 +108,11 @@ func (m *DefaultManager) Find(caps session.Caps) (Starter, bool) {
 	browser := caps.BrowserName()
 	version := caps.Version
 
-	log.Printf("[LOCATING_SERVICE] [%s] [%s]", browser, version)
+	//log.Printf("[LOCATING_SERVICE] [%s] [%s]", browser, version)
+	log.WithFields(log.Fields{
+		"browser": browser,
+		"version": version,
+	}).Info("Locating service")
 
 	org := "public.ecr.aws/zebrunner" //public zebrunner ECR docker registry
 	if browser == "MicrosoftEdge" {
@@ -138,7 +142,11 @@ func (m *DefaultManager) Find(caps session.Caps) (Starter, bool) {
 	}
 
 	serviceBase := ServiceBase{Service: &service}
-	log.Printf("[USING_ECS] browser: %s; service: %v", browser, service)
+	//log.Printf("[USING_ECS] browser: %s; service: %v", browser, service)
+	log.WithFields(log.Fields{
+		"browser": browser,
+		"service": service,
+	})
 	return &Task{
 		ServiceBase: serviceBase,
 		Environment: *m.Environment,

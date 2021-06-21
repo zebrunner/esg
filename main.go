@@ -124,6 +124,8 @@ func CreateRouter() *gin.Engine {
 }
 
 func main() {
+	log.SetLevel(log.DebugLevel)
+
 	db, err := service.InitDBConnection(dbConnectionString)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to init DB client.")
