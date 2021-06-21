@@ -141,10 +141,9 @@ func main() {
 	go handlers.ClearSessions()
 
 	router := CreateRouter()
+	log.Infof("Listening on %s", listen)
 	err = router.Run(listen)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to start server")
 	}
-
-	log.Infof("Listening on %s", listen)
 }

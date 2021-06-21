@@ -10,12 +10,18 @@ import (
 )
 
 func APIError(c *gin.Context) {
+	log.Info("Api error")
 	c.Next()
 	if c.Errors.Last() == nil {
 		return
 	}
 
-	log.Println(c.Errors.String())
+	for _, err := range c.Errors {
+		log.WithFields(log.Fields{
+			"client": c.ClientIP(),
+		}).WithError(err).Warn("API error received")
+	}
+
 	status := http.StatusInternalServerError
 	message := "Internal server error happened. All error details collected in logs"
 	var meta interface{}
@@ -28,6 +34,11 @@ func APIError(c *gin.Context) {
 		}
 		meta = publicError.Meta
 	}
+	log.WithFields(log.Fields{
+		"client":   c.ClientIP(),
+		"status":   status,
+		"response": message,
+	}).Warn("Nonsuccessful response")
 	c.JSON(status, utils.APIErrorResponse{
 		Error:   message,
 		Payload: meta,

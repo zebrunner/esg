@@ -12,6 +12,6 @@ func TraceLogFromating(param gin.LogFormatterParams) string {
 		"client":  param.ClientIP,
 		"method":  param.Method,
 		"path":    param.Path,
-	}).Info()
+	}).Trace()
 	return ""
 }
