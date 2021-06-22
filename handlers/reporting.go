@@ -11,14 +11,14 @@ import (
 
 var (
 	startTime time.Time
-	Revission = "undefined"
+	Revision  = "undefined"
 	BuildTime = "undefined"
 	Version   = "undefined"
 )
 
 func init() {
 	startTime = time.Now()
-	Revission = os.Getenv("REVISSION")
+	Revision = os.Getenv("REVISION")
 	BuildTime = os.Getenv("BUILD_TIME")
 	Version = os.Getenv("VERSION")
 }
@@ -37,7 +37,7 @@ func ClusterStatus(c *gin.Context) {
 			"ready":   true,
 			"message": "Server is running",
 			"build": gin.H{
-				"revission": Revission,
+				"revission": Revision,
 				"time":      BuildTime,
 				"version":   Version,
 			},
