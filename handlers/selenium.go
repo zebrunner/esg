@@ -225,7 +225,7 @@ func Create(c *gin.Context) {
 	sessionStartTime := time.Now()
 	user, remote := util.RequestInfo(r)
 	l := log.WithFields(log.Fields{
-		"user": user,
+		"user":   user,
 		"remote": remote,
 	})
 	body, err := ioutil.ReadAll(r.Body)
@@ -305,7 +305,7 @@ func Create(c *gin.Context) {
 	}
 	if !ok {
 		l.WithFields(log.Fields{
-			"browserName": caps.BrowserName(),
+			"browserName":    caps.BrowserName(),
 			"browserVersion": caps.Version,
 		}).Error("Environment not available")
 		c.Error(&utils.HTTPError{
@@ -344,7 +344,7 @@ func Create(c *gin.Context) {
 
 		l.WithFields(log.Fields{
 			"serviceUrl": u,
-			"attempt": i,
+			"attempt":    i,
 		}).Info("Session attempted")
 		//TODO: show body and capabilities in verbose mode
 		resp, status := createSession(r.Context(), r.URL.String(), r.Header, body)
@@ -439,7 +439,7 @@ func Create(c *gin.Context) {
 	}
 	l.WithFields(log.Fields{
 		"sessionID": s.ID,
-		"latency": util.SecondsSince(sessionStartTime),
+		"latency":   util.SecondsSince(sessionStartTime),
 	}).Info("Session created")
 }
 
@@ -555,7 +555,7 @@ func defaultErrorHandler() func(http.ResponseWriter, *http.Request, error) {
 	return func(w http.ResponseWriter, r *http.Request, err error) {
 		user, remote := util.RequestInfo(r)
 		log.WithError(err).WithFields(log.Fields{
-			"user": user,
+			"user":   user,
 			"remote": remote,
 		}).Error("Client disconnected")
 		w.WriteHeader(http.StatusBadGateway)
@@ -599,32 +599,36 @@ func splitRequestPath(p string) (string, string) {
 func Vnc(wsconn *websocket.Conn) {
 	defer wsconn.Close()
 	sid, _ := splitRequestPath(wsconn.Request().URL.Path)
+	l := log.WithField("sessionID", sid)
 	sess, err := CreateSessionFromCache(sid)
-	if err == nil {
-		vncHostPort := sess.HostPort.VNC
-		if vncHostPort != "" {
-			log.Printf("[VNC_ENABLED] [%s]", sid)
-			var d net.Dialer
-			conn, err := d.DialContext(wsconn.Request().Context(), "tcp", vncHostPort)
-			if err != nil {
-				log.Printf("[VNC_ERROR] [%v]", err)
-				return
-			}
-			defer conn.Close()
-			wsconn.PayloadType = websocket.BinaryFrame
-			go func() {
-				io.Copy(wsconn, conn)
-				wsconn.Close()
-				log.Printf("[VNC_SESSION_CLOSED] [%s]", sid)
-			}()
-			io.Copy(conn, wsconn)
-			log.Printf("[VNC_CLIENT_DISCONNECTED] [%s]", sid)
-		} else {
-			log.Printf("[VNC_NOT_ENABLED] [%s]", sid)
-		}
-	} else {
-		log.Printf("[SESSION_NOT_FOUND] [%s]", sid)
+
+	if err != nil {
+		l.WithError(err).Error("Session not found")
+		return
 	}
+
+	vncHostPort := sess.HostPort.VNC
+	if vncHostPort == "" {
+		l.Debug("Vnc not enabled")
+		return
+	}
+
+	l.Debug("Vnc enabled")
+	var d net.Dialer
+	conn, err := d.DialContext(wsconn.Request().Context(), "tcp", vncHostPort)
+	if err != nil {
+		l.WithError(err).Error("Vnc error")
+		return
+	}
+	defer conn.Close()
+	wsconn.PayloadType = websocket.BinaryFrame
+	go func() {
+		io.Copy(wsconn, conn)
+		wsconn.Close()
+		l.Debug("Vnc session closed")
+	}()
+	io.Copy(conn, wsconn)
+	l.Debug("Vnc client disconected")
 }
 
 const (
@@ -664,8 +668,8 @@ func Video(c *gin.Context) {
 	presignedUrl, err := service.GeneratePreSignedURL(videoFile)
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{
-			"user": user,
-			"remote": c.ClientIP(),
+			"user":      user,
+			"remote":    c.ClientIP(),
 			"sessionID": sessionID,
 		}).Error("Failed to create pre signed url to session video")
 		c.Error(err)
