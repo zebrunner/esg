@@ -125,6 +125,10 @@ func CreateRouter() *gin.Engine {
 
 func main() {
 	log.SetLevel(log.DebugLevel)
+	log.SetFormatter(&log.TextFormatter{
+		FullTimestamp: true,
+		TimestampFormat: time.RFC3339Nano,
+	})
 
 	db, err := service.InitDBConnection(dbConnectionString)
 	if err != nil {
