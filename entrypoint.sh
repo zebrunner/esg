@@ -1,5 +1,9 @@
 #!/bin/sh
 
+export REVISION=$(git rev-parse HEAD)
+export BUILD_TIME=$(date -Iseconds)
+export VERSION=$(git describe --tags `git rev-list --tags --max-count=1`)
+
 # Apply all up migrations
 DATABASE="postgres://postgres:postgres@db/postgres?sslmode=disable"
 migrate -path migrations -database $DATABASE up
@@ -12,6 +16,9 @@ nohup ./esg \
     -aws-auto-scaling-group esg-dev-asg \
     -db-connection $DATABASE \
     -listen :4444 \
+    -min-memory 1024 \
+    -min-cpu 1024 \
+    -min-memory-reservation 1024 \
     -s3-bucket zebrunner.dev-assets >> ./esg.log 2>&1 &
 status=$?
 if [ $status -ne 0 ]; then
@@ -27,6 +34,9 @@ nohup ./esg \
     -aws-auto-scaling-group esg-dev-asg \
     -db-connection $DATABASE \
     -listen :4445 \
+    -min-cpu 1024 \
+    -min-memory 1024 \
+    -min-memory-reservation 1024 \
     -s3-bucket zebrunner.dev-assets >> ./esg.log 2>&1 &
 status=$?
 if [ $status -ne 0 ]; then

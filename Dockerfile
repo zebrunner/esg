@@ -1,6 +1,6 @@
 FROM golang:1.14-alpine
 
-RUN apk add -U ca-certificates tzdata mailcap curl && rm -Rf /var/cache/apk/*
+RUN apk add -U ca-certificates tzdata mailcap curl git && rm -Rf /var/cache/apk/*
 
 # Install migrate tool
 RUN curl -L https://github.com/golang-migrate/migrate/releases/download/v4.14.1/migrate.linux-amd64.tar.gz | tar -xvz
