@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -33,6 +32,7 @@ import (
 	//	"github.com/docker/docker/api/types"
 	//	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/go-redis/redis/v8"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/websocket"
 )
 
@@ -135,14 +135,14 @@ func (r Request) Localaddr() string {
 }
 
 func Delete(taskId string) {
-	log.Printf("SESSION_TIMED_OUT: Removing ECS task forcibly: '%s'!", taskId)
+	log.WithField("taskID", taskId).Info("Session timed out. Removing ECS task forcibly")
 	service.RemoveTask(taskId)
 }
 
 func CloseSession(sessionID string) {
 	sess, err := CreateSessionFromCache(sessionID)
 	if err != nil {
-		fmt.Printf("[Error] Failed to get session from cache. Error: %v", err)
+		log.WithError(err).Error("Failed to get session from cache")
 		return
 	}
 	defer sess.Cancel()
@@ -153,28 +153,28 @@ func CloseSession(sessionID string) {
 	defer cancel()
 	req, err := http.NewRequestWithContext(timeoutCtx, http.MethodDelete, sess.URL.String(), nil)
 	if err != nil {
-		log.Printf("[Error] Failed to create request. Error: %v", err)
+		log.WithError(err).Error("Failed to create request")
 		return
 	}
 
-	log.Printf("Closing session. Request: [%s %s]", req.Method, req.URL)
+	log.Debug("Closing session. Request: [%s %s]", req.Method, req.URL)
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("[Error] Failed to cancel driver session, RequestError: %w", err)
+		log.WithError(err).Error("Failed to cancel driver session")
 		return
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("cancel request returned not success status code. Code: %d", resp.StatusCode)
+		log.WithField("statusCode", resp.Status).Error("Cancel request returned not success status code")
 		return
 	}
 
 	_, err = RDB.Del(context.Background(), sessionID).Result()
 	if err != nil {
-		log.Printf("[Error] Failed to delete session from redis. Error: %v", err)
+		log.WithError(err).Error("Failed to delete session from redis")
 		return
 	}
-	log.Printf("Session closed. SessionId: %s", sessionID)
+	log.WithField("sessionID", sessionID).Info("Session closed.")
 }
 
 // create() method from ggr.
@@ -224,10 +224,14 @@ func Create(c *gin.Context) {
 	r := c.Request
 	sessionStartTime := time.Now()
 	user, remote := util.RequestInfo(r)
+	l := log.WithFields(log.Fields{
+		"user": user,
+		"remote": remote,
+	})
 	body, err := ioutil.ReadAll(r.Body)
 	r.Body.Close()
 	if err != nil {
-		log.Printf("[%s] [%s] [ERROR_READING_REQUEST] [%v]", user, remote, err)
+		l.WithError(err).Error("Failed to read request")
 		c.Error(&utils.HTTPError{
 			Status:  http.StatusBadRequest,
 			Message: err.Error(),
@@ -243,7 +247,7 @@ func Create(c *gin.Context) {
 	}
 	err = json.Unmarshal(body, &browser)
 	if err != nil {
-		log.Printf("[%s] [%s] [BAD_JSON_FORMAT] [%v]", user, remote, err)
+		l.WithError(err).Error("Bad JSON format")
 		c.Error(&utils.HTTPError{
 			Status:  http.StatusBadRequest,
 			Message: err.Error(),
@@ -267,7 +271,7 @@ func Create(c *gin.Context) {
 		caps.ProcessExtensionCapabilities()
 		sessionTimeout, err = getSessionTimeout(caps.SessionTimeout, MaxTimeout, Timeout)
 		if err != nil {
-			log.Printf("[%s] [%s] [BAD_SESSION_TIMEOUT] [%s]", user, remote, caps.SessionTimeout)
+			l.WithError(err).Error("Bas session timeout")
 			c.Error(&utils.HTTPError{
 				Status:  http.StatusBadRequest,
 				Message: err.Error(),
@@ -276,7 +280,7 @@ func Create(c *gin.Context) {
 		}
 		resolution, err := getScreenResolution(caps.ScreenResolution)
 		if err != nil {
-			log.Printf("[%s] [%s] [BAD_SCREEN_RESOLUTION] [%s]", user, remote, caps.ScreenResolution)
+			l.WithError(err).WithField("resolution", caps.ScreenResolution).Error("Bad screen resolution")
 			c.Error(&utils.HTTPError{
 				Status:  http.StatusBadRequest,
 				Message: err.Error(),
@@ -286,7 +290,7 @@ func Create(c *gin.Context) {
 		caps.ScreenResolution = resolution
 		videoScreenSize, err := getVideoScreenSize(caps.VideoScreenSize, resolution)
 		if err != nil {
-			log.Printf("[%s] [%s] [BAD_VIDEO_SCREEN_SIZE] [%s]", user, remote, caps.VideoScreenSize)
+			l.WithError(err).WithField("videoScreenSize", caps.VideoScreenSize).Error("Bad video screen size")
 			c.Error(&utils.HTTPError{
 				Status:  http.StatusBadRequest,
 				Message: err.Error(),
@@ -300,7 +304,10 @@ func Create(c *gin.Context) {
 		}
 	}
 	if !ok {
-		log.Printf("[%s] [%s] [ENVIRONMENT_NOT_AVAILABLE] [%s] [%s]", user, remote, caps.BrowserName(), caps.Version)
+		l.WithFields(log.Fields{
+			"browserName": caps.BrowserName(),
+			"browserVersion": caps.Version,
+		}).Error("Environment not available")
 		c.Error(&utils.HTTPError{
 			Status:  http.StatusBadRequest,
 			Message: "Requested environment is not available",
@@ -316,11 +323,11 @@ func Create(c *gin.Context) {
 
 	startedService, err := starter.StartWithCancel(username)
 	if err != nil {
-		log.Printf("[%s] [%s] [SERVICE_STARTUP_FAILED] [%v]", user, remote, err)
+		l.WithError(err).Error("Service startup failed")
 		c.Error(err)
 		return
 	}
-	log.Printf("[%s] [%s] [SERVICE_TASK_ID] [%v]", user, remote, startedService.TaskID)
+	l.WithField("taskID", startedService.TaskID).Info("Service started successfully")
 	u := startedService.Url
 	cancel := startedService.Cancel
 	i := 1
@@ -335,12 +342,15 @@ func Create(c *gin.Context) {
 		r.URL.Host, r.URL.Path = u.Host, path.Join(u.Path, r.URL.Path)
 		r.URL.Scheme = "http"
 
-		log.Printf("[%s] [%s] [SESSION_ATTEMPTED] [%s] [%d]", user, remote, u.String(), i)
+		l.WithFields(log.Fields{
+			"serviceUrl": u,
+			"attempt": i,
+		}).Info("Session attempted")
 		//TODO: show body and capabilities in verbose mode
 		resp, status := createSession(r.Context(), r.URL.String(), r.Header, body)
 		select {
 		case <-r.Context().Done():
-			log.Printf("[%s] [%s] [CLIENT_DISCONNECTED]", user, remote)
+			l.Info("Client disconnected")
 			cancel()
 			return
 		default:
@@ -349,11 +359,11 @@ func Create(c *gin.Context) {
 			sess, ok := resp["sessionId"].(string)
 			if !ok {
 				protocolError := func() {
+					l.Error("Bad response")
 					c.Error(&utils.HTTPError{
 						Status:  http.StatusBadGateway,
 						Message: "protocol error",
 					})
-					log.Printf("[%s] [%s] [BAD_RESPONSE]\n", user, remote)
 				}
 				value, ok := resp["value"]
 				if !ok {
@@ -385,7 +395,7 @@ func Create(c *gin.Context) {
 			c.JSON(http.StatusOK, resp)
 			break
 		} else {
-			log.Printf("[%s] [%s] [SESSION_FAILED]", user, remote)
+			l.Warn("Session failed")
 			cancel()
 			return
 		}
@@ -427,7 +437,10 @@ func Create(c *gin.Context) {
 	if err != nil {
 		fmt.Println("Session not cached", err)
 	}
-	log.Printf("[%s] [%s] [SESSION_CREATED] [%s] [%d] [%.2fs]", user, remote, s.ID, i, util.SecondsSince(sessionStartTime))
+	l.WithFields(log.Fields{
+		"sessionID": s.ID,
+		"latency": util.SecondsSince(sessionStartTime),
+	}).Info("Session created")
 }
 
 var (
@@ -501,7 +514,7 @@ func Proxy(c *gin.Context) {
 			if !ok {
 				sess, err = CreateSessionFromCache(sessionID)
 				if err != nil {
-					log.Printf("Cant find session. %v", err)
+					log.WithError(err).WithField("sessionID", sessionID).Error("Cant find session")
 				}
 			}
 
@@ -520,7 +533,7 @@ func Proxy(c *gin.Context) {
 					cancel = sess.Cancel
 					sessions.Remove(sessionID)
 					RDB.Del(context.Background(), sessionID).Result()
-					log.Printf("[SESSION_DELETED] [%s]", sessionID)
+					log.WithField("sessionID", sessionID).Info("Session deleted")
 				} else {
 					if len(fragments) == 4 && fragments[len(fragments)-1] == "file" && EnableFileUpload {
 						r.Header.Set("X-Selenoid-File", filepath.Join(os.TempDir(), sessionID))
@@ -541,7 +554,10 @@ func Proxy(c *gin.Context) {
 func defaultErrorHandler() func(http.ResponseWriter, *http.Request, error) {
 	return func(w http.ResponseWriter, r *http.Request, err error) {
 		user, remote := util.RequestInfo(r)
-		log.Printf("[CLIENT_DISCONNECTED] [%s] [%s] [Error: %v]", user, remote, err)
+		log.WithError(err).WithFields(log.Fields{
+			"user": user,
+			"remote": remote,
+		}).Error("Client disconnected")
 		w.WriteHeader(http.StatusBadGateway)
 	}
 }
@@ -647,6 +663,11 @@ func Video(c *gin.Context) {
 	videoFile := strings.Join([]string{user, "artifacts", "test-sessions", sessionID, "video.mp4"}, "/")
 	presignedUrl, err := service.GeneratePreSignedURL(videoFile)
 	if err != nil {
+		log.WithError(err).WithFields(log.Fields{
+			"user": user,
+			"remote": c.ClientIP(),
+			"sessionID": sessionID,
+		}).Error("Failed to create pre signed url to session video")
 		c.Error(err)
 		return
 	}
@@ -723,34 +744,34 @@ func ClearSessions() {
 		time.Sleep(Timeout)
 		keys, err := RDB.Keys(context.Background(), "*").Result()
 		if err != nil {
-			log.Println("Error while getting list of keys", err)
+			log.WithError(err).Error("Failed to get list of keys")
 			continue
 		}
 
 		for _, key := range keys {
 			idle, err := RDB.ObjectIdleTime(context.Background(), key).Result()
 			if err != nil {
-				log.Printf("Error while getting IDLE time for session: %s. Error: %v", key, err)
+				log.WithError(err).WithField("session", key).Error("Failed to get IDLE time for session.")
 				continue
 			}
 
 			if idle > Timeout {
 				result, err := RDB.Get(context.Background(), key).Result()
 				if err != nil {
-					log.Printf("Error happened while getting session from cache. %v", err)
+					log.WithError(err).Error("Failed to get session from cache")
 					continue
 				}
 				s := CachedSession{}
 				err = json.Unmarshal([]byte(result), &s)
 				if err != nil {
-					log.Printf("Cant unmarshal redis data. Error: %v", err)
+					log.WithError(err).Error("Failed to unmarshal redis response")
 					continue
 				}
-				log.Printf("Deleting task: %s. Reason: idle timeout", s.TaskID)
+				log.WithField("task", s.TaskID).Info("Deleting task. Reson: idle temeout")
 				CloseSession(key)
 				_, err = RDB.Del(context.Background(), key).Result()
 				if err != nil {
-					log.Printf("can't delete session from redis cache. Session: %s. Error: %v", key, err)
+					log.WithError(err).WithField("session", key).Error("Failed to delete session from cache")
 				}
 			}
 		}

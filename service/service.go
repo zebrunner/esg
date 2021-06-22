@@ -1,14 +1,15 @@
 package service
 
 import (
+	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"time"
 
 	"github.com/go-redis/redis/v8"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/session"
 )
 
@@ -87,12 +88,19 @@ type Browser struct {
 	Port  int64
 }
 
-func InitCache() *redis.Client {
-	return redis.NewClient(&redis.Options{
+func InitCache() (*redis.Client, error) {
+	client := redis.NewClient(&redis.Options{
 		Addr:     AwsElasticCache,
 		Password: "",
 		DB:       0,
 	})
+
+	_, err := client.Ping(context.Background()).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	return client, nil
 }
 
 // Find - default implementation Manager interface
@@ -100,7 +108,11 @@ func (m *DefaultManager) Find(caps session.Caps) (Starter, bool) {
 	browser := caps.BrowserName()
 	version := caps.Version
 
-	log.Printf("[LOCATING_SERVICE] [%s] [%s]", browser, version)
+	//log.Printf("[LOCATING_SERVICE] [%s] [%s]", browser, version)
+	log.WithFields(log.Fields{
+		"browser": browser,
+		"version": version,
+	}).Info("Locating service")
 
 	org := "public.ecr.aws/zebrunner" //public zebrunner ECR docker registry
 	if browser == "MicrosoftEdge" {
@@ -130,7 +142,11 @@ func (m *DefaultManager) Find(caps session.Caps) (Starter, bool) {
 	}
 
 	serviceBase := ServiceBase{Service: &service}
-	log.Printf("[USING_ECS] browser: %s; service: %v", browser, service)
+	//log.Printf("[USING_ECS] browser: %s; service: %v", browser, service)
+	log.WithFields(log.Fields{
+		"browser": browser,
+		"service": service,
+	})
 	return &Task{
 		ServiceBase: serviceBase,
 		Environment: *m.Environment,

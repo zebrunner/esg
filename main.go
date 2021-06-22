@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
 	"net/http"
 	"net/http/httputil"
 	"strings"
@@ -12,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/net/websocket"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/handlers"
 	"github.com/zebrunner/esg/service"
 )
@@ -72,7 +72,8 @@ func ReverseProxy() gin.HandlerFunc {
 }
 
 func CreateRouter() *gin.Engine {
-	r := gin.Default()
+	r := gin.New()
+	r.Use(gin.LoggerWithFormatter(TraceLogFromating), gin.Recovery())
 
 	api := r.Group("/api")
 	api.Use(handlers.APIError)
@@ -123,25 +124,32 @@ func CreateRouter() *gin.Engine {
 }
 
 func main() {
-	log.Printf("[-] [INIT] [Timezone: %s]", time.Local)
-	log.Printf("[-] [INIT] [Listening on %s]", listen)
+	log.SetLevel(log.DebugLevel)
+	log.SetFormatter(&log.TextFormatter{
+		FullTimestamp: true,
+		TimestampFormat: time.RFC3339Nano,
+	})
 
-	db, err := service.InitConnection(dbConnectionString)
+	db, err := service.InitDBConnection(dbConnectionString)
 	if err != nil {
-		log.Printf("[-] [INIT] [Failed to start. Problem with db connection: %v]", err)
+		log.WithError(err).Fatal("Failed to init DB client.")
 	}
 	service.DB = db
 	defer db.Close()
 
-	rdb := service.InitCache()
+	rdb, err := service.InitCache()
+	if err != nil {
+		log.WithError(err).Fatal("Failed to init Redis client")
+	}
 	handlers.RDB = rdb
 	defer rdb.Close()
 
 	go handlers.ClearSessions()
 
 	router := CreateRouter()
+	log.Infof("Listening on %s", listen)
 	err = router.Run(listen)
 	if err != nil {
-		log.Printf("[ERROR] Wrror while startup %v", err)
+		log.WithError(err).Fatal("Failed to start server")
 	}
 }

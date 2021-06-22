@@ -2,14 +2,16 @@ package service
 
 import (
 	"fmt"
-	"github.com/zebrunner/esg/utils"
-	"log"
 	"net/http"
 
+	"github.com/zebrunner/esg/utils"
+
 	"github.com/jackc/pgtype"
+	"github.com/jackc/pgx/v4"
 	_ "github.com/jackc/pgx/v4/stdlib"
 	"github.com/jmoiron/sqlx"
 	"github.com/sethvargo/go-password/password"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -36,9 +38,15 @@ func generatePassword() (string, error) {
 	return password.Generate(passwordLength, digitCount, symbolCount, noUpper, allowRepeat)
 }
 
-func InitConnection(connectionString string) (*sqlx.DB, error) {
+func InitDBConnection(connectionString string) (*sqlx.DB, error) {
 	client, err := sqlx.Open("pgx", connectionString)
 	if err != nil {
+		return nil, err
+	}
+
+	err = client.Ping()
+	if err != nil {
+		client.Close()
 		return nil, err
 	}
 	return client, nil
@@ -68,6 +76,7 @@ func CreateUser(name string) (string, error) {
 		return "", err
 	}
 
+	log.WithField("user", name).Debug("User created successfully")
 	return pwd, nil
 }
 
@@ -76,7 +85,7 @@ func GetUser(name string) (*User, error) {
 	user := User{}
 	err := DB.Get(&user, getQuery, name)
 	if err != nil {
-		if err.Error() == "sql: no rows in result set" {
+		if err == pgx.ErrNoRows {
 			return nil, &utils.HTTPError{
 				Status:  http.StatusNotFound,
 				Message: fmt.Sprintf("User with name %s not found", name),
@@ -139,16 +148,14 @@ func CheckAuth(name, password string) error {
 	}
 	user, err := GetUser(name)
 	if err != nil {
-		log.Println(err)
 		return &authenticationError
 	}
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	if err != nil {
-		log.Println(err)
 		return &authenticationError
 	}
 	if !user.IsActive {
-		authenticationError.Message = "User deactivated, authorization not alowed."
+		authenticationError.Message = "User deactivated, authorization not allowed."
 		return &authenticationError
 	}
 	return nil
