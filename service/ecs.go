@@ -105,6 +105,10 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 						Name:  aws.String("VERBOSE"),
 						Value: aws.String("1"),
 					},
+					{
+						Name:  aws.String("ENABLE_VNC"),
+						Value: aws.String(strconv.FormatBool(d.Caps.VNC)),
+					},
 				},
 				PortMappings: []*ecs.PortMapping{
 					{
@@ -209,7 +213,7 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	//log.Printf("[STARTING_TASK] [%s] [%s]", imageUrl, taskStartTime)
 	log.WithFields(log.Fields{
 		"taskStartTime": taskStartTime,
-		"imageUrl": imageUrl,
+		"imageUrl":      imageUrl,
 	}).Debug()
 
 	family := *resultTaskDefinition.TaskDefinition.Family
@@ -290,7 +294,7 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	//log.Printf("[TASK_CONTAINER_INSTANCE_ID] [%s]", containerInstanceId)
 	log.WithFields(log.Fields{
 		"taskContainerInstanceArn": containerInstanceArn,
-		"taskContainerInstanceID": containerInstanceId,
+		"taskContainerInstanceID":  containerInstanceId,
 	}).Debug()
 
 	containerInstanceInput := &ecs.DescribeContainerInstancesInput{
@@ -328,20 +332,21 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	//log.Printf("[INSTANCE_PUBLIC_IP] [%s]", publicIpAddress)
 	log.WithFields(log.Fields{
 		"instancePrivateIP": privateIpAddress,
-		"instancePublicIP": publicIpAddress,
+		"instancePublicIP":  publicIpAddress,
 	}).Debug()
 
 	browserTaskStartTime := time.Now()
 	//log.Printf("[TASK_STARTED] [%s] [%s] [%.2fs]", imageUrl, taskId, util.SecondsSince(browserTaskStartTime))
 	log.WithFields(log.Fields{
-		"imageURL": imageUrl,
-		"taskID": taskId,
+		"imageURL":      imageUrl,
+		"taskID":        taskId,
 		"taskStartTime": browserTaskStartTime,
 	}).Debug()
 
 	hostPort := getTaskHostPort(d.Caps, privateIpAddress, portConfig)
 	//log.Printf("[HOST_PORT] [%s]", hostPort)
 	log.WithField("hostPort", hostPort).Debug()
+	log.WithField("VNCPort", hostPort.VNC).Debug("VNC")
 
 	u := &url.URL{Scheme: "http", Host: hostPort.Selenium, Path: d.Service.Path}
 	//log.Printf("[CONTAINER_SERVICE_URL] [%s]", u)
@@ -356,13 +361,13 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	//log.Printf("[SERVICE_STARTED] [%s] [%s] [%.2fs]", imageUrl, taskId, util.SecondsSince(serviceStartTime))
 	//log.Printf("[PROXY_TO] [%s] [%s]", taskId, u.String())
 	log.WithFields(log.Fields{
-		"imageURL": imageUrl,
-		"taskID": taskId,
+		"imageURL":  imageUrl,
+		"taskID":    taskId,
 		"startTime": util.SecondsSince(serviceStartTime),
-		"hostPort": hostPort,
+		"hostPort":  hostPort,
 	}).Info("Service started")
 	log.WithFields(log.Fields{
-		"taskID": taskId,
+		"taskID":              taskId,
 		"containerServiceUrl": u,
 	}).Debug("Proxy to...")
 

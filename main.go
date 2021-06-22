@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"net/http"
 	"net/http/httputil"
 	"strings"
@@ -99,7 +98,7 @@ func CreateRouter() *gin.Engine {
 
 		hub.GET("/vnc/:session", func(c *gin.Context) {
 			handler := websocket.Handler(handlers.Vnc)
-			fmt.Printf("[VNC REQUEST] %+v", c.Request)
+			log.WithField("request", c.Request).Debug("Vnc request")
 			handler.ServeHTTP(c.Writer, c.Request)
 		})
 		hub.GET("/ws/vnc/:session", func(c *gin.Context) {
@@ -107,7 +106,7 @@ func CreateRouter() *gin.Engine {
 			c.Request.Header.Add("Access-Control-Allow-Origin", "*")
 			c.Request.Header.Add("X-Real-IP", c.Request.RemoteAddr)
 
-			fmt.Printf("[VNC REQUEST] %+v", c.Request)
+			log.WithField("request", c.Request).Debug("Vnc request")
 			handler.ServeHTTP(c.Writer, c.Request)
 		})
 
@@ -126,8 +125,9 @@ func CreateRouter() *gin.Engine {
 func main() {
 	log.SetLevel(log.DebugLevel)
 	log.SetFormatter(&log.TextFormatter{
-		FullTimestamp: true,
+		FullTimestamp:   true,
 		TimestampFormat: time.RFC3339Nano,
+		ForceColors:     true,
 	})
 
 	db, err := service.InitDBConnection(dbConnectionString)
