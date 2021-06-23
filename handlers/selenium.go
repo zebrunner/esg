@@ -19,20 +19,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aerokube/util"
 	"github.com/gin-gonic/gin"
-	"github.com/zebrunner/esg/utils"
-
+	"github.com/go-redis/redis/v8"
 	"github.com/imdario/mergo"
+	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/event"
 	"github.com/zebrunner/esg/service"
-
-	"github.com/aerokube/util"
 	"github.com/zebrunner/esg/session"
-
-	//	"github.com/docker/docker/api/types"
-	//	"github.com/docker/docker/pkg/stdcopy"
-	"github.com/go-redis/redis/v8"
-	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/utils"
 	"golang.org/x/net/websocket"
 )
 
@@ -92,18 +87,26 @@ func (s CachedSession) MarshalBinary() ([]byte, error) {
 
 func CreateSessionFromCache(sessionID string) (*session.Session, error) {
 	result, err := RDB.Get(context.Background(), sessionID).Result()
+	if err == redis.Nil {
+		return nil, &utils.SeleniumError{
+			ResponseStatus: http.StatusNotFound,
+			SeleniumCode:   "invalid session id",
+			Message:        "Session id not found in active sessions.",
+			Err:            err,
+		}
+	}
 	if err != nil {
-		return nil, fmt.Errorf("Error happened while getting session from cache. %v", err)
+		return nil, err
 	}
 	s := CachedSession{}
 	err = json.Unmarshal([]byte(result), &s)
 	if err != nil {
-		return nil, fmt.Errorf("Cant unmarshal redis data", err)
+		return nil, err
 	}
 
 	sessionTimeout, err := getSessionTimeout(s.Caps.SessionTimeout, MaxTimeout, Timeout)
 	if err != nil {
-		log.Println(err)
+		return nil, err
 	}
 	seleniumSession := session.Session{
 		Quota:    s.Quota,
@@ -220,6 +223,14 @@ func createSession(ctx context.Context, sessionUrl string, header http.Header, b
 	return reply, browserStarted
 }
 
+func creationError(msg string, err error) *utils.SeleniumError {
+	return &utils.SeleniumError{
+		SeleniumCode:   "session not created",
+		ResponseStatus: http.StatusInternalServerError,
+		Message:        fmt.Sprintf("Session not created. Reason: %s, InternalError: %v", msg, err),
+	}
+}
+
 func Create(c *gin.Context) {
 	r := c.Request
 	sessionStartTime := time.Now()
@@ -228,14 +239,12 @@ func Create(c *gin.Context) {
 		"user":   user,
 		"remote": remote,
 	})
+
 	body, err := ioutil.ReadAll(r.Body)
 	r.Body.Close()
 	if err != nil {
 		l.WithError(err).Error("Failed to read request")
-		c.Error(&utils.HTTPError{
-			Status:  http.StatusBadRequest,
-			Message: err.Error(),
-		})
+		c.Error(creationError("Failed to read request", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
 	var browser struct {
@@ -248,10 +257,7 @@ func Create(c *gin.Context) {
 	err = json.Unmarshal(body, &browser)
 	if err != nil {
 		l.WithError(err).Error("Bad JSON format")
-		c.Error(&utils.HTTPError{
-			Status:  http.StatusBadRequest,
-			Message: err.Error(),
-		})
+		c.Error(creationError("Bad JSON fromat", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
 	if browser.W3CCaps.Caps.BrowserName() != "" && browser.Caps.BrowserName() == "" {
@@ -272,29 +278,22 @@ func Create(c *gin.Context) {
 		sessionTimeout, err = getSessionTimeout(caps.SessionTimeout, MaxTimeout, Timeout)
 		if err != nil {
 			l.WithError(err).Error("Bas session timeout")
-			c.Error(&utils.HTTPError{
-				Status:  http.StatusBadRequest,
-				Message: err.Error(),
-			})
+			c.Error(creationError("Failed to parse `sessionTimeout` capability.", err)).SetType(gin.ErrorTypePublic)
 			return
 		}
+
 		resolution, err := getScreenResolution(caps.ScreenResolution)
 		if err != nil {
 			l.WithError(err).WithField("resolution", caps.ScreenResolution).Error("Bad screen resolution")
-			c.Error(&utils.HTTPError{
-				Status:  http.StatusBadRequest,
-				Message: err.Error(),
-			})
+			c.Error(creationError("Failed to parse `resolution` capability", err)).SetType(gin.ErrorTypePublic)
 			return
 		}
+
 		caps.ScreenResolution = resolution
 		videoScreenSize, err := getVideoScreenSize(caps.VideoScreenSize, resolution)
 		if err != nil {
 			l.WithError(err).WithField("videoScreenSize", caps.VideoScreenSize).Error("Bad video screen size")
-			c.Error(&utils.HTTPError{
-				Status:  http.StatusBadRequest,
-				Message: err.Error(),
-			})
+			c.Error(creationError("Failed to parse `videoScreenSize` capability", err)).SetType(gin.ErrorTypePublic)
 			return
 		}
 		caps.VideoScreenSize = videoScreenSize
@@ -308,10 +307,7 @@ func Create(c *gin.Context) {
 			"browserName":    caps.BrowserName(),
 			"browserVersion": caps.Version,
 		}).Error("Environment not available")
-		c.Error(&utils.HTTPError{
-			Status:  http.StatusBadRequest,
-			Message: "Requested environment is not available",
-		})
+		c.Error(creationError("Requested browser not available", nil)).SetType(gin.ErrorTypePublic)
 		return
 	}
 
@@ -346,7 +342,6 @@ func Create(c *gin.Context) {
 			"serviceUrl": u,
 			"attempt":    i,
 		}).Info("Session attempted")
-		//TODO: show body and capabilities in verbose mode
 		resp, status := createSession(r.Context(), r.URL.String(), r.Header, body)
 		select {
 		case <-r.Context().Done():
@@ -360,10 +355,7 @@ func Create(c *gin.Context) {
 			if !ok {
 				protocolError := func() {
 					l.Error("Bad response")
-					c.Error(&utils.HTTPError{
-						Status:  http.StatusBadGateway,
-						Message: "protocol error",
-					})
+					c.Error(creationError("Protocol error", nil))
 				}
 				value, ok := resp["value"]
 				if !ok {
@@ -485,7 +477,7 @@ func getSessionTimeout(sessionTimeout string, maxTimeout time.Duration, defaultT
 	if sessionTimeout != "" {
 		st, err := time.ParseDuration(sessionTimeout)
 		if err != nil {
-			return 0, fmt.Errorf("Invalid sessionTimeout capability: %v", err)
+			return 0, fmt.Errorf("invalid sessionTimeout capability: %v", err)
 		}
 		if st <= maxTimeout {
 			return st, nil
@@ -593,7 +585,6 @@ func splitRequestPath(p string) (string, string) {
 		}
 	}
 	return fragments[vncIndex+1], slash + strings.Join(fragments[vncIndex+2:], slash)
-	// return fragments[2], slash + strings.Join(fragments[3:], slash)
 }
 
 func Vnc(wsconn *websocket.Conn) {

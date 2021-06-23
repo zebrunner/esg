@@ -124,6 +124,7 @@ func CreateRouter() *gin.Engine {
 
 func main() {
 	log.SetLevel(log.DebugLevel)
+	log.SetLevel(log.TraceLevel)
 	log.SetFormatter(&log.TextFormatter{
 		FullTimestamp:   true,
 		TimestampFormat: time.RFC3339Nano,

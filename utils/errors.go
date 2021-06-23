@@ -19,10 +19,12 @@ type APIErrorResponse struct {
 }
 
 type SeleniumError struct {
-	Err string
-	Message string
+	ResponseStatus int
+	SeleniumCode   string
+	Message        string
+	Err            error
 }
 
 func (err *SeleniumError) Error() string {
-	return fmt.Sprintf("Error: %s. Message: %s", err.Err, err.Message)
+	return fmt.Sprintf("selenium error. Error: %s. Message: %s", err.Err, err.Message)
 }

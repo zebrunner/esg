@@ -1,12 +1,13 @@
 package handlers
 
 import (
+	"net/http"
+	"strings"
+
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
-	"net/http"
-	"strings"
 )
 
 func APIError(c *gin.Context) {
@@ -50,6 +51,7 @@ func SeleniumError(c *gin.Context) {
 		return
 	}
 
+	// Add sessionID to gin context for logging purposes
 	path := c.Request.URL.Path
 	if strings.HasPrefix(path, "/wd/hub/session") && len(strings.Split(path, "")) >= 3 {
 		sessionID := strings.Split(path, "/")[2]
@@ -66,27 +68,31 @@ func SeleniumError(c *gin.Context) {
 
 	status := http.StatusInternalServerError
 	message := "Internal server error happened. All error details collected in logs"
+	seleniumCode := "unknown error"
 	var meta interface{}
+
 	publicError := c.Errors.ByType(gin.ErrorTypePublic).Last()
 	if publicError != nil {
-		httpError, ok := publicError.Err.(*utils.SeleniumError)
+		seleniumErr, ok := publicError.Err.(*utils.SeleniumError)
 		if ok {
-			message = httpError.Message
+			message = seleniumErr.Message
+			seleniumCode = seleniumErr.SeleniumCode
+			status = seleniumErr.ResponseStatus
 		}
 		meta = publicError.Meta
 	}
+
 	log.WithFields(log.Fields{
-		"status": status,
+		"status":         status,
 		"seleniumStatus": 13,
-		"seleniumError": "unknown error",
+		"seleniumError":  "unknown error",
 	}).Warn("Error sent to selenium")
 	c.JSON(status, gin.H{
 		"value": gin.H{
-			"error":   "unknown error",
+			"error":   seleniumCode,
 			"message": message,
 			"data":    meta,
 		},
-		"status": 13,
 	})
 }
 
@@ -104,8 +110,8 @@ func Authentication(c *gin.Context) {
 	err := service.CheckAuth(username, password)
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{
-			"client" : c.ClientIP(),
-			"user": username,
+			"client":   c.ClientIP(),
+			"user":     username,
 			"password": password,
 		}).Warn("Failed to authenticate user")
 		c.JSON(http.StatusUnauthorized, gin.H{
