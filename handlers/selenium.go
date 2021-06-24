@@ -91,7 +91,7 @@ func CreateSessionFromCache(sessionID string) (*session.Session, error) {
 		return nil, &utils.SeleniumError{
 			ResponseStatus: http.StatusNotFound,
 			SeleniumCode:   "invalid session id",
-			Message:        "Session id not found in active sessions.",
+			Message:        fmt.Sprintf("Session with id %s not found in active sessions.", sessionID),
 			Err:            err,
 		}
 	}
@@ -517,12 +517,7 @@ func Proxy(c *gin.Context) {
 				sess, err = CreateSessionFromCache(sessionID)
 				if err != nil {
 					log.WithError(err).WithField("sessionID", sessionID).Error("Cant find session")
-					c.Error(&utils.SeleniumError{
-						ResponseStatus: http.StatusNotFound,
-						SeleniumCode:   "invalid session id",
-						Message:        fmt.Sprintf("No active session with ID %s", sessionID),
-						Err:            err,
-					}).SetType(gin.ErrorTypePublic)
+					c.Error(err).SetType(gin.ErrorTypePublic)
 					return
 				}
 			}
