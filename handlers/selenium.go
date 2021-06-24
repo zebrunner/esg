@@ -56,6 +56,7 @@ var (
 	VideoRecorderImage    string
 	manager               service.Manager
 	EnableFileUpload      bool
+	TrustedMode           bool
 )
 
 func InitManager() {
@@ -236,20 +237,26 @@ func Create(c *gin.Context) {
 	sessionStartTime := time.Now()
 	username, password, ok := c.Request.BasicAuth()
 	remote := c.ClientIP()
+	if TrustedMode {
+		username = "zebrunner"
+		ok = true
+	}
 	if !ok {
 		c.Error(creationError("Failed to get auth credentials.", nil)).SetType(gin.ErrorTypePublic)
 		return
 	}
 
-	err := service.CheckAuth(username, password)
-	if err != nil {
-		log.WithError(err).WithFields(log.Fields{
-			"client":   c.ClientIP(),
-			"user":     username,
-			"password": password,
-		}).Warn("Failed to authenticate user on session creation")
-		c.Error(creationError("Authentication error", err)).SetType(gin.ErrorTypePublic)
-		return
+	if !TrustedMode {
+		err := service.CheckAuth(username, password)
+		if err != nil {
+			log.WithError(err).WithFields(log.Fields{
+				"client":   c.ClientIP(),
+				"user":     username,
+				"password": password,
+			}).Warn("Failed to authenticate user on session creation")
+			c.Error(creationError("Authentication error", err)).SetType(gin.ErrorTypePublic)
+			return
+		}
 	}
 
 	l := log.WithFields(log.Fields{
@@ -619,6 +626,11 @@ const (
 
 func Logs(c *gin.Context) {
 	user, _, ok := c.Request.BasicAuth()
+	if TrustedMode {
+		user = "zebrunner"
+		ok = true
+	}
+
 	if !ok {
 		c.Error(&utils.HTTPError{
 			Status:  http.StatusBadRequest,
@@ -638,6 +650,10 @@ func Logs(c *gin.Context) {
 
 func Video(c *gin.Context) {
 	user, _, ok := c.Request.BasicAuth()
+	if TrustedMode {
+		user = "zebrunner"
+		ok = true
+	}
 	if !ok {
 		c.Error(&utils.HTTPError{
 			Status:  http.StatusBadRequest,
