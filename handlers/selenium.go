@@ -571,27 +571,6 @@ func defaultErrorHandler() func(http.ResponseWriter, *http.Request, error) {
 	}
 }
 
-func ReverseProxy(hostFn func(sess *session.Session) string, status string) func(http.ResponseWriter, *http.Request) {
-	return func(w http.ResponseWriter, r *http.Request) {
-		sid, remainingPath := splitRequestPath(r.URL.Path)
-		sess, ok := sessions.Get(sid)
-		if ok {
-			(&httputil.ReverseProxy{
-				Director: func(r *http.Request) {
-					r.URL.Scheme = "http"
-					r.URL.Host = hostFn(sess)
-					r.URL.Path = remainingPath
-					log.Printf("[%s] [%s] [%s]", status, sid, remainingPath)
-				},
-				ErrorHandler: defaultErrorHandler(),
-			}).ServeHTTP(w, r)
-		} else {
-			util.JsonError(w, fmt.Sprintf("Unknown session %s", sid), http.StatusNotFound)
-			log.Printf("[SESSION_NOT_FOUND] [%s]", sid)
-		}
-	}
-}
-
 func splitRequestPath(p string) (string, string) {
 	fragments := strings.Split(p, slash)
 	vncIndex := 0
