@@ -83,16 +83,14 @@ func SeleniumError(c *gin.Context) {
 	}
 
 	log.WithFields(log.Fields{
-		"status":         status,
-		"seleniumStatus": 13,
-		"seleniumError":  "unknown error",
+		"status":        status,
+		"seleniumError": seleniumCode,
 	}).Warn("Error sent to selenium")
 	c.JSON(status, gin.H{
 		"value": gin.H{
-			"error":      seleniumCode,
-			"message":    message,
-			"data":       meta,
-			"stacktrace": "",
+			"error":   seleniumCode,
+			"message": message,
+			"data":    meta,
 		},
 	})
 }

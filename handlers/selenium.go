@@ -243,6 +243,11 @@ func Create(c *gin.Context) {
 
 	err := service.CheckAuth(username, password)
 	if err != nil {
+		log.WithError(err).WithFields(log.Fields{
+			"client":   c.ClientIP(),
+			"user":     username,
+			"password": password,
+		}).Warn("Failed to authenticate user on session creation")
 		c.Error(creationError("Authentication error", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
@@ -512,6 +517,13 @@ func Proxy(c *gin.Context) {
 				sess, err = CreateSessionFromCache(sessionID)
 				if err != nil {
 					log.WithError(err).WithField("sessionID", sessionID).Error("Cant find session")
+					c.Error(&utils.SeleniumError{
+						ResponseStatus: http.StatusNotFound,
+						SeleniumCode:   "invalid session id",
+						Message:        fmt.Sprintf("No active session with ID %s", sessionID),
+						Err:            err,
+					}).SetType(gin.ErrorTypePublic)
+					return
 				}
 			}
 
