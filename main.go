@@ -49,6 +49,7 @@ func init() {
 	flag.StringVar(&service.AwsAccessKeyID, "aws-access-key-id", "", "Access key for S3 bucket")
 	flag.StringVar(&service.AwsSecretAccessKey, "aws-secret-access-key", "", "Secret key for S3 bucket")
 	flag.StringVar(&dbConnectionString, "db-connection", "", "Connection string for database")
+	flag.BoolVar(&handlers.TrustedMode, "trusted", false, "If trusted mode enabled hub does not require any auth")
 
 	flag.Parse()
 
@@ -84,6 +85,12 @@ func CreateRouter() *gin.Engine {
 	}
 
 	hub := r.Group("/")
+	hub.Use(handlers.APIError)
+	{
+		hub.GET("/logs/:session", handlers.Logs)
+		hub.GET("/video/:session", handlers.Video)
+	}
+
 	hub.Use(handlers.SeleniumError)
 	{
 		hub.GET("/", handlers.Welcome)
@@ -93,8 +100,6 @@ func CreateRouter() *gin.Engine {
 		hub.Any("/wd/hub/*action", ReverseProxy())
 		hub.POST("/session", handlers.Create) // Auth logic moved to handler
 		hub.Any("/session/*action", handlers.Proxy)
-		hub.GET("/logs/:session", handlers.Logs)
-		hub.GET("/video/:session", handlers.Video)
 
 		hub.GET("/vnc/:session", func(c *gin.Context) {
 			handler := websocket.Handler(handlers.Vnc)
