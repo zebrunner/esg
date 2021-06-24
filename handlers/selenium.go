@@ -227,16 +227,28 @@ func creationError(msg string, err error) *utils.SeleniumError {
 	return &utils.SeleniumError{
 		SeleniumCode:   "session not created",
 		ResponseStatus: http.StatusInternalServerError,
-		Message:        fmt.Sprintf("Session not created. Reason: %s, InternalError: %v", msg, err),
+		Message:        fmt.Sprintf("Session not created; Reason: %s; InternalError: %v", msg, err),
 	}
 }
 
 func Create(c *gin.Context) {
 	r := c.Request
 	sessionStartTime := time.Now()
-	user, remote := util.RequestInfo(r)
+	username, password, ok := c.Request.BasicAuth()
+	remote := c.ClientIP()
+	if !ok {
+		c.Error(creationError("Failed to get auth credentials.", nil)).SetType(gin.ErrorTypePublic)
+		return
+	}
+
+	err := service.CheckAuth(username, password)
+	if err != nil {
+		c.Error(creationError("Authentication error", err)).SetType(gin.ErrorTypePublic)
+		return
+	}
+
 	l := log.WithFields(log.Fields{
-		"user":   user,
+		"user":   username,
 		"remote": remote,
 	})
 
@@ -269,7 +281,6 @@ func Create(c *gin.Context) {
 	}
 	var caps session.Caps
 	var starter service.Starter
-	var ok bool
 	var sessionTimeout time.Duration
 	for _, fmc := range firstMatchCaps {
 		caps = browser.Caps
@@ -311,16 +322,10 @@ func Create(c *gin.Context) {
 		return
 	}
 
-	// username, password, ok
-	username, _, ok := r.BasicAuth()
-	if !ok {
-		username = service.Tenant
-	}
-
 	startedService, err := starter.StartWithCancel(username)
 	if err != nil {
 		l.WithError(err).Error("Service startup failed")
-		c.Error(err)
+		c.Error(creationError("Failed to start browser", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
 	l.WithField("taskID", startedService.TaskID).Info("Service started successfully")
@@ -394,7 +399,7 @@ func Create(c *gin.Context) {
 	}
 
 	sess := &session.Session{
-		Quota:    user,
+		Quota:    username,
 		Caps:     caps,
 		URL:      u,
 		HostPort: startedService.HostPort,

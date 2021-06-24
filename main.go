@@ -91,7 +91,7 @@ func CreateRouter() *gin.Engine {
 		hub.GET("/ping", handlers.Ping)
 
 		hub.Any("/wd/hub/*action", ReverseProxy())
-		hub.POST("/session", handlers.Authentication, handlers.Create)
+		hub.POST("/session", handlers.Create) // Auth logic moved to handler
 		hub.Any("/session/*action", handlers.Proxy)
 		hub.GET("/logs/:session", handlers.Logs)
 		hub.GET("/video/:session", handlers.Video)

@@ -89,9 +89,10 @@ func SeleniumError(c *gin.Context) {
 	}).Warn("Error sent to selenium")
 	c.JSON(status, gin.H{
 		"value": gin.H{
-			"error":   seleniumCode,
-			"message": message,
-			"data":    meta,
+			"error":      seleniumCode,
+			"message":    message,
+			"data":       meta,
+			"stacktrace": "",
 		},
 	})
 }
