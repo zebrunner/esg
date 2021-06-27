@@ -220,7 +220,6 @@ func creationError(msg string, err error) *utils.SeleniumError {
 }
 
 func Create(c *gin.Context) {
-	r := c.Request
 	sessionStartTime := time.Now()
 	username, password, ok := c.Request.BasicAuth()
 	remote := c.ClientIP()
@@ -251,8 +250,8 @@ func Create(c *gin.Context) {
 		"remote": remote,
 	})
 
-	body, err := ioutil.ReadAll(r.Body)
-	r.Body.Close()
+	body, err := ioutil.ReadAll(c.Request.Body)
+	c.Request.Body.Close()
 	if err != nil {
 		l.WithError(err).Error("Failed to read request")
 		c.Error(creationError("Failed to read request", err)).SetType(gin.ErrorTypePublic)
@@ -342,16 +341,16 @@ func Create(c *gin.Context) {
 		ID string `json:"sessionId"`
 	}
 	for ; ; i++ {
-		r.URL.Host, r.URL.Path = u.Host, path.Join(u.Path, r.URL.Path)
-		r.URL.Scheme = "http"
+		c.Request.URL.Host, c.Request.URL.Path = u.Host, path.Join(u.Path, c.Request.URL.Path)
+		c.Request.URL.Scheme = "http"
 
 		l.WithFields(log.Fields{
 			"serviceUrl": u,
 			"attempt":    i,
 		}).Info("Session attempted")
-		resp, status := createSession(r.Context(), r.URL.String(), r.Header, body)
+		resp, status := createSession(c.Request.Context(), c.Request.URL.String(), c.Request.Header, body)
 		select {
-		case <-r.Context().Done():
+		case <-c.Request.Context().Done():
 			l.Info("Client disconnected")
 			cancel()
 			return
