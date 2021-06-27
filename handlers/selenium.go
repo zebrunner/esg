@@ -16,7 +16,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/aerokube/util"
@@ -45,8 +44,6 @@ var (
 			return http.ErrUseLastResponse
 		},
 	}
-	num                   uint64
-	numLock               sync.RWMutex
 	RDB                   *redis.Client
 	sessions              = session.NewMap()
 	Timeout               time.Duration
@@ -161,7 +158,10 @@ func CloseSession(sessionID string) {
 		return
 	}
 
-	log.Debug("Closing session. Request: [%s %s]", req.Method, req.URL)
+	log.WithFields(log.Fields{
+		"method": req.Method,
+		"url":    req.URL,
+	}).Debug("Closing session.")
 	resp, err := client.Do(req)
 	if err != nil {
 		log.WithError(err).Error("Failed to cancel driver session")
@@ -296,7 +296,10 @@ func Create(c *gin.Context) {
 	var sessionTimeout time.Duration
 	for _, fmc := range firstMatchCaps {
 		caps = browser.Caps
-		mergo.Merge(&caps, *fmc)
+		err := mergo.Merge(&caps, *fmc)
+		if err != nil {
+			c.Error(err)
+		}
 		caps.ProcessExtensionCapabilities()
 		sessionTimeout, err = getSessionTimeout(caps.SessionTimeout, MaxTimeout, Timeout)
 		if err != nil {
@@ -368,7 +371,7 @@ func Create(c *gin.Context) {
 		default:
 		}
 		if status == browserStarted {
-			sess, ok := resp["sessionId"].(string)
+			// sess, ok := resp["sessionId"].(string)
 			if !ok {
 				protocolError := func() {
 					l.Error("Bad response")
@@ -386,18 +389,16 @@ func Create(c *gin.Context) {
 					cancel()
 					return
 				}
-				sess, ok = valueMap["sessionId"].(string)
+				sess, ok := valueMap["sessionId"].(string)
 				if !ok {
 					protocolError()
 					cancel()
 					return
 				}
-				// s.ID = startedService.Container.ContainerInstanceID + startedService.Container.ID + sess
 				s.ID = sess
 				resp["value"].(map[string]interface{})["sessionId"] = s.ID
 			} else {
-				sess, ok = resp["sessionId"].(string)
-				// s.ID = startedService.Container.ContainerInstanceID + startedService.Container.ID + sess
+				sess, _ := resp["sessionId"].(string)
 				s.ID = sess
 				resp["sessionId"] = s.ID
 			}
@@ -429,7 +430,7 @@ func Create(c *gin.Context) {
 			SessionId: sessionId,
 			Session:   sess,
 		}
-		event.SessionStopped(event.StoppedSession{e})
+		event.SessionStopped(event.StoppedSession{Event: e})
 	}
 	sess.Cancel = cancelAndRenameFiles
 	sessions.Put(s.ID, sess)
@@ -518,10 +519,9 @@ func Proxy(c *gin.Context) {
 			fragments := strings.Split(r.URL.Path, slash)
 			sessionID := fragments[2]
 
-			var err error = nil
 			sess, ok := sessions.Get(sessionID)
 			if !ok {
-				sess, err = CreateSessionFromCache(sessionID)
+				_, err := CreateSessionFromCache(sessionID)
 				if err != nil {
 					log.WithError(err).WithField("sessionID", sessionID).Error("Cant find session")
 					c.Error(err).SetType(gin.ErrorTypePublic)
@@ -612,11 +612,17 @@ func Vnc(wsconn *websocket.Conn) {
 	defer conn.Close()
 	wsconn.PayloadType = websocket.BinaryFrame
 	go func() {
-		io.Copy(wsconn, conn)
+		_, e := io.Copy(wsconn, conn)
+		if e != nil {
+			log.WithError(e).Error("VNC WS Copy error")
+		}
 		wsconn.Close()
 		l.Debug("Vnc session closed")
 	}()
-	io.Copy(conn, wsconn)
+	_, err = io.Copy(conn, wsconn)
+	if err != nil {
+		log.WithError(err).Error("VNC WS Copy error")
+	}
 	l.Debug("Vnc client disconected")
 }
 

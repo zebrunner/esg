@@ -60,7 +60,11 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	log.WithField("taskDefinitionFamily", taskDefFamily).Debug()
 
 	//create ECS task definition based on capabilities
-	svc := ecs.New(awsSession.New(&aws.Config{Region: &AwsRegion, MaxRetries: &AwsRetry}))
+	sess, err := awsSession.NewSession(&aws.Config{Region: &AwsRegion, MaxRetries: &AwsRetry})
+	if err != nil {
+		return nil, err
+	}
+	svc := ecs.New(sess)
 
 	//TODO: support GPU reservation: The number of GPU units to reserve for the container. A container instance with GPU support has 1 GPU unit for every GPU.
 	//log.Printf("[CREATING_ECS_TASK_DEFINITION] [%s]", imageUrl)
@@ -320,7 +324,7 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 		},
 	}
 
-	svcEc2 := ec2.New(awsSession.New(&aws.Config{Region: &AwsRegion}))
+	svcEc2 := ec2.New(sess)
 	resultInstance, err := svcEc2.DescribeInstances(instanceInput)
 	if err != nil {
 		RemoveTask(taskArn)
@@ -413,7 +417,12 @@ func getFailReason(svc *ecs.ECS, taskId string) (*string, error) {
 }
 
 func GetTasksCount() (*map[string]interface{}, error) {
-	svc := ecs.New(awsSession.New(&aws.Config{Region: &AwsRegion, MaxRetries: &AwsRetry}))
+	sess, err := awsSession.NewSession(&aws.Config{Region: &AwsRegion, MaxRetries: &AwsRetry})
+	if err != nil {
+		return nil, err
+	}
+
+	svc := ecs.New(sess)
 	listInput := ecs.ListTasksInput{
 		Cluster: &AwsCluster,
 	}
@@ -534,11 +543,8 @@ func getEcsCpu(caps session.Caps) (int64, error) {
 }
 
 func getTaskHostPort(caps session.Caps, taskIP string, pc *ecsPortConfig) session.HostPort {
-	fn := func(containerPort int64) string {
-		return ""
-	}
 	containerIP := taskIP
-	fn = func(containerPort int64) string {
+	fn := func(containerPort int64) string {
 		return containerIP + ":" + strconv.FormatInt(containerPort, 10)
 	}
 
@@ -557,9 +563,13 @@ func getTaskHostPort(caps session.Caps, taskIP string, pc *ecsPortConfig) sessio
 }
 
 func RemoveTask(taskArn string) {
-	//log.Printf("[REMOVING_TASK] [%s]", taskArn)
 	log.WithField("taskARN", taskArn).Info("Removing task")
-	svc := ecs.New(awsSession.New(&aws.Config{Region: &AwsRegion, MaxRetries: &AwsRetry}))
+	sess, err := awsSession.NewSession(&aws.Config{Region: &AwsRegion, MaxRetries: &AwsRetry})
+	if err != nil {
+		log.WithError(err).WithField("taskARN", taskArn).Warn("Failed to stop task")
+		return
+	}
+	svc := ecs.New(sess)
 
 	stopTaskInput := &ecs.StopTaskInput{
 		Cluster: &AwsCluster,
