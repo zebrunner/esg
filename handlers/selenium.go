@@ -23,6 +23,7 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/imdario/mergo"
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/event"
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/session"
@@ -44,23 +45,16 @@ var (
 			return http.ErrUseLastResponse
 		},
 	}
-	RDB                   *redis.Client
-	sessions              = session.NewMap()
-	Timeout               time.Duration
-	MaxTimeout            time.Duration
-	ServiceStartupTimeout time.Duration
-	SessionDeleteTimeout  time.Duration
-	VideoRecorderImage    string
-	manager               service.Manager
-	EnableFileUpload      bool
-	TrustedMode           bool
+	sessions = session.NewMap()
+	manager  service.Manager
+	RDB      *redis.Client
 )
 
 func InitManager() {
 	environment := service.Environment{
-		StartupTimeout:       ServiceStartupTimeout,
-		SessionDeleteTimeout: SessionDeleteTimeout,
-		VideoContainerImage:  VideoRecorderImage,
+		StartupTimeout:       config.ServiceStartupTimeout,
+		SessionDeleteTimeout: config.SessionDeleteTimeout,
+		VideoContainerImage:  config.VideoRecorderImage,
 	}
 	manager = &service.DefaultManager{Environment: &environment}
 }
@@ -102,7 +96,7 @@ func CreateSessionFromCache(sessionID string) (*session.Session, error) {
 		return nil, err
 	}
 
-	sessionTimeout, err := getSessionTimeout(s.Caps.SessionTimeout, MaxTimeout, Timeout)
+	sessionTimeout, err := getSessionTimeout(s.Caps.SessionTimeout, config.MaxTimeout, config.Timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +144,7 @@ func CloseSession(sessionID string) {
 
 	client := http.Client{}
 	sess.URL.Path = path.Clean(sess.URL.Path + fmt.Sprintf("/session/%s", sessionID))
-	timeoutCtx, cancel := context.WithTimeout(context.Background(), SessionDeleteTimeout)
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), config.SessionDeleteTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(timeoutCtx, http.MethodDelete, sess.URL.String(), nil)
 	if err != nil {
@@ -193,7 +187,7 @@ func createSession(ctx context.Context, sessionUrl string, header http.Header, b
 		}
 	}
 	req.Header.Del("Accept-Encoding")
-	ctx, cancel := context.WithTimeout(ctx, Timeout)
+	ctx, cancel := context.WithTimeout(ctx, config.Timeout)
 	defer cancel()
 	req = req.WithContext(ctx)
 	req.Header.Set("Content-Type", "application/json")
@@ -237,7 +231,7 @@ func Create(c *gin.Context) {
 	sessionStartTime := time.Now()
 	username, password, ok := c.Request.BasicAuth()
 	remote := c.ClientIP()
-	if TrustedMode {
+	if config.TrustedMode {
 		username = "zebrunner"
 		ok = true
 	}
@@ -246,7 +240,7 @@ func Create(c *gin.Context) {
 		return
 	}
 
-	if !TrustedMode {
+	if !config.TrustedMode {
 		err := service.CheckAuth(username, password)
 		if err != nil {
 			log.WithError(err).WithFields(log.Fields{
@@ -301,7 +295,7 @@ func Create(c *gin.Context) {
 			c.Error(err)
 		}
 		caps.ProcessExtensionCapabilities()
-		sessionTimeout, err = getSessionTimeout(caps.SessionTimeout, MaxTimeout, Timeout)
+		sessionTimeout, err = getSessionTimeout(caps.SessionTimeout, config.MaxTimeout, config.Timeout)
 		if err != nil {
 			l.WithError(err).Error("Bas session timeout")
 			c.Error(creationError("Failed to parse `sessionTimeout` capability.", err)).SetType(gin.ErrorTypePublic)
@@ -371,7 +365,7 @@ func Create(c *gin.Context) {
 		default:
 		}
 		if status == browserStarted {
-			// sess, ok := resp["sessionId"].(string)
+			sess, ok := resp["sessionId"].(string)
 			if !ok {
 				protocolError := func() {
 					l.Error("Bad response")
@@ -389,7 +383,7 @@ func Create(c *gin.Context) {
 					cancel()
 					return
 				}
-				sess, ok := valueMap["sessionId"].(string)
+				sess, ok = valueMap["sessionId"].(string)
 				if !ok {
 					protocolError()
 					cancel()
@@ -538,7 +532,7 @@ func Proxy(c *gin.Context) {
 					close(sess.TimeoutCh)
 				}
 				if r.Method == http.MethodDelete && len(fragments) == 3 {
-					if EnableFileUpload {
+					if config.EnableFileUpload {
 						os.RemoveAll(filepath.Join(os.TempDir(), sessionID))
 					}
 					cancel = sess.Cancel
@@ -546,7 +540,7 @@ func Proxy(c *gin.Context) {
 					RDB.Del(context.Background(), sessionID).Result()
 					log.WithField("sessionID", sessionID).Info("Session deleted")
 				} else {
-					if len(fragments) == 4 && fragments[len(fragments)-1] == "file" && EnableFileUpload {
+					if len(fragments) == 4 && fragments[len(fragments)-1] == "file" && config.EnableFileUpload {
 						r.Header.Set("X-Selenoid-File", filepath.Join(os.TempDir(), sessionID))
 						r.URL.Path = "/file"
 						return
@@ -632,7 +626,7 @@ const (
 
 func Logs(c *gin.Context) {
 	user, _, ok := c.Request.BasicAuth()
-	if TrustedMode {
+	if config.TrustedMode {
 		user = "zebrunner"
 		ok = true
 	}
@@ -656,7 +650,7 @@ func Logs(c *gin.Context) {
 
 func Video(c *gin.Context) {
 	user, _, ok := c.Request.BasicAuth()
-	if TrustedMode {
+	if config.TrustedMode {
 		user = "zebrunner"
 		ok = true
 	}
@@ -749,7 +743,7 @@ func ClearSessions() {
 	// TODO: Emulate session termination on selenium and try to return response
 	// TODO: Move logic outside core ESG to run separately from main processes
 	for {
-		time.Sleep(Timeout)
+		time.Sleep(config.Timeout)
 		keys, err := RDB.Keys(context.Background(), "*").Result()
 		if err != nil {
 			log.WithError(err).Error("Failed to get list of keys")
@@ -763,7 +757,7 @@ func ClearSessions() {
 				continue
 			}
 
-			if idle > Timeout {
+			if idle > config.Timeout {
 				result, err := RDB.Get(context.Background(), key).Result()
 				if err != nil {
 					log.WithError(err).Error("Failed to get session from cache")
