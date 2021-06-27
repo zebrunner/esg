@@ -4,12 +4,12 @@ package main
 
 import (
 	"encoding/json"
+	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/event"
 	"github.com/zebrunner/esg/session"
 	"io/ioutil"
 	"path/filepath"
 	"time"
-	log "github.com/sirupsen/logrus"
 )
 
 const metadataFileExtension = ".json"

@@ -343,7 +343,7 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 		"taskStartTime": browserTaskStartTime,
 	}).Debug()
 
-	hostPort := getTaskHostPort(d.Caps, privateIpAddress, portConfig)
+	hostPort := getTaskHostPort(d.Caps, publicIpAddress, portConfig)
 	//log.Printf("[HOST_PORT] [%s]", hostPort)
 	log.WithField("hostPort", hostPort).Debug()
 	log.WithField("VNCPort", hostPort.VNC).Debug("VNC")
