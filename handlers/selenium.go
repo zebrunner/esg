@@ -122,13 +122,6 @@ func cancelAndRenameFiles(taskID string) func() {
 	}
 }
 
-// TODO There is simpler way to do this
-func (r Request) Localaddr() string {
-	addr := r.Context().Value(http.LocalAddrContextKey).(net.Addr).String()
-	_, port, _ := net.SplitHostPort(addr)
-	return net.JoinHostPort("127.0.0.1", port)
-}
-
 func Delete(taskId string) {
 	log.WithField("taskID", taskId).Info("Session timed out. Removing ECS task forcibly")
 	service.RemoveTask(taskId)
