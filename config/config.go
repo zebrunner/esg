@@ -1,4 +1,4 @@
-package settings
+package config
 
 import (
 	"time"
@@ -28,5 +28,6 @@ var (
 	AwsAccessKeyID       string
 	AwsSecretAccessKey   string
 	DbConnectionString   string
-	TrustedMode          string
+	TrustedMode          bool
+	Tenant               string
 )
