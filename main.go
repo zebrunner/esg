@@ -50,6 +50,7 @@ func init() {
 	flag.StringVar(&config.AwsSecretAccessKey, "aws-secret-access-key", "", "Secret key for S3 bucket")
 	flag.StringVar(&config.DbConnectionString, "db-connection", "", "Connection string for database")
 	flag.BoolVar(&config.TrustedMode, "trusted", false, "If trusted mode enabled hub does not require any auth")
+	flag.StringVar(&config.LogLevel, "log-level", "debug", "Desired log level. Valid levels: `panic`, `fatal`, `error`, `warning`, `info`, `debug`, `trace`")
 
 	flag.Parse()
 
@@ -128,7 +129,7 @@ func CreateRouter() *gin.Engine {
 }
 
 func main() {
-	log.SetLevel(log.DebugLevel)
+	log.SetLevel(config.ParseLogLevel())
 	log.SetFormatter(&log.TextFormatter{
 		FullTimestamp:   true,
 		TimestampFormat: time.RFC3339Nano,

@@ -2,6 +2,8 @@ package config
 
 import (
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 var (
@@ -12,6 +14,7 @@ var (
 	SessionDeleteTimeout  time.Duration
 	ServiceStartupTimeout time.Duration
 	VideoRecorderImage    string
+	LogLevel              string = "debug"
 
 	AwsRegion            string
 	AwsRetry             int
@@ -31,3 +34,24 @@ var (
 	TrustedMode          bool
 	Tenant               string
 )
+
+func ParseLogLevel() logrus.Level {
+	switch LogLevel {
+	case "panic":
+		return logrus.PanicLevel
+	case "fatal":
+		return logrus.FatalLevel
+	case "error":
+		return logrus.ErrorLevel
+	case "warning":
+		return logrus.WarnLevel
+	case "info":
+		return logrus.InfoLevel
+	case "debug":
+		return logrus.DebugLevel
+	case "trace":
+		return logrus.TraceLevel
+	default:
+		return logrus.DebugLevel
+	}
+}
