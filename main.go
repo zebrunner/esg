@@ -85,12 +85,6 @@ func CreateRouter() *gin.Engine {
 	}
 
 	hub := r.Group("/")
-	hub.Use(handlers.APIError)
-	{
-		hub.GET("/logs/:session", handlers.Logs)
-		hub.GET("/video/:session", handlers.Video)
-	}
-
 	hub.Use(handlers.SeleniumError)
 	{
 		hub.GET("/", handlers.Welcome)
@@ -122,6 +116,12 @@ func CreateRouter() *gin.Engine {
 		hub.POST("/clipboard/:session", handlers.Clipboard)
 
 		hub.GET("/devtools/:session", handlers.Devtools)
+	}
+
+	hub.Use(handlers.APIError)
+	{
+		hub.GET("/logs/:session", handlers.Logs)
+		hub.GET("/video/:session", handlers.Video)
 	}
 
 	return r
