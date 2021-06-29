@@ -82,15 +82,11 @@ func CreateRouter() *gin.Engine {
 		api.DELETE("/users/:username", handlers.DeleteUser)
 		api.PUT("/users/:username/refresh-token", handlers.RefreshToken)
 		api.PUT("/users/:username/activation", handlers.UserActivation)
+		api.GET("/logs/:session", handlers.Logs)
+		api.GET("/video/:session", handlers.Video)
 	}
 
 	hub := r.Group("/")
-	hub.Use(handlers.APIError)
-	{
-		hub.GET("/logs/:session", handlers.Logs)
-		hub.GET("/video/:session", handlers.Video)
-	}
-
 	hub.Use(handlers.SeleniumError)
 	{
 		hub.GET("/", handlers.Welcome)
@@ -128,7 +124,7 @@ func CreateRouter() *gin.Engine {
 }
 
 func main() {
-	log.SetLevel(log.DebugLevel)
+	log.SetLevel(log.TraceLevel)
 	log.SetFormatter(&log.TextFormatter{
 		FullTimestamp:   true,
 		TimestampFormat: time.RFC3339Nano,

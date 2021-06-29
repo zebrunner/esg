@@ -226,7 +226,7 @@ func createSession(ctx context.Context, sessionUrl string, header http.Header, b
 
 func creationError(msg string, err error) *utils.SeleniumError {
 	return &utils.SeleniumError{
-		SeleniumCode:   "session not created",
+		SeleniumCode: "session not created",
 		ResponseStatus: http.StatusInternalServerError,
 		Message:        fmt.Sprintf("Session not created; Reason: %s; InternalError: %v", msg, err),
 	}
@@ -242,7 +242,11 @@ func Create(c *gin.Context) {
 		ok = true
 	}
 	if !ok {
-		c.Error(creationError("Failed to get auth credentials.", nil)).SetType(gin.ErrorTypePublic)
+		c.Error(&utils.SeleniumError{
+			SeleniumCode: "session not created",
+			ResponseStatus: http.StatusUnauthorized,
+			Message: fmt.Sprintf("Session not created; Reason: Failed to get auth credentials."),
+		}).SetType(gin.ErrorTypePublic)
 		return
 	}
 
@@ -254,7 +258,11 @@ func Create(c *gin.Context) {
 				"user":     username,
 				"password": password,
 			}).Warn("Failed to authenticate user on session creation")
-			c.Error(creationError("Authentication error", err)).SetType(gin.ErrorTypePublic)
+			c.Error(&utils.SeleniumError{
+				SeleniumCode: "session not created",
+				ResponseStatus: http.StatusUnauthorized,
+				Message: fmt.Sprintf("Session not created; Reason: Invalid username or password"),
+			}).SetType(gin.ErrorTypePublic)
 			return
 		}
 	}
@@ -372,7 +380,7 @@ func Create(c *gin.Context) {
 			if !ok {
 				protocolError := func() {
 					l.Error("Bad response")
-					c.Error(creationError("Protocol error", nil))
+					c.Error(creationError("Protocol error", nil, ))
 				}
 				value, ok := resp["value"]
 				if !ok {
