@@ -16,9 +16,6 @@ nohup ./esg \
     -aws-auto-scaling-group esg-dev-asg \
     -db-connection $DATABASE \
     -listen :4444 \
-    -min-memory 1024 \
-    -min-cpu 1024 \
-    -min-memory-reservation 1024 \
     -s3-bucket zebrunner.dev-assets >> ./esg.log 2>&1 &
 status=$?
 if [ $status -ne 0 ]; then
@@ -34,9 +31,6 @@ nohup ./esg \
     -aws-auto-scaling-group esg-dev-asg \
     -db-connection $DATABASE \
     -listen :4445 \
-    -min-cpu 1024 \
-    -min-memory 1024 \
-    -min-memory-reservation 1024 \
     -s3-bucket zebrunner.dev-assets >> ./esg.log 2>&1 &
 status=$?
 if [ $status -ne 0 ]; then
