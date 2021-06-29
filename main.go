@@ -11,45 +11,46 @@ import (
 	"golang.org/x/net/websocket"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/handlers"
 	"github.com/zebrunner/esg/service"
 )
 
 var (
-	listen             string
-	gracefulPeriod     time.Duration
-	retryCount         int
-	dbConnectionString string
+	listen         string
+	gracefulPeriod time.Duration
+	retryCount     int
 )
 
 func init() {
-	flag.BoolVar(&handlers.EnableFileUpload, "enable-file-upload", false, "File upload support")
+	flag.BoolVar(&config.EnableFileUpload, "enable-file-upload", false, "File upload support")
 	flag.StringVar(&listen, "listen", ":4444", "Network address to accept connections")
 	flag.IntVar(&retryCount, "retry-count", 1, "New session attempts retry count")
-	flag.DurationVar(&handlers.Timeout, "timeout", 60*time.Second, "Session idle timeout in time.Duration format")
-	flag.DurationVar(&handlers.MaxTimeout, "max-timeout", 1*time.Hour, "Maximum valid session idle timeout in time.Duration format")
-	flag.DurationVar(&handlers.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
-	flag.DurationVar(&handlers.ServiceStartupTimeout, "service-startup-timeout", 30*time.Second, "Service startup timeout in time.Duration format")
-	flag.StringVar(&handlers.VideoRecorderImage, "video-recorder-image", "selenoid/video-recorder:latest-release", "Image to use as video recorder")
+	flag.DurationVar(&config.Timeout, "timeout", 60*time.Second, "Session idle timeout in time.Duration format")
+	flag.DurationVar(&config.MaxTimeout, "max-timeout", 1*time.Hour, "Maximum valid session idle timeout in time.Duration format")
+	flag.DurationVar(&config.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
+	flag.DurationVar(&config.ServiceStartupTimeout, "service-startup-timeout", 30*time.Second, "Service startup timeout in time.Duration format")
+	flag.StringVar(&config.VideoRecorderImage, "video-recorder-image", "selenoid/video-recorder:latest-release", "Image to use as video recorder")
 	flag.DurationVar(&gracefulPeriod, "graceful-period", 300*time.Second, "graceful shutdown period in time.Duration format, e.g. 300s or 500ms")
 	// AWS Related args
-	flag.StringVar(&service.AwsRegion, "aws-region", "us-east-1", "AWS region name")
-	flag.IntVar(&service.AwsRetry, "aws-retry", 10, "AWS client retry count")
-	flag.StringVar(&service.AwsCluster, "aws-cluster", "esg", "AWS cluster name")
-	flag.StringVar(&service.AwsElasticCache, "aws-elastic-cache", "localhost:6379", "AWS elastic cache connection URL")
-	flag.StringVar(&service.AwsAutoScalingGroup, "aws-auto-scaling-group", "esg-asg", "AWS auto scaling group name")
-	flag.IntVar(&service.MinMemory, "min-memory", 768, "AWS minimum memory limitation for session")
-	flag.IntVar(&service.MinMemoryReservation, "min-memory-reservation", 768, "AWS minimum memory reservation limitation for session")
-	flag.IntVar(&service.MaxMemory, "max-memory", 8192, "AWS maximum memory limitation for session")
-	flag.IntVar(&service.MaxMemoryReservation, "max-memory-reservation", 8192, "AWS maximum memory reservation limitation for session")
-	flag.IntVar(&service.MinCpu, "min-cpu", 512, "AWS minimum CPU limitation for session")
-	flag.IntVar(&service.MaxCpu, "max-cpu", 4096, "AWS maximum CPU limitation for session")
-	flag.StringVar(&service.S3Bucket, "s3-bucket", "", "S3 Bucket name for pushing artifacts")
-	flag.StringVar(&service.Tenant, "tenant", "", "Zebrunner tenant name")
-	flag.StringVar(&service.AwsAccessKeyID, "aws-access-key-id", "", "Access key for S3 bucket")
-	flag.StringVar(&service.AwsSecretAccessKey, "aws-secret-access-key", "", "Secret key for S3 bucket")
-	flag.StringVar(&dbConnectionString, "db-connection", "", "Connection string for database")
-	flag.BoolVar(&handlers.TrustedMode, "trusted", false, "If trusted mode enabled hub does not require any auth")
+	flag.StringVar(&config.AwsRegion, "aws-region", "us-east-1", "AWS region name")
+	flag.IntVar(&config.AwsRetry, "aws-retry", 10, "AWS client retry count")
+	flag.StringVar(&config.AwsCluster, "aws-cluster", "esg", "AWS cluster name")
+	flag.StringVar(&config.AwsElasticCache, "aws-elastic-cache", "localhost:6379", "AWS elastic cache connection URL")
+	flag.StringVar(&config.AwsAutoScalingGroup, "aws-auto-scaling-group", "esg-asg", "AWS auto scaling group name")
+	flag.IntVar(&config.MinMemory, "min-memory", 768, "AWS minimum memory limitation for session")
+	flag.IntVar(&config.MinMemoryReservation, "min-memory-reservation", 768, "AWS minimum memory reservation limitation for session")
+	flag.IntVar(&config.MaxMemory, "max-memory", 8192, "AWS maximum memory limitation for session")
+	flag.IntVar(&config.MaxMemoryReservation, "max-memory-reservation", 8192, "AWS maximum memory reservation limitation for session")
+	flag.IntVar(&config.MinCpu, "min-cpu", 512, "AWS minimum CPU limitation for session")
+	flag.IntVar(&config.MaxCpu, "max-cpu", 4096, "AWS maximum CPU limitation for session")
+	flag.StringVar(&config.S3Bucket, "s3-bucket", "", "S3 Bucket name for pushing artifacts")
+	flag.StringVar(&config.Tenant, "tenant", "", "Zebrunner tenant name")
+	flag.StringVar(&config.AwsAccessKeyID, "aws-access-key-id", "", "Access key for S3 bucket")
+	flag.StringVar(&config.AwsSecretAccessKey, "aws-secret-access-key", "", "Secret key for S3 bucket")
+	flag.StringVar(&config.DbConnectionString, "db-connection", "", "Connection string for database")
+	flag.BoolVar(&config.TrustedMode, "trusted", false, "If trusted mode enabled hub does not require any auth")
+	flag.StringVar(&config.LogLevel, "log-level", "debug", "Desired log level. Valid levels: `panic`, `fatal`, `error`, `warning`, `info`, `debug`, `trace`")
 
 	flag.Parse()
 
@@ -120,18 +121,24 @@ func CreateRouter() *gin.Engine {
 		hub.GET("/devtools/:session", handlers.Devtools)
 	}
 
+	hub.Use(handlers.APIError)
+	{
+		hub.GET("/logs/:session", handlers.Logs)
+		hub.GET("/video/:session", handlers.Video)
+	}
+
 	return r
 }
 
 func main() {
-	log.SetLevel(log.TraceLevel)
+	log.SetLevel(config.ParseLogLevel())
 	log.SetFormatter(&log.TextFormatter{
 		FullTimestamp:   true,
 		TimestampFormat: time.RFC3339Nano,
 		ForceColors:     true,
 	})
 
-	db, err := service.InitDBConnection(dbConnectionString)
+	db, err := service.InitDBConnection(config.DbConnectionString)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to init DB client.")
 	}

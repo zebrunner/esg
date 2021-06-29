@@ -16,7 +16,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/aerokube/util"
@@ -24,6 +23,7 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/imdario/mergo"
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/event"
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/session"
@@ -45,25 +45,16 @@ var (
 			return http.ErrUseLastResponse
 		},
 	}
-	num                   uint64
-	numLock               sync.RWMutex
-	RDB                   *redis.Client
-	sessions              = session.NewMap()
-	Timeout               time.Duration
-	MaxTimeout            time.Duration
-	ServiceStartupTimeout time.Duration
-	SessionDeleteTimeout  time.Duration
-	VideoRecorderImage    string
-	manager               service.Manager
-	EnableFileUpload      bool
-	TrustedMode           bool
+	sessions = session.NewMap()
+	manager  service.Manager
+	RDB      *redis.Client
 )
 
 func InitManager() {
 	environment := service.Environment{
-		StartupTimeout:       ServiceStartupTimeout,
-		SessionDeleteTimeout: SessionDeleteTimeout,
-		VideoContainerImage:  VideoRecorderImage,
+		StartupTimeout:       config.ServiceStartupTimeout,
+		SessionDeleteTimeout: config.SessionDeleteTimeout,
+		VideoContainerImage:  config.VideoRecorderImage,
 	}
 	manager = &service.DefaultManager{Environment: &environment}
 }
@@ -105,7 +96,7 @@ func CreateSessionFromCache(sessionID string) (*session.Session, error) {
 		return nil, err
 	}
 
-	sessionTimeout, err := getSessionTimeout(s.Caps.SessionTimeout, MaxTimeout, Timeout)
+	sessionTimeout, err := getSessionTimeout(s.Caps.SessionTimeout, config.MaxTimeout, config.Timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -131,13 +122,6 @@ func cancelAndRenameFiles(taskID string) func() {
 	}
 }
 
-// TODO There is simpler way to do this
-func (r Request) Localaddr() string {
-	addr := r.Context().Value(http.LocalAddrContextKey).(net.Addr).String()
-	_, port, _ := net.SplitHostPort(addr)
-	return net.JoinHostPort("127.0.0.1", port)
-}
-
 func Delete(taskId string) {
 	log.WithField("taskID", taskId).Info("Session timed out. Removing ECS task forcibly")
 	service.RemoveTask(taskId)
@@ -153,7 +137,7 @@ func CloseSession(sessionID string) {
 
 	client := http.Client{}
 	sess.URL.Path = path.Clean(sess.URL.Path + fmt.Sprintf("/session/%s", sessionID))
-	timeoutCtx, cancel := context.WithTimeout(context.Background(), SessionDeleteTimeout)
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), config.SessionDeleteTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(timeoutCtx, http.MethodDelete, sess.URL.String(), nil)
 	if err != nil {
@@ -161,7 +145,10 @@ func CloseSession(sessionID string) {
 		return
 	}
 
-	log.Debug("Closing session. Request: [%s %s]", req.Method, req.URL)
+	log.WithFields(log.Fields{
+		"method": req.Method,
+		"url":    req.URL,
+	}).Debug("Closing session.")
 	resp, err := client.Do(req)
 	if err != nil {
 		log.WithError(err).Error("Failed to cancel driver session")
@@ -193,7 +180,7 @@ func createSession(ctx context.Context, sessionUrl string, header http.Header, b
 		}
 	}
 	req.Header.Del("Accept-Encoding")
-	ctx, cancel := context.WithTimeout(ctx, Timeout)
+	ctx, cancel := context.WithTimeout(ctx, config.Timeout)
 	defer cancel()
 	req = req.WithContext(ctx)
 	req.Header.Set("Content-Type", "application/json")
@@ -233,11 +220,10 @@ func creationError(msg string, err error) *utils.SeleniumError {
 }
 
 func Create(c *gin.Context) {
-	r := c.Request
 	sessionStartTime := time.Now()
 	username, password, ok := c.Request.BasicAuth()
 	remote := c.ClientIP()
-	if TrustedMode {
+	if config.TrustedMode {
 		username = "zebrunner"
 		ok = true
 	}
@@ -250,7 +236,7 @@ func Create(c *gin.Context) {
 		return
 	}
 
-	if !TrustedMode {
+	if !config.TrustedMode {
 		err := service.CheckAuth(username, password)
 		if err != nil {
 			log.WithError(err).WithFields(log.Fields{
@@ -272,8 +258,8 @@ func Create(c *gin.Context) {
 		"remote": remote,
 	})
 
-	body, err := ioutil.ReadAll(r.Body)
-	r.Body.Close()
+	body, err := ioutil.ReadAll(c.Request.Body)
+	c.Request.Body.Close()
 	if err != nil {
 		l.WithError(err).Error("Failed to read request")
 		c.Error(creationError("Failed to read request", err)).SetType(gin.ErrorTypePublic)
@@ -304,9 +290,12 @@ func Create(c *gin.Context) {
 	var sessionTimeout time.Duration
 	for _, fmc := range firstMatchCaps {
 		caps = browser.Caps
-		mergo.Merge(&caps, *fmc)
+		err := mergo.Merge(&caps, *fmc)
+		if err != nil {
+			c.Error(err)
+		}
 		caps.ProcessExtensionCapabilities()
-		sessionTimeout, err = getSessionTimeout(caps.SessionTimeout, MaxTimeout, Timeout)
+		sessionTimeout, err = getSessionTimeout(caps.SessionTimeout, config.MaxTimeout, config.Timeout)
 		if err != nil {
 			l.WithError(err).Error("Bas session timeout")
 			c.Error(creationError("Failed to parse `sessionTimeout` capability.", err)).SetType(gin.ErrorTypePublic)
@@ -360,16 +349,16 @@ func Create(c *gin.Context) {
 		ID string `json:"sessionId"`
 	}
 	for ; ; i++ {
-		r.URL.Host, r.URL.Path = u.Host, path.Join(u.Path, r.URL.Path)
-		r.URL.Scheme = "http"
+		c.Request.URL.Host, c.Request.URL.Path = u.Host, path.Join(u.Path, c.Request.URL.Path)
+		c.Request.URL.Scheme = "http"
 
 		l.WithFields(log.Fields{
 			"serviceUrl": u,
 			"attempt":    i,
 		}).Info("Session attempted")
-		resp, status := createSession(r.Context(), r.URL.String(), r.Header, body)
+		resp, status := createSession(c.Request.Context(), c.Request.URL.String(), c.Request.Header, body)
 		select {
-		case <-r.Context().Done():
+		case <-c.Request.Context().Done():
 			l.Info("Client disconnected")
 			cancel()
 			return
@@ -400,12 +389,10 @@ func Create(c *gin.Context) {
 					cancel()
 					return
 				}
-				// s.ID = startedService.Container.ContainerInstanceID + startedService.Container.ID + sess
 				s.ID = sess
 				resp["value"].(map[string]interface{})["sessionId"] = s.ID
 			} else {
-				sess, ok = resp["sessionId"].(string)
-				// s.ID = startedService.Container.ContainerInstanceID + startedService.Container.ID + sess
+				sess, _ := resp["sessionId"].(string)
 				s.ID = sess
 				resp["sessionId"] = s.ID
 			}
@@ -437,7 +424,7 @@ func Create(c *gin.Context) {
 			SessionId: sessionId,
 			Session:   sess,
 		}
-		event.SessionStopped(event.StoppedSession{e})
+		event.SessionStopped(event.StoppedSession{Event: e})
 	}
 	sess.Cancel = cancelAndRenameFiles
 	sessions.Put(s.ID, sess)
@@ -526,10 +513,9 @@ func Proxy(c *gin.Context) {
 			fragments := strings.Split(r.URL.Path, slash)
 			sessionID := fragments[2]
 
-			var err error = nil
 			sess, ok := sessions.Get(sessionID)
 			if !ok {
-				sess, err = CreateSessionFromCache(sessionID)
+				_, err := CreateSessionFromCache(sessionID)
 				if err != nil {
 					log.WithError(err).WithField("sessionID", sessionID).Error("Cant find session")
 					c.Error(err).SetType(gin.ErrorTypePublic)
@@ -546,7 +532,7 @@ func Proxy(c *gin.Context) {
 					close(sess.TimeoutCh)
 				}
 				if r.Method == http.MethodDelete && len(fragments) == 3 {
-					if EnableFileUpload {
+					if config.EnableFileUpload {
 						os.RemoveAll(filepath.Join(os.TempDir(), sessionID))
 					}
 					cancel = sess.Cancel
@@ -554,7 +540,7 @@ func Proxy(c *gin.Context) {
 					RDB.Del(context.Background(), sessionID).Result()
 					log.WithField("sessionID", sessionID).Info("Session deleted")
 				} else {
-					if len(fragments) == 4 && fragments[len(fragments)-1] == "file" && EnableFileUpload {
+					if len(fragments) == 4 && fragments[len(fragments)-1] == "file" && config.EnableFileUpload {
 						r.Header.Set("X-Selenoid-File", filepath.Join(os.TempDir(), sessionID))
 						r.URL.Path = "/file"
 						return
@@ -620,11 +606,17 @@ func Vnc(wsconn *websocket.Conn) {
 	defer conn.Close()
 	wsconn.PayloadType = websocket.BinaryFrame
 	go func() {
-		io.Copy(wsconn, conn)
+		_, e := io.Copy(wsconn, conn)
+		if e != nil {
+			log.WithError(e).Error("VNC WS Copy error")
+		}
 		wsconn.Close()
 		l.Debug("Vnc session closed")
 	}()
-	io.Copy(conn, wsconn)
+	_, err = io.Copy(conn, wsconn)
+	if err != nil {
+		log.WithError(err).Error("VNC WS Copy error")
+	}
 	l.Debug("Vnc client disconected")
 }
 
@@ -634,7 +626,7 @@ const (
 
 func Logs(c *gin.Context) {
 	user, _, ok := c.Request.BasicAuth()
-	if TrustedMode {
+	if config.TrustedMode {
 		user = "zebrunner"
 		ok = true
 	}
@@ -658,7 +650,7 @@ func Logs(c *gin.Context) {
 
 func Video(c *gin.Context) {
 	user, _, ok := c.Request.BasicAuth()
-	if TrustedMode {
+	if config.TrustedMode {
 		user = "zebrunner"
 		ok = true
 	}
@@ -751,7 +743,7 @@ func ClearSessions() {
 	// TODO: Emulate session termination on selenium and try to return response
 	// TODO: Move logic outside core ESG to run separately from main processes
 	for {
-		time.Sleep(Timeout)
+		time.Sleep(config.Timeout)
 		keys, err := RDB.Keys(context.Background(), "*").Result()
 		if err != nil {
 			log.WithError(err).Error("Failed to get list of keys")
@@ -765,7 +757,7 @@ func ClearSessions() {
 				continue
 			}
 
-			if idle > Timeout {
+			if idle > config.Timeout {
 				result, err := RDB.Get(context.Background(), key).Result()
 				if err != nil {
 					log.WithError(err).Error("Failed to get session from cache")
