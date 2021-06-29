@@ -137,7 +137,10 @@ func DeleteUser(name string) error {
 		return err
 	}
 	deleteQuery := `UPDATE users SET is_deleted=true WHERE id = $1`
-	DB.Exec(deleteQuery, user.ID)
+	_, err = DB.Exec(deleteQuery, user.ID)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

@@ -10,6 +10,7 @@ import (
 	"github.com/go-redis/redis/v8"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/session"
 )
 
@@ -31,24 +32,6 @@ type Environment struct {
 
 const (
 	DefaultContainerNetwork = "default"
-)
-
-var (
-	AwsRegion            string
-	AwsRetry             int
-	AwsCluster           string
-	AwsElasticCache      string
-	AwsAutoScalingGroup  string
-	MinMemory            int
-	MinMemoryReservation int
-	MaxMemory            int
-	MaxMemoryReservation int
-	MinCpu               int
-	MaxCpu               int
-	S3Bucket             string
-	Tenant               string
-	AwsAccessKeyID       string
-	AwsSecretAccessKey   string
 )
 
 // ServiceBase - stores fields required by all services
@@ -90,7 +73,7 @@ type Browser struct {
 
 func InitCache() (*redis.Client, error) {
 	client := redis.NewClient(&redis.Options{
-		Addr:     AwsElasticCache,
+		Addr:     config.AwsElasticCache,
 		Password: "",
 		DB:       0,
 	})

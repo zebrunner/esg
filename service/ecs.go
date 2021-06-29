@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/aerokube/util"
+	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/session"
 
 	"strings"
@@ -60,7 +61,11 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	log.WithField("taskDefinitionFamily", taskDefFamily).Debug()
 
 	//create ECS task definition based on capabilities
-	svc := ecs.New(awsSession.New(&aws.Config{Region: &AwsRegion, MaxRetries: &AwsRetry}))
+	sess, err := awsSession.NewSession(&aws.Config{Region: &config.AwsRegion, MaxRetries: &config.AwsRetry})
+	if err != nil {
+		return nil, err
+	}
+	svc := ecs.New(sess)
 
 	//TODO: support GPU reservation: The number of GPU units to reserve for the container. A container instance with GPU support has 1 GPU unit for every GPU.
 	//log.Printf("[CREATING_ECS_TASK_DEFINITION] [%s]", imageUrl)
@@ -156,7 +161,7 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 					},
 					{
 						Name:  aws.String("BUCKET"),
-						Value: &S3Bucket,
+						Value: &config.S3Bucket,
 					},
 					{
 						Name:  aws.String("TENANT"),
@@ -164,15 +169,15 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 					},
 					{
 						Name:  aws.String("AWS_ACCESS_KEY_ID"),
-						Value: &AwsAccessKeyID,
+						Value: &config.AwsAccessKeyID,
 					},
 					{
 						Name:  aws.String("AWS_SECRET_ACCESS_KEY"),
-						Value: &AwsSecretAccessKey,
+						Value: &config.AwsSecretAccessKey,
 					},
 					{
 						Name:  aws.String("AWS_DEFAULT_REGION"),
-						Value: &AwsRegion,
+						Value: &config.AwsRegion,
 					},
 				},
 				MountPoints: []*ecs.MountPoint{
@@ -222,7 +227,7 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	// Pass a context with a timeout to tell a blocking function that it should abandon its work after the timeout elapses.
 	//TODO: parametrize provision timeout
 	runTaskInput := &ecs.RunTaskInput{
-		Cluster:        &AwsCluster,
+		Cluster:        &config.AwsCluster,
 		TaskDefinition: aws.String(family + ":" + strconv.FormatInt(revision, 10)),
 	}
 
@@ -261,7 +266,7 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	taskId := strings.Split(taskArn, "/")[2]
 	//TODO: wait until container starts (in response we should have valid *resultRunTask.Tasks[0].ContainerInstanceArn value
 	describeTaskInput := &ecs.DescribeTasksInput{
-		Cluster: &AwsCluster,
+		Cluster: &config.AwsCluster,
 		Tasks: []*string{
 			aws.String(taskId),
 		},
@@ -298,7 +303,7 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	}).Debug()
 
 	containerInstanceInput := &ecs.DescribeContainerInstancesInput{
-		Cluster: &AwsCluster,
+		Cluster: &config.AwsCluster,
 		ContainerInstances: []*string{
 			aws.String(containerInstanceId),
 		},
@@ -320,7 +325,7 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 		},
 	}
 
-	svcEc2 := ec2.New(awsSession.New(&aws.Config{Region: &AwsRegion}))
+	svcEc2 := ec2.New(sess)
 	resultInstance, err := svcEc2.DescribeInstances(instanceInput)
 	if err != nil {
 		RemoveTask(taskArn)
@@ -394,7 +399,7 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 
 func getFailReason(svc *ecs.ECS, taskId string) (*string, error) {
 	describeTaskInput := &ecs.DescribeTasksInput{
-		Cluster: &AwsCluster,
+		Cluster: &config.AwsCluster,
 		Tasks:   []*string{aws.String(taskId)},
 	}
 	describeTaskResult, err := svc.DescribeTasks(describeTaskInput)
@@ -413,9 +418,14 @@ func getFailReason(svc *ecs.ECS, taskId string) (*string, error) {
 }
 
 func GetTasksCount() (*map[string]interface{}, error) {
-	svc := ecs.New(awsSession.New(&aws.Config{Region: &AwsRegion, MaxRetries: &AwsRetry}))
+	sess, err := awsSession.NewSession(&aws.Config{Region: &config.AwsRegion, MaxRetries: &config.AwsRetry})
+	if err != nil {
+		return nil, err
+	}
+
+	svc := ecs.New(sess)
 	listInput := ecs.ListTasksInput{
-		Cluster: &AwsCluster,
+		Cluster: &config.AwsCluster,
 	}
 
 	var tasks []*ecs.Task
@@ -431,7 +441,7 @@ func GetTasksCount() (*map[string]interface{}, error) {
 		listInput.NextToken = listResult.NextToken
 
 		describeInput := ecs.DescribeTasksInput{
-			Cluster: &AwsCluster,
+			Cluster: &config.AwsCluster,
 			Tasks:   listResult.TaskArns,
 		}
 		describeResult, err := svc.DescribeTasks(&describeInput)
@@ -492,53 +502,50 @@ func parseResourceCapability(cap string, defaultValue int, capabilityName string
 }
 
 func getEcsMemory(caps session.Caps) (int64, error) {
-	memory, err := parseResourceCapability(caps.Memory, MinMemory, "Memory")
+	memory, err := parseResourceCapability(caps.Memory, config.MinMemory, "Memory")
 	if err != nil {
 		return 0, err
 	}
-	if memory < MinMemory {
-		fmt.Println("[WARN] Requested Memory is lower than MinMemory. Using MinMemory as default. Requested:", memory, "MinMemory:", MinMemory)
-		return int64(MinMemory), nil
-	} else if memory > MaxMemory {
-		return 0, fmt.Errorf("Requested Memory is grater than MaxMemory allowed by system administrator. Requested: %d. MaxMemory: %d", memory, MaxMemory)
+	if memory < config.MinMemory {
+		fmt.Println("[WARN] Requested Memory is lower than MinMemory. Using MinMemory as default. Requested:", memory, "MinMemory:", config.MinMemory)
+		return int64(config.MinMemory), nil
+	} else if memory > config.MaxMemory {
+		return 0, fmt.Errorf("Requested Memory is grater than MaxMemory allowed by system administrator. Requested: %d. MaxMemory: %d", memory, config.MaxMemory)
 	}
 	return int64(memory), nil
 }
 
 func getEcsMemoryReservation(caps session.Caps) (int64, error) {
-	memoryReservation, err := parseResourceCapability(caps.MemoryReservation, MinMemoryReservation, "MemoryReservation")
+	memoryReservation, err := parseResourceCapability(caps.MemoryReservation, config.MinMemoryReservation, "MemoryReservation")
 	if err != nil {
 		return 0, err
 	}
-	if memoryReservation < MinMemoryReservation {
-		fmt.Println("[WARN] Requested MemoryReservation lower than MinMemoryReservation. Using MinMemoryReservation as default. Requested:", memoryReservation, "MinMemoryReservation:", MinMemoryReservation)
-		return int64(MinMemoryReservation), nil
-	} else if memoryReservation > MaxMemoryReservation {
-		return 0, fmt.Errorf("Requested MemoryReservation is grater than MaxMemoryReservation allowed by system administrator. Requested: %d. MaxMemory: %d", memoryReservation, MaxMemoryReservation)
+	if memoryReservation < config.MinMemoryReservation {
+		fmt.Println("[WARN] Requested MemoryReservation lower than MinMemoryReservation. Using MinMemoryReservation as default. Requested:", memoryReservation, "MinMemoryReservation:", config.MinMemoryReservation)
+		return int64(config.MinMemoryReservation), nil
+	} else if memoryReservation > config.MaxMemoryReservation {
+		return 0, fmt.Errorf("Requested MemoryReservation is grater than MaxMemoryReservation allowed by system administrator. Requested: %d. MaxMemory: %d", memoryReservation, config.MaxMemoryReservation)
 	}
 	return int64(memoryReservation), nil
 }
 
 func getEcsCpu(caps session.Caps) (int64, error) {
-	cpu, err := parseResourceCapability(caps.Cpu, MinCpu, "Cpu")
+	cpu, err := parseResourceCapability(caps.Cpu, config.MinCpu, "Cpu")
 	if err != nil {
 		return 0, err
 	}
-	if cpu < MinCpu {
-		fmt.Println("[WARN] Requested CPU lower than MinCpu. Using MinCpu as default. Requested:", cpu, "MinCpu:", MinCpu)
-		return int64(MinCpu), nil
-	} else if cpu > MaxCpu {
-		return 0, fmt.Errorf("Requested CPU is grater than MaxCpu allowed by system administrator. Requested: %d. MaxCpu: %d", cpu, MaxCpu)
+	if cpu < config.MinCpu {
+		fmt.Println("[WARN] Requested CPU lower than MinCpu. Using MinCpu as default. Requested:", cpu, "MinCpu:", config.MinCpu)
+		return int64(config.MinCpu), nil
+	} else if cpu > config.MaxCpu {
+		return 0, fmt.Errorf("Requested CPU is grater than MaxCpu allowed by system administrator. Requested: %d. MaxCpu: %d", cpu, config.MaxCpu)
 	}
 	return int64(cpu), nil
 }
 
 func getTaskHostPort(caps session.Caps, taskIP string, pc *ecsPortConfig) session.HostPort {
-	fn := func(containerPort int64) string {
-		return ""
-	}
 	containerIP := taskIP
-	fn = func(containerPort int64) string {
+	fn := func(containerPort int64) string {
 		return containerIP + ":" + strconv.FormatInt(containerPort, 10)
 	}
 
@@ -557,12 +564,16 @@ func getTaskHostPort(caps session.Caps, taskIP string, pc *ecsPortConfig) sessio
 }
 
 func RemoveTask(taskArn string) {
-	//log.Printf("[REMOVING_TASK] [%s]", taskArn)
 	log.WithField("taskARN", taskArn).Info("Removing task")
-	svc := ecs.New(awsSession.New(&aws.Config{Region: &AwsRegion, MaxRetries: &AwsRetry}))
+	sess, err := awsSession.NewSession(&aws.Config{Region: &config.AwsRegion, MaxRetries: &config.AwsRetry})
+	if err != nil {
+		log.WithError(err).WithField("taskARN", taskArn).Warn("Failed to stop task")
+		return
+	}
+	svc := ecs.New(sess)
 
 	stopTaskInput := &ecs.StopTaskInput{
-		Cluster: &AwsCluster,
+		Cluster: &config.AwsCluster,
 		Reason:  aws.String("Cancel"),
 		Task:    aws.String(taskArn),
 	}
@@ -589,13 +600,13 @@ func RemoveTask(taskArn string) {
 }
 
 func GeneratePreSignedURL(key string) (string, error) {
-	sess, err := awsSession.NewSession(&aws.Config{Region: &AwsRegion})
+	sess, err := awsSession.NewSession(&aws.Config{Region: &config.AwsRegion})
 	if err != nil {
 		return "", err
 	}
 	s3Svc := s3.New(sess)
 	req, _ := s3Svc.GetObjectRequest(&s3.GetObjectInput{
-		Bucket: &S3Bucket,
+		Bucket: &config.S3Bucket,
 		Key:    &key,
 	})
 	urlStr, err := req.Presign(10 * time.Minute)

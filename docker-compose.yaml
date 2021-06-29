@@ -7,7 +7,7 @@ services:
         - "4444:4444"
         - "4445:4445"
     volumes:
-      - "/home/ubuntu/.aws:/root/.aws"
+      - "${HOME}/.aws:/root/.aws"
     links:
       - redis
       - db
