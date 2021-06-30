@@ -68,7 +68,6 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	svc := ecs.New(sess)
 
 	//TODO: support GPU reservation: The number of GPU units to reserve for the container. A container instance with GPU support has 1 GPU unit for every GPU.
-	//log.Printf("[CREATING_ECS_TASK_DEFINITION] [%s]", imageUrl)
 	log.WithField("imageUrl", imageUrl).Info("Creating ECS task definition")
 
 	uuid := uuid.New().String()
@@ -208,14 +207,12 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 		TaskRoleArn: aws.String(""),
 	}
 
-	time.Sleep(1 * time.Second)
 	resultTaskDefinition, err := svc.RegisterTaskDefinition(taskDefinitionInput)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to create task definition: %v", err)
 	}
 
 	taskStartTime := time.Now()
-	//log.Printf("[STARTING_TASK] [%s] [%s]", imageUrl, taskStartTime)
 	log.WithFields(log.Fields{
 		"taskStartTime": taskStartTime,
 		"imageUrl":      imageUrl,
@@ -235,11 +232,9 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	taskFailure := ""
 	for retry := 1; retry < 5; retry++ {
 		if err != nil {
-			//log.Printf("[TASK_RUN_ERROR] [%s] [%d]", err, retry)
 			log.WithError(err).WithField("retry", retry).Warn("Task run attempt error")
 		} else if len(resultRunTask.Failures) > 0 {
 			taskFailure = *resultRunTask.Failures[0].Reason
-			//log.Printf("[TASK_RUN_FAILURE] [%s] [%d]", taskFailure, retry)
 			log.WithError(err).WithField("retry", retry).Error("Task run failure")
 		} else {
 			// all good and we can proceed
@@ -261,7 +256,6 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	}
 
 	taskArn := *resultRunTask.Tasks[0].TaskArn
-	//log.Printf("[TASK_ARN] [%s]", taskArn)
 	log.WithField("taskARN", taskArn).Debug()
 	taskId := strings.Split(taskArn, "/")[2]
 	//TODO: wait until container starts (in response we should have valid *resultRunTask.Tasks[0].ContainerInstanceArn value
@@ -294,9 +288,7 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 
 	containerInstanceArn := *resultDescribeTask.Tasks[0].ContainerInstanceArn
 
-	//log.Printf("[TASK_CONTAINER_INSTANCE] [%s]", containerInstanceArn)
 	containerInstanceId := strings.Split(containerInstanceArn, "/")[2]
-	//log.Printf("[TASK_CONTAINER_INSTANCE_ID] [%s]", containerInstanceId)
 	log.WithFields(log.Fields{
 		"taskContainerInstanceArn": containerInstanceArn,
 		"taskContainerInstanceID":  containerInstanceId,
@@ -316,7 +308,6 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 
 	//TODO: verify that returned number of instances is 1!
 	instanceId := *resultContainerInstance.ContainerInstances[0].Ec2InstanceId
-	//log.Printf("[INSTANCE_ID] [%s]", instanceId)
 	log.WithField("instanceID", instanceId).Debug()
 
 	instanceInput := &ec2.DescribeInstancesInput{
@@ -332,16 +323,13 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 		return nil, fmt.Errorf("Unable to get instance details: %v", err)
 	}
 	privateIpAddress := *resultInstance.Reservations[0].Instances[0].PrivateIpAddress
-	//log.Printf("[INSTANCE_PRIVATE_IP] [%s]", privateIpAddress)
 	publicIpAddress := *resultInstance.Reservations[0].Instances[0].PublicIpAddress
-	//log.Printf("[INSTANCE_PUBLIC_IP] [%s]", publicIpAddress)
 	log.WithFields(log.Fields{
 		"instancePrivateIP": privateIpAddress,
 		"instancePublicIP":  publicIpAddress,
 	}).Debug()
 
 	browserTaskStartTime := time.Now()
-	//log.Printf("[TASK_STARTED] [%s] [%s] [%.2fs]", imageUrl, taskId, util.SecondsSince(browserTaskStartTime))
 	log.WithFields(log.Fields{
 		"imageURL":      imageUrl,
 		"taskID":        taskId,
@@ -349,12 +337,10 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	}).Debug()
 
 	hostPort := getTaskHostPort(d.Caps, privateIpAddress, portConfig)
-	//log.Printf("[HOST_PORT] [%s]", hostPort)
 	log.WithField("hostPort", hostPort).Debug()
 	log.WithField("VNCPort", hostPort.VNC).Debug("VNC")
 
 	u := &url.URL{Scheme: "http", Host: hostPort.Selenium, Path: d.Service.Path}
-	//log.Printf("[CONTAINER_SERVICE_URL] [%s]", u)
 	log.WithField("containerServiceUrl", u).Debug()
 
 	serviceStartTime := time.Now()
@@ -363,8 +349,6 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 		RemoveTask(taskArn)
 		return nil, fmt.Errorf("wait: %v", err)
 	}
-	//log.Printf("[SERVICE_STARTED] [%s] [%s] [%.2fs]", imageUrl, taskId, util.SecondsSince(serviceStartTime))
-	//log.Printf("[PROXY_TO] [%s] [%s]", taskId, u.String())
 	log.WithFields(log.Fields{
 		"imageURL":  imageUrl,
 		"taskID":    taskId,
@@ -415,64 +399,6 @@ func getFailReason(svc *ecs.ECS, taskId string) (*string, error) {
 	}
 
 	return &resultReason, nil
-}
-
-func GetTasksCount() (*map[string]interface{}, error) {
-	sess, err := awsSession.NewSession(&aws.Config{Region: &config.AwsRegion, MaxRetries: &config.AwsRetry})
-	if err != nil {
-		return nil, err
-	}
-
-	svc := ecs.New(sess)
-	listInput := ecs.ListTasksInput{
-		Cluster: &config.AwsCluster,
-	}
-
-	var tasks []*ecs.Task
-	for {
-		listResult, err := svc.ListTasks(&listInput)
-		if err != nil {
-			log.WithError(err).Error("Failed to get list of tasks")
-			return nil, err
-		}
-		if len(listResult.TaskArns) == 0 {
-			break
-		}
-		listInput.NextToken = listResult.NextToken
-
-		describeInput := ecs.DescribeTasksInput{
-			Cluster: &config.AwsCluster,
-			Tasks:   listResult.TaskArns,
-		}
-		describeResult, err := svc.DescribeTasks(&describeInput)
-		if err != nil {
-			log.WithError(err).Error("Failed to describe tasks")
-			return nil, err
-		}
-		tasks = append(tasks, describeResult.Tasks...)
-
-		if listInput.NextToken == nil {
-			break
-		}
-	}
-
-	result := map[string]int{
-		"PROVISIONING":   0,
-		"PENDING":        0,
-		"ACTIVATING":     0,
-		"RUNNING":        0,
-		"DEACTIVATING":   0,
-		"STOPPING":       0,
-		"DEPROVISIONING": 0,
-		"STOPPED":        0,
-	}
-	for _, task := range tasks {
-		result[*task.LastStatus] += 1
-	}
-
-	return &map[string]interface{}{
-		"tasks": result,
-	}, nil
 }
 
 func getEcsPortConfig() (*ecsPortConfig, error) {
@@ -580,7 +506,6 @@ func RemoveTask(taskArn string) {
 
 	resultStopTask, err := svc.StopTask(stopTaskInput)
 	if err != nil {
-		//log.Printf("[FAILED_TO_STOP_TASK] [%s] [%v]", taskArn, err)
 		log.WithError(err).WithField("taskARN", taskArn).Warn("Failed to stop task")
 		return
 	}
@@ -591,11 +516,9 @@ func RemoveTask(taskArn string) {
 	}
 	resultTaskDeregister, err := svc.DeregisterTaskDefinition(taskDeregisterInput)
 	if err != nil {
-		//log.Printf("[FAILED_TO_DEREGISTER_TASK_DEFINITION] [%s] [%v]", taskDefinitionArn, err)
 		log.WithError(err).WithField("taskDefinitionARN", taskDefinitionArn).Error("Failed to deregister task definition")
 		return
 	}
-	//log.Printf("[TASK_DEFINITION_REMOVED] [%s]", *resultTaskDeregister.TaskDefinition.TaskDefinitionArn)
 	log.WithField("taskDefinitionARN", *resultTaskDeregister.TaskDefinition.TaskDefinitionArn).Info("Task definition removed")
 }
 

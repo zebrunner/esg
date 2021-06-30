@@ -620,10 +620,6 @@ func Vnc(wsconn *websocket.Conn) {
 	l.Debug("Vnc client disconected")
 }
 
-const (
-	JsonParam = "json"
-)
-
 func Logs(c *gin.Context) {
 	user, _, ok := c.Request.BasicAuth()
 	if config.TrustedMode {
