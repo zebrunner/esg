@@ -151,6 +151,12 @@ func main() {
 	handlers.RDB = rdb
 	defer rdb.Close()
 
+	aws, err := service.InitAws()
+	if err != nil {
+		log.WithError(err).Fatal("Failed to start aws session")
+	}
+	service.AwsSess = aws
+
 	go handlers.ClearSessions()
 
 	router := CreateRouter()

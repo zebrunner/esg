@@ -125,7 +125,6 @@ func (m *DefaultManager) Find(caps session.Caps) (Starter, bool) {
 	}
 
 	serviceBase := ServiceBase{Service: &service}
-	//log.Printf("[USING_ECS] browser: %s; service: %v", browser, service)
 	log.WithFields(log.Fields{
 		"browser": browser,
 		"service": service,

@@ -73,7 +73,8 @@ func (c *Caps) BrowserName() string {
 type Container struct {
 	ID                  string `json:"id"`
 	ContainerInstanceID string
-	IPAddress           string            `json:"ip"`
+	IPAddress           string `json:"ip"`
+	PublicIPAddress     string
 	Ports               map[string]string `json:"exposedPorts,omitempty"`
 }
 
