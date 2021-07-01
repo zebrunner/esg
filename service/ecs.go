@@ -403,52 +403,61 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	svc := ecs.New(AwsSess)
 
 	portConfig := getEcsPortConfig()
-
-	taskDefinition, err := d.CreateTaskDefinition(username, portConfig)
-	if err != nil {
-		return nil, err
-	}
-
-	taskArn, err := RunTask(taskDefinition)
-	if err != nil {
-		return nil, err
-	}
-	taskId := strings.Split(taskArn, "/")[2]
-
-	describeTaskInput := &ecs.DescribeTasksInput{
-		Cluster: &config.AwsCluster,
-		Tasks: []*string{
-			aws.String(taskId),
-		},
-	}
-	time.Sleep(15 * time.Second)
-	ScaleUp()
-
-	err = svc.WaitUntilTasksRunning(describeTaskInput)
-	if err != nil {
-		RemoveTask(taskArn)
-		failReason, reasonErr := getFailReason(svc, taskId)
-		if reasonErr == nil {
-			return nil, fmt.Errorf("Unable to wait until task is running: %v", *failReason)
-		} else {
-			return nil, fmt.Errorf("Unable to wait until task is running: %v", err)
+	var err error
+	for i := 0; i < config.RetryCount; i++ {
+		log.WithField("attempt", i + 1).Info("Session start attempt")
+		taskDefinition, err := d.CreateTaskDefinition(username, portConfig)
+		if err != nil {
+			log.WithError(err).Error("Attempt failed")
+			continue
 		}
+
+		taskArn, err := RunTask(taskDefinition)
+		if err != nil {
+			log.WithError(err).Error("Attempt failed")
+			continue
+		}
+		taskId := strings.Split(taskArn, "/")[2]
+
+		describeTaskInput := &ecs.DescribeTasksInput{
+			Cluster: &config.AwsCluster,
+			Tasks: []*string{
+				aws.String(taskId),
+			},
+		}
+		time.Sleep(15 * time.Second)
+		ScaleUp()
+
+		err = svc.WaitUntilTasksRunning(describeTaskInput)
+		if err != nil {
+			RemoveTask(taskArn)
+			failReason, reasonErr := getFailReason(svc, taskId)
+			if reasonErr == nil {
+				log.WithError(err).WithField("reason", failReason).Error("Attempt failed. Unable to wait until task is running")
+			} else {
+				log.WithError(err).Error("Attempt failed. Unable to wait until task is running")
+			}
+			continue
+		}
+
+		sessionInfo, err := d.GetStartedServiceInfo(taskArn, portConfig)
+		if err != nil {
+			log.WithError(err).Error("Attempt failed")
+			RemoveTask(taskArn)
+			continue
+		}
+
+		err = wait(sessionInfo.Url.String(), d.StartupTimeout)
+		if err != nil {
+			log.WithError(err).Errorf("Session does not respond in %ds", d.StartupTimeout)
+			RemoveTask(taskArn)
+			continue
+		}
+
+		return sessionInfo, nil
 	}
 
-	sessionInfo, err := d.GetStartedServiceInfo(taskArn, portConfig)
-	if err != nil {
-		RemoveTask(taskArn)
-		return nil, err
-	}
-
-	err = wait(sessionInfo.Url.String(), d.StartupTimeout)
-	if err != nil {
-		log.WithError(err).Errorf("Session does not respond in %ds", d.StartupTimeout)
-		RemoveTask(taskArn)
-		return nil, fmt.Errorf("wait: %v", err)
-	}
-
-	return sessionInfo, nil
+	return nil, fmt.Errorf("failed to start task after %d attempts. InternalError: %v", config.RetryCount, err)
 }
 
 func getFailReason(svc *ecs.ECS, taskId string) (*string, error) {
