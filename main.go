@@ -19,13 +19,12 @@ import (
 var (
 	listen         string
 	gracefulPeriod time.Duration
-	retryCount     int
 )
 
 func init() {
 	flag.BoolVar(&config.EnableFileUpload, "enable-file-upload", false, "File upload support")
 	flag.StringVar(&listen, "listen", ":4444", "Network address to accept connections")
-	flag.IntVar(&retryCount, "retry-count", 1, "New session attempts retry count")
+	flag.IntVar(&config.RetryCount, "retry-count", 1, "New session attempts retry count")
 	flag.DurationVar(&config.Timeout, "timeout", 60*time.Second, "Session idle timeout in time.Duration format")
 	flag.DurationVar(&config.MaxTimeout, "max-timeout", 1*time.Hour, "Maximum valid session idle timeout in time.Duration format")
 	flag.DurationVar(&config.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
@@ -151,6 +150,12 @@ func main() {
 	}
 	handlers.RDB = rdb
 	defer rdb.Close()
+
+	aws, err := service.InitAws()
+	if err != nil {
+		log.WithError(err).Fatal("Failed to start aws session")
+	}
+	service.AwsSess = aws
 
 	go handlers.ClearSessions()
 
