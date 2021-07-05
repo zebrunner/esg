@@ -19,9 +19,13 @@ services:
       - "pgdata-volume:/var/lib/postgresql/data"
     environment: 
       POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
     restart: always
   redis:
     image: redis:6
     container_name: esg-redis
+    ports:
+      - "6379:6379"
 volumes:
   pgdata-volume:

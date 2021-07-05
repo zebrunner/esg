@@ -225,24 +225,25 @@ func (d *Task) CreateTaskDefinition(username string, portConfig *ecsPortConfig) 
 }
 
 func DeregisterTaskDefinition(taskDefinitionArn string) error {
-	svc := ecs.New(AwsSess)
-	taskDeregisterInput := &ecs.DeregisterTaskDefinitionInput{
-		TaskDefinition: aws.String(taskDefinitionArn),
-	}
-	resultTaskDeregister, err := svc.DeregisterTaskDefinition(taskDeregisterInput)
-	if err != nil {
-		log.WithError(err).WithField("taskDefinitionARN", taskDefinitionArn).Error("Failed to deregister task definition")
-		return err
-	}
-	log.WithField("taskDefinitionARN", *resultTaskDeregister.TaskDefinition.TaskDefinitionArn).Info("Task definition removed")
+	// svc := ecs.New(AwsSess)
+	// taskDeregisterInput := &ecs.DeregisterTaskDefinitionInput{
+	// 	TaskDefinition: aws.String(taskDefinitionArn),
+	// }
+	// resultTaskDeregister, err := svc.DeregisterTaskDefinition(taskDeregisterInput)
+	// if err != nil {
+	// 	log.WithError(err).WithField("taskDefinitionARN", taskDefinitionArn).Error("Failed to deregister task definition")
+	// 	return err
+	// }
+	// log.WithField("taskDefinitionARN", *resultTaskDeregister.TaskDefinition.TaskDefinitionArn).Info("Task definition removed")
+	// return nil
 	return nil
 }
 
 func RunTask(taskDefinition *ecs.TaskDefinition) (taskArn string, err error) {
 	svc := ecs.New(AwsSess)
 
-	family := *taskDefinition.Family
-	revision := *taskDefinition.Revision
+	family := "chrome-1625235470369413054"
+	revision := int64(1)
 	runTaskInput := &ecs.RunTaskInput{
 		Cluster:        &config.AwsCluster,
 		TaskDefinition: aws.String(family + ":" + strconv.FormatInt(revision, 10)),
@@ -405,14 +406,18 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	portConfig := getEcsPortConfig()
 	var err error
 	for i := 0; i < config.RetryCount; i++ {
-		log.WithField("attempt", i + 1).Info("Session start attempt")
-		taskDefinition, err := d.CreateTaskDefinition(username, portConfig)
-		if err != nil {
-			log.WithError(err).Error("Attempt failed")
-			continue
-		}
+		log.WithField("attempt", i+1).Info("Session start attempt")
+		// startTime := time.Now()
+		// taskDefinition, err := d.CreateTaskDefinition(username, portConfig)
+		// log.WithField("latency", time.Since(startTime)).Info("CreateTaskDefinition delay")
+		// if err != nil {
+		// 	log.WithError(err).Error("Attempt failed")
+		// 	continue
+		// }
 
-		taskArn, err := RunTask(taskDefinition)
+		startTime := time.Now()
+		taskArn, err := RunTask(nil)
+		log.WithField("latency", time.Since(startTime)).Info("RunTask delay")
 		if err != nil {
 			log.WithError(err).Error("Attempt failed")
 			continue
@@ -425,10 +430,13 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 				aws.String(taskId),
 			},
 		}
-		time.Sleep(15 * time.Second)
+		// time.Sleep(15 * time.Second)
 		ScaleUp()
 
+		startTime = time.Now()
 		err = svc.WaitUntilTasksRunning(describeTaskInput)
+		log.WithField("latency", time.Since(startTime)).Info("WaitUntilTasksRunning delay")
+
 		if err != nil {
 			RemoveTask(taskArn)
 			failReason, reasonErr := getFailReason(svc, taskId)

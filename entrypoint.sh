@@ -11,11 +11,13 @@ migrate -path migrations -database $DATABASE up
 # Start the first process
 nohup ./esg \
     -retry-count 2 \
+    -aws-retry 20 \
     -aws-cluster esg-dev \
     -aws-elastic-cache redis:6379 \
     -aws-auto-scaling-group esg-dev-asg \
     -db-connection $DATABASE \
     -listen :4444 \
+    -log-level debug \
     -s3-bucket zebrunner.dev-assets >> ./esg.log 2>&1 &
 status=$?
 if [ $status -ne 0 ]; then
@@ -26,11 +28,13 @@ fi
 # Start the second process
 nohup ./esg \
     -retry-count 2 \
+    -aws-retry 20 \
     -aws-cluster esg-dev \
     -aws-elastic-cache redis:6379 \
     -aws-auto-scaling-group esg-dev-asg \
     -db-connection $DATABASE \
     -listen :4445 \
+    -log-level debug \
     -s3-bucket zebrunner.dev-assets >> ./esg.log 2>&1 &
 status=$?
 if [ $status -ne 0 ]; then
