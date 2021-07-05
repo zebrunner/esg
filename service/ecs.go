@@ -360,7 +360,7 @@ func (d *Task) GetStartedServiceInfo(taskArn string, portConfig *ecsPortConfig) 
 		"taskStartTime": browserTaskStartTime,
 	}).Debug()
 
-	hostPort := getTaskHostPort(d.Caps, publicIpAddress, portConfig)
+	hostPort := getTaskHostPort(d.Caps, privateIpAddress, portConfig)
 	log.WithField("hostPort", hostPort).Debug()
 	log.WithField("VNCPort", hostPort.VNC).Debug("VNC")
 
