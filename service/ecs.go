@@ -72,7 +72,7 @@ func (d *Task) CreateTaskDefinition(username string, portConfig *ecsPortConfig) 
 
 	imageUrl := d.Service.Image
 	browserContainerName := "browser"
-	taskDefFamily := d.Caps.Name + "-" + strconv.Itoa(int(time.Now().UnixNano()))
+	taskDefFamily := d.Caps.Name
 	memory, memErr := getEcsMemory(d.Caps)
 	memoryReservation, memResErr := getEcsMemoryReservation(d.Caps)
 	cpu, cpuErr := getEcsCpu(d.Caps)
@@ -360,7 +360,7 @@ func (d *Task) GetStartedServiceInfo(taskArn string, portConfig *ecsPortConfig) 
 		"taskStartTime": browserTaskStartTime,
 	}).Debug()
 
-	hostPort := getTaskHostPort(d.Caps, privateIpAddress, portConfig)
+	hostPort := getTaskHostPort(d.Caps, publicIpAddress, portConfig)
 	log.WithField("hostPort", hostPort).Debug()
 	log.WithField("VNCPort", hostPort.VNC).Debug("VNC")
 
@@ -450,7 +450,7 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 
 		sessionInfo, err := d.GetStartedServiceInfo(taskArn, portConfig)
 		if err != nil {
-			log.WithError(err).Error("Attempt failed")
+			log.WithError(err).Error("Attempt failed. Failed to get service info.")
 			RemoveTask(taskArn)
 			continue
 		}
