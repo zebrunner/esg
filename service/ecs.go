@@ -242,11 +242,11 @@ func DeregisterTaskDefinition(taskDefinitionArn string) error {
 func RunTask(taskDefinition *ecs.TaskDefinition) (taskArn string, err error) {
 	svc := ecs.New(AwsSess)
 
-	family := "chrome-1625235470369413054"
-	revision := int64(1)
+	family := taskDefinition.Family
+	revision := taskDefinition.Revision
 	runTaskInput := &ecs.RunTaskInput{
 		Cluster:        &config.AwsCluster,
-		TaskDefinition: aws.String(family + ":" + strconv.FormatInt(revision, 10)),
+		TaskDefinition: aws.String(*family + ":" + strconv.FormatInt(*revision, 10)),
 	}
 	resultRunTask, err := svc.RunTask(runTaskInput)
 	if err != nil {
@@ -407,16 +407,16 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	var err error
 	for i := 0; i < config.RetryCount; i++ {
 		log.WithField("attempt", i+1).Info("Session start attempt")
-		// startTime := time.Now()
-		// taskDefinition, err := d.CreateTaskDefinition(username, portConfig)
-		// log.WithField("latency", time.Since(startTime)).Info("CreateTaskDefinition delay")
-		// if err != nil {
-		// 	log.WithError(err).Error("Attempt failed")
-		// 	continue
-		// }
-
 		startTime := time.Now()
-		taskArn, err := RunTask(nil)
+		taskDefinition, err := d.CreateTaskDefinition(username, portConfig)
+		log.WithField("latency", time.Since(startTime)).Info("CreateTaskDefinition delay")
+		if err != nil {
+			log.WithError(err).Error("Attempt failed")
+			continue
+		}
+
+		startTime = time.Now()
+		taskArn, err := RunTask(taskDefinition)
 		log.WithField("latency", time.Since(startTime)).Info("RunTask delay")
 		if err != nil {
 			log.WithError(err).Error("Attempt failed")
