@@ -157,6 +157,11 @@ func main() {
 	}
 	service.AwsSess = aws
 
+	_, err = service.CreateTaskDefinition("chrome")
+	if err != nil {
+		log.WithError(err).Fatal("Failed to create task definition")
+	}
+
 	go handlers.ClearSessions()
 
 	router := CreateRouter()
