@@ -1,7 +1,6 @@
 package service
 
 import (
-	"errors"
 	"math"
 	"strconv"
 
@@ -85,7 +84,8 @@ func getTasks(svc *ecs.ECS) ([]*ecs.Task, error) {
 		return nil, err
 	}
 	if len(listTasksResult.TaskArns) == 0 {
-		return nil, errors.New("can't describe tasks. List of tasks is empty")
+		log.Debug("There is no tasks to run now")
+		return []*ecs.Task{}, nil
 	}
 	describeTasksInput := &ecs.DescribeTasksInput{
 		Cluster: &config.AwsCluster,

@@ -55,11 +55,11 @@ func InitAws() (*awsSession.Session, error) {
 }
 
 const (
-	SeleniumPort = 4444
+	SeleniumPort   = 4444
 	FileServerPort = 5900
-	ClipboardPort = 7070
-	VncPort = 8080
-	DevtoolsPort = 9090
+	ClipboardPort  = 7070
+	VncPort        = 8080
+	DevtoolsPort   = 9090
 )
 
 func CreateTaskDefinition(browser string) (taskDefinition *ecs.TaskDefinition, err error) {
@@ -262,8 +262,8 @@ func (d *Task) RunTask(family string, username string) (taskArn string, err erro
 					Value: aws.String(strconv.FormatBool(d.Caps.VNC)),
 				},
 			},
-			Cpu: &cpu,
-			Memory: &memory,
+			Cpu:               &cpu,
+			Memory:            &memory,
 			MemoryReservation: &memoryReservation,
 		},
 		{
@@ -303,7 +303,7 @@ func (d *Task) RunTask(family string, username string) (taskArn string, err erro
 	runTaskInput := &ecs.RunTaskInput{
 		Cluster:        &config.AwsCluster,
 		TaskDefinition: aws.String(family + ":" + strconv.FormatInt(revision, 10)),
-		Overrides: &ecs.TaskOverride{ContainerOverrides: overrides},
+		Overrides:      &ecs.TaskOverride{ContainerOverrides: overrides},
 	}
 	resultRunTask, err := svc.RunTask(runTaskInput)
 	if err != nil {
@@ -381,12 +381,11 @@ func (d *Task) GetStartedServiceInfo(taskArn string) (*StartedService, error) {
 	}
 
 	var container *ecs.Container
-	for _, c  := range resultDescribeTask.Tasks[0].Containers {
+	for _, c := range resultDescribeTask.Tasks[0].Containers {
 		if *c.Name == "browser" {
 			container = c
 		}
 	}
-
 
 	containerInstanceArn := *resultDescribeTask.Tasks[0].ContainerInstanceArn
 
@@ -436,11 +435,11 @@ func (d *Task) GetStartedServiceInfo(taskArn string) (*StartedService, error) {
 	}).Debug()
 
 	portConfig := ecsPortConfig{
-		SeleniumPort: FindHostPort(container, SeleniumPort),
+		SeleniumPort:   FindHostPort(container, SeleniumPort),
 		FileserverPort: FindHostPort(container, FileServerPort),
-		ClipboardPort: FindHostPort(container, ClipboardPort),
-		VNCPort: FindHostPort(container, VncPort),
-		DevtoolsPort: FindHostPort(container, FileServerPort),
+		ClipboardPort:  FindHostPort(container, ClipboardPort),
+		VNCPort:        FindHostPort(container, VncPort),
+		DevtoolsPort:   FindHostPort(container, FileServerPort),
 	}
 
 	hostPort := getTaskHostPort(d.Caps, privateIpAddress, &portConfig)
@@ -489,7 +488,7 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 		//}
 
 		startTime := time.Now()
-		taskArn, err :=d.RunTask("family-chrome", username)
+		taskArn, err := d.RunTask("family-chrome", username)
 		log.WithField("latency", time.Since(startTime)).Info("RunTask delay")
 		if err != nil {
 			log.WithError(err).Error("Attempt failed")
@@ -503,8 +502,6 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 				aws.String(taskId),
 			},
 		}
-		// time.Sleep(15 * time.Second)
-		ScaleUp()
 
 		startTime = time.Now()
 		err = svc.WaitUntilTasksRunning(describeTaskInput)

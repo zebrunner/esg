@@ -14,6 +14,7 @@ import (
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/handlers"
 	"github.com/zebrunner/esg/service"
+	"github.com/zebrunner/esg/utils"
 )
 
 var (
@@ -73,7 +74,7 @@ func ReverseProxy() gin.HandlerFunc {
 
 func CreateRouter() *gin.Engine {
 	r := gin.New()
-	r.Use(gin.LoggerWithFormatter(TraceLogFromating), gin.Recovery())
+	r.Use(gin.LoggerWithFormatter(utils.TraceLogFromating), gin.Recovery())
 
 	api := r.Group("/api")
 	api.Use(handlers.APIError)
@@ -161,8 +162,6 @@ func main() {
 	if err != nil {
 		log.WithError(err).Fatal("Failed to create task definition")
 	}
-
-	go handlers.ClearSessions()
 
 	router := CreateRouter()
 	log.Infof("Listening on %s", listen)

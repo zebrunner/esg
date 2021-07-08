@@ -1,0 +1,15 @@
+FROM golang:1.14-alpine
+
+RUN apk add -U ca-certificates tzdata mailcap curl git && rm -Rf /var/cache/apk/*
+
+WORKDIR /esg
+
+# Download dependencies
+COPY ./go.mod .
+COPY ./go.sum .
+RUN go mod download
+
+# Build esg
+COPY . /esg
+
+RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./cmd/background
