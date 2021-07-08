@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"net/http"
 	"net/http/httputil"
 	"strings"
@@ -163,7 +162,12 @@ func main() {
 	if err != nil {
 		log.WithError(err).Fatal("Failed to get image list")
 	}
-	fmt.Println(images)
+	for _, image := range images {
+		_, err = service.CreateTaskDefinition(image)
+		if err != nil {
+			log.WithError(err).WithField("family", image).Fatal("Failed to create task definitions")
+		}
+	}
 
 	_, err = service.CreateTaskDefinition("chrome")
 	if err != nil {
