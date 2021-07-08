@@ -2,6 +2,8 @@ package service
 
 import (
 	"fmt"
+	"github.com/aws/aws-sdk-go/service/ecrpublic"
+
 	//"github.com/zebrunner/esg/handlers"
 
 	"github.com/aws/aws-sdk-go/service/s3"
@@ -62,22 +64,32 @@ const (
 	DevtoolsPort   = 9090
 )
 
+func ListBrowsers() ([]string, error) {
+	svc := ecrpublic.New(AwsSess)
+	var images []string
+
+	for _, repository := range config.SupportedBrowsers {
+		input := ecrpublic.DescribeImagesInput{
+			RepositoryName: &repository,
+		}
+		result, err := svc.DescribeImages(&input)
+		if err != nil {
+			return nil, err
+		}
+		for _, image := range result.ImageDetails {
+			for _, tag := range image.ImageTags {
+				images = append(images, repository +  ":" + *tag)
+			}
+		}
+	}
+
+	return images, nil
+}
+
 func CreateTaskDefinition(browser string) (taskDefinition *ecs.TaskDefinition, err error) {
 	svc := ecs.New(AwsSess)
-
-	//imageUrl := d.Service.Image
 	browserContainerName := "browser"
-	//taskDefFamily := d.Caps.Name
-	taskDefFamily := "family-" + browser
-	//memory, memErr := getEcsMemory(d.Caps)
-	//memoryReservation, memResErr := getEcsMemoryReservation(d.Caps)
-	//cpu, cpuErr := getEcsCpu(d.Caps)
-	//if memErr != nil || memResErr != nil || cpuErr != nil {
-	//	return nil, fmt.Errorf("error happend while parsing resources. Errors: [%v, %v, %v]", memErr, memResErr, cpuErr)
-	//}
-
-	//id := uuid.New().String()
-
+	taskDefFamily := browser
 	sharedFolder := "/opt/zebrunner"
 	sharedVolume := "data"
 
@@ -86,7 +98,7 @@ func CreateTaskDefinition(browser string) (taskDefinition *ecs.TaskDefinition, e
 		ContainerDefinitions: []*ecs.ContainerDefinition{
 			{
 				Name:              aws.String(browserContainerName),
-				Image:             aws.String("public.ecr.aws/zebrunner/chrome"),
+				Image:             aws.String("public.ecr.aws/zebrunner/" + browser),
 				Cpu:               aws.Int64(int64(config.MinCpu)),
 				Essential:         aws.Bool(true), //If the essential parameter of a container is marked as true, the failure of that container will stop the task.
 				Memory:            aws.Int64(int64(config.MinMemory)),
@@ -105,19 +117,10 @@ func CreateTaskDefinition(browser string) (taskDefinition *ecs.TaskDefinition, e
 					},
 				},
 				Environment: []*ecs.KeyValuePair{
-					//TODO: provide extra values from caps
-					//{
-					//	Name:  aws.String("UUID"),
-					//	Value: aws.String(id),
-					//},
 					{
 						Name:  aws.String("VERBOSE"),
 						Value: aws.String("1"),
 					},
-					//{
-					//	Name:  aws.String("ENABLE_VNC"),
-					//	Value: aws.String(strconv.FormatBool(d.Caps.VNC)),
-					//},
 				},
 				PortMappings: []*ecs.PortMapping{
 					{
@@ -152,37 +155,6 @@ func CreateTaskDefinition(browser string) (taskDefinition *ecs.TaskDefinition, e
 				Privileged:        aws.Bool(false), //no need privileged mode for artifacts-uploader/video-recording container
 				Links: []*string{
 					aws.String(browserContainerName),
-				},
-				Environment: []*ecs.KeyValuePair{
-					//TODO: provide extra values from caps
-					//{
-					//	Name:  aws.String("BROWSER_CONTAINER_NAME"),
-					//	Value: aws.String(browserContainerName),
-					//},
-					//{
-					//	Name:  aws.String("UUID"),
-					//	Value: aws.String(id),
-					//},
-					//{
-					//	Name:  aws.String("BUCKET"),
-					//	Value: &config.S3Bucket,
-					//},
-					//{
-					//	Name:  aws.String("TENANT"),
-					//	Value: &username,
-					//},
-					//{
-					//	Name:  aws.String("AWS_ACCESS_KEY_ID"),
-					//	Value: &config.AwsAccessKeyID,
-					//},
-					//{
-					//	Name:  aws.String("AWS_SECRET_ACCESS_KEY"),
-					//	Value: &config.AwsSecretAccessKey,
-					//},
-					//{
-					//	Name:  aws.String("AWS_DEFAULT_REGION"),
-					//	Value: &config.AwsRegion,
-					//},
 				},
 				MountPoints: []*ecs.MountPoint{
 					{
@@ -219,21 +191,6 @@ func CreateTaskDefinition(browser string) (taskDefinition *ecs.TaskDefinition, e
 	return resultTaskDefinition.TaskDefinition, nil
 }
 
-func DeregisterTaskDefinition(taskDefinitionArn string) error {
-	// svc := ecs.New(AwsSess)
-	// taskDeregisterInput := &ecs.DeregisterTaskDefinitionInput{
-	// 	TaskDefinition: aws.String(taskDefinitionArn),
-	// }
-	// resultTaskDeregister, err := svc.DeregisterTaskDefinition(taskDeregisterInput)
-	// if err != nil {
-	// 	log.WithError(err).WithField("taskDefinitionARN", taskDefinitionArn).Error("Failed to deregister task definition")
-	// 	return err
-	// }
-	// log.WithField("taskDefinitionARN", *resultTaskDeregister.TaskDefinition.TaskDefinitionArn).Info("Task definition removed")
-	// return nil
-	return nil
-}
-
 func (d *Task) RunTask(family string, username string) (taskArn string, err error) {
 	svc := ecs.New(AwsSess)
 
@@ -247,7 +204,6 @@ func (d *Task) RunTask(family string, username string) (taskArn string, err erro
 	browserContainerName := "browser"
 	id := uuid.New().String()
 
-	//family := taskDefinition.Family
 	revision := int64(1)
 	overrides := []*ecs.ContainerOverride{
 		{
@@ -341,17 +297,6 @@ func RemoveTask(taskArn string) {
 		return
 	}
 	log.WithField("taskARN", taskArn).Info("Task stopped")
-
-	//taskDefinitionArn := *resultStopTask.Task.TaskDefinitionArn
-	//err = DeregisterTaskDefinition(taskDefinitionArn)
-	//if err != nil {
-	//	log.WithError(err).WithFields(log.Fields{
-	//		"taskArn":           taskArn,
-	//		"taskDefinitionArn": taskDefinitionArn,
-	//	}).Error("Failed to deregister task definition")
-	//	return
-	//}
-	//log.WithField("taskDefinitionARN", taskDefinitionArn).Info("Task definition removed")
 }
 
 func FindHostPort(container *ecs.Container, containerPort int) int64 {
@@ -479,16 +424,12 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	var err error
 	for i := 0; i < config.RetryCount; i++ {
 		log.WithField("attempt", i+1).Info("Session start attempt")
-		//startTime := time.Now()
-		//taskDefinition, err := d.CreateTaskDefinition(username, portConfig)
-		//log.WithField("latency", time.Since(startTime)).Info("CreateTaskDefinition delay")
-		//if err != nil {
-		//	log.WithError(err).Error("Attempt failed")
-		//	continue
-		//}
+
+		parts := strings.Split(d.Service.Image, "/")
+		browser := parts[len(parts) - 1]
 
 		startTime := time.Now()
-		taskArn, err := d.RunTask("family-chrome", username)
+		taskArn, err := d.RunTask(browser, username)
 		log.WithField("latency", time.Since(startTime)).Info("RunTask delay")
 		if err != nil {
 			log.WithError(err).Error("Attempt failed")

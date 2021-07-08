@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"net/http"
 	"net/http/httputil"
 	"strings"
@@ -157,6 +158,12 @@ func main() {
 		log.WithError(err).Fatal("Failed to start aws session")
 	}
 	service.AwsSess = aws
+
+	images, err := service.ListBrowsers()
+	if err != nil {
+		log.WithError(err).Fatal("Failed to get image list")
+	}
+	fmt.Println(images)
 
 	_, err = service.CreateTaskDefinition("chrome")
 	if err != nil {
