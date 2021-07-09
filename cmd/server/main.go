@@ -158,22 +158,6 @@ func main() {
 	}
 	service.AwsSess = aws
 
-	images, err := service.ListBrowsers()
-	if err != nil {
-		log.WithError(err).Fatal("Failed to get image list")
-	}
-	for _, image := range images {
-		_, err = service.CreateTaskDefinition(image)
-		if err != nil {
-			log.WithError(err).WithField("family", image).Fatal("Failed to create task definitions")
-		}
-	}
-
-	_, err = service.CreateTaskDefinition("chrome")
-	if err != nil {
-		log.WithError(err).Fatal("Failed to create task definition")
-	}
-
 	router := CreateRouter()
 	log.Infof("Listening on %s", listen)
 	err = router.Run(listen)

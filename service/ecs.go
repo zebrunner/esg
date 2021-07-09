@@ -2,13 +2,11 @@ package service
 
 import (
 	"fmt"
-	"github.com/aws/aws-sdk-go/service/ecrpublic"
 
-	//"github.com/zebrunner/esg/handlers"
+	"github.com/aws/aws-sdk-go/service/ecrpublic"
 
 	"github.com/aws/aws-sdk-go/service/s3"
 
-	//"math/rand"
 	"net/url"
 	"strconv"
 	"time"
@@ -78,7 +76,7 @@ func ListBrowsers() ([]string, error) {
 		}
 		for _, image := range result.ImageDetails {
 			for _, tag := range image.ImageTags {
-				images = append(images, repository +  ":" + *tag)
+				images = append(images, repository+":"+*tag)
 			}
 		}
 	}
@@ -86,10 +84,9 @@ func ListBrowsers() ([]string, error) {
 	return images, nil
 }
 
-func CreateTaskDefinition(browser string) (taskDefinition *ecs.TaskDefinition, err error) {
+func CreateTaskDefinition(browser string, family string) (taskDefinition *ecs.TaskDefinition, err error) {
 	svc := ecs.New(AwsSess)
 	browserContainerName := "browser"
-	taskDefFamily := browser
 	sharedFolder := "/opt/zebrunner"
 	sharedVolume := "data"
 
@@ -165,7 +162,7 @@ func CreateTaskDefinition(browser string) (taskDefinition *ecs.TaskDefinition, e
 				},
 			},
 		},
-		Family: aws.String(taskDefFamily),
+		Family: aws.String(family),
 		Volumes: []*ecs.Volume{
 			{
 				Host: &ecs.HostVolumeProperties{
@@ -204,7 +201,7 @@ func (d *Task) RunTask(family string, username string) (taskArn string, err erro
 	browserContainerName := "browser"
 	id := uuid.New().String()
 
-	revision := int64(1)
+	// revision := int64(1)
 	overrides := []*ecs.ContainerOverride{
 		{
 			Name: &browserContainerName,
@@ -258,15 +255,31 @@ func (d *Task) RunTask(family string, username string) (taskArn string, err erro
 	}
 	runTaskInput := &ecs.RunTaskInput{
 		Cluster:        &config.AwsCluster,
-		TaskDefinition: aws.String(family + ":" + strconv.FormatInt(revision, 10)),
+		TaskDefinition: aws.String(family),
 		Overrides:      &ecs.TaskOverride{ContainerOverrides: overrides},
 	}
 	resultRunTask, err := svc.RunTask(runTaskInput)
 	if err != nil {
 		return "", err
 	}
+	if len(resultRunTask.Tasks) == 0 {
+		return "", fmt.Errorf("start task result doesn't contains tasks")
+	}
 
 	return *resultRunTask.Tasks[0].TaskArn, nil
+}
+
+func DeregisterTaskDefinition(family string) error {
+	svc := ecs.New(AwsSess)
+	input := ecs.DeregisterTaskDefinitionInput{
+		TaskDefinition: aws.String(family + ":1"),
+	}
+	_, err := svc.DeregisterTaskDefinition(&input)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func StopTask(taskArn string) (*ecs.StopTaskOutput, error) {
@@ -426,7 +439,9 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 		log.WithField("attempt", i+1).Info("Session start attempt")
 
 		parts := strings.Split(d.Service.Image, "/")
-		browser := parts[len(parts) - 1]
+		browser := parts[len(parts)-1]
+		browser = strings.ReplaceAll(browser, ":", "-")
+		browser = strings.ReplaceAll(browser, ".", "-")
 
 		startTime := time.Now()
 		taskArn, err := d.RunTask(browser, username)

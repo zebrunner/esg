@@ -11,8 +11,10 @@ services:
     links:
       - redis
       - db
+    depends_on:
+      - management
     command: ./scripts/entrypoint.sh
-  worker:
+  management:
     container_name: esg-worker
     build:
       context: .

@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
-	"github.com/zebrunner/esg/service"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/zebrunner/esg/service"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
@@ -28,6 +30,13 @@ func init() {
 	flag.StringVar(&config.AwsAccessKeyID, "aws-access-key-id", "", "Access key for S3 bucket")
 	flag.StringVar(&config.AwsSecretAccessKey, "aws-secret-access-key", "", "Secret key for S3 bucket")
 	flag.StringVar(&config.LogLevel, "log-level", "debug", "Desired log level. Valid levels: `panic`, `fatal`, `error`, `warning`, `info`, `debug`, `trace`")
+
+	flag.IntVar(&config.MinMemory, "min-memory", 1024, "AWS minimum memory limitation for session")
+	flag.IntVar(&config.MinMemoryReservation, "min-memory-reservation", 1024, "AWS minimum memory reservation limitation for session")
+	flag.IntVar(&config.MaxMemory, "max-memory", 8192, "AWS maximum memory limitation for session")
+	flag.IntVar(&config.MaxMemoryReservation, "max-memory-reservation", 8192, "AWS maximum memory reservation limitation for session")
+	flag.IntVar(&config.MinCpu, "min-cpu", 1024, "AWS minimum CPU limitation for session")
+	flag.IntVar(&config.MaxCpu, "max-cpu", 4096, "AWS maximum CPU limitation for session")
 
 	flag.Parse()
 }
@@ -86,8 +95,34 @@ func ScaleCluster() {
 	}
 }
 
+func RefreshTaskDefinitions() {
+	images, err := service.ListBrowsers()
+	if err != nil {
+		log.WithError(err).Error("Failed to get image list")
+	}
+
+	for _, image := range images {
+		family := strings.ReplaceAll(image, ":", "-")
+		family = strings.ReplaceAll(family, ".", "-")
+
+		_, err = service.CreateTaskDefinition(image, family)
+		if err != nil {
+			log.WithError(err).WithField("family", family).Error("Failed to create task definitions")
+		}
+	}
+}
+
 func main() {
 	log.SetLevel(config.ParseLogLevel())
+
+	awsSess, err := service.InitAws()
+	if err != nil {
+		log.WithError(err).Fatal("Failed to init aws session")
+	}
+	service.AwsSess = awsSess
+
+	RefreshTaskDefinitions()
+	log.Info("Task definitions refreshed successfully")
 
 	wg.Add(1)
 	go ScaleCluster()
@@ -95,5 +130,5 @@ func main() {
 	go ClearSessions()
 
 	wg.Wait()
-	log.Panic("Background worker stopped!")
+	log.Fatal("Background worker stopped!")
 }
