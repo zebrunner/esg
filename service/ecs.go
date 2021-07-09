@@ -19,6 +19,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	awsSession "github.com/aws/aws-sdk-go/aws/session"
+//	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ecs"
 
@@ -260,6 +261,8 @@ func (d *Task) RunTask(family string, username string) (taskArn string, err erro
 	}
 
         resultRunTask, err := svc.RunTask(runTaskInput)
+	//TODO: take a look to LastStatus field for negative cases. PROVISIONING and PENDING looks good. Extra varians?
+	log.Printf("[TASK_RUN_RESULT] [%v]", resultRunTask)
 	isStarted := false
         for retryCount := 0; retryCount < config.RetryCount; retryCount++ {
         	// TODO: explicitly minimize errors range to wait only by well-knoen reasons aka RESOURCE:CPU etc
@@ -297,6 +300,8 @@ func (d *Task) RunTask(family string, username string) (taskArn string, err erro
 			//TODO: convert exiting hard-coded 5 wait attempts to dedicated waiter timeout
 	                for i := 1; i < 5; i++ {
 			        err = svc.WaitUntilTasksRunning(describeTaskInput)
+				//TODO: reuse wait with context to specify valid timeout
+				//err = svc.WaitUntilTasksRunningWithContext(aws.Context, describeTaskInput, request. WithWaiterDelay(60 * time.Second))
 			        log.WithField("latency", time.Since(startTime)).Info("WaitUntilTasksRunning delay")
         			if err != nil {
                         		log.Printf("[TASK_WAIT_FAILURE] [%v] [%d]", "Failed to wait for a task:", err, retryCount)
