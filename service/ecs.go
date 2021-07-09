@@ -258,14 +258,45 @@ func (d *Task) RunTask(family string, username string) (taskArn string, err erro
 		TaskDefinition: aws.String(family),
 		Overrides:      &ecs.TaskOverride{ContainerOverrides: overrides},
 	}
+
 	resultRunTask, err := svc.RunTask(runTaskInput)
-	if err != nil {
-		if err.Error() == "ClientException: Tasks provisioning capacity limit exceeded" {
-			// [VD] it happens when cluster achieves max capacity and can't register tasks even in provisioning state.
-			// simple pause in this place allow to place next tasks into the PROVISIONING state
-			log.WithError(err).Warn("ClientException handled. Sleep 5 seconds")
-			time.Sleep(5 * time.Second)
+
+	taskFailure := ""
+	// TODO: move awsRetry into this piece of code as it is low-level startup command
+	// TODO: convert existing hard-coded 25 retries into the queue or provisioning timeout: https://github.com/zebrunner/esg/issues/72
+	// TODO: explicitly minimize errors range to wait only by well-knoen reasons aka RESOURCE:CPU etc
+	// TODO: move waiter into the same block under the global awsRetry (make sure that non-waited tasks didn't start or closed correctly)
+
+	// [VD] retry in this case should be ~15 if instances can be started in 1 min and 25 if ~2 min
+	for retry := 1; retry < 25; retry++ {
+		if err != nil {
+			log.Printf("[TASK_RUN_ERROR] [%s] [%d]", err, retry)
+		} else if len(resultRunTask.Failures) > 0 {
+			taskFailure = *resultRunTask.Failures[0].Reason
+			log.Printf("[TASK_RUN_FAILURE] [%s] [%d]", taskFailure, retry)
+		} else if len(resultRunTask.Tasks) == 0 {
+                        log.Printf("[TASK_RUN_FAILURE] [%s] [%d]", " result doesn't contains tasks", retry)
+		} else {
+                        // all good and we can proceed
+			taskFailure = "" //reset taskFailure if any
+                        break
 		}
+
+		// retry run task operation
+		time.Sleep (5 * time.Second)
+                resultRunTask, err = svc.RunTask(runTaskInput)
+	}
+
+	/*
+		Failures: [{
+		      Arn: "arn:aws:ecs:us-east-1:659932254483:container-instance/829954d05541417cb21d02409e43ea10",
+		      Reason: "RESOURCE:CPU"
+		    }],
+		  Tasks: []
+		}]
+	*/
+
+	if err != nil {
 		return "", err
 	}
 	if len(resultRunTask.Tasks) == 0 {
@@ -454,6 +485,7 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 		log.WithField("latency", time.Since(startTime)).Info("RunTask delay")
 		if err != nil {
 			log.WithError(err).Error("Attempt failed")
+	                time.Sleep (5 * time.Second)
 			continue
 		}
 		taskId := strings.Split(taskArn, "/")[2]
