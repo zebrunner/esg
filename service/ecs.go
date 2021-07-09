@@ -267,7 +267,7 @@ func (d *Task) RunTask(family string, username string) (taskArn string, err erro
 	        for i := 1; i < 25; i++ { // [VD] "i" retry should be ~15 if instances can be started in 1 min and 25 if ~2 min
             		if err != nil {
                         	log.Printf("[TASK_RUN_ERROR] [%s] [%d]", err, i)
-                	} else if len(resultRunTask.Failures) > 0 {
+                 	} else if len(resultRunTask.Failures) > 0 {
                         	log.Printf("[TASK_RUN_FAILURE] [%s] [%d]", *resultRunTask.Failures[0].Reason, i)
                 	} else if len(resultRunTask.Tasks) == 0 {
                         	log.Printf("[TASK_RUN_FAILURE] [%s] [%d]", " result doesn't contains tasks", i)
@@ -282,24 +282,29 @@ func (d *Task) RunTask(family string, username string) (taskArn string, err erro
         	}
 
 		if isStarted {
-			// task start initiated successfully. try to wait while running
-        		taskId := strings.Split(*resultRunTask.Tasks[0].TaskArn, "/")[2]
+                        // task start initiated successfully. try to wait while running
+                        taskId := strings.Split(*resultRunTask.Tasks[0].TaskArn, "/")[2]
 
-		        describeTaskInput := &ecs.DescribeTasksInput{
-                		Cluster: &config.AwsCluster,
-		                Tasks: []*string{
-                		        aws.String(taskId),
-		                },
-		        }
+                        describeTaskInput := &ecs.DescribeTasksInput{
+                                Cluster: &config.AwsCluster,
+                                Tasks: []*string{
+                                        aws.String(taskId),
+                                },
+                        }
 
-		        startTime := time.Now()
-		        err = svc.WaitUntilTasksRunning(describeTaskInput)
-		        log.WithField("latency", time.Since(startTime)).Info("WaitUntilTasksRunning delay")
-        		if err != nil {
-                        	log.Printf("[TASK_WAIT_FAILURE] [%v] [%d]", "Failed to wait for a task:", err, retryCount)
-				// repeit again run task and wait
-				continue
-		        }
+                        startTime := time.Now()
+
+			//TODO: convert exiting hard-coded 5 wait attempts to dedicated waiter timeout
+	                for i := 1; i < 5; i++ {
+			        err = svc.WaitUntilTasksRunning(describeTaskInput)
+			        log.WithField("latency", time.Since(startTime)).Info("WaitUntilTasksRunning delay")
+        			if err != nil {
+                        		log.Printf("[TASK_WAIT_FAILURE] [%v] [%d]", "Failed to wait for a task:", err, retryCount)
+					// repeit again run task and wait
+					continue
+			        }
+				break
+			}
 			break
 		}
 		log.Printf("retry #[%d] failed", retryCount)
