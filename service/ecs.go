@@ -260,6 +260,12 @@ func (d *Task) RunTask(family string, username string) (taskArn string, err erro
 	}
 	resultRunTask, err := svc.RunTask(runTaskInput)
 	if err != nil {
+		if err.Error() == "ClientException: Tasks provisioning capacity limit exceeded" {
+			// [VD] it happens when cluster achieves max capacity and can't register tasks even in provisioning state.
+			// simple pause in this place allow to place next tasks into the PROVISIONING state
+			log.WithError(err).Warn("ClientException handled. Sleep 5 seconds")
+			time.Sleep(5 * time.Second)
+		}
 		return "", err
 	}
 	if len(resultRunTask.Tasks) == 0 {
@@ -467,7 +473,7 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 			RemoveTask(taskArn)
 			failReason, reasonErr := getFailReason(svc, taskId)
 			if reasonErr == nil {
-				log.WithError(err).WithField("reason", failReason).Error("Attempt failed. Unable to wait until task is running")
+				log.WithError(err).WithField("reason", *failReason).Error("Attempt failed. Unable to wait until task is running")
 			} else {
 				log.WithError(err).Error("Attempt failed. Unable to wait until task is running")
 			}
