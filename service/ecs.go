@@ -301,6 +301,8 @@ func (d *Task) RunTask(family string, username string) (taskArn string, err erro
         			if err != nil {
                         		log.Printf("[TASK_WAIT_FAILURE] [%v] [%d]", "Failed to wait for a task:", err, retryCount)
 					// repeit again run task and wait
+		                        // sleep 5 sec for a while. TODO: reorganize into the smart delay
+                		        time.Sleep (5 * time.Second)
 					continue
 			        }
 				break
