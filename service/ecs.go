@@ -260,14 +260,11 @@ func (d *Task) RunTask(family string, username string) (taskArn string, err erro
 	}
 
         resultRunTask, err := svc.RunTask(runTaskInput)
-	isContinue := true
+	isStarted := false
         for retryCount := 0; retryCount < config.RetryCount; retryCount++ {
-        	// TODO: convert existing hard-coded 25 retries into the queue or provisioning timeout: https://github.com/zebrunner/esg/issues/72
         	// TODO: explicitly minimize errors range to wait only by well-knoen reasons aka RESOURCE:CPU etc
-        	// TODO: move task waiter into the same block under the global retryCount (make sure that non-waited tasks didn't start or closed correctly)
-
-        	// [VD] "i" retry in this case should be ~15 if instances can be started in 1 min and 25 if ~2 min
-	        for i := 1; i < 25; i++ {
+                // TODO: convert existing hard-coded 25 retries into the queue or provisioning timeout: https://github.com/zebrunner/esg/issues/72
+	        for i := 1; i < 25; i++ { // [VD] "i" retry should be ~15 if instances can be started in 1 min and 25 if ~2 min
             		if err != nil {
                         	log.Printf("[TASK_RUN_ERROR] [%s] [%d]", err, i)
                 	} else if len(resultRunTask.Failures) > 0 {
@@ -276,19 +273,36 @@ func (d *Task) RunTask(family string, username string) (taskArn string, err erro
                         	log.Printf("[TASK_RUN_FAILURE] [%s] [%d]", " result doesn't contains tasks", i)
                 	} else {
                         	// all good and we can proceed
-				isContinue = false
+				isStarted = true
                         	break
                 	}
-                        log.Printf("after if operator with break")
                 	// sleep 5 sec for a while. TODO: reorganize into the smart delay
                 	time.Sleep (5 * time.Second)
                 	resultRunTask, err = svc.RunTask(runTaskInput)
         	}
-		if !isContinue {
-			// no need to proceed with retries
+
+		if isStarted {
+			// task start initiated successfully. try to wait while running
+        		taskId := strings.Split(*resultRunTask.Tasks[0].TaskArn, "/")[2]
+
+		        describeTaskInput := &ecs.DescribeTasksInput{
+                		Cluster: &config.AwsCluster,
+		                Tasks: []*string{
+                		        aws.String(taskId),
+		                },
+		        }
+
+		        startTime := time.Now()
+		        err = svc.WaitUntilTasksRunning(describeTaskInput)
+		        log.WithField("latency", time.Since(startTime)).Info("WaitUntilTasksRunning delay")
+        		if err != nil {
+                        	log.Printf("[TASK_WAIT_FAILURE] [%v] [%d]", "Failed to wait for a task:", err, retryCount)
+				// repeit again run task and wait
+				continue
+		        }
 			break
 		}
-		log.Printf("attempt #[%d] faile", retryCount)
+		log.Printf("retry #[%d] failed", retryCount)
 	}
 
 	/*
@@ -470,8 +484,6 @@ func (d *Task) GetStartedServiceInfo(taskArn string) (*StartedService, error) {
 
 // StartWithCancel - Starter interface implementation
 func (d *Task) StartWithCancel(username string) (*StartedService, error) {
-	svc := ecs.New(AwsSess)
-
 	var err error
 
 	parts := strings.Split(d.Service.Image, "/")
@@ -485,24 +497,8 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
         	return nil, fmt.Errorf("failed to start task. InternalError: %v", err)
 	}
         log.WithField("latency", time.Since(startTime)).Info("RunTask delay")
-	taskId := strings.Split(taskArn, "/")[2]
-
-	describeTaskInput := &ecs.DescribeTasksInput{
-		Cluster: &config.AwsCluster,
-		Tasks: []*string{
-			aws.String(taskId),
-		},
-	}
 
 	startTime = time.Now()
-	err = svc.WaitUntilTasksRunning(describeTaskInput)
-	log.WithField("latency", time.Since(startTime)).Info("WaitUntilTasksRunning delay")
-
-	if err != nil {
-		RemoveTask(taskArn)
-		return nil, fmt.Errorf("Failed to wait for a task. InternalError: %v", err)
-	}
-
 	sessionInfo, err := d.GetStartedServiceInfo(taskArn)
 	if err != nil {
 		RemoveTask(taskArn)
