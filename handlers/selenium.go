@@ -513,57 +513,57 @@ func Proxy(c *gin.Context) {
 			fragments := strings.Split(r.URL.Path, slash)
 			sessionID := fragments[2]
 
-			sess, ok := sessions.Get(sessionID)
-			if !ok {
-				_, err := CreateSessionFromCache(sessionID)
-				if err != nil {
-					log.WithError(err).WithField("sessionID", sessionID).Error("Cant find session")
-					c.Error(err).SetType(gin.ErrorTypePublic)
+			sess, err := CreateSessionFromCache(sessionID)
+			if err != nil {
+				log.WithError(err).WithField("sessionID", sessionID).Error("Cant find session")
+				c.Error(err).SetType(gin.ErrorTypePublic)
+				return
+			}
+
+			sess.Lock.Lock()
+			defer sess.Lock.Unlock()
+			select {
+			case <-sess.TimeoutCh:
+			default:
+				close(sess.TimeoutCh)
+			}
+			if r.Method == http.MethodDelete && len(fragments) == 3 {
+				if config.EnableFileUpload {
+					os.RemoveAll(filepath.Join(os.TempDir(), sessionID))
+				}
+				cancel = sess.Cancel
+				sessions.Remove(sessionID)
+				RDB.Del(context.Background(), sessionID).Result()
+				log.WithField("sessionID", sessionID).Info("Session deleted")
+			} else {
+				if len(fragments) == 4 && fragments[len(fragments)-1] == "file" && config.EnableFileUpload {
+					r.Header.Set("X-Selenoid-File", filepath.Join(os.TempDir(), sessionID))
+					r.URL.Path = "/file"
 					return
 				}
 			}
-
-			if sess != nil {
-				sess.Lock.Lock()
-				defer sess.Lock.Unlock()
-				select {
-				case <-sess.TimeoutCh:
-				default:
-					close(sess.TimeoutCh)
-				}
-				if r.Method == http.MethodDelete && len(fragments) == 3 {
-					if config.EnableFileUpload {
-						os.RemoveAll(filepath.Join(os.TempDir(), sessionID))
-					}
-					cancel = sess.Cancel
-					sessions.Remove(sessionID)
-					RDB.Del(context.Background(), sessionID).Result()
-					log.WithField("sessionID", sessionID).Info("Session deleted")
-				} else {
-					if len(fragments) == 4 && fragments[len(fragments)-1] == "file" && config.EnableFileUpload {
-						r.Header.Set("X-Selenoid-File", filepath.Join(os.TempDir(), sessionID))
-						r.URL.Path = "/file"
-						return
-					}
-				}
-				r.URL.Host, r.URL.Path = sess.URL.Host, path.Clean(sess.URL.Path+r.URL.Path)
-				r.URL.Scheme = "http"
-				return
-			}
-			r.URL.Path = "/error"
+			r.URL.Host, r.URL.Path = sess.URL.Host, path.Clean(sess.URL.Path+r.URL.Path)
+			r.URL.Scheme = "http"
 		},
-		ErrorHandler: defaultErrorHandler(),
+		ErrorHandler: defaultErrorHandler(c),
 	}).ServeHTTP(c.Writer, c.Request)
 }
 
-func defaultErrorHandler() func(http.ResponseWriter, *http.Request, error) {
+func defaultErrorHandler(с *gin.Context) func(http.ResponseWriter, *http.Request, error) {
 	return func(w http.ResponseWriter, r *http.Request, err error) {
 		user, remote := util.RequestInfo(r)
 		log.WithError(err).WithFields(log.Fields{
 			"user":   user,
 			"remote": remote,
 		}).Error("Client disconnected")
-		w.WriteHeader(http.StatusBadGateway)
+		w.WriteHeader(http.StatusInternalServerError)
+		driverError := gin.H{
+			"value": gin.H{
+				"error":   "unknown error",
+				"message": "Driver connection refused",
+			},
+		}
+		json.NewEncoder(w).Encode(driverError)
 	}
 }
 
@@ -733,45 +733,4 @@ func onTimeout(t time.Duration, f func()) chan struct{} {
 		}
 	}(cancel)
 	return cancel
-}
-
-func ClearSessions() {
-	// TODO: Emulate session termination on selenium and try to return response
-	// TODO: Move logic outside core ESG to run separately from main processes
-	for {
-		time.Sleep(config.Timeout)
-		keys, err := RDB.Keys(context.Background(), "*").Result()
-		if err != nil {
-			log.WithError(err).Error("Failed to get list of keys")
-			continue
-		}
-
-		for _, key := range keys {
-			idle, err := RDB.ObjectIdleTime(context.Background(), key).Result()
-			if err != nil {
-				log.WithError(err).WithField("session", key).Error("Failed to get IDLE time for session.")
-				continue
-			}
-
-			if idle > config.Timeout {
-				result, err := RDB.Get(context.Background(), key).Result()
-				if err != nil {
-					log.WithError(err).Error("Failed to get session from cache")
-					continue
-				}
-				s := CachedSession{}
-				err = json.Unmarshal([]byte(result), &s)
-				if err != nil {
-					log.WithError(err).Error("Failed to unmarshal redis response")
-					continue
-				}
-				log.WithField("task", s.TaskID).Info("Deleting task. Reson: idle temeout")
-				CloseSession(key)
-				_, err = RDB.Del(context.Background(), key).Result()
-				if err != nil {
-					log.WithError(err).WithField("session", key).Error("Failed to delete session from cache")
-				}
-			}
-		}
-	}
 }

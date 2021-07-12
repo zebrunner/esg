@@ -3,9 +3,10 @@ package service
 import (
 	"fmt"
 
+	"github.com/aws/aws-sdk-go/service/ecrpublic"
+
 	"github.com/aws/aws-sdk-go/service/s3"
 
-	"math/rand"
 	"net/url"
 	"strconv"
 	"time"
@@ -18,6 +19,8 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	awsSession "github.com/aws/aws-sdk-go/aws/session"
+
+	//	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ecs"
 
@@ -53,35 +56,39 @@ func InitAws() (*awsSession.Session, error) {
 	return sess, nil
 }
 
-func getEcsPortConfig() *ecsPortConfig {
-	selelinumPort := rand.Int63n(64511) + 1025
-	fileserverPort := rand.Int63n(64511) + 1025
-	clipboardPort := rand.Int63n(64511) + 1025
-	vncPort := rand.Int63n(64511) + 1025
-	devtoolsPort := rand.Int63n(64511) + 1025
-	return &ecsPortConfig{
-		SeleniumPort:   selelinumPort,
-		FileserverPort: fileserverPort,
-		ClipboardPort:  clipboardPort,
-		VNCPort:        vncPort,
-		DevtoolsPort:   devtoolsPort}
-}
+const (
+	SeleniumPort   = 4444
+	FileServerPort = 5900
+	ClipboardPort  = 7070
+	VncPort        = 8080
+	DevtoolsPort   = 9090
+)
 
-func (d *Task) CreateTaskDefinition(username string, portConfig *ecsPortConfig) (taskDefinition *ecs.TaskDefinition, err error) {
-	svc := ecs.New(AwsSess)
+func ListBrowsers() ([]string, error) {
+	svc := ecrpublic.New(AwsSess)
+	var images []string
 
-	imageUrl := d.Service.Image
-	browserContainerName := "browser"
-	taskDefFamily := d.Caps.Name + "-" + strconv.Itoa(int(time.Now().UnixNano()))
-	memory, memErr := getEcsMemory(d.Caps)
-	memoryReservation, memResErr := getEcsMemoryReservation(d.Caps)
-	cpu, cpuErr := getEcsCpu(d.Caps)
-	if memErr != nil || memResErr != nil || cpuErr != nil {
-		return nil, fmt.Errorf("error happend while parsing resources. Errors: [%v, %v, %v]", memErr, memResErr, cpuErr)
+	for _, repository := range config.SupportedBrowsers {
+		input := ecrpublic.DescribeImagesInput{
+			RepositoryName: &repository,
+		}
+		result, err := svc.DescribeImages(&input)
+		if err != nil {
+			return nil, err
+		}
+		for _, image := range result.ImageDetails {
+			for _, tag := range image.ImageTags {
+				images = append(images, repository+":"+*tag)
+			}
+		}
 	}
 
-	id := uuid.New().String()
+	return images, nil
+}
 
+func CreateTaskDefinition(browser string, family string) (taskDefinition *ecs.TaskDefinition, err error) {
+	svc := ecs.New(AwsSess)
+	browserContainerName := "browser"
 	sharedFolder := "/opt/zebrunner"
 	sharedVolume := "data"
 
@@ -90,11 +97,11 @@ func (d *Task) CreateTaskDefinition(username string, portConfig *ecsPortConfig) 
 		ContainerDefinitions: []*ecs.ContainerDefinition{
 			{
 				Name:              aws.String(browserContainerName),
-				Image:             aws.String(imageUrl),
-				Cpu:               &cpu,
+				Image:             aws.String("public.ecr.aws/zebrunner/" + browser),
+				Cpu:               aws.Int64(int64(config.MinCpu)),
 				Essential:         aws.Bool(true), //If the essential parameter of a container is marked as true, the failure of that container will stop the task.
-				Memory:            &memory,
-				MemoryReservation: &memoryReservation,
+				Memory:            aws.Int64(int64(config.MinMemory)),
+				MemoryReservation: aws.Int64(int64(config.MinMemoryReservation)),
 				Privileged:        aws.Bool(true), //privileged mode is needed to start browser driver correctly
 				MountPoints: []*ecs.MountPoint{
 					{
@@ -109,40 +116,31 @@ func (d *Task) CreateTaskDefinition(username string, portConfig *ecsPortConfig) 
 					},
 				},
 				Environment: []*ecs.KeyValuePair{
-					//TODO: provide extra values from caps
-					{
-						Name:  aws.String("UUID"),
-						Value: aws.String(id),
-					},
 					{
 						Name:  aws.String("VERBOSE"),
 						Value: aws.String("1"),
 					},
-					{
-						Name:  aws.String("ENABLE_VNC"),
-						Value: aws.String(strconv.FormatBool(d.Caps.VNC)),
-					},
 				},
 				PortMappings: []*ecs.PortMapping{
 					{
-						ContainerPort: aws.Int64(d.Service.Port),
-						HostPort:      aws.Int64(portConfig.SeleniumPort),
+						ContainerPort: aws.Int64(SeleniumPort),
+						HostPort:      aws.Int64(0),
 					},
 					{
-						ContainerPort: aws.Int64(5900),
-						HostPort:      aws.Int64(portConfig.VNCPort),
+						ContainerPort: aws.Int64(FileServerPort),
+						HostPort:      aws.Int64(0),
 					},
 					{
-						ContainerPort: aws.Int64(7070),
-						HostPort:      aws.Int64(portConfig.DevtoolsPort),
+						ContainerPort: aws.Int64(ClipboardPort),
+						HostPort:      aws.Int64(0),
 					},
 					{
-						ContainerPort: aws.Int64(8080),
-						HostPort:      aws.Int64(portConfig.FileserverPort),
+						ContainerPort: aws.Int64(VncPort),
+						HostPort:      aws.Int64(0),
 					},
 					{
-						ContainerPort: aws.Int64(9090),
-						HostPort:      aws.Int64(portConfig.ClipboardPort),
+						ContainerPort: aws.Int64(DevtoolsPort),
+						HostPort:      aws.Int64(0),
 					},
 				},
 			},
@@ -157,37 +155,6 @@ func (d *Task) CreateTaskDefinition(username string, portConfig *ecsPortConfig) 
 				Links: []*string{
 					aws.String(browserContainerName),
 				},
-				Environment: []*ecs.KeyValuePair{
-					//TODO: provide extra values from caps
-					{
-						Name:  aws.String("BROWSER_CONTAINER_NAME"),
-						Value: aws.String(browserContainerName),
-					},
-					{
-						Name:  aws.String("UUID"),
-						Value: aws.String(id),
-					},
-					{
-						Name:  aws.String("BUCKET"),
-						Value: &config.S3Bucket,
-					},
-					{
-						Name:  aws.String("TENANT"),
-						Value: &username,
-					},
-					{
-						Name:  aws.String("AWS_ACCESS_KEY_ID"),
-						Value: &config.AwsAccessKeyID,
-					},
-					{
-						Name:  aws.String("AWS_SECRET_ACCESS_KEY"),
-						Value: &config.AwsSecretAccessKey,
-					},
-					{
-						Name:  aws.String("AWS_DEFAULT_REGION"),
-						Value: &config.AwsRegion,
-					},
-				},
 				MountPoints: []*ecs.MountPoint{
 					{
 						ContainerPath: aws.String("/data"),
@@ -195,10 +162,9 @@ func (d *Task) CreateTaskDefinition(username string, portConfig *ecsPortConfig) 
 						SourceVolume:  aws.String(sharedVolume),
 					},
 				},
-				PortMappings: []*ecs.PortMapping{},
 			},
 		},
-		Family: aws.String(taskDefFamily),
+		Family: aws.String(family),
 		Volumes: []*ecs.Volume{
 			{
 				Host: &ecs.HostVolumeProperties{
@@ -224,35 +190,164 @@ func (d *Task) CreateTaskDefinition(username string, portConfig *ecsPortConfig) 
 	return resultTaskDefinition.TaskDefinition, nil
 }
 
-func DeregisterTaskDefinition(taskDefinitionArn string) error {
-	svc := ecs.New(AwsSess)
-	taskDeregisterInput := &ecs.DeregisterTaskDefinitionInput{
-		TaskDefinition: aws.String(taskDefinitionArn),
-	}
-	resultTaskDeregister, err := svc.DeregisterTaskDefinition(taskDeregisterInput)
-	if err != nil {
-		log.WithError(err).WithField("taskDefinitionARN", taskDefinitionArn).Error("Failed to deregister task definition")
-		return err
-	}
-	log.WithField("taskDefinitionARN", *resultTaskDeregister.TaskDefinition.TaskDefinitionArn).Info("Task definition removed")
-	return nil
-}
-
-func RunTask(taskDefinition *ecs.TaskDefinition) (taskArn string, err error) {
+func (d *Task) RunTask(family string, username string) (taskArn string, err error) {
 	svc := ecs.New(AwsSess)
 
-	family := *taskDefinition.Family
-	revision := *taskDefinition.Revision
+	memory, memErr := getEcsMemory(d.Caps)
+	memoryReservation, memResErr := getEcsMemoryReservation(d.Caps)
+	cpu, cpuErr := getEcsCpu(d.Caps)
+	if memErr != nil || memResErr != nil || cpuErr != nil {
+		return "", fmt.Errorf("error happend while parsing resources. Errors: [%v, %v, %v]", memErr, memResErr, cpuErr)
+	}
+
+	browserContainerName := "browser"
+	id := uuid.New().String()
+
+	// revision := int64(1)
+	overrides := []*ecs.ContainerOverride{
+		{
+			Name: &browserContainerName,
+			Environment: []*ecs.KeyValuePair{
+				{
+					Name:  aws.String("UUID"),
+					Value: aws.String(id),
+				},
+				{
+					Name:  aws.String("ENABLE_VNC"),
+					Value: aws.String(strconv.FormatBool(d.Caps.VNC)),
+				},
+			},
+			Cpu:               &cpu,
+			Memory:            &memory,
+			MemoryReservation: &memoryReservation,
+		},
+		{
+			Name: aws.String("artifacts-uploader"),
+			Environment: []*ecs.KeyValuePair{
+				{
+					Name:  aws.String("BROWSER_CONTAINER_NAME"),
+					Value: aws.String(browserContainerName),
+				},
+				{
+					Name:  aws.String("UUID"),
+					Value: aws.String(id),
+				},
+				{
+					Name:  aws.String("BUCKET"),
+					Value: &config.S3Bucket,
+				},
+				{
+					Name:  aws.String("TENANT"),
+					Value: &username,
+				},
+				{
+					Name:  aws.String("AWS_ACCESS_KEY_ID"),
+					Value: &config.AwsAccessKeyID,
+				},
+				{
+					Name:  aws.String("AWS_SECRET_ACCESS_KEY"),
+					Value: &config.AwsSecretAccessKey,
+				},
+				{
+					Name:  aws.String("AWS_DEFAULT_REGION"),
+					Value: &config.AwsRegion,
+				},
+			},
+		},
+	}
 	runTaskInput := &ecs.RunTaskInput{
 		Cluster:        &config.AwsCluster,
-		TaskDefinition: aws.String(family + ":" + strconv.FormatInt(revision, 10)),
+		TaskDefinition: aws.String(family),
+		Overrides:      &ecs.TaskOverride{ContainerOverrides: overrides},
 	}
+
 	resultRunTask, err := svc.RunTask(runTaskInput)
+	//TODO: take a look to LastStatus field for negative cases. PROVISIONING and PENDING looks good. Extra varians?
+	log.Printf("[TASK_RUN_RESULT] [%v]", resultRunTask)
+	isStarted := false
+	for retryCount := 0; retryCount < config.RetryCount; retryCount++ {
+		// TODO: explicitly minimize errors range to wait only by well-knoen reasons aka RESOURCE:CPU etc
+		// TODO: convert existing hard-coded 25 retries into the queue or provisioning timeout: https://github.com/zebrunner/esg/issues/72
+		for i := 1; i < 25; i++ { // [VD] "i" retry should be ~15 if instances can be started in 1 min and 25 if ~2 min
+			if err != nil {
+				log.WithError(err).WithField("attempt", i).Error("Task run error")
+			} else if len(resultRunTask.Failures) > 0 {
+				log.WithFields(log.Fields{
+					"reason":  *resultRunTask.Failures[0].Reason,
+					"attempt": i,
+				}).Error("Task run failure")
+			} else if len(resultRunTask.Tasks) == 0 {
+				log.WithField("attempt", i).Error("Task run failure: result doesn't contains tasks")
+			} else {
+				// all good and we can proceed
+				isStarted = true
+				break
+			}
+			// sleep 5 sec for a while. TODO: reorganize into the smart delay
+			time.Sleep(5 * time.Second)
+			resultRunTask, err = svc.RunTask(runTaskInput)
+		}
+
+		if isStarted {
+			// task start initiated successfully. try to wait while running
+			taskId := strings.Split(*resultRunTask.Tasks[0].TaskArn, "/")[2]
+
+			describeTaskInput := &ecs.DescribeTasksInput{
+				Cluster: &config.AwsCluster,
+				Tasks: []*string{
+					aws.String(taskId),
+				},
+			}
+
+			startTime := time.Now()
+
+			//TODO: convert exiting hard-coded 5 wait attempts to dedicated waiter timeout
+			for i := 1; i < 5; i++ {
+				err = svc.WaitUntilTasksRunning(describeTaskInput)
+				//TODO: reuse wait with context to specify valid timeout
+				//err = svc.WaitUntilTasksRunningWithContext(aws.Context, describeTaskInput, request. WithWaiterDelay(60 * time.Second))
+				log.WithField("latency", time.Since(startTime)).Info("WaitUntilTasksRunning delay")
+				if err != nil {
+					log.WithError(err).WithField("attempt", retryCount).Error("Failed to wait for a task")
+					// repeit again run task and wait
+					// sleep 5 sec for a while. TODO: reorganize into the smart delay
+					time.Sleep(5 * time.Second)
+					continue
+				}
+				break
+			}
+			break
+		}
+		log.WithField("attempt", retryCount).Debug("retry failed")
+	}
+
+	/*
+		Failures: [{
+		      Arn: "arn:aws:ecs:us-east-1:659932254483:container-instance/829954d05541417cb21d02409e43ea10",
+		      Reason: "RESOURCE:CPU"
+		    }],
+		  Tasks: []
+		}]
+	*/
+
 	if err != nil {
 		return "", err
 	}
 
 	return *resultRunTask.Tasks[0].TaskArn, nil
+}
+
+func DeregisterTaskDefinition(family string) error {
+	svc := ecs.New(AwsSess)
+	input := ecs.DeregisterTaskDefinitionInput{
+		TaskDefinition: aws.String(family + ":1"),
+	}
+	_, err := svc.DeregisterTaskDefinition(&input)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func StopTask(taskArn string) (*ecs.StopTaskOutput, error) {
@@ -277,26 +372,25 @@ func StopTask(taskArn string) (*ecs.StopTaskOutput, error) {
 // RemoveTask Method stops task by ARN and remove task-definition after that
 func RemoveTask(taskArn string) {
 
-	resultStopTask, err := StopTask(taskArn)
+	_, err := StopTask(taskArn)
 	if err != nil {
 		log.WithError(err).WithField("taskARN", taskArn).Warn("Failed to stop task")
 		return
 	}
 	log.WithField("taskARN", taskArn).Info("Task stopped")
-
-	taskDefinitionArn := *resultStopTask.Task.TaskDefinitionArn
-	err = DeregisterTaskDefinition(taskDefinitionArn)
-	if err != nil {
-		log.WithError(err).WithFields(log.Fields{
-			"taskArn":           taskArn,
-			"taskDefinitionArn": taskDefinitionArn,
-		}).Error("Failed to deregister task definition")
-		return
-	}
-	log.WithField("taskDefinitionARN", taskDefinitionArn).Info("Task definition removed")
 }
 
-func (d *Task) GetStartedServiceInfo(taskArn string, portConfig *ecsPortConfig) (*StartedService, error) {
+func FindHostPort(container *ecs.Container, containerPort int) int64 {
+	for _, b := range container.NetworkBindings {
+		if *b.ContainerPort == int64(containerPort) {
+			return *b.HostPort
+		}
+	}
+
+	return 0
+}
+
+func (d *Task) GetStartedServiceInfo(taskArn string) (*StartedService, error) {
 	svc := ecs.New(AwsSess)
 
 	taskId := strings.Split(taskArn, "/")[2]
@@ -310,6 +404,13 @@ func (d *Task) GetStartedServiceInfo(taskArn string, portConfig *ecsPortConfig) 
 	resultDescribeTask, err := svc.DescribeTasks(describeTaskInput)
 	if err != nil {
 		return nil, fmt.Errorf("unable to describe task: %v", err)
+	}
+
+	var container *ecs.Container
+	for _, c := range resultDescribeTask.Tasks[0].Containers {
+		if *c.Name == "browser" {
+			container = c
+		}
 	}
 
 	containerInstanceArn := *resultDescribeTask.Tasks[0].ContainerInstanceArn
@@ -359,7 +460,15 @@ func (d *Task) GetStartedServiceInfo(taskArn string, portConfig *ecsPortConfig) 
 		"taskStartTime": browserTaskStartTime,
 	}).Debug()
 
-	hostPort := getTaskHostPort(d.Caps, privateIpAddress, portConfig)
+	portConfig := ecsPortConfig{
+		SeleniumPort:   FindHostPort(container, SeleniumPort),
+		FileserverPort: FindHostPort(container, FileServerPort),
+		ClipboardPort:  FindHostPort(container, ClipboardPort),
+		VNCPort:        FindHostPort(container, VncPort),
+		DevtoolsPort:   FindHostPort(container, FileServerPort),
+	}
+
+	hostPort := getTaskHostPort(d.Caps, privateIpAddress, &portConfig)
 	log.WithField("hostPort", hostPort).Debug()
 	log.WithField("VNCPort", hostPort.VNC).Debug("VNC")
 
@@ -377,17 +486,8 @@ func (d *Task) GetStartedServiceInfo(taskArn string, portConfig *ecsPortConfig) 
 		"containerServiceUrl": u,
 	}).Debug("Proxy to...")
 
-	// publish all ports feature is still under question for ecs task service so empty map is ok
-	var publishedPortsInfo map[string]string
-
 	s := StartedService{
-		Url: u,
-		Container: &session.Container{
-			ID:                  taskId,
-			ContainerInstanceID: containerInstanceId,
-			IPAddress:           privateIpAddress,
-			Ports:               publishedPortsInfo,
-		},
+		Url:      u,
 		TaskID:   taskId,
 		HostPort: hostPort,
 		Cancel: func() {
@@ -400,64 +500,34 @@ func (d *Task) GetStartedServiceInfo(taskArn string, portConfig *ecsPortConfig) 
 
 // StartWithCancel - Starter interface implementation
 func (d *Task) StartWithCancel(username string) (*StartedService, error) {
-	svc := ecs.New(AwsSess)
-
-	portConfig := getEcsPortConfig()
 	var err error
-	for i := 0; i < config.RetryCount; i++ {
-		log.WithField("attempt", i + 1).Info("Session start attempt")
-		taskDefinition, err := d.CreateTaskDefinition(username, portConfig)
-		if err != nil {
-			log.WithError(err).Error("Attempt failed")
-			continue
-		}
 
-		taskArn, err := RunTask(taskDefinition)
-		if err != nil {
-			log.WithError(err).Error("Attempt failed")
-			continue
-		}
-		taskId := strings.Split(taskArn, "/")[2]
+	parts := strings.Split(d.Service.Image, "/")
+	browser := parts[len(parts)-1]
+	browser = strings.ReplaceAll(browser, ":", "-")
+	browser = strings.ReplaceAll(browser, ".", "-")
 
-		describeTaskInput := &ecs.DescribeTasksInput{
-			Cluster: &config.AwsCluster,
-			Tasks: []*string{
-				aws.String(taskId),
-			},
-		}
-		time.Sleep(15 * time.Second)
-		ScaleUp()
+	startTime := time.Now()
+	taskArn, err := d.RunTask(browser, username)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start task. InternalError: %v", err)
+	}
+	log.WithField("latency", time.Since(startTime)).Info("RunTask delay")
 
-		err = svc.WaitUntilTasksRunning(describeTaskInput)
-		if err != nil {
-			RemoveTask(taskArn)
-			failReason, reasonErr := getFailReason(svc, taskId)
-			if reasonErr == nil {
-				log.WithError(err).WithField("reason", failReason).Error("Attempt failed. Unable to wait until task is running")
-			} else {
-				log.WithError(err).Error("Attempt failed. Unable to wait until task is running")
-			}
-			continue
-		}
-
-		sessionInfo, err := d.GetStartedServiceInfo(taskArn, portConfig)
-		if err != nil {
-			log.WithError(err).Error("Attempt failed")
-			RemoveTask(taskArn)
-			continue
-		}
-
-		err = wait(sessionInfo.Url.String(), d.StartupTimeout)
-		if err != nil {
-			log.WithError(err).Errorf("Session does not respond in %ds", d.StartupTimeout)
-			RemoveTask(taskArn)
-			continue
-		}
-
-		return sessionInfo, nil
+	startTime = time.Now()
+	sessionInfo, err := d.GetStartedServiceInfo(taskArn)
+	if err != nil {
+		RemoveTask(taskArn)
+		return nil, fmt.Errorf("Failed to get service info. InternalError: %v", err)
 	}
 
-	return nil, fmt.Errorf("failed to start task after %d attempts. InternalError: %v", config.RetryCount, err)
+	err = wait(sessionInfo.Url.String(), d.StartupTimeout)
+	if err != nil {
+		RemoveTask(taskArn)
+		return nil, fmt.Errorf("Session does not respond in %ds", d.StartupTimeout)
+	}
+
+	return sessionInfo, nil
 }
 
 func getFailReason(svc *ecs.ECS, taskId string) (*string, error) {

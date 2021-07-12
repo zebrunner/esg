@@ -7,6 +7,15 @@ import (
 )
 
 var (
+	SupportedBrowsers = []string{
+		"chrome",
+		"firefox",
+		"opera",
+		"edge",
+	}
+)
+
+var (
 	EnableFileUpload      bool
 	RetryCount            int
 	Timeout               time.Duration

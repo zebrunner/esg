@@ -15,6 +15,6 @@ COPY ./go.sum .
 RUN go mod download
 
 # Build esg
-COPY ./ /esg
+COPY . /esg
 
-RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build
+RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./cmd/server

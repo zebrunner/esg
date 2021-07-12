@@ -1,17 +1,30 @@
-version: "3.3"
+version: "3.8"
 services: 
   grid:
-    container_name: esg-grid
-    build: .
+    build:
+      context: .
+      dockerfile: ./build/Dockerfile.server
     ports: 
-        - "4444:4444"
-        - "4445:4445"
+        - "4444-4445:4444"
     volumes:
       - "${HOME}/.aws:/root/.aws"
     links:
       - redis
       - db
-    command: ./entrypoint.sh
+    depends_on:
+      - management
+    command: ./scripts/entrypoint.sh
+  management:
+    container_name: esg-worker
+    build:
+      context: .
+      dockerfile: ./build/Dockerfile.worker
+    volumes:
+      - "${HOME}/.aws:/root/.aws"
+    links:
+      - redis
+    command:
+      - ./scripts/worker_entrypoint.sh
   db:
     image: postgres:13
     container_name: esg-postgres
@@ -19,9 +32,13 @@ services:
       - "pgdata-volume:/var/lib/postgresql/data"
     environment: 
       POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
     restart: always
   redis:
     image: redis:6
     container_name: esg-redis
+    ports:
+      - "6379:6379"
 volumes:
   pgdata-volume:
