@@ -19,7 +19,8 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	awsSession "github.com/aws/aws-sdk-go/aws/session"
-//	"github.com/aws/aws-sdk-go/aws/request"
+
+	//	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ecs"
 
@@ -260,61 +261,64 @@ func (d *Task) RunTask(family string, username string) (taskArn string, err erro
 		Overrides:      &ecs.TaskOverride{ContainerOverrides: overrides},
 	}
 
-        resultRunTask, err := svc.RunTask(runTaskInput)
+	resultRunTask, err := svc.RunTask(runTaskInput)
 	//TODO: take a look to LastStatus field for negative cases. PROVISIONING and PENDING looks good. Extra varians?
 	log.Printf("[TASK_RUN_RESULT] [%v]", resultRunTask)
 	isStarted := false
-        for retryCount := 0; retryCount < config.RetryCount; retryCount++ {
-        	// TODO: explicitly minimize errors range to wait only by well-knoen reasons aka RESOURCE:CPU etc
-                // TODO: convert existing hard-coded 25 retries into the queue or provisioning timeout: https://github.com/zebrunner/esg/issues/72
-	        for i := 1; i < 25; i++ { // [VD] "i" retry should be ~15 if instances can be started in 1 min and 25 if ~2 min
-            		if err != nil {
-                        	log.Printf("[TASK_RUN_ERROR] [%s] [%d]", err, i)
-                 	} else if len(resultRunTask.Failures) > 0 {
-                        	log.Printf("[TASK_RUN_FAILURE] [%s] [%d]", *resultRunTask.Failures[0].Reason, i)
-                	} else if len(resultRunTask.Tasks) == 0 {
-                        	log.Printf("[TASK_RUN_FAILURE] [%s] [%d]", " result doesn't contains tasks", i)
-                	} else {
-                        	// all good and we can proceed
+	for retryCount := 0; retryCount < config.RetryCount; retryCount++ {
+		// TODO: explicitly minimize errors range to wait only by well-knoen reasons aka RESOURCE:CPU etc
+		// TODO: convert existing hard-coded 25 retries into the queue or provisioning timeout: https://github.com/zebrunner/esg/issues/72
+		for i := 1; i < 25; i++ { // [VD] "i" retry should be ~15 if instances can be started in 1 min and 25 if ~2 min
+			if err != nil {
+				log.WithError(err).WithField("attempt", i).Error("Task run error")
+			} else if len(resultRunTask.Failures) > 0 {
+				log.WithFields(log.Fields{
+					"reason":  *resultRunTask.Failures[0].Reason,
+					"attempt": i,
+				}).Error("Task run failure")
+			} else if len(resultRunTask.Tasks) == 0 {
+				log.WithField("attempt", i).Error("Task run failure: result doesn't contains tasks")
+			} else {
+				// all good and we can proceed
 				isStarted = true
-                        	break
-                	}
-                	// sleep 5 sec for a while. TODO: reorganize into the smart delay
-                	time.Sleep (5 * time.Second)
-                	resultRunTask, err = svc.RunTask(runTaskInput)
-        	}
+				break
+			}
+			// sleep 5 sec for a while. TODO: reorganize into the smart delay
+			time.Sleep(5 * time.Second)
+			resultRunTask, err = svc.RunTask(runTaskInput)
+		}
 
 		if isStarted {
-                        // task start initiated successfully. try to wait while running
-                        taskId := strings.Split(*resultRunTask.Tasks[0].TaskArn, "/")[2]
+			// task start initiated successfully. try to wait while running
+			taskId := strings.Split(*resultRunTask.Tasks[0].TaskArn, "/")[2]
 
-                        describeTaskInput := &ecs.DescribeTasksInput{
-                                Cluster: &config.AwsCluster,
-                                Tasks: []*string{
-                                        aws.String(taskId),
-                                },
-                        }
+			describeTaskInput := &ecs.DescribeTasksInput{
+				Cluster: &config.AwsCluster,
+				Tasks: []*string{
+					aws.String(taskId),
+				},
+			}
 
-                        startTime := time.Now()
+			startTime := time.Now()
 
 			//TODO: convert exiting hard-coded 5 wait attempts to dedicated waiter timeout
-	                for i := 1; i < 5; i++ {
-			        err = svc.WaitUntilTasksRunning(describeTaskInput)
+			for i := 1; i < 5; i++ {
+				err = svc.WaitUntilTasksRunning(describeTaskInput)
 				//TODO: reuse wait with context to specify valid timeout
 				//err = svc.WaitUntilTasksRunningWithContext(aws.Context, describeTaskInput, request. WithWaiterDelay(60 * time.Second))
-			        log.WithField("latency", time.Since(startTime)).Info("WaitUntilTasksRunning delay")
-        			if err != nil {
-                        		log.Printf("[TASK_WAIT_FAILURE] [%v] [%d]", "Failed to wait for a task:", err, retryCount)
+				log.WithField("latency", time.Since(startTime)).Info("WaitUntilTasksRunning delay")
+				if err != nil {
+					log.WithError(err).WithField("attempt", retryCount).Error("Failed to wait for a task")
 					// repeit again run task and wait
-		                        // sleep 5 sec for a while. TODO: reorganize into the smart delay
-                		        time.Sleep (5 * time.Second)
+					// sleep 5 sec for a while. TODO: reorganize into the smart delay
+					time.Sleep(5 * time.Second)
 					continue
-			        }
+				}
 				break
 			}
 			break
 		}
-		log.Printf("retry #[%d] failed", retryCount)
+		log.WithField("attempt", retryCount).Debug("retry failed")
 	}
 
 	/*
@@ -506,21 +510,21 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	startTime := time.Now()
 	taskArn, err := d.RunTask(browser, username)
 	if err != nil {
-        	return nil, fmt.Errorf("failed to start task. InternalError: %v", err)
+		return nil, fmt.Errorf("failed to start task. InternalError: %v", err)
 	}
-        log.WithField("latency", time.Since(startTime)).Info("RunTask delay")
+	log.WithField("latency", time.Since(startTime)).Info("RunTask delay")
 
 	startTime = time.Now()
 	sessionInfo, err := d.GetStartedServiceInfo(taskArn)
 	if err != nil {
 		RemoveTask(taskArn)
-                return nil, fmt.Errorf("Failed to get service info. InternalError: %v", err)
+		return nil, fmt.Errorf("Failed to get service info. InternalError: %v", err)
 	}
 
 	err = wait(sessionInfo.Url.String(), d.StartupTimeout)
 	if err != nil {
 		RemoveTask(taskArn)
-                return nil, fmt.Errorf("Session does not respond in %ds", d.StartupTimeout)
+		return nil, fmt.Errorf("Session does not respond in %ds", d.StartupTimeout)
 	}
 
 	return sessionInfo, nil
