@@ -84,7 +84,6 @@ func getTasks(svc *ecs.ECS) ([]*ecs.Task, error) {
 		return nil, err
 	}
 	if len(listTasksResult.TaskArns) == 0 {
-		log.Debug("There is no tasks to run now")
 		return []*ecs.Task{}, nil
 	}
 	describeTasksInput := &ecs.DescribeTasksInput{
@@ -173,7 +172,6 @@ func ScaleUp() {
 	provisioningTasksResources := getTasksResources(tasks, "PROVISIONING")
 	// All tasks is running
 	if provisioningTasksResources.CPU == 0 && provisioningTasksResources.Memory == 0 {
-		log.Debug("There is no tasks in PROVISIONING state. No need to scale up")
 		return
 	}
 
