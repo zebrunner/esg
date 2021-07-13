@@ -30,6 +30,7 @@ func init() {
 	flag.StringVar(&config.AwsAccessKeyID, "aws-access-key-id", "", "Access key for S3 bucket")
 	flag.StringVar(&config.AwsSecretAccessKey, "aws-secret-access-key", "", "Secret key for S3 bucket")
 	flag.StringVar(&config.LogLevel, "log-level", "debug", "Desired log level. Valid levels: `panic`, `fatal`, `error`, `warning`, `info`, `debug`, `trace`")
+	flag.DurationVar(&config.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
 
 	flag.IntVar(&config.MinMemory, "min-memory", 1024, "AWS minimum memory limitation for session")
 	flag.IntVar(&config.MinMemoryReservation, "min-memory-reservation", 1024, "AWS minimum memory reservation limitation for session")
@@ -42,31 +43,23 @@ func init() {
 }
 
 func ClearSessions() {
-	// TODO: Emulate session termination on selenium and try to return response
-	// TODO: Move logic outside core ESG to run separately from main processes
-	RDB, err := service.InitCache()
-	if err != nil {
-		log.WithError(err).Fatal("Failed to init Redis client")
-	}
-	defer RDB.Close()
-
 	for {
 		time.Sleep(config.Timeout)
-		keys, err := RDB.Keys(context.Background(), "*").Result()
+		keys, err := handlers.RDB.Keys(context.Background(), "*").Result()
 		if err != nil {
 			log.WithError(err).Error("Failed to get list of keys")
 			continue
 		}
 
 		for _, key := range keys {
-			idle, err := RDB.ObjectIdleTime(context.Background(), key).Result()
+			idle, err := handlers.RDB.ObjectIdleTime(context.Background(), key).Result()
 			if err != nil {
 				log.WithError(err).WithField("session", key).Error("Failed to get IDLE time for session.")
 				continue
 			}
 
 			if idle > config.Timeout {
-				result, err := RDB.Get(context.Background(), key).Result()
+				result, err := handlers.RDB.Get(context.Background(), key).Result()
 				if err != nil {
 					log.WithError(err).Error("Failed to get session from cache")
 					continue
@@ -79,7 +72,7 @@ func ClearSessions() {
 				}
 				log.WithField("task", s.TaskID).Info("Deleting task. Reason: idle timeout")
 				handlers.CloseSession(key)
-				_, err = RDB.Del(context.Background(), key).Result()
+				_, err = handlers.RDB.Del(context.Background(), key).Result()
 				if err != nil {
 					log.WithError(err).WithField("session", key).Error("Failed to delete session from cache")
 				}
@@ -120,6 +113,12 @@ func main() {
 		log.WithError(err).Fatal("Failed to init aws session")
 	}
 	service.AwsSess = awsSess
+
+	rdb, err := service.InitCache()
+	if err != nil {
+		log.WithError(err).Fatal("Failed to init redis connection")
+	}
+	handlers.RDB = rdb
 
 	RefreshTaskDefinitions()
 	log.Info("Task definitions refreshed successfully")
