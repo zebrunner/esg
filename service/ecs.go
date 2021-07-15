@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/client"
 	awsSession "github.com/aws/aws-sdk-go/aws/session"
 
 	//	"github.com/aws/aws-sdk-go/aws/request"
@@ -48,7 +49,14 @@ type ecsPortConfig struct {
 }
 
 func InitAws() (*awsSession.Session, error) {
-	sess, err := awsSession.NewSession(&aws.Config{Region: &config.AwsRegion, MaxRetries: &config.AwsRetry})
+	sess, err := awsSession.NewSession(&aws.Config{
+		Region:     &config.AwsRegion,
+		MaxRetries: &config.AwsRetry,
+		Retryer: client.DefaultRetryer{
+			MaxThrottleDelay: 30 * time.Second,
+			MinThrottleDelay: 5 * time.Second,
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
