@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"math/rand"
 
 	"github.com/aws/aws-sdk-go/service/ecrpublic"
 
@@ -18,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/client"
 	awsSession "github.com/aws/aws-sdk-go/aws/session"
 
 	//	"github.com/aws/aws-sdk-go/aws/request"
@@ -48,7 +50,14 @@ type ecsPortConfig struct {
 }
 
 func InitAws() (*awsSession.Session, error) {
-	sess, err := awsSession.NewSession(&aws.Config{Region: &config.AwsRegion, MaxRetries: &config.AwsRetry})
+	sess, err := awsSession.NewSession(&aws.Config{
+		Region:     &config.AwsRegion,
+		MaxRetries: &config.AwsRetry,
+		Retryer: client.DefaultRetryer{
+			MaxThrottleDelay: 30 * time.Second,
+			MinThrottleDelay: 5 * time.Second,
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -261,6 +270,10 @@ func (d *Task) RunTask(family string, username string) (taskArn string, err erro
 		Overrides:      &ecs.TaskOverride{ContainerOverrides: overrides},
 	}
 
+	sleep := rand.Intn(15)
+        log.Printf("[SLEEP] [%d]", sleep)
+	time.Sleep(time.Duration(sleep) * time.Second)
+
 	resultRunTask, err := svc.RunTask(runTaskInput)
 	//TODO: take a look to LastStatus field for negative cases. PROVISIONING and PENDING looks good. Extra varians?
 	log.Printf("[TASK_RUN_RESULT] [%v]", resultRunTask)
@@ -283,12 +296,16 @@ func (d *Task) RunTask(family string, username string) (taskArn string, err erro
 				isStarted = true
 				break
 			}
-			// sleep 5 sec for a while. TODO: reorganize into the smart delay
-			time.Sleep(5 * time.Second)
+			// sleep 1-15 sec for a while. TODO: reorganize into the smart delay
+			sleep = rand.Intn(15)
+			log.Printf("[SLEEP2] [%d]", sleep)
+		        time.Sleep(time.Duration(sleep) * time.Second)
+			//time.Sleep(10 * time.Second)
 			resultRunTask, err = svc.RunTask(runTaskInput)
 		}
 
 		if isStarted {
+                        time.Sleep(10 * time.Second)
 			// task start initiated successfully. try to wait while running
 			taskId := strings.Split(*resultRunTask.Tasks[0].TaskArn, "/")[2]
 
@@ -302,7 +319,7 @@ func (d *Task) RunTask(family string, username string) (taskArn string, err erro
 			startTime := time.Now()
 
 			//TODO: convert exiting hard-coded 5 wait attempts to dedicated waiter timeout
-			for i := 1; i < 5; i++ {
+			for i := 1; i < 25; i++ {
 				err = svc.WaitUntilTasksRunning(describeTaskInput)
 				//TODO: reuse wait with context to specify valid timeout
 				//err = svc.WaitUntilTasksRunningWithContext(aws.Context, describeTaskInput, request. WithWaiterDelay(60 * time.Second))
@@ -310,8 +327,6 @@ func (d *Task) RunTask(family string, username string) (taskArn string, err erro
 				if err != nil {
 					log.WithError(err).WithField("attempt", retryCount).Error("Failed to wait for a task")
 					// repeit again run task and wait
-					// sleep 5 sec for a while. TODO: reorganize into the smart delay
-					time.Sleep(5 * time.Second)
 					continue
 				}
 				break
