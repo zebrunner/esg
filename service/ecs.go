@@ -66,10 +66,10 @@ func InitAws() (*awsSession.Session, error) {
 
 const (
 	SeleniumPort   = 4444
-	FileServerPort = 5900
-	ClipboardPort  = 7070
-	VncPort        = 8080
-	DevtoolsPort   = 9090
+	VncPort        = 5900
+	DevtoolsPort   = 7070
+	FileServerPort = 8080
+	ClipboardPort  = 9090
 )
 
 func ListBrowsers() ([]string, error) {
