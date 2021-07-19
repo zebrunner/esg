@@ -16,4 +16,5 @@ RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./cmd/background
 
 
 FROM alpine:latest
-COPY --from=0 /esg/background /esg/background
+COPY --from=0 /esg/background /background
+COPY --from=0 /esg/scripts/ /scripts/
