@@ -96,7 +96,7 @@ func CreateSessionFromCache(sessionID string) (*session.Session, error) {
 		return nil, err
 	}
 
-	sessionTimeout, err := getSessionTimeout(s.Caps.SessionTimeout, config.MaxTimeout, config.Timeout)
+	//sessionTimeout, err := getSessionTimeout(s.Caps.SessionTimeout, config.MaxTimeout, config.Timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -105,10 +105,10 @@ func CreateSessionFromCache(sessionID string) (*session.Session, error) {
 		Caps:     s.Caps,
 		URL:      s.URL,
 		HostPort: s.HostPort,
-		Timeout:  s.Timeout,
-		TimeoutCh: onTimeout(sessionTimeout, func() {
-			Delete(s.TaskID)
-		}),
+		//Timeout:  s.Timeout,
+		//TimeoutCh: onTimeout(sessionTimeout, func() {
+		//	Delete(s.TaskID)
+		//}),
 		Started: s.Started,
 		TaskID:  s.TaskID,
 	}
@@ -287,7 +287,7 @@ func Create(c *gin.Context) {
 	}
 	var caps session.Caps
 	var starter service.Starter
-	var sessionTimeout time.Duration
+	//var sessionTimeout time.Duration
 	for _, fmc := range firstMatchCaps {
 		caps = browser.Caps
 		err := mergo.Merge(&caps, *fmc)
@@ -295,7 +295,7 @@ func Create(c *gin.Context) {
 			c.Error(err)
 		}
 		caps.ProcessExtensionCapabilities()
-		sessionTimeout, err = getSessionTimeout(caps.SessionTimeout, config.MaxTimeout, config.Timeout)
+		//sessionTimeout, err = getSessionTimeout(caps.SessionTimeout, config.MaxTimeout, config.Timeout)
 		if err != nil {
 			l.WithError(err).Error("Bas session timeout")
 			c.Error(creationError("Failed to parse `sessionTimeout` capability.", err)).SetType(gin.ErrorTypePublic)
@@ -410,10 +410,10 @@ func Create(c *gin.Context) {
 		Caps:     caps,
 		URL:      u,
 		HostPort: startedService.HostPort,
-		Timeout:  sessionTimeout,
-		TimeoutCh: onTimeout(sessionTimeout, func() {
-			Delete(startedService.TaskID)
-		}),
+		//Timeout:  sessionTimeout,
+		//TimeoutCh: onTimeout(sessionTimeout, func() {
+		//	Delete(startedService.TaskID)
+		//}),
 		Started: time.Now(),
 	}
 
@@ -433,7 +433,7 @@ func Create(c *gin.Context) {
 		Caps:     sess.Caps,
 		URL:      sess.URL,
 		HostPort: sess.HostPort,
-		Timeout:  sess.Timeout,
+		//Timeout:  sess.Timeout,
 		Started:  sess.Started,
 		TaskID:   startedService.TaskID,
 	}
@@ -522,11 +522,11 @@ func Proxy(c *gin.Context) {
 
 			sess.Lock.Lock()
 			defer sess.Lock.Unlock()
-			select {
-			case <-sess.TimeoutCh:
-			default:
-				close(sess.TimeoutCh)
-			}
+			//select {
+			//case <-sess.TimeoutCh:
+			//default:
+			//	close(sess.TimeoutCh)
+			//}
 			if r.Method == http.MethodDelete && len(fragments) == 3 {
 				if config.EnableFileUpload {
 					os.RemoveAll(filepath.Join(os.TempDir(), sessionID))
