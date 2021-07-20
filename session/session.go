@@ -86,8 +86,6 @@ type Session struct {
 	Container *Container
 	HostPort  HostPort
 	Cancel    func()
-	Timeout   time.Duration
-	TimeoutCh chan struct{}
 	Started   time.Time
 	Lock      sync.Mutex
 	TaskID    string
