@@ -496,7 +496,7 @@ func (d *Task) GetStartedServiceInfo(taskArn string) (*StartedService, error) {
 		DevtoolsPort:   FindHostPort(container, FileServerPort),
 	}
 
-	hostPort := getTaskHostPort(d.Caps, publicIpAddress, &portConfig)
+	hostPort := getTaskHostPort(d.Caps, privateIpAddress, &portConfig)
 	log.WithField("hostPort", hostPort).Debug()
 	log.WithField("VNCPort", hostPort.VNC).Debug("VNC")
 
