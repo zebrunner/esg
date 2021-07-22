@@ -332,9 +332,13 @@ func (d *Task) RunTask(family string, username string) (taskArn string, err erro
 			// 	break
 			// }
 
+			startTime := time.Now()
 			err = waitUntilTaskIsRunning(svc, taskId, ConstDelay(6*time.Second), 25)
-
-			break
+			log.WithField("latency", time.Since(startTime)).Info("WaitUntilTasksRunning delay")
+			if err != nil {
+				log.WithError(err).WithField("taskId", taskId).Error("Failed to wait task successfull state")
+			}
+			// break
 		}
 		log.WithField("attempt", retryCount).Debug("retry failed")
 	}
