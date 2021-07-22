@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
 
@@ -271,12 +272,12 @@ func (d *Task) RunTask(family string, username string) (taskArn string, err erro
 	}
 
 	sleep := rand.Intn(15)
-        log.Printf("[SLEEP] [%d]", sleep)
+	log.Printf("[SLEEP] [%d]", sleep)
 	time.Sleep(time.Duration(sleep) * time.Second)
 
 	resultRunTask, err := svc.RunTask(runTaskInput)
 	//TODO: take a look to LastStatus field for negative cases. PROVISIONING and PENDING looks good. Extra varians?
-	log.Printf("[TASK_RUN_RESULT] [%v]", resultRunTask)
+	// log.Printf("[TASK_RUN_RESULT] [%v]", resultRunTask)
 	isStarted := false
 	for retryCount := 0; retryCount < config.RetryCount; retryCount++ {
 		// TODO: explicitly minimize errors range to wait only by well-knoen reasons aka RESOURCE:CPU etc
@@ -299,38 +300,40 @@ func (d *Task) RunTask(family string, username string) (taskArn string, err erro
 			// sleep 1-15 sec for a while. TODO: reorganize into the smart delay
 			sleep = rand.Intn(15)
 			log.Printf("[SLEEP2] [%d]", sleep)
-		        time.Sleep(time.Duration(sleep) * time.Second)
+			time.Sleep(time.Duration(sleep) * time.Second)
 			//time.Sleep(10 * time.Second)
 			resultRunTask, err = svc.RunTask(runTaskInput)
 		}
 
 		if isStarted {
-                        time.Sleep(10 * time.Second)
+			time.Sleep(10 * time.Second)
 			// task start initiated successfully. try to wait while running
 			taskId := strings.Split(*resultRunTask.Tasks[0].TaskArn, "/")[2]
 
-			describeTaskInput := &ecs.DescribeTasksInput{
-				Cluster: &config.AwsCluster,
-				Tasks: []*string{
-					aws.String(taskId),
-				},
-			}
-
-			startTime := time.Now()
+			// describeTaskInput := &ecs.DescribeTasksInput{
+			// 	Cluster: &config.AwsCluster,
+			// 	Tasks: []*string{
+			// 		aws.String(taskId),
+			// 	},
+			// }
 
 			//TODO: convert exiting hard-coded 5 wait attempts to dedicated waiter timeout
-			for i := 1; i < 25; i++ {
-				err = svc.WaitUntilTasksRunning(describeTaskInput)
-				//TODO: reuse wait with context to specify valid timeout
-				//err = svc.WaitUntilTasksRunningWithContext(aws.Context, describeTaskInput, request. WithWaiterDelay(60 * time.Second))
-				log.WithField("latency", time.Since(startTime)).Info("WaitUntilTasksRunning delay")
-				if err != nil {
-					log.WithError(err).WithField("attempt", retryCount).Error("Failed to wait for a task")
-					// repeit again run task and wait
-					continue
-				}
-				break
-			}
+			// for i := 1; i < 25; i++ {
+			// 	startTime := time.Now()
+			// 	err = svc.WaitUntilTasksRunning(describeTaskInput)
+			// 	//TODO: reuse wait with context to specify valid timeout
+			// 	//err = svc.WaitUntilTasksRunningWithContext(aws.Context, describeTaskInput, request. WithWaiterDelay(60 * time.Second))
+			// 	log.WithField("latency", time.Since(startTime)).Info("WaitUntilTasksRunning delay")
+			// 	if err != nil {
+			// 		log.WithError(err).WithField("attempt", retryCount).Error("Failed to wait for a task")
+			// 		// repeit again run task and wait
+			// 		continue
+			// 	}
+			// 	break
+			// }
+
+			err = waitUntilTaskIsRunning(svc, taskId, ConstDelay(6*time.Second), 25)
+
 			break
 		}
 		log.WithField("attempt", retryCount).Debug("retry failed")
@@ -350,6 +353,12 @@ func (d *Task) RunTask(family string, username string) (taskArn string, err erro
 	}
 
 	return *resultRunTask.Tasks[0].TaskArn, nil
+}
+
+func ConstDelay(t time.Duration) func(int) time.Duration {
+	return func(attempt int) time.Duration {
+		return t
+	}
 }
 
 func DeregisterTaskDefinition(family string) error {
@@ -483,7 +492,7 @@ func (d *Task) GetStartedServiceInfo(taskArn string) (*StartedService, error) {
 		DevtoolsPort:   FindHostPort(container, FileServerPort),
 	}
 
-	hostPort := getTaskHostPort(d.Caps, privateIpAddress, &portConfig)
+	hostPort := getTaskHostPort(d.Caps, publicIpAddress, &portConfig)
 	log.WithField("hostPort", hostPort).Debug()
 	log.WithField("VNCPort", hostPort.VNC).Debug("VNC")
 
@@ -543,6 +552,43 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	}
 
 	return sessionInfo, nil
+}
+
+func waitUntilTaskIsRunning(svc *ecs.ECS, taskId string, sleepFn func(int) time.Duration, maxAttempts int) error {
+	for i := 0; i < maxAttempts; i++ {
+		log := log.WithFields(log.Fields{
+			"attempt": i,
+			"taskId":  taskId,
+		})
+
+		describeTaskInput := &ecs.DescribeTasksInput{
+			Cluster: &config.AwsCluster,
+			Tasks:   []*string{&taskId},
+		}
+		describeTaskResult, err := svc.DescribeTasks(describeTaskInput)
+		if err != nil {
+			time.Sleep(sleepFn(i))
+			continue
+		}
+		if len(describeTaskResult.Tasks) == 0 {
+			log.Debug("Wait until task running. Got 0 tasks in result")
+			time.Sleep(sleepFn(i))
+			continue
+		}
+		if len(describeTaskResult.Failures) != 0 {
+			log.WithField("failures", describeTaskResult.Failures).Debug("Wait until task running. For failures in response")
+			time.Sleep(sleepFn(i))
+			continue
+		}
+
+		if *describeTaskResult.Tasks[0].LastStatus == "RUNNING" {
+			return nil
+		}
+
+		time.Sleep(sleepFn(i))
+	}
+
+	return errors.New("failed to wait successfull task status. Max etempt limit exceeded")
 }
 
 func getFailReason(svc *ecs.ECS, taskId string) (*string, error) {
