@@ -102,6 +102,7 @@ func RefreshTaskDefinitions() {
 		if err != nil {
 			log.WithError(err).WithField("family", family).Error("Failed to create task definitions")
 		}
+		time.Sleep(250 * time.Millisecond)
 	}
 }
 
