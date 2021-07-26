@@ -75,11 +75,24 @@ const (
 )
 
 func ListBrowsers() ([]string, error) {
-	svc := ecrpublic.New(AwsSess)
+        sess, err := awsSession.NewSession(&aws.Config{
+                Region:     aws.String("us-east-1"),
+                MaxRetries: &config.AwsRetry,
+                Retryer: client.DefaultRetryer{
+                        MaxThrottleDelay: 30 * time.Second,
+                        MinThrottleDelay: 5 * time.Second,
+                },
+        })
+        if err != nil {
+                return nil, err
+        }
+
+	svc := ecrpublic.New(sess)
 	var images []string
 
 	for _, repository := range config.SupportedBrowsers {
 		input := ecrpublic.DescribeImagesInput{
+                	RegistryId: aws.String("659932254483"),
 			RepositoryName: &repository,
 		}
 		result, err := svc.DescribeImages(&input)
