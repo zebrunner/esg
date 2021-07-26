@@ -75,24 +75,24 @@ const (
 )
 
 func ListBrowsers() ([]string, error) {
-        sess, err := awsSession.NewSession(&aws.Config{
-                Region:     aws.String("us-east-1"),
-                MaxRetries: &config.AwsRetry,
-                Retryer: client.DefaultRetryer{
-                        MaxThrottleDelay: 30 * time.Second,
-                        MinThrottleDelay: 5 * time.Second,
-                },
-        })
-        if err != nil {
-                return nil, err
-        }
+	sess, err := awsSession.NewSession(&aws.Config{
+		Region:     aws.String("us-east-1"),
+		MaxRetries: &config.AwsRetry,
+		Retryer: client.DefaultRetryer{
+			MaxThrottleDelay: 30 * time.Second,
+			MinThrottleDelay: 5 * time.Second,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
 
 	svc := ecrpublic.New(sess)
 	var images []string
 
 	for _, repository := range config.SupportedBrowsers {
 		input := ecrpublic.DescribeImagesInput{
-                	RegistryId: aws.String("659932254483"),
+			RegistryId:     aws.String("659932254483"),
 			RepositoryName: &repository,
 		}
 		result, err := svc.DescribeImages(&input)
@@ -289,6 +289,10 @@ func (d *Task) RunTask(family string, username string) (taskArn string, err erro
 	time.Sleep(time.Duration(sleep) * time.Second)
 
 	resultRunTask, err := svc.RunTask(runTaskInput)
+	// Not good solution by aws doesn't give a choice
+	if err.Error() == "ClientException: TaskDefinition not found." {
+		return "", fmt.Errorf("Browser %s not found", family)
+	}
 	//TODO: take a look to LastStatus field for negative cases. PROVISIONING and PENDING looks good. Extra varians?
 	// log.Printf("[TASK_RUN_RESULT] [%v]", resultRunTask)
 	isStarted := false
@@ -322,28 +326,6 @@ func (d *Task) RunTask(family string, username string) (taskArn string, err erro
 			time.Sleep(10 * time.Second)
 			// task start initiated successfully. try to wait while running
 			taskId := strings.Split(*resultRunTask.Tasks[0].TaskArn, "/")[2]
-
-			// describeTaskInput := &ecs.DescribeTasksInput{
-			// 	Cluster: &config.AwsCluster,
-			// 	Tasks: []*string{
-			// 		aws.String(taskId),
-			// 	},
-			// }
-
-			//TODO: convert exiting hard-coded 5 wait attempts to dedicated waiter timeout
-			// for i := 1; i < 25; i++ {
-			// 	startTime := time.Now()
-			// 	err = svc.WaitUntilTasksRunning(describeTaskInput)
-			// 	//TODO: reuse wait with context to specify valid timeout
-			// 	//err = svc.WaitUntilTasksRunningWithContext(aws.Context, describeTaskInput, request. WithWaiterDelay(60 * time.Second))
-			// 	log.WithField("latency", time.Since(startTime)).Info("WaitUntilTasksRunning delay")
-			// 	if err != nil {
-			// 		log.WithError(err).WithField("attempt", retryCount).Error("Failed to wait for a task")
-			// 		// repeit again run task and wait
-			// 		continue
-			// 	}
-			// 	break
-			// }
 
 			startTime := time.Now()
 			err = waitUntilTaskIsRunning(svc, taskId, ConstDelay(6*time.Second), 25)
