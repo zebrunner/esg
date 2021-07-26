@@ -17,6 +17,7 @@ var (
 
 var (
 	EnableFileUpload      bool
+	UsePublicIp           bool
 	RetryCount            int
 	Timeout               time.Duration
 	MaxTimeout            time.Duration
