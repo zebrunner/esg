@@ -75,24 +75,24 @@ const (
 )
 
 func ListBrowsers() ([]string, error) {
-        sess, err := awsSession.NewSession(&aws.Config{
-                Region:     aws.String("us-east-1"),
-                MaxRetries: &config.AwsRetry,
-                Retryer: client.DefaultRetryer{
-                        MaxThrottleDelay: 30 * time.Second,
-                        MinThrottleDelay: 5 * time.Second,
-                },
-        })
-        if err != nil {
-                return nil, err
-        }
+	sess, err := awsSession.NewSession(&aws.Config{
+		Region:     aws.String("us-east-1"),
+		MaxRetries: &config.AwsRetry,
+		Retryer: client.DefaultRetryer{
+			MaxThrottleDelay: 30 * time.Second,
+			MinThrottleDelay: 5 * time.Second,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
 
 	svc := ecrpublic.New(sess)
 	var images []string
 
 	for _, repository := range config.SupportedBrowsers {
 		input := ecrpublic.DescribeImagesInput{
-                	RegistryId: aws.String("659932254483"),
+			RegistryId:     aws.String("659932254483"),
 			RepositoryName: &repository,
 		}
 		result, err := svc.DescribeImages(&input)
@@ -289,6 +289,10 @@ func (d *Task) RunTask(family string, username string) (taskArn string, err erro
 	time.Sleep(time.Duration(sleep) * time.Second)
 
 	resultRunTask, err := svc.RunTask(runTaskInput)
+	// Not good solution by aws doesn't give a choice
+	if err.Error() == "TaskDefinition not found." {
+		return "", fmt.Errorf("Browser %s not found", family)
+	}
 	//TODO: take a look to LastStatus field for negative cases. PROVISIONING and PENDING looks good. Extra varians?
 	// log.Printf("[TASK_RUN_RESULT] [%v]", resultRunTask)
 	isStarted := false
