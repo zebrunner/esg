@@ -290,7 +290,7 @@ func (d *Task) RunTask(family string, username string) (taskArn string, err erro
 
 	resultRunTask, err := svc.RunTask(runTaskInput)
 	// Not good solution by aws doesn't give a choice
-	if err.Error() == "TaskDefinition not found." {
+	if err.Error() == "ClientException: TaskDefinition not found." {
 		return "", fmt.Errorf("Browser %s not found", family)
 	}
 	//TODO: take a look to LastStatus field for negative cases. PROVISIONING and PENDING looks good. Extra varians?
