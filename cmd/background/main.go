@@ -106,7 +106,7 @@ func RefreshTaskDefinitions() {
 			log.WithError(err).WithField("family", family).Error("Failed to create task definitions")
 		}
 
-		time.Sleep(1 * time.Second)
+    time.Sleep(250 * time.Millisecond)
 	}
 }
 
@@ -125,7 +125,7 @@ func RefreshTaskDefinitionsFromFile(path string) {
 			log.WithError(err).WithField("family", family).Error("Failed to create task definitions")
 		}
 
-		time.Sleep(1 * time.Second)
+		time.Sleep(250 * time.Millisecond)
 	}
 }
 
