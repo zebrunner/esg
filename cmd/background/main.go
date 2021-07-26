@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"io/ioutil"
 	"strings"
 	"sync"
 	"time"
@@ -16,7 +17,8 @@ import (
 )
 
 var (
-	wg sync.WaitGroup
+	wg           sync.WaitGroup
+	browsersFile string
 )
 
 func init() {
@@ -31,6 +33,7 @@ func init() {
 	flag.StringVar(&config.AwsSecretAccessKey, "aws-secret-access-key", "", "Secret key for S3 bucket")
 	flag.StringVar(&config.LogLevel, "log-level", "debug", "Desired log level. Valid levels: `panic`, `fatal`, `error`, `warning`, `info`, `debug`, `trace`")
 	flag.DurationVar(&config.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
+	flag.StringVar(&browsersFile, "browsers-file", "", "Path to txt file with supported browsers")
 
 	flag.IntVar(&config.MinMemory, "min-memory", 1024, "AWS minimum memory limitation for session")
 	flag.IntVar(&config.MinMemoryReservation, "min-memory-reservation", 1024, "AWS minimum memory reservation limitation for session")
@@ -102,6 +105,26 @@ func RefreshTaskDefinitions() {
 		if err != nil {
 			log.WithError(err).WithField("family", family).Error("Failed to create task definitions")
 		}
+
+    time.Sleep(250 * time.Millisecond)
+	}
+}
+
+func RefreshTaskDefinitionsFromFile(path string) {
+	images, err := ioutil.ReadFile(path)
+	if err != nil {
+		log.WithError(err).Error("Failed to read file browsers.txt")
+	}
+	imageList := strings.Split(string(images), "\n")
+	for _, image := range imageList {
+		family := strings.ReplaceAll(image, ":", "-")
+		family = strings.ReplaceAll(family, ".", "-")
+
+		_, err = service.CreateTaskDefinition(image, family)
+		if err != nil {
+			log.WithError(err).WithField("family", family).Error("Failed to create task definitions")
+		}
+
 		time.Sleep(250 * time.Millisecond)
 	}
 }
@@ -121,7 +144,11 @@ func main() {
 	}
 	handlers.RDB = rdb
 
-	RefreshTaskDefinitions()
+	if browsersFile != "" {
+		RefreshTaskDefinitionsFromFile(browsersFile)
+	} else {
+		RefreshTaskDefinitions()
+	}
 	log.Info("Task definitions refreshed successfully")
 
 	wg.Add(1)
