@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -88,7 +89,7 @@ func InitCache() (*redis.Client, error) {
 // Find - default implementation Manager interface
 func (m *DefaultManager) Find(caps session.Caps) (Starter, bool) {
 	browser := caps.BrowserName()
-	version := caps.Version
+	version := strings.ToLower(caps.Version)
 
 	//log.Printf("[LOCATING_SERVICE] [%s] [%s]", browser, version)
 	log.WithFields(log.Fields{
@@ -105,13 +106,20 @@ func (m *DefaultManager) Find(caps session.Caps) (Starter, bool) {
 		browser = "opera"
 	}
 
-	if version != "" {
-		version = ":" + caps.Version
-	} else {
-		version = ":latest"
+	useAsLatest := []string{
+		"null",
+		"latest",
+		"",
 	}
 
-	image := fmt.Sprintf("%s/%s%s", org, browser, version)
+	for _, item := range useAsLatest {
+		if item == version {
+			version = "latest"
+			break
+		}
+	}
+
+	image := fmt.Sprintf("%s/%s:%s", org, browser, version)
 
 	path := ""
 	if browser == "firefox" {
