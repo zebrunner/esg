@@ -327,28 +327,6 @@ func (d *Task) RunTask(family string, username string) (taskArn string, err erro
 			// task start initiated successfully. try to wait while running
 			taskId := strings.Split(*resultRunTask.Tasks[0].TaskArn, "/")[2]
 
-			// describeTaskInput := &ecs.DescribeTasksInput{
-			// 	Cluster: &config.AwsCluster,
-			// 	Tasks: []*string{
-			// 		aws.String(taskId),
-			// 	},
-			// }
-
-			//TODO: convert exiting hard-coded 5 wait attempts to dedicated waiter timeout
-			// for i := 1; i < 25; i++ {
-			// 	startTime := time.Now()
-			// 	err = svc.WaitUntilTasksRunning(describeTaskInput)
-			// 	//TODO: reuse wait with context to specify valid timeout
-			// 	//err = svc.WaitUntilTasksRunningWithContext(aws.Context, describeTaskInput, request. WithWaiterDelay(60 * time.Second))
-			// 	log.WithField("latency", time.Since(startTime)).Info("WaitUntilTasksRunning delay")
-			// 	if err != nil {
-			// 		log.WithError(err).WithField("attempt", retryCount).Error("Failed to wait for a task")
-			// 		// repeit again run task and wait
-			// 		continue
-			// 	}
-			// 	break
-			// }
-
 			startTime := time.Now()
 			err = waitUntilTaskIsRunning(svc, taskId, ConstDelay(6*time.Second), 25)
 			log.WithField("latency", time.Since(startTime)).Info("WaitUntilTasksRunning delay")
