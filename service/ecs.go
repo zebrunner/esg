@@ -470,11 +470,13 @@ func (d *Task) GetStartedServiceInfo(taskArn string) (*StartedService, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Unable to get instance details: %v", err)
 	}
-	privateIpAddress := *resultInstance.Reservations[0].Instances[0].PrivateIpAddress
-	publicIpAddress := *resultInstance.Reservations[0].Instances[0].PublicIpAddress
+
+	ipAddress := *resultInstance.Reservations[0].Instances[0].PrivateIpAddress
+	if config.UsePublicIp {
+		ipAddress = *resultInstance.Reservations[0].Instances[0].PublicIpAddress
+	}
 	log.WithFields(log.Fields{
-		"instancePrivateIP": privateIpAddress,
-		"instancePublicIP":  publicIpAddress,
+		"instanceIP": ipAddress,
 	}).Debug()
 
 	browserTaskStartTime := time.Now()
@@ -491,7 +493,7 @@ func (d *Task) GetStartedServiceInfo(taskArn string) (*StartedService, error) {
 		DevtoolsPort:   FindHostPort(container, FileServerPort),
 	}
 
-	hostPort := getTaskHostPort(d.Caps, privateIpAddress, &portConfig)
+	hostPort := getTaskHostPort(d.Caps, ipAddress, &portConfig)
 	log.WithField("hostPort", hostPort).Debug()
 	log.WithField("VNCPort", hostPort.VNC).Debug("VNC")
 
