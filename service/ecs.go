@@ -289,12 +289,13 @@ func (d *Task) RunTask(family string, username string) (taskArn string, returnEr
 	// TODO: explicitly minimize errors range to wait only by well-knoen reasons aka RESOURCE:CPU etc
 	// TODO: convert existing hard-coded 25 retries into the queue or provisioning timeout: https://github.com/zebrunner/esg/issues/72
 	// [VD] "i" retry should be ~15 if instances can be started in 1 min and 25 if ~2 min
-	var err error
+	var outputErr error
 	for i := 0; i < 25; i++ {
 		// Trying to minimize random sleep this needs performance test. If it doesn't works return old sleep.
 		sleep := time.Duration(rand.Intn(15)) * time.Second
 		// log.Printf("[SLEEP2] [%d]", sleep)
 		time.Sleep(sleep)
+		var resultRunTask *ecs.RunTaskOutput
 		resultRunTask, err := svc.RunTask(runTaskInput)
 		// Not good solution but aws doesn't give a choice
 		if err != nil && err.Error() == "ClientException: TaskDefinition not found." {
@@ -303,6 +304,7 @@ func (d *Task) RunTask(family string, username string) (taskArn string, returnEr
 
 		if err != nil {
 			log.WithError(err).WithField("attempt", i).Debug("RunTask attempt failed.")
+			outputErr = err
 			continue
 		}
 
@@ -311,13 +313,13 @@ func (d *Task) RunTask(family string, username string) (taskArn string, returnEr
 				"attempt": i,
 				"error":   *resultRunTask.Failures[0].Reason,
 			}).Debug("Run task attempt failed. Response contains failures")
-			err = errors.New("response contains failures")
+			outputErr = errors.New("response contains failures")
 			continue
 		}
 
 		if len(resultRunTask.Tasks) == 0 {
 			log.WithField("attempt", i).Debug("Run task attempt failed. Response doesn't contains tasks")
-			err = errors.New("response doesn't contains tasks")
+			outputErr = errors.New("response doesn't contains tasks")
 			continue
 		}
 
@@ -325,7 +327,7 @@ func (d *Task) RunTask(family string, username string) (taskArn string, returnEr
 		return *resultRunTask.Tasks[0].TaskArn, nil
 	}
 
-	return "", err
+	return "", outputErr
 }
 
 // //TODO: take a look to LastStatus field for negative cases. PROVISIONING and PENDING looks good. Extra varians?
@@ -567,14 +569,14 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 	browser = strings.ReplaceAll(browser, ":", "-")
 	browser = strings.ReplaceAll(browser, ".", "-")
 
-	var err error = nil
+	var outputErr error
 	for i := 0; i < config.RetryCount; i++ {
 		startTime := time.Now()
 		taskArn, err := d.RunTask(browser, username)
 		log.WithField("latency", time.Since(startTime)).Info("RunTask delay")
 		if err != nil {
 			log.WithError(err).WithField("attempt", i).Error("Failed to run task")
-			err = fmt.Errorf("failed to start task. InternalError: %v", err)
+			outputErr = fmt.Errorf("failed to start task. InternalError: %v", err)
 			continue
 		}
 
@@ -588,7 +590,7 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 				"taskId":  taskId,
 				"attempt": i,
 			}).Error("Failed to wait task successfull state")
-			err = fmt.Errorf("Failed to wait until task is running. InternalError: %v", err)
+			outputErr = fmt.Errorf("failed to wait until task is running. InternalError: %v", err)
 			continue
 		}
 
@@ -601,7 +603,7 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 				"taskId":  taskId,
 				"attempt": i,
 			}).Error("Failed to get service info.")
-			err = fmt.Errorf("failed to get service info. InternalError: %v", err)
+			outputErr = fmt.Errorf("failed to get service info. InternalError: %v", err)
 			continue
 		}
 
@@ -612,14 +614,14 @@ func (d *Task) StartWithCancel(username string) (*StartedService, error) {
 				"taskId":  taskId,
 				"attempt": i,
 			}).Error("Failed to wait browser response")
-			err = fmt.Errorf("session does not respond in %ds", d.StartupTimeout/time.Second)
+			outputErr = fmt.Errorf("session does not respond in %ds", d.StartupTimeout/time.Second)
 			continue
 		}
 
 		return sessionInfo, nil
 	}
 
-	return nil, err
+	return nil, outputErr
 }
 
 func waitUntilTaskIsRunning(svc *ecs.ECS, taskId string, sleepFn func(int) time.Duration, maxAttempts int) error {
