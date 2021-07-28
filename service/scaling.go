@@ -13,6 +13,10 @@ import (
 	"github.com/zebrunner/esg/config"
 )
 
+var (
+	instanceTypeResources *Resources = nil
+)
+
 type Resources struct {
 	CPU    int64
 	Memory int64
@@ -72,7 +76,7 @@ func getInstanceResources() (*Resources, error) {
 
 	instanceInfo := instanceTypesResult.InstanceTypes[0]
 
-	return &Resources{CPU: *instanceInfo.VCpuInfo.DefaultCores * 1024, Memory: *instanceInfo.MemoryInfo.SizeInMiB}, nil
+	return &Resources{CPU: *instanceInfo.VCpuInfo.DefaultVCpus * 1024, Memory: *instanceInfo.MemoryInfo.SizeInMiB}, nil
 }
 
 func getTasks(svc *ecs.ECS) ([]*ecs.Task, error) {
@@ -98,17 +102,16 @@ func getTasks(svc *ecs.ECS) ([]*ecs.Task, error) {
 	return describeTasksResult.Tasks, nil
 }
 
-func getTasksResources(tasks []*ecs.Task, status string) Resources {
-	resources := Resources{
-		CPU:    0,
-		Memory: 0,
-	}
+func getTasksResources(tasks []*ecs.Task, status string) []*Resources {
+	resources := []*Resources{}
 	for _, task := range tasks {
 		taskCpu, cpuErr := strconv.Atoi(*task.Cpu)
 		taskMemory, memoryErr := strconv.Atoi(*task.Memory)
 		if *task.LastStatus == status && cpuErr == nil && memoryErr == nil {
-			resources.CPU += int64(taskCpu)
-			resources.Memory += int64(taskMemory)
+			resources = append(resources, &Resources{
+				CPU:    int64(taskCpu),
+				Memory: int64(taskMemory),
+			})
 		}
 	}
 
@@ -152,7 +155,7 @@ func setDesiredCapacity(autoscalingService *autoscaling.AutoScaling, newDesiredC
 	log.WithFields(log.Fields{
 		"currentCapacity": *autoScalingGroup.DesiredCapacity,
 		"newCapacity":     newDesiredCapacity,
-	}).Debug("Capacity updated")
+	}).Info("Capacity updated")
 }
 
 func ScaleUp() {
@@ -170,25 +173,96 @@ func ScaleUp() {
 	}
 
 	provisioningTasksResources := getTasksResources(tasks, "PROVISIONING")
-	// All tasks is running
-	if provisioningTasksResources.CPU == 0 && provisioningTasksResources.Memory == 0 {
+	runningTasksResources := getTasksResources(tasks, "RUNNING")
+	// There is no task in provisioning state, no need to scale up
+	if len(provisioningTasksResources) == 0 {
+		log.Trace("There is no task in provisioning state, no need to scale up")
 		return
 	}
 
-	instanceResources, err := getInstanceResources()
-	if err != nil {
-		log.WithError(err).Error("Failed to get instance resources")
-		return
+	if instanceTypeResources == nil {
+		instanceTypeResources, err = getInstanceResources()
+		if err != nil {
+			log.WithError(err).Error("Failed to get instance resources")
+			return
+		}
 	}
 
-	cpuRatio := float64(provisioningTasksResources.CPU) / float64(instanceResources.CPU)
-	memoryRatio := float64(provisioningTasksResources.Memory) / float64(instanceResources.Memory)
-
-	curentInstanceCount, err := getInstanceCount(svc)
+	currentInstanceCount, err := getInstanceCount(svc)
 	if err != nil {
 		log.WithError(err).Error("Failed to get instance count")
 		return
 	}
-	requiredInstances := curentInstanceCount + int64(math.Ceil(math.Max(cpuRatio, memoryRatio)))
+
+	// Generate list of resources for each instance
+	instanceResources := []*Resources{}
+	for i := 0; i < int(currentInstanceCount); i++ {
+		instanceResources = append(instanceResources, &Resources{
+			CPU:    instanceTypeResources.CPU,
+			Memory: instanceTypeResources.Memory,
+		})
+	}
+
+	// Remove resources that already are using by RUNNING tasks
+	for _, t := range runningTasksResources {
+		for _, i := range instanceResources {
+			if i.CPU >= t.CPU && i.Memory >= t.Memory {
+				i.CPU -= t.CPU
+				i.Memory -= t.Memory
+				break
+			}
+		}
+	}
+
+	// Remove all instances that couldn't run a tasks
+	freeInstanceResources := []*Resources{}
+	for _, i := range instanceResources {
+		if i.CPU >= int64(config.MinCpu) && i.Memory >= int64(config.MinMemory) {
+			freeInstanceResources = append(freeInstanceResources, i)
+		}
+	}
+
+	// Remove resources that might be used for PROVISSIONING tasks
+	enought := false
+	requiredTaskResources := []*Resources{}
+	for _, t := range provisioningTasksResources {
+		enought = false
+		for _, i := range freeInstanceResources {
+			if i.CPU >= t.CPU && i.Memory >= t.Memory {
+				i.CPU -= t.CPU
+				i.Memory -= t.Memory
+				enought = true
+				break
+			}
+		}
+
+		if !enought {
+			requiredTaskResources = append(requiredTaskResources, t)
+		}
+	}
+
+	// No new resources required right now
+	if len(requiredTaskResources) == 0 {
+                log.Trace("No new resources required")
+		return
+	}
+
+	totalRequiredResources := Resources{
+		CPU:    0,
+		Memory: 0,
+	}
+	for _, t := range requiredTaskResources {
+		totalRequiredResources.CPU += t.CPU
+		totalRequiredResources.Memory += t.Memory
+	}
+	log.WithFields(log.Fields{
+		"CPU":    totalRequiredResources.CPU,
+		"Memory": totalRequiredResources.Memory,
+	}).Debug("Total required resources")
+
+	requiredCpu := float64(totalRequiredResources.CPU) / float64(instanceTypeResources.CPU)
+	requiredMemory := float64(totalRequiredResources.Memory) / float64(instanceTypeResources.Memory)
+
+	requiredInstances := currentInstanceCount + int64(math.Ceil(math.Max(requiredCpu, requiredMemory)))
 	setDesiredCapacity(autoscalingSvc, requiredInstances)
 }

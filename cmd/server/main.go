@@ -24,6 +24,7 @@ var (
 
 func init() {
 	flag.BoolVar(&config.EnableFileUpload, "enable-file-upload", false, "File upload support")
+	flag.BoolVar(&config.UsePublicIp, "use-public-ip", false, "Use or no public ip address for browser slave instances")
 	flag.StringVar(&listen, "listen", ":4444", "Network address to accept connections")
 	flag.IntVar(&config.RetryCount, "retry-count", 1, "New session attempts retry count")
 	flag.DurationVar(&config.Timeout, "timeout", 60*time.Second, "Session idle timeout in time.Duration format")

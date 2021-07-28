@@ -14,6 +14,10 @@ services:
     depends_on:
       - management
     command: ./scripts/entrypoint.sh
+    logging:
+     options:
+      max-size: "512m"
+    restart: always
   management:
     container_name: esg-worker
     build:
@@ -25,6 +29,7 @@ services:
       - redis
     command:
       - ./scripts/worker_entrypoint.sh
+    restart: always
   db:
     image: postgres:13
     container_name: esg-postgres
@@ -40,5 +45,6 @@ services:
     container_name: esg-redis
     ports:
       - "6379:6379"
+    restart: always
 volumes:
   pgdata-volume:
