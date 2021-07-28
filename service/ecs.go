@@ -296,7 +296,7 @@ func (d *Task) RunTask(family string, username string) (taskArn string, returnEr
 		// log.Printf("[SLEEP2] [%d]", sleep)
 		time.Sleep(sleep)
 		resultRunTask, err := svc.RunTask(runTaskInput)
-		// Not good solution because aws doesn't give a choice
+		// Not good solution but aws doesn't give a choice
 		if err != nil && err.Error() == "ClientException: TaskDefinition not found." {
 			return "", fmt.Errorf("Browser %s not found", family)
 		}
