@@ -155,7 +155,7 @@ func setDesiredCapacity(autoscalingService *autoscaling.AutoScaling, newDesiredC
 	log.WithFields(log.Fields{
 		"currentCapacity": *autoScalingGroup.DesiredCapacity,
 		"newCapacity":     newDesiredCapacity,
-	}).Debug("Capacity updated")
+	}).Info("Capacity updated")
 }
 
 func ScaleUp() {
@@ -176,6 +176,7 @@ func ScaleUp() {
 	runningTasksResources := getTasksResources(tasks, "RUNNING")
 	// There is no task in provisioning state, no need to scale up
 	if len(provisioningTasksResources) == 0 {
+		log.Trace("There is no task in provisioning state, no need to scale up")
 		return
 	}
 
@@ -242,6 +243,7 @@ func ScaleUp() {
 
 	// No new resources required right now
 	if len(requiredTaskResources) == 0 {
+                log.Trace("No new resources required")
 		return
 	}
 
