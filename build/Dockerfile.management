@@ -12,10 +12,10 @@ RUN go mod download
 # Build esg
 COPY . /esg
 
-RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./cmd/background
+RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./cmd/management
 
 
 FROM alpine:latest
-COPY --from=0 /esg/background /background
+COPY --from=0 /esg/management /management
 COPY --from=0 /esg/scripts/ /scripts/
 COPY --from=0 /esg/browsers.txt /browsers.txt 

@@ -1,6 +1,6 @@
 #!/bin/sh
 
-./background \
+./management \
   -aws-retry 2 \
   -aws-cluster esg-dev \
   -aws-elastic-cache redis:6379 \
