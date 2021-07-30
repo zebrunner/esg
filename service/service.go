@@ -51,7 +51,7 @@ type StartedService struct {
 
 // Starter - interface to create session with cancellation ability
 type Starter interface {
-	StartWithCancel(username string) (*StartedService, error)
+	StartWithCancel(ctx context.Context, username string) (*StartedService, error)
 }
 
 // Manager - interface to choose appropriate starter

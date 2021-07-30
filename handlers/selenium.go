@@ -324,7 +324,9 @@ func Create(c *gin.Context) {
 		return
 	}
 
-	startedService, err := starter.StartWithCancel(username)
+	ctx, ctxCancel := context.WithTimeout(context.Background(), 10 * time.Second)
+	defer ctxCancel()
+	startedService, err := starter.StartWithCancel(ctx, username)
 	if err != nil {
 		l.WithError(err).Error("Service startup failed")
 		c.Error(creationError("Failed to start browser", err)).SetType(gin.ErrorTypePublic)

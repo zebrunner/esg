@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -211,7 +212,7 @@ func CreateTaskDefinition(browser string, family string) (taskDefinition *ecs.Ta
 	return resultTaskDefinition.TaskDefinition, nil
 }
 
-func (d *Task) RunTask(family string, username string) (taskArn string, returnErr error) {
+func (d *Task) RunTaskWithContext(ctx context.Context, family string, username string) (taskArn string, returnErr error) {
 	svc := ecs.New(AwsSess)
 
 	memory, memErr := getEcsMemory(d.Caps)
@@ -224,7 +225,6 @@ func (d *Task) RunTask(family string, username string) (taskArn string, returnEr
 	browserContainerName := "browser"
 	id := uuid.New().String()
 
-	// revision := int64(1)
 	overrides := []*ecs.ContainerOverride{
 		{
 			Name: &browserContainerName,
@@ -282,18 +282,18 @@ func (d *Task) RunTask(family string, username string) (taskArn string, returnEr
 		Overrides:      &ecs.TaskOverride{ContainerOverrides: overrides},
 	}
 
-	// sleep := rand.Intn(15)
-	// log.Printf("[SLEEP] [%d]", sleep)
-	// time.Sleep(time.Duration(sleep) * time.Second)
-
 	// TODO: explicitly minimize errors range to wait only by well-knoen reasons aka RESOURCE:CPU etc
 	// TODO: convert existing hard-coded 25 retries into the queue or provisioning timeout: https://github.com/zebrunner/esg/issues/72
 	// [VD] "i" retry should be ~15 if instances can be started in 1 min and 25 if ~2 min
 	var outputErr error
 	for i := 0; i < 25; i++ {
+		select {
+		case <- ctx.Done():
+			return
+		default:
+		}
 		// Trying to minimize random sleep this needs performance test. If it doesn't works return old sleep.
 		sleep := time.Duration(rand.Intn(15)) * time.Second
-		// log.Printf("[SLEEP2] [%d]", sleep)
 		time.Sleep(sleep)
 		var resultRunTask *ecs.RunTaskOutput
 		resultRunTask, err := svc.RunTask(runTaskInput)
@@ -330,23 +330,14 @@ func (d *Task) RunTask(family string, username string) (taskArn string, returnEr
 	return "", outputErr
 }
 
+func (d *Task) RunTask(family string, username string) (taskArn string, returnErr error) {
+	return d.RunTaskWithContext(context.Background(), family, username)
+}
+
 func ConstDelay(t time.Duration) func(int) time.Duration {
 	return func(attempt int) time.Duration {
 		return t
 	}
-}
-
-func DeregisterTaskDefinition(family string) error {
-	svc := ecs.New(AwsSess)
-	input := ecs.DeregisterTaskDefinitionInput{
-		TaskDefinition: aws.String(family + ":1"),
-	}
-	_, err := svc.DeregisterTaskDefinition(&input)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func StopTask(taskArn string) (*ecs.StopTaskOutput, error) {
@@ -500,71 +491,99 @@ func (d *Task) GetStartedServiceInfo(taskArn string) (*StartedService, error) {
 }
 
 // StartWithCancel - Starter interface implementation
-func (d *Task) StartWithCancel(username string) (*StartedService, error) {
+func (d *Task) StartWithCancel(ctx context.Context, username string) (*StartedService, error) {
 	svc := ecs.New(AwsSess)
-
 	parts := strings.Split(d.Service.Image, "/")
 	browser := parts[len(parts)-1]
 	browser = strings.ReplaceAll(browser, ":", "-")
 	browser = strings.ReplaceAll(browser, ".", "-")
 
-	var outputErr error
-	for i := 0; i < config.RetryCount; i++ {
-		startTime := time.Now()
-		taskArn, err := d.RunTask(browser, username)
-		log.WithField("latency", time.Since(startTime)).Info("RunTask delay")
-		if err != nil {
-			log.WithError(err).WithField("attempt", i).Error("Failed to run task")
-			outputErr = fmt.Errorf("failed to start task. InternalError: %v", err)
-			continue
+	resChannel := make(chan *StartedService, 1)
+	errChannel := make(chan error, 1)
+	go func() {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+
+		}
+		var outputErr error
+		for i := 0; i < config.RetryCount; i++ {
+			startTime := time.Now()
+			taskArn, err := d.RunTask(browser, username)
+			log.WithField("latency", time.Since(startTime)).Info("RunTask delay")
+			if err != nil {
+				log.WithError(err).WithField("attempt", i).Error("Failed to run task")
+				outputErr = fmt.Errorf("failed to start task. InternalError: %v", err)
+				continue
+			}
+
+			taskId := strings.Split(taskArn, "/")[2]
+			startTime = time.Now()
+			err = waitUntilTaskIsRunningWithContext(ctx, svc, taskId, ConstDelay(6*time.Second), 25)
+			log.WithField("latency", time.Since(startTime)).Info("WaitUntilTasksRunning delay")
+			if err != nil {
+				RemoveTask(taskArn)
+				log.WithError(err).WithFields(log.Fields{
+					"taskId":  taskId,
+					"attempt": i,
+				}).Error("Failed to wait task successfull state")
+				outputErr = fmt.Errorf("failed to wait until task is running. InternalError: %v", err)
+				continue
+			}
+
+			startTime = time.Now()
+			sessionInfo, err := d.GetStartedServiceInfo(taskArn)
+			log.WithField("latency", time.Since(startTime)).Info("GetStartedServiceInfo delay")
+			if err != nil {
+				RemoveTask(taskArn)
+				log.WithError(err).WithFields(log.Fields{
+					"taskId":  taskId,
+					"attempt": i,
+				}).Error("Failed to get service info.")
+				outputErr = fmt.Errorf("failed to get service info. InternalError: %v", err)
+				continue
+			}
+
+			err = wait(sessionInfo.Url.String(), d.StartupTimeout)
+			if err != nil {
+				RemoveTask(taskArn)
+				log.WithError(err).WithFields(log.Fields{
+					"taskId":  taskId,
+					"attempt": i,
+				}).Error("Failed to wait browser response")
+				outputErr = fmt.Errorf("session does not respond in %ds", d.StartupTimeout/time.Second)
+				continue
+			}
+
+			if outputErr == nil {
+				resChannel<-sessionInfo
+			}
 		}
 
-		taskId := strings.Split(taskArn, "/")[2]
-		startTime = time.Now()
-		err = waitUntilTaskIsRunning(svc, taskId, ConstDelay(6*time.Second), 25)
-		log.WithField("latency", time.Since(startTime)).Info("WaitUntilTasksRunning delay")
-		if err != nil {
-			RemoveTask(taskArn)
-			log.WithError(err).WithFields(log.Fields{
-				"taskId":  taskId,
-				"attempt": i,
-			}).Error("Failed to wait task successfull state")
-			outputErr = fmt.Errorf("failed to wait until task is running. InternalError: %v", err)
-			continue
-		}
-
-		startTime = time.Now()
-		sessionInfo, err := d.GetStartedServiceInfo(taskArn)
-		log.WithField("latency", time.Since(startTime)).Info("GetStartedServiceInfo delay")
-		if err != nil {
-			RemoveTask(taskArn)
-			log.WithError(err).WithFields(log.Fields{
-				"taskId":  taskId,
-				"attempt": i,
-			}).Error("Failed to get service info.")
-			outputErr = fmt.Errorf("failed to get service info. InternalError: %v", err)
-			continue
-		}
-
-		err = wait(sessionInfo.Url.String(), d.StartupTimeout)
-		if err != nil {
-			RemoveTask(taskArn)
-			log.WithError(err).WithFields(log.Fields{
-				"taskId":  taskId,
-				"attempt": i,
-			}).Error("Failed to wait browser response")
-			outputErr = fmt.Errorf("session does not respond in %ds", d.StartupTimeout/time.Second)
-			continue
-		}
-
+		errChannel<-outputErr
+	}()
+	select {
+	case sessionInfo :=  <-resChannel:
 		return sessionInfo, nil
+	case err := <-errChannel:
+		return nil, err
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
-
-	return nil, outputErr
 }
 
 func waitUntilTaskIsRunning(svc *ecs.ECS, taskId string, sleepFn func(int) time.Duration, maxAttempts int) error {
+	return waitUntilTaskIsRunningWithContext(context.Background(), svc, taskId, sleepFn, maxAttempts)
+}
+
+func waitUntilTaskIsRunningWithContext(ctx context.Context, svc *ecs.ECS, taskId string, sleepFn func (int) time.Duration, maxAttempts int) error {
 	for i := 0; i < maxAttempts; i++ {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
 		log := log.WithFields(log.Fields{
 			"attempt": i,
 			"taskId":  taskId,
