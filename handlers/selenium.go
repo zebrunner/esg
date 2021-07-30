@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -96,9 +97,6 @@ func CreateSessionFromCache(sessionID string) (*session.Session, error) {
 		return nil, err
 	}
 
-	if err != nil {
-		return nil, err
-	}
 	seleniumSession := session.Session{
 		Quota:    s.Quota,
 		Caps:     s.Caps,
@@ -324,7 +322,12 @@ func Create(c *gin.Context) {
 		return
 	}
 
-	startedService, err := starter.StartWithCancel(username)
+	ctx, ctxCancel := context.WithTimeout(context.Background(), config.ServiceStartupTimeout)
+	defer ctxCancel()
+	startedService, err := starter.StartWithCancel(ctx, username)
+	if err == context.DeadlineExceeded {
+		err = errors.New("session startup timed out")
+	}
 	if err != nil {
 		l.WithError(err).Error("Service startup failed")
 		c.Error(creationError("Failed to start browser", err)).SetType(gin.ErrorTypePublic)

@@ -24,7 +24,7 @@ var (
 	SessionDeleteTimeout  time.Duration
 	ServiceStartupTimeout time.Duration
 	VideoRecorderImage    string
-	LogLevel              string = "debug"
+	LogLevel              = "debug"
 
 	AwsRegion            string
 	AwsRetry             int

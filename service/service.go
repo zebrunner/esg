@@ -51,7 +51,7 @@ type StartedService struct {
 
 // Starter - interface to create session with cancellation ability
 type Starter interface {
-	StartWithCancel(username string) (*StartedService, error)
+	StartWithCancel(ctx context.Context, username string) (*StartedService, error)
 }
 
 // Manager - interface to choose appropriate starter
@@ -144,7 +144,7 @@ func (m *DefaultManager) Find(caps session.Caps) (Starter, bool) {
 		Caps:        caps}, true
 }
 
-func wait(u string, t time.Duration) error {
+func wait(ctx context.Context, u string, t time.Duration) error {
 	up := make(chan struct{})
 	done := make(chan struct{})
 	go func() {
@@ -172,6 +172,9 @@ func wait(u string, t time.Duration) error {
 	case <-time.After(t):
 		close(done)
 		return fmt.Errorf("%s does not respond in %v", u, t)
+	case <-ctx.Done():
+		close(done)
+		return ctx.Err()
 	case <-up:
 	}
 	return nil
