@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -324,9 +325,12 @@ func Create(c *gin.Context) {
 		return
 	}
 
-	ctx, ctxCancel := context.WithTimeout(context.Background(), 10 * time.Second)
+	ctx, ctxCancel := context.WithTimeout(context.Background(), config.ServiceStartupTimeout)
 	defer ctxCancel()
 	startedService, err := starter.StartWithCancel(ctx, username)
+	if err == context.DeadlineExceeded {
+		err = errors.New("session startup timed out")
+	}
 	if err != nil {
 		l.WithError(err).Error("Service startup failed")
 		c.Error(creationError("Failed to start browser", err)).SetType(gin.ErrorTypePublic)

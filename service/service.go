@@ -144,7 +144,7 @@ func (m *DefaultManager) Find(caps session.Caps) (Starter, bool) {
 		Caps:        caps}, true
 }
 
-func wait(u string, t time.Duration) error {
+func wait(ctx context.Context, u string, t time.Duration) error {
 	up := make(chan struct{})
 	done := make(chan struct{})
 	go func() {
@@ -172,6 +172,9 @@ func wait(u string, t time.Duration) error {
 	case <-time.After(t):
 		close(done)
 		return fmt.Errorf("%s does not respond in %v", u, t)
+	case <-ctx.Done():
+		close(done)
+		return ctx.Err()
 	case <-up:
 	}
 	return nil
