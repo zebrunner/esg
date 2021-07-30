@@ -39,6 +39,7 @@ type Caps struct {
 	Memory                string            `json:"Memory,omitempty"`
 	MemoryReservation     string            `json:"MemoryReservation,omitempty"`
 	Cpu                   string            `json:"Cpu,omitempty"`
+	IdleTimeout           int               `json:"idleTimeout,omitempty"`
 }
 
 func (c *Caps) ProcessExtensionCapabilities() {

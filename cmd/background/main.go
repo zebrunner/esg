@@ -61,18 +61,24 @@ func ClearSessions() {
 				continue
 			}
 
-			if idle > config.Timeout {
-				result, err := handlers.RDB.Get(context.Background(), key).Result()
-				if err != nil {
-					log.WithError(err).Error("Failed to get session from cache")
-					continue
-				}
-				s := handlers.CachedSession{}
-				err = json.Unmarshal([]byte(result), &s)
-				if err != nil {
-					log.WithError(err).Error("Failed to unmarshal redis response")
-					continue
-				}
+			result, err := handlers.RDB.Get(context.Background(), key).Result()
+			if err != nil {
+				log.WithError(err).Error("Failed to get session from cache")
+				continue
+			}
+
+			s := handlers.CachedSession{}
+			err = json.Unmarshal([]byte(result), &s)
+			if err != nil {
+				log.WithError(err).Error("Failed to unmarshal redis response")
+				continue
+			}
+
+			timeout := config.Timeout
+			if s.Caps.IdleTimeout != 0 {
+				timeout = time.Duration(s.Caps.IdleTimeout) * time.Second
+			}
+			if idle > timeout {
 				log.WithField("task", s.TaskID).Info("Deleting task. Reason: idle timeout")
 				handlers.CloseSession(key)
 				_, err = handlers.RDB.Del(context.Background(), key).Result()
@@ -106,7 +112,7 @@ func RefreshTaskDefinitions() {
 			log.WithError(err).WithField("family", family).Error("Failed to create task definitions")
 		}
 
-    time.Sleep(250 * time.Millisecond)
+		time.Sleep(250 * time.Millisecond)
 	}
 }
 

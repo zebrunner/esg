@@ -96,9 +96,6 @@ func CreateSessionFromCache(sessionID string) (*session.Session, error) {
 		return nil, err
 	}
 
-	if err != nil {
-		return nil, err
-	}
 	seleniumSession := session.Session{
 		Quota:    s.Quota,
 		Caps:     s.Caps,
