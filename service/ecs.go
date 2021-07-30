@@ -330,67 +330,6 @@ func (d *Task) RunTask(family string, username string) (taskArn string, returnEr
 	return "", outputErr
 }
 
-// //TODO: take a look to LastStatus field for negative cases. PROVISIONING and PENDING looks good. Extra varians?
-// // log.Printf("[TASK_RUN_RESULT] [%v]", resultRunTask)
-// isStarted := false
-// for retryCount := 0; retryCount < config.RetryCount; retryCount++ {
-// 	// TODO: explicitly minimize errors range to wait only by well-knoen reasons aka RESOURCE:CPU etc
-// 	// TODO: convert existing hard-coded 25 retries into the queue or provisioning timeout: https://github.com/zebrunner/esg/issues/72
-// 	for i := 1; i < 25; i++ { // [VD] "i" retry should be ~15 if instances can be started in 1 min and 25 if ~2 min
-// 		if err != nil {
-// 			log.WithError(err).WithField("attempt", i).Error("Task run error")
-// 		} else if len(resultRunTask.Failures) > 0 {
-// 			log.WithFields(log.Fields{
-// 				"reason":  *resultRunTask.Failures[0].Reason,
-// 				"attempt": i,
-// 			}).Error("Task run failure")
-// 		} else if len(resultRunTask.Tasks) == 0 {
-// 			log.WithField("attempt", i).Error("Task run failure: result doesn't contains tasks")
-// 		} else {
-// 			// all good and we can proceed
-// 			isStarted = true
-// 			break
-// 		}
-// 		// sleep 1-15 sec for a while. TODO: reorganize into the smart delay
-// 		sleep = rand.Intn(15)
-// 		log.Printf("[SLEEP2] [%d]", sleep)
-// 		time.Sleep(time.Duration(sleep) * time.Second)
-// 		//time.Sleep(10 * time.Second)
-// 		resultRunTask, err = svc.RunTask(runTaskInput)
-// 	}
-
-// 		if isStarted {
-// 			time.Sleep(10 * time.Second)
-// 			// task start initiated successfully. try to wait while running
-// 			taskId := strings.Split(*resultRunTask.Tasks[0].TaskArn, "/")[2]
-
-// 			startTime := time.Now()
-// 			err = waitUntilTaskIsRunning(svc, taskId, ConstDelay(6*time.Second), 25)
-// 			log.WithField("latency", time.Since(startTime)).Info("WaitUntilTasksRunning delay")
-// 			if err != nil {
-// 				log.WithError(err).WithField("taskId", taskId).Error("Failed to wait task successfull state")
-// 			}
-// 			// break
-// 		}
-// 		log.WithField("attempt", retryCount).Debug("retry failed")
-// 	}
-
-// 	/*
-// 		Failures: [{
-// 		      Arn: "arn:aws:ecs:us-east-1:659932254483:container-instance/829954d05541417cb21d02409e43ea10",
-// 		      Reason: "RESOURCE:CPU"
-// 		    }],
-// 		  Tasks: []
-// 		}]
-// 	*/
-
-// 	if err != nil {
-// 		return "", err
-// 	}
-
-// 	return *resultRunTask.Tasks[0].TaskArn, nil
-// }
-
 func ConstDelay(t time.Duration) func(int) time.Duration {
 	return func(attempt int) time.Duration {
 		return t
