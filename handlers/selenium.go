@@ -57,12 +57,6 @@ func InitManager() {
 	manager = &service.DefaultManager{Environment: &environment}
 }
 
-func RemoveTask(taskID string) func() {
-	return func() {
-		service.RemoveTask(taskID)
-	}
-}
-
 func CloseSession(workspace string, sessionID string) {
 	sess, err := selenium.CreateSessionFromCache(sessionID)
 	if err != nil {
@@ -385,14 +379,6 @@ func Create(c *gin.Context) {
 }
 
 func Proxy(c *gin.Context) {
-	done := make(chan func())
-	go func() {
-		(<-done)()
-	}()
-	cancel := func() {}
-	defer func() {
-		done <- cancel
-	}()
 	(&httputil.ReverseProxy{
 		Director: func(r *http.Request) {
 			fragments := strings.Split(r.URL.Path, slash)
@@ -411,7 +397,7 @@ func Proxy(c *gin.Context) {
 				if config.EnableFileUpload {
 					os.RemoveAll(filepath.Join(os.TempDir(), sessionID))
 				}
-				cancel = sess.Cancel
+				defer service.RemoveTask(sess.TaskID)
 				if config.ZebrunnerIsIntegrated() {
 					go zebrunner.SendSessionDuration(sess.Workspace, time.Since(sess.Started))
 				}

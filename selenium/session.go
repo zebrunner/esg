@@ -199,7 +199,6 @@ func CreateSessionFromCache(sessionID string) (*Session, error) {
 		TaskID:    s.TaskID,
 		Workspace: s.Workspace,
 	}
-	// seleniumSession.Cancel = RemoveTask(s.TaskID)
 	return &seleniumSession, nil
 }
 
