@@ -57,50 +57,6 @@ func InitManager() {
 	manager = &service.DefaultManager{Environment: &environment}
 }
 
-func CloseSession(workspace string, sessionID string) {
-	sess, err := selenium.CreateSessionFromCache(sessionID)
-	if err != nil {
-		log.WithError(err).Error("Failed to get session from cache")
-		return
-	}
-	defer sess.Cancel()
-
-	client := http.Client{}
-	sess.URL.Path = path.Clean(sess.URL.Path + fmt.Sprintf("/session/%s", sessionID))
-	timeoutCtx, cancel := context.WithTimeout(context.Background(), config.SessionDeleteTimeout)
-	defer cancel()
-	req, err := http.NewRequestWithContext(timeoutCtx, http.MethodDelete, sess.URL.String(), nil)
-	if err != nil {
-		log.WithError(err).Error("Failed to create request")
-		return
-	}
-
-	log.WithFields(log.Fields{
-		"method": req.Method,
-		"url":    req.URL,
-	}).Debug("Closing session.")
-	resp, err := client.Do(req)
-	if err != nil {
-		log.WithError(err).Error("Failed to cancel driver session")
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		log.WithField("statusCode", resp.Status).Error("Cancel request returned not success status code")
-		return
-	}
-
-	if config.ZebrunnerIsIntegrated() {
-		go zebrunner.SendSessionDuration(workspace, time.Since(sess.Started))
-	}
-	_, err = config.RedisConnection.Del(context.Background(), sessionID).Result()
-	if err != nil {
-		log.WithError(err).Error("Failed to delete session from redis")
-		return
-	}
-	log.WithField("sessionID", sessionID).Info("Session closed.")
-}
-
 // create() method from ggr.
 func createSession(ctx context.Context, sessionUrl string, header http.Header, body []byte) (map[string]interface{}, int) {
 	req, err := http.NewRequest(http.MethodPost, sessionUrl, bytes.NewReader(body))

@@ -14,7 +14,6 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
-	"github.com/zebrunner/esg/handlers"
 )
 
 var (
@@ -86,7 +85,7 @@ func ClearSessions() {
 			}
 			if idle > timeout {
 				log.WithField("task", s.TaskID).Info("Deleting task. Reason: idle timeout")
-				handlers.CloseSession(s.Workspace, key)
+				selenium.CloseSession(s.Workspace, key)
 				_, err = rdb.Del(context.Background(), key).Result()
 				if err != nil {
 					log.WithError(err).WithField("session", key).Error("Failed to delete session from cache")
