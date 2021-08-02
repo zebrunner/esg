@@ -30,7 +30,7 @@ func init() {
 	flag.DurationVar(&config.Timeout, "timeout", 60*time.Second, "Session idle timeout in time.Duration format")
 	flag.DurationVar(&config.MaxTimeout, "max-timeout", 1*time.Hour, "Maximum valid session idle timeout in time.Duration format")
 	flag.DurationVar(&config.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
-	flag.DurationVar(&config.ServiceStartupTimeout, "service-startup-timeout", 3 * time.Minute, "Service startup timeout in time.Duration format")
+	flag.DurationVar(&config.ServiceStartupTimeout, "service-startup-timeout", 3*time.Minute, "Service startup timeout in time.Duration format")
 	flag.StringVar(&config.VideoRecorderImage, "video-recorder-image", "selenoid/video-recorder:latest-release", "Image to use as video recorder")
 	flag.DurationVar(&gracefulPeriod, "graceful-period", 300*time.Second, "graceful shutdown period in time.Duration format, e.g. 300s or 500ms")
 	// AWS Related args
@@ -52,6 +52,10 @@ func init() {
 	flag.StringVar(&config.DbConnectionString, "db-connection", "", "Connection string for database")
 	flag.BoolVar(&config.TrustedMode, "trusted", false, "If trusted mode enabled hub does not require any auth")
 	flag.StringVar(&config.LogLevel, "log-level", "debug", "Desired log level. Valid levels: `panic`, `fatal`, `error`, `warning`, `info`, `debug`, `trace`")
+
+	flag.StringVar(&config.ZebrunnerHost, "zebrunner-host", "", "Host for zebrunner integration for this environment")
+	flag.StringVar(&config.ZebrunnerIntegrationUser, "zebrunner-integration-user", "", "User for zebrunner for current env")
+	flag.StringVar(&config.ZebrunnerIntegrationPassword, "zebrunner-integration-password", "", "Password for zebrunner for current env")
 
 	flag.Parse()
 

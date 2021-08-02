@@ -65,13 +65,14 @@ type Request struct {
 }
 
 type CachedSession struct {
-	Quota    string
-	Caps     session.Caps
-	URL      *url.URL
-	HostPort session.HostPort
-	Timeout  time.Duration
-	Started  time.Time
-	TaskID   string
+	Quota     string
+	Caps      session.Caps
+	URL       *url.URL
+	HostPort  session.HostPort
+	Timeout   time.Duration
+	Started   time.Time
+	TaskID    string
+	Workspace string
 }
 
 func (s CachedSession) MarshalBinary() ([]byte, error) {
@@ -98,12 +99,13 @@ func CreateSessionFromCache(sessionID string) (*session.Session, error) {
 	}
 
 	seleniumSession := session.Session{
-		Quota:    s.Quota,
-		Caps:     s.Caps,
-		URL:      s.URL,
-		HostPort: s.HostPort,
-		Started:  s.Started,
-		TaskID:   s.TaskID,
+		Quota:     s.Quota,
+		Caps:      s.Caps,
+		URL:       s.URL,
+		HostPort:  s.HostPort,
+		Started:   s.Started,
+		TaskID:    s.TaskID,
+		Workspace: s.Workspace,
 	}
 	seleniumSession.Cancel = cancelAndRenameFiles(s.TaskID)
 	return &seleniumSession, nil
@@ -115,12 +117,12 @@ func cancelAndRenameFiles(taskID string) func() {
 	}
 }
 
-func Delete(taskId string) {
-	log.WithField("taskID", taskId).Info("Session timed out. Removing ECS task forcibly")
-	service.RemoveTask(taskId)
-}
+// func Delete(taskId string) {
+// 	log.WithField("taskID", taskId).Info("Session timed out. Removing ECS task forcibly")
+// 	service.RemoveTask(taskId)
+// }
 
-func CloseSession(sessionID string) {
+func CloseSession(workspace string, sessionID string) {
 	sess, err := CreateSessionFromCache(sessionID)
 	if err != nil {
 		log.WithError(err).Error("Failed to get session from cache")
@@ -153,6 +155,9 @@ func CloseSession(sessionID string) {
 		return
 	}
 
+	if config.ZebrunnerIsIntegrated() {
+		go service.SendSessionDuration(workspace, time.Since(sess.Started))
+	}
 	_, err = RDB.Del(context.Background(), sessionID).Result()
 	if err != nil {
 		log.WithError(err).Error("Failed to delete session from redis")
@@ -421,12 +426,13 @@ func Create(c *gin.Context) {
 	sess.Cancel = cancelAndRenameFiles
 	sessions.Put(s.ID, sess)
 	redisSession := CachedSession{
-		Quota:    sess.Quota,
-		Caps:     sess.Caps,
-		URL:      sess.URL,
-		HostPort: sess.HostPort,
-		Started:  sess.Started,
-		TaskID:   startedService.TaskID,
+		Quota:     sess.Quota,
+		Caps:      sess.Caps,
+		URL:       sess.URL,
+		HostPort:  sess.HostPort,
+		Started:   sess.Started,
+		TaskID:    startedService.TaskID,
+		Workspace: username,
 	}
 	err = RDB.Set(context.Background(), s.ID, redisSession, 0).Err()
 	if err != nil {
@@ -518,6 +524,9 @@ func Proxy(c *gin.Context) {
 					os.RemoveAll(filepath.Join(os.TempDir(), sessionID))
 				}
 				cancel = sess.Cancel
+				if config.ZebrunnerIsIntegrated() {
+					go service.SendSessionDuration(sess.Workspace, time.Since(sess.Started))
+				}
 				sessions.Remove(sessionID)
 				RDB.Del(context.Background(), sessionID).Result()
 				log.WithField("sessionID", sessionID).Info("Session deleted")

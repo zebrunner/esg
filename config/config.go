@@ -43,6 +43,10 @@ var (
 	DbConnectionString   string
 	TrustedMode          bool
 	Tenant               string
+
+	ZebrunnerHost                string
+	ZebrunnerIntegrationUser     string
+	ZebrunnerIntegrationPassword string
 )
 
 func ParseLogLevel() logrus.Level {
@@ -64,4 +68,8 @@ func ParseLogLevel() logrus.Level {
 	default:
 		return logrus.DebugLevel
 	}
+}
+
+func ZebrunnerIsIntegrated() bool {
+	return ZebrunnerHost != "" && ZebrunnerIntegrationUser != "" && ZebrunnerIntegrationPassword != ""
 }
