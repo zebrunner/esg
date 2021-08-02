@@ -148,7 +148,7 @@ func main() {
 	}
 	service.AwsSess = awsSess
 
-	rdb, err := service.InitCache()
+	rdb, err := config.InitCache()
 	if err != nil {
 		log.WithError(err).Fatal("Failed to init redis connection")
 	}

@@ -8,10 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-redis/redis/v8"
-
 	log "github.com/sirupsen/logrus"
-	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/session"
 )
 
@@ -69,21 +66,6 @@ type Browser struct {
 	Image string
 	Path  string
 	Port  int64
-}
-
-func InitCache() (*redis.Client, error) {
-	client := redis.NewClient(&redis.Options{
-		Addr:     config.AwsElasticCache,
-		Password: "",
-		DB:       0,
-	})
-
-	_, err := client.Ping(context.Background()).Result()
-	if err != nil {
-		return nil, err
-	}
-
-	return client, nil
 }
 
 // Find - default implementation Manager interface

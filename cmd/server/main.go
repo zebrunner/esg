@@ -142,14 +142,14 @@ func main() {
 		ForceColors:     true,
 	})
 
-	db, err := service.InitDBConnection(config.DbConnectionString)
+	db, err := config.InitDBConnection(config.DbConnectionString)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to init DB client.")
 	}
 	service.DB = db
 	defer db.Close()
 
-	rdb, err := service.InitCache()
+	rdb, err := config.InitCache()
 	if err != nil {
 		log.WithError(err).Fatal("Failed to init Redis client")
 	}

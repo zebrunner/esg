@@ -38,20 +38,6 @@ func generatePassword() (string, error) {
 	return password.Generate(passwordLength, digitCount, symbolCount, noUpper, allowRepeat)
 }
 
-func InitDBConnection(connectionString string) (*sqlx.DB, error) {
-	client, err := sqlx.Open("pgx", connectionString)
-	if err != nil {
-		return nil, err
-	}
-
-	err = client.Ping()
-	if err != nil {
-		client.Close()
-		return nil, err
-	}
-	return client, nil
-}
-
 func CreateUser(name string) (string, error) {
 	dbUser, _ := GetUser(name)
 	if dbUser != nil {
