@@ -31,8 +31,6 @@ import (
 	"golang.org/x/net/websocket"
 )
 
-const slash = "/"
-
 const (
 	browserStarted = iota
 	browserFailed
@@ -337,7 +335,7 @@ func Create(c *gin.Context) {
 func Proxy(c *gin.Context) {
 	(&httputil.ReverseProxy{
 		Director: func(r *http.Request) {
-			fragments := strings.Split(r.URL.Path, slash)
+			fragments := strings.Split(r.URL.Path, "/")
 			sessionID := fragments[2]
 
 			sess, err := selenium.CreateSessionFromCache(sessionID)
@@ -391,8 +389,9 @@ func defaultErrorHandler(с *gin.Context) func(http.ResponseWriter, *http.Reques
 	}
 }
 
-func splitRequestPath(p string) (string, string) {
-	fragments := strings.Split(p, slash)
+func Vnc(wsconn *websocket.Conn) {
+	defer wsconn.Close()
+	fragments := strings.Split(wsconn.Request().Host, "/")
 	vncIndex := 0
 	for i, fragment := range fragments {
 		if fragment == "vnc" {
@@ -400,12 +399,7 @@ func splitRequestPath(p string) (string, string) {
 			break
 		}
 	}
-	return fragments[vncIndex+1], slash + strings.Join(fragments[vncIndex+2:], slash)
-}
-
-func Vnc(wsconn *websocket.Conn) {
-	defer wsconn.Close()
-	sid, _ := splitRequestPath(wsconn.Request().URL.Path)
+	sid := fragments[vncIndex+1]
 	l := log.WithField("sessionID", sid)
 	sess, err := selenium.CreateSessionFromCache(sid)
 
@@ -545,16 +539,4 @@ func Devtools(c *gin.Context) {
 		Host: sess.HostPort.Devtools,
 	}
 	c.Redirect(http.StatusFound, fileUrl.String())
-}
-
-func onTimeout(t time.Duration, f func()) chan struct{} {
-	cancel := make(chan struct{})
-	go func(cancel chan struct{}) {
-		select {
-		case <-time.After(t):
-			f()
-		case <-cancel:
-		}
-	}(cancel)
-	return cancel
 }
