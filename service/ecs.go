@@ -288,7 +288,7 @@ func (d *Task) RunTask(ctx context.Context, family string, username string) (tas
 	var outputErr error
 	for i := 0; i < 25; i++ {
 		select {
-		case <- ctx.Done():
+		case <-ctx.Done():
 			return
 		default:
 		}
@@ -495,10 +495,10 @@ func (d *Task) StartWithCancel(ctx context.Context, username string) (*StartedSe
 	browser = strings.ReplaceAll(browser, ".", "-")
 
 	var outputErr error
-	out:
+out:
 	for i := 0; i < config.RetryCount; i++ {
 		select {
-		case <- ctx.Done():
+		case <-ctx.Done():
 			break out
 		default:
 		}
@@ -555,7 +555,7 @@ func (d *Task) StartWithCancel(ctx context.Context, username string) (*StartedSe
 	return nil, outputErr
 }
 
-func waitUntilTaskIsRunning(ctx context.Context, svc *ecs.ECS, taskId string, sleepFn func (int) time.Duration, maxAttempts int) error {
+func waitUntilTaskIsRunning(ctx context.Context, svc *ecs.ECS, taskId string, sleepFn func(int) time.Duration, maxAttempts int) error {
 	for i := 0; i < maxAttempts; i++ {
 		select {
 		case <-ctx.Done():
@@ -594,7 +594,7 @@ func waitUntilTaskIsRunning(ctx context.Context, svc *ecs.ECS, taskId string, sl
 		time.Sleep(sleepFn(i))
 	}
 
-	return errors.New("failed to wait successfull task status. Max etempt limit exceeded")
+	return errors.New("failed to wait successfull task status. Max attempt limit exceeded")
 }
 
 func getFailReason(svc *ecs.ECS, taskId string) (*string, error) {
