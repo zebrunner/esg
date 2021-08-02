@@ -1,7 +1,9 @@
 package selenium
 
 import (
+	"fmt"
 	"net/url"
+	"regexp"
 	"sync"
 	"time"
 
@@ -91,6 +93,45 @@ type Session struct {
 	Lock      sync.Mutex
 	TaskID    string
 	Workspace string
+}
+
+var (
+	fullFormat  = regexp.MustCompile(`^([0-9]+x[0-9]+)x(8|16|24)$`)
+	shortFormat = regexp.MustCompile(`^[0-9]+x[0-9]+$`)
+)
+
+func (c *Caps) GetScreenResolution() (string, error) {
+	if c.ScreenResolution == "" {
+		return "1920x1080x24", nil
+	}
+	if fullFormat.MatchString(c.ScreenResolution) {
+		return c.ScreenResolution, nil
+	}
+	if shortFormat.MatchString(c.ScreenResolution) {
+		return fmt.Sprintf("%sx24", c.ScreenResolution), nil
+	}
+	return "", fmt.Errorf(
+		"Malformed screenResolution capability: %s. Correct format is WxH (1920x1080) or WxHxD (1920x1080x24).",
+		c.ScreenResolution,
+	)
+}
+
+func (c *Caps) GetVideoScreenSize() (string, error) {
+	if c.VideoScreenSize != "" {
+		if shortFormat.MatchString(c.VideoScreenSize) {
+			return c.VideoScreenSize, nil
+		}
+		return "", fmt.Errorf(
+			"Malformed videoScreenSize capability: %s. Correct format is WxH (1920x1080).",
+			c.VideoScreenSize,
+		)
+	}
+
+	resolution, err := c.GetScreenResolution()
+	if err != nil {
+		return "", fmt.Errorf("failed to get screen size. %v", err)
+	}
+	return fullFormat.FindStringSubmatch(resolution)[1], nil
 }
 
 // HostPort - hold host-port values for all forwarded ports

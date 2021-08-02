@@ -15,7 +15,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -57,10 +56,6 @@ func InitManager() {
 		VideoContainerImage:  config.VideoRecorderImage,
 	}
 	manager = &service.DefaultManager{Environment: &environment}
-}
-
-type Request struct {
-	*http.Request
 }
 
 type CachedSession struct {
@@ -106,20 +101,15 @@ func CreateSessionFromCache(sessionID string) (*selenium.Session, error) {
 		TaskID:    s.TaskID,
 		Workspace: s.Workspace,
 	}
-	seleniumSession.Cancel = cancelAndRenameFiles(s.TaskID)
+	seleniumSession.Cancel = RemoveTask(s.TaskID)
 	return &seleniumSession, nil
 }
 
-func cancelAndRenameFiles(taskID string) func() {
+func RemoveTask(taskID string) func() {
 	return func() {
 		service.RemoveTask(taskID)
 	}
 }
-
-// func Delete(taskId string) {
-// 	log.WithField("taskID", taskId).Info("Session timed out. Removing ECS task forcibly")
-// 	service.RemoveTask(taskId)
-// }
 
 func CloseSession(workspace string, sessionID string) {
 	sess, err := CreateSessionFromCache(sessionID)
@@ -297,7 +287,7 @@ func Create(c *gin.Context) {
 			return
 		}
 
-		resolution, err := getScreenResolution(caps.ScreenResolution)
+		resolution, err := caps.GetScreenResolution()
 		if err != nil {
 			l.WithError(err).WithField("resolution", caps.ScreenResolution).Error("Bad screen resolution")
 			c.Error(creationError("Failed to parse `resolution` capability", err)).SetType(gin.ErrorTypePublic)
@@ -305,7 +295,7 @@ func Create(c *gin.Context) {
 		}
 
 		caps.ScreenResolution = resolution
-		videoScreenSize, err := getVideoScreenSize(caps.VideoScreenSize, resolution)
+		videoScreenSize, err := caps.GetVideoScreenSize()
 		if err != nil {
 			l.WithError(err).WithField("videoScreenSize", caps.VideoScreenSize).Error("Bad video screen size")
 			c.Error(creationError("Failed to parse `videoScreenSize` capability", err)).SetType(gin.ErrorTypePublic)
@@ -440,58 +430,6 @@ func Create(c *gin.Context) {
 		"sessionID": s.ID,
 		"latency":   util.SecondsSince(sessionStartTime),
 	}).Info("Session created")
-}
-
-var (
-	fullFormat  = regexp.MustCompile(`^([0-9]+x[0-9]+)x(8|16|24)$`)
-	shortFormat = regexp.MustCompile(`^[0-9]+x[0-9]+$`)
-)
-
-func getScreenResolution(input string) (string, error) {
-	if input == "" {
-		return "1920x1080x24", nil
-	}
-	if fullFormat.MatchString(input) {
-		return input, nil
-	}
-	if shortFormat.MatchString(input) {
-		return fmt.Sprintf("%sx24", input), nil
-	}
-	return "", fmt.Errorf(
-		"Malformed screenResolution capability: %s. Correct format is WxH (1920x1080) or WxHxD (1920x1080x24).",
-		input,
-	)
-}
-
-func shortenScreenResolution(screenResolution string) string {
-	return fullFormat.FindStringSubmatch(screenResolution)[1]
-}
-
-func getVideoScreenSize(videoScreenSize string, screenResolution string) (string, error) {
-	if videoScreenSize != "" {
-		if shortFormat.MatchString(videoScreenSize) {
-			return videoScreenSize, nil
-		}
-		return "", fmt.Errorf(
-			"Malformed videoScreenSize capability: %s. Correct format is WxH (1920x1080).",
-			videoScreenSize,
-		)
-	}
-	return shortenScreenResolution(screenResolution), nil
-}
-
-func getSessionTimeout(sessionTimeout string, maxTimeout time.Duration, defaultTimeout time.Duration) (time.Duration, error) {
-	if sessionTimeout != "" {
-		st, err := time.ParseDuration(sessionTimeout)
-		if err != nil {
-			return 0, fmt.Errorf("invalid sessionTimeout capability: %v", err)
-		}
-		if st <= maxTimeout {
-			return st, nil
-		}
-		return maxTimeout, nil
-	}
-	return defaultTimeout, nil
 }
 
 func Proxy(c *gin.Context) {
