@@ -90,6 +90,7 @@ type Session struct {
 	Started   time.Time
 	Lock      sync.Mutex
 	TaskID    string
+	Workspace string
 }
 
 // HostPort - hold host-port values for all forwarded ports

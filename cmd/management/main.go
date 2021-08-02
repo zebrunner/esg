@@ -42,6 +42,10 @@ func init() {
 	flag.IntVar(&config.MinCpu, "min-cpu", 1024, "AWS minimum CPU limitation for session")
 	flag.IntVar(&config.MaxCpu, "max-cpu", 4096, "AWS maximum CPU limitation for session")
 
+	flag.StringVar(&config.ZebrunnerHost, "zebrunner-host", "", "Host for zebrunner integration for this environment")
+	flag.StringVar(&config.ZebrunnerIntegrationUser, "zebrunner-integration-user", "", "User for zebrunner for current env")
+	flag.StringVar(&config.ZebrunnerIntegrationPassword, "zebrunner-integration-password", "", "Password for zebrunner for current env")
+
 	flag.Parse()
 }
 
@@ -80,7 +84,7 @@ func ClearSessions() {
 			}
 			if idle > timeout {
 				log.WithField("task", s.TaskID).Info("Deleting task. Reason: idle timeout")
-				handlers.CloseSession(key)
+				handlers.CloseSession(s.Workspace, key)
 				_, err = handlers.RDB.Del(context.Background(), key).Result()
 				if err != nil {
 					log.WithError(err).WithField("session", key).Error("Failed to delete session from cache")
