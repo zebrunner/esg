@@ -71,5 +71,5 @@ func ParseLogLevel() logrus.Level {
 }
 
 func ZebrunnerIsIntegrated() bool {
-	return ZebrunnerHost != "" && ZebrunnerIntegrationUser != "" && ZebrunnerIntegrationPassword != ""
+	return ZebrunnerHost != "" && ZebrunnerIntegrationUser != "" && ZebrunnerIntegrationPassword != "" && !TrustedMode
 }
