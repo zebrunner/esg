@@ -7,6 +7,11 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+var (
+	RedisConnection *redis.Client
+	DbConnection    *sqlx.DB
+)
+
 func InitCache() (*redis.Client, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr:     AwsElasticCache,

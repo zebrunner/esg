@@ -4,19 +4,15 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/utils"
 
 	"github.com/jackc/pgtype"
 	"github.com/jackc/pgx/v4"
 	_ "github.com/jackc/pgx/v4/stdlib"
-	"github.com/jmoiron/sqlx"
 	"github.com/sethvargo/go-password/password"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
-)
-
-var (
-	DB *sqlx.DB
 )
 
 type User struct {
@@ -57,7 +53,7 @@ func CreateUser(name string) (string, error) {
 	}
 
 	createQuery := `INSERT INTO users (name, password) VALUES ($1, $2)`
-	_, err = DB.Exec(createQuery, name, string(passwordHash))
+	_, err = config.DbConnection.Exec(createQuery, name, string(passwordHash))
 	if err != nil {
 		return "", err
 	}
@@ -69,7 +65,7 @@ func CreateUser(name string) (string, error) {
 func GetUser(name string) (*User, error) {
 	getQuery := `SELECT id, name, password, is_active FROM users WHERE is_deleted = false AND name = $1`
 	user := User{}
-	err := DB.Get(&user, getQuery, name)
+	err := config.DbConnection.Get(&user, getQuery, name)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, &utils.HTTPError{
@@ -89,7 +85,7 @@ func ActivationUser(name string, isActive bool) error {
 		return err
 	}
 	invalidateQuery := `UPDATE users SET is_active = $1, updated_at = now() WHERE users.id = $2`
-	_, err = DB.Exec(invalidateQuery, isActive, user.ID)
+	_, err = config.DbConnection.Exec(invalidateQuery, isActive, user.ID)
 	if err != nil {
 		return err
 	}
@@ -110,7 +106,7 @@ func RefreshToken(name string) (string, error) {
 		return "", err
 	}
 	refreshQuery := `UPDATE users SET password = $1, updated_at = now() WHERE id = $2`
-	_, err = DB.Exec(refreshQuery, passwordHash, user.ID)
+	_, err = config.DbConnection.Exec(refreshQuery, passwordHash, user.ID)
 	if err != nil {
 		return "", err
 	}
@@ -123,7 +119,7 @@ func DeleteUser(name string) error {
 		return err
 	}
 	deleteQuery := `UPDATE users SET is_deleted=true WHERE id = $1`
-	_, err = DB.Exec(deleteQuery, user.ID)
+	_, err = config.DbConnection.Exec(deleteQuery, user.ID)
 	if err != nil {
 		return err
 	}

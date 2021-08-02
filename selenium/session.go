@@ -1,13 +1,22 @@
 package selenium
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
+	"path"
 	"regexp"
 	"sync"
 	"time"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/imdario/mergo"
+	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/config"
+	"github.com/zebrunner/esg/utils"
+	"github.com/zebrunner/esg/zebrunner"
 )
 
 // Caps - user capabilities
@@ -127,11 +136,11 @@ func (c *Caps) GetVideoScreenSize() (string, error) {
 		)
 	}
 
-	resolution, err := c.GetScreenResolution()
+	screenResolution, err := c.GetScreenResolution()
 	if err != nil {
-		return "", fmt.Errorf("failed to get screen size. %v", err)
+		return "", fmt.Errorf("Failed to get screen resolution. %v", err)
 	}
-	return fullFormat.FindStringSubmatch(resolution)[1], nil
+	return fullFormat.FindStringSubmatch(screenResolution)[1], nil
 }
 
 // HostPort - hold host-port values for all forwarded ports
@@ -149,4 +158,95 @@ type Metadata struct {
 	Capabilities Caps      `json:"capabilities"`
 	Started      time.Time `json:"started"`
 	Finished     time.Time `json:"finished"`
+}
+
+type CachedSession struct {
+	Quota     string
+	Caps      Caps
+	URL       *url.URL
+	HostPort  HostPort
+	Timeout   time.Duration
+	Started   time.Time
+	TaskID    string
+	Workspace string
+}
+
+func CreateSessionFromCache(sessionID string) (*Session, error) {
+	result, err := config.RedisConnection.Get(context.Background(), sessionID).Result()
+	if err == redis.Nil {
+		return nil, &utils.SeleniumError{
+			ResponseStatus: http.StatusNotFound,
+			SeleniumCode:   "invalid session id",
+			Message:        fmt.Sprintf("Session with id %s not found in active sessions.", sessionID),
+			Err:            err,
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	s := CachedSession{}
+	err = json.Unmarshal([]byte(result), &s)
+	if err != nil {
+		return nil, err
+	}
+
+	seleniumSession := Session{
+		Quota:     s.Quota,
+		Caps:      s.Caps,
+		URL:       s.URL,
+		HostPort:  s.HostPort,
+		Started:   s.Started,
+		TaskID:    s.TaskID,
+		Workspace: s.Workspace,
+	}
+	// seleniumSession.Cancel = RemoveTask(s.TaskID)
+	return &seleniumSession, nil
+}
+
+func CloseSession(workspace string, sessionID string) {
+	sess, err := CreateSessionFromCache(sessionID)
+	if err != nil {
+		log.WithError(err).Error("Failed to get session from cache")
+		return
+	}
+	defer sess.Cancel()
+
+	client := http.Client{}
+	sess.URL.Path = path.Clean(sess.URL.Path + fmt.Sprintf("/session/%s", sessionID))
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), config.SessionDeleteTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(timeoutCtx, http.MethodDelete, sess.URL.String(), nil)
+	if err != nil {
+		log.WithError(err).Error("Failed to create request")
+		return
+	}
+
+	log.WithFields(log.Fields{
+		"method": req.Method,
+		"url":    req.URL,
+	}).Debug("Closing session.")
+	resp, err := client.Do(req)
+	if err != nil {
+		log.WithError(err).Error("Failed to cancel driver session")
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		log.WithField("statusCode", resp.Status).Error("Cancel request returned not success status code")
+		return
+	}
+
+	if config.ZebrunnerIsIntegrated() {
+		go zebrunner.SendSessionDuration(workspace, time.Since(sess.Started))
+	}
+	_, err = config.RedisConnection.Del(context.Background(), sessionID).Result()
+	if err != nil {
+		log.WithError(err).Error("Failed to delete session from redis")
+		return
+	}
+	log.WithField("sessionID", sessionID).Info("Session closed.")
+}
+
+func (s CachedSession) MarshalBinary() ([]byte, error) {
+	return json.Marshal(s)
 }

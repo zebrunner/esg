@@ -20,7 +20,6 @@ import (
 
 	"github.com/aerokube/util"
 	"github.com/gin-gonic/gin"
-	"github.com/go-redis/redis/v8"
 	"github.com/imdario/mergo"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
@@ -28,6 +27,7 @@ import (
 	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
+	"github.com/zebrunner/esg/zebrunner"
 	"golang.org/x/net/websocket"
 )
 
@@ -46,7 +46,6 @@ var (
 		},
 	}
 	manager service.Manager
-	RDB     *redis.Client
 )
 
 func InitManager() {
@@ -58,53 +57,6 @@ func InitManager() {
 	manager = &service.DefaultManager{Environment: &environment}
 }
 
-type CachedSession struct {
-	Quota     string
-	Caps      selenium.Caps
-	URL       *url.URL
-	HostPort  selenium.HostPort
-	Timeout   time.Duration
-	Started   time.Time
-	TaskID    string
-	Workspace string
-}
-
-func (s CachedSession) MarshalBinary() ([]byte, error) {
-	return json.Marshal(s)
-}
-
-func CreateSessionFromCache(sessionID string) (*selenium.Session, error) {
-	result, err := RDB.Get(context.Background(), sessionID).Result()
-	if err == redis.Nil {
-		return nil, &utils.SeleniumError{
-			ResponseStatus: http.StatusNotFound,
-			SeleniumCode:   "invalid session id",
-			Message:        fmt.Sprintf("Session with id %s not found in active sessions.", sessionID),
-			Err:            err,
-		}
-	}
-	if err != nil {
-		return nil, err
-	}
-	s := CachedSession{}
-	err = json.Unmarshal([]byte(result), &s)
-	if err != nil {
-		return nil, err
-	}
-
-	seleniumSession := selenium.Session{
-		Quota:     s.Quota,
-		Caps:      s.Caps,
-		URL:       s.URL,
-		HostPort:  s.HostPort,
-		Started:   s.Started,
-		TaskID:    s.TaskID,
-		Workspace: s.Workspace,
-	}
-	seleniumSession.Cancel = RemoveTask(s.TaskID)
-	return &seleniumSession, nil
-}
-
 func RemoveTask(taskID string) func() {
 	return func() {
 		service.RemoveTask(taskID)
@@ -112,7 +64,7 @@ func RemoveTask(taskID string) func() {
 }
 
 func CloseSession(workspace string, sessionID string) {
-	sess, err := CreateSessionFromCache(sessionID)
+	sess, err := selenium.CreateSessionFromCache(sessionID)
 	if err != nil {
 		log.WithError(err).Error("Failed to get session from cache")
 		return
@@ -145,9 +97,9 @@ func CloseSession(workspace string, sessionID string) {
 	}
 
 	if config.ZebrunnerIsIntegrated() {
-		go service.SendSessionDuration(workspace, time.Since(sess.Started))
+		go zebrunner.SendSessionDuration(workspace, time.Since(sess.Started))
 	}
-	_, err = RDB.Del(context.Background(), sessionID).Result()
+	_, err = config.RedisConnection.Del(context.Background(), sessionID).Result()
 	if err != nil {
 		log.WithError(err).Error("Failed to delete session from redis")
 		return
@@ -413,7 +365,7 @@ func Create(c *gin.Context) {
 		event.SessionStopped(event.StoppedSession{Event: e})
 	}
 	sess.Cancel = cancelAndRenameFiles
-	redisSession := CachedSession{
+	redisSession := selenium.CachedSession{
 		Quota:     sess.Quota,
 		Caps:      sess.Caps,
 		URL:       sess.URL,
@@ -422,7 +374,7 @@ func Create(c *gin.Context) {
 		TaskID:    startedService.TaskID,
 		Workspace: username,
 	}
-	err = RDB.Set(context.Background(), s.ID, redisSession, 0).Err()
+	err = config.RedisConnection.Set(context.Background(), s.ID, redisSession, 0).Err()
 	if err != nil {
 		fmt.Println("Session not cached", err)
 	}
@@ -446,7 +398,7 @@ func Proxy(c *gin.Context) {
 			fragments := strings.Split(r.URL.Path, slash)
 			sessionID := fragments[2]
 
-			sess, err := CreateSessionFromCache(sessionID)
+			sess, err := selenium.CreateSessionFromCache(sessionID)
 			if err != nil {
 				log.WithError(err).WithField("sessionID", sessionID).Error("Cant find session")
 				c.Error(err).SetType(gin.ErrorTypePublic)
@@ -461,9 +413,9 @@ func Proxy(c *gin.Context) {
 				}
 				cancel = sess.Cancel
 				if config.ZebrunnerIsIntegrated() {
-					go service.SendSessionDuration(sess.Workspace, time.Since(sess.Started))
+					go zebrunner.SendSessionDuration(sess.Workspace, time.Since(sess.Started))
 				}
-				RDB.Del(context.Background(), sessionID).Result()
+				config.RedisConnection.Del(context.Background(), sessionID).Result()
 				log.WithField("sessionID", sessionID).Info("Session deleted")
 			} else {
 				if len(fragments) == 4 && fragments[len(fragments)-1] == "file" && config.EnableFileUpload {
@@ -513,7 +465,7 @@ func Vnc(wsconn *websocket.Conn) {
 	defer wsconn.Close()
 	sid, _ := splitRequestPath(wsconn.Request().URL.Path)
 	l := log.WithField("sessionID", sid)
-	sess, err := CreateSessionFromCache(sid)
+	sess, err := selenium.CreateSessionFromCache(sid)
 
 	if err != nil {
 		l.WithError(err).Error("Session not found")
@@ -605,7 +557,7 @@ func Video(c *gin.Context) {
 func Downloads(c *gin.Context) {
 	sessionID := c.Param("session")
 	filename := c.Param("file")
-	sess, err := CreateSessionFromCache(sessionID)
+	sess, err := selenium.CreateSessionFromCache(sessionID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -624,7 +576,7 @@ func Downloads(c *gin.Context) {
 
 func Clipboard(c *gin.Context) {
 	sessionID := c.Param("session")
-	sess, err := CreateSessionFromCache(sessionID)
+	sess, err := selenium.CreateSessionFromCache(sessionID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -641,7 +593,7 @@ func Clipboard(c *gin.Context) {
 
 func Devtools(c *gin.Context) {
 	sessionID := c.Param("session")
-	sess, err := CreateSessionFromCache(sessionID)
+	sess, err := selenium.CreateSessionFromCache(sessionID)
 	if err != nil {
 		c.Error(err)
 		return

@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/service"
 
 	log "github.com/sirupsen/logrus"
@@ -50,28 +51,29 @@ func init() {
 }
 
 func ClearSessions() {
+	rdb := config.RedisConnection
 	for {
 		time.Sleep(config.Timeout)
-		keys, err := handlers.RDB.Keys(context.Background(), "*").Result()
+		keys, err := rdb.Keys(context.Background(), "*").Result()
 		if err != nil {
 			log.WithError(err).Error("Failed to get list of keys")
 			continue
 		}
 
 		for _, key := range keys {
-			idle, err := handlers.RDB.ObjectIdleTime(context.Background(), key).Result()
+			idle, err := rdb.ObjectIdleTime(context.Background(), key).Result()
 			if err != nil {
 				log.WithError(err).WithField("session", key).Error("Failed to get IDLE time for session.")
 				continue
 			}
 
-			result, err := handlers.RDB.Get(context.Background(), key).Result()
+			result, err := rdb.Get(context.Background(), key).Result()
 			if err != nil {
 				log.WithError(err).Error("Failed to get session from cache")
 				continue
 			}
 
-			s := handlers.CachedSession{}
+			s := selenium.CachedSession{}
 			err = json.Unmarshal([]byte(result), &s)
 			if err != nil {
 				log.WithError(err).Error("Failed to unmarshal redis response")
@@ -85,7 +87,7 @@ func ClearSessions() {
 			if idle > timeout {
 				log.WithField("task", s.TaskID).Info("Deleting task. Reason: idle timeout")
 				handlers.CloseSession(s.Workspace, key)
-				_, err = handlers.RDB.Del(context.Background(), key).Result()
+				_, err = rdb.Del(context.Background(), key).Result()
 				if err != nil {
 					log.WithError(err).WithField("session", key).Error("Failed to delete session from cache")
 				}
@@ -152,7 +154,7 @@ func main() {
 	if err != nil {
 		log.WithError(err).Fatal("Failed to init redis connection")
 	}
-	handlers.RDB = rdb
+	config.RedisConnection = rdb
 
 	if browsersFile != "" {
 		RefreshTaskDefinitionsFromFile(browsersFile)

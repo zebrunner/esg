@@ -146,14 +146,14 @@ func main() {
 	if err != nil {
 		log.WithError(err).Fatal("Failed to init DB client.")
 	}
-	service.DB = db
+	config.DbConnection = db
 	defer db.Close()
 
 	rdb, err := config.InitCache()
 	if err != nil {
 		log.WithError(err).Fatal("Failed to init Redis client")
 	}
-	handlers.RDB = rdb
+	config.RedisConnection = rdb
 	defer rdb.Close()
 
 	aws, err := service.InitAws()
