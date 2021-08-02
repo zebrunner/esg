@@ -26,8 +26,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/event"
+	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/service"
-	"github.com/zebrunner/esg/session"
 	"github.com/zebrunner/esg/utils"
 	"golang.org/x/net/websocket"
 )
@@ -46,9 +46,8 @@ var (
 			return http.ErrUseLastResponse
 		},
 	}
-	sessions = session.NewMap()
-	manager  service.Manager
-	RDB      *redis.Client
+	manager service.Manager
+	RDB     *redis.Client
 )
 
 func InitManager() {
@@ -66,9 +65,9 @@ type Request struct {
 
 type CachedSession struct {
 	Quota     string
-	Caps      session.Caps
+	Caps      selenium.Caps
 	URL       *url.URL
-	HostPort  session.HostPort
+	HostPort  selenium.HostPort
 	Timeout   time.Duration
 	Started   time.Time
 	TaskID    string
@@ -79,7 +78,7 @@ func (s CachedSession) MarshalBinary() ([]byte, error) {
 	return json.Marshal(s)
 }
 
-func CreateSessionFromCache(sessionID string) (*session.Session, error) {
+func CreateSessionFromCache(sessionID string) (*selenium.Session, error) {
 	result, err := RDB.Get(context.Background(), sessionID).Result()
 	if err == redis.Nil {
 		return nil, &utils.SeleniumError{
@@ -98,7 +97,7 @@ func CreateSessionFromCache(sessionID string) (*session.Session, error) {
 		return nil, err
 	}
 
-	seleniumSession := session.Session{
+	seleniumSession := selenium.Session{
 		Quota:     s.Quota,
 		Caps:      s.Caps,
 		URL:       s.URL,
@@ -264,10 +263,10 @@ func Create(c *gin.Context) {
 		return
 	}
 	var browser struct {
-		Caps    session.Caps `json:"desiredCapabilities"`
+		Caps    selenium.Caps `json:"desiredCapabilities"`
 		W3CCaps struct {
-			Caps       session.Caps    `json:"alwaysMatch"`
-			FirstMatch []*session.Caps `json:"firstMatch"`
+			Caps       selenium.Caps    `json:"alwaysMatch"`
+			FirstMatch []*selenium.Caps `json:"firstMatch"`
 		} `json:"capabilities"`
 	}
 	err = json.Unmarshal(body, &browser)
@@ -281,9 +280,9 @@ func Create(c *gin.Context) {
 	}
 	firstMatchCaps := browser.W3CCaps.FirstMatch
 	if len(firstMatchCaps) == 0 {
-		firstMatchCaps = append(firstMatchCaps, &session.Caps{})
+		firstMatchCaps = append(firstMatchCaps, &selenium.Caps{})
 	}
-	var caps session.Caps
+	var caps selenium.Caps
 	var starter service.Starter
 	for _, fmc := range firstMatchCaps {
 		caps = browser.Caps
@@ -406,7 +405,7 @@ func Create(c *gin.Context) {
 		}
 	}
 
-	sess := &session.Session{
+	sess := &selenium.Session{
 		Quota:    username,
 		Caps:     caps,
 		URL:      u,
@@ -424,7 +423,6 @@ func Create(c *gin.Context) {
 		event.SessionStopped(event.StoppedSession{Event: e})
 	}
 	sess.Cancel = cancelAndRenameFiles
-	sessions.Put(s.ID, sess)
 	redisSession := CachedSession{
 		Quota:     sess.Quota,
 		Caps:      sess.Caps,
@@ -527,7 +525,6 @@ func Proxy(c *gin.Context) {
 				if config.ZebrunnerIsIntegrated() {
 					go service.SendSessionDuration(sess.Workspace, time.Since(sess.Started))
 				}
-				sessions.Remove(sessionID)
 				RDB.Del(context.Background(), sessionID).Result()
 				log.WithField("sessionID", sessionID).Info("Session deleted")
 			} else {

@@ -1,6 +1,6 @@
 package event
 
-import "github.com/zebrunner/esg/session"
+import "github.com/zebrunner/esg/selenium"
 
 var (
 	fileCreatedListeners    []FileCreatedListener
@@ -14,7 +14,7 @@ type InitRequired interface {
 type Event struct {
 	RequestId uint64
 	SessionId string
-	Session   *session.Session
+	Session   *selenium.Session
 }
 
 type CreatedFile struct {

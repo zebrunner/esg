@@ -9,7 +9,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/zebrunner/esg/session"
+	"github.com/zebrunner/esg/selenium"
 )
 
 // Environment - all settings that influence browser startup
@@ -41,7 +41,7 @@ type ServiceBase struct {
 // StartedService - all started service properties
 type StartedService struct {
 	Url      *url.URL
-	HostPort session.HostPort
+	HostPort selenium.HostPort
 	TaskID   string
 	Cancel   func()
 }
@@ -53,7 +53,7 @@ type Starter interface {
 
 // Manager - interface to choose appropriate starter
 type Manager interface {
-	Find(caps session.Caps) (Starter, bool)
+	Find(caps selenium.Caps) (Starter, bool)
 }
 
 // DefaultManager - struct for default implementation
@@ -69,7 +69,7 @@ type Browser struct {
 }
 
 // Find - default implementation Manager interface
-func (m *DefaultManager) Find(caps session.Caps) (Starter, bool) {
+func (m *DefaultManager) Find(caps selenium.Caps) (Starter, bool) {
 	browser := caps.BrowserName()
 	version := strings.ToLower(caps.Version)
 

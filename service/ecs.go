@@ -16,7 +16,7 @@ import (
 
 	"github.com/aerokube/util"
 	"github.com/zebrunner/esg/config"
-	"github.com/zebrunner/esg/session"
+	"github.com/zebrunner/esg/selenium"
 
 	"strings"
 
@@ -38,7 +38,7 @@ var (
 type Task struct {
 	ServiceBase
 	Environment
-	session.Caps
+	selenium.Caps
 }
 
 type ecsPortConfig struct {
@@ -628,7 +628,7 @@ func parseResourceCapability(cap string, defaultValue int, capabilityName string
 	return resource, nil
 }
 
-func getEcsMemory(caps session.Caps) (int64, error) {
+func getEcsMemory(caps selenium.Caps) (int64, error) {
 	memory, err := parseResourceCapability(caps.Memory, config.MinMemory, "Memory")
 	if err != nil {
 		return 0, err
@@ -642,7 +642,7 @@ func getEcsMemory(caps session.Caps) (int64, error) {
 	return int64(memory), nil
 }
 
-func getEcsMemoryReservation(caps session.Caps) (int64, error) {
+func getEcsMemoryReservation(caps selenium.Caps) (int64, error) {
 	memoryReservation, err := parseResourceCapability(caps.MemoryReservation, config.MinMemoryReservation, "MemoryReservation")
 	if err != nil {
 		return 0, err
@@ -656,7 +656,7 @@ func getEcsMemoryReservation(caps session.Caps) (int64, error) {
 	return int64(memoryReservation), nil
 }
 
-func getEcsCpu(caps session.Caps) (int64, error) {
+func getEcsCpu(caps selenium.Caps) (int64, error) {
 	cpu, err := parseResourceCapability(caps.Cpu, config.MinCpu, "Cpu")
 	if err != nil {
 		return 0, err
@@ -670,13 +670,13 @@ func getEcsCpu(caps session.Caps) (int64, error) {
 	return int64(cpu), nil
 }
 
-func getTaskHostPort(caps session.Caps, taskIP string, pc *ecsPortConfig) session.HostPort {
+func getTaskHostPort(caps selenium.Caps, taskIP string, pc *ecsPortConfig) selenium.HostPort {
 	containerIP := taskIP
 	fn := func(containerPort int64) string {
 		return containerIP + ":" + strconv.FormatInt(containerPort, 10)
 	}
 
-	hp := session.HostPort{
+	hp := selenium.HostPort{
 		Selenium:   fn(pc.SeleniumPort),
 		Fileserver: fn(pc.FileserverPort),
 		Clipboard:  fn(pc.ClipboardPort),
