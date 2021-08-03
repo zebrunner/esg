@@ -19,16 +19,16 @@ services:
       max-size: "512m"
     restart: always
   management:
-    container_name: esg-worker
+    container_name: cluster-manager
     build:
       context: .
-      dockerfile: ./build/Dockerfile.worker
+      dockerfile: build/Dockerfile.management
     volumes:
       - "${HOME}/.aws:/root/.aws"
     links:
       - redis
     command:
-      - ./scripts/worker_entrypoint.sh
+      - ./scripts/management_entrypoint.sh
     restart: always
   db:
     image: postgres:13

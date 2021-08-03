@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -64,13 +65,14 @@ type Request struct {
 }
 
 type CachedSession struct {
-	Quota    string
-	Caps     session.Caps
-	URL      *url.URL
-	HostPort session.HostPort
-	Timeout  time.Duration
-	Started  time.Time
-	TaskID   string
+	Quota     string
+	Caps      session.Caps
+	URL       *url.URL
+	HostPort  session.HostPort
+	Timeout   time.Duration
+	Started   time.Time
+	TaskID    string
+	Workspace string
 }
 
 func (s CachedSession) MarshalBinary() ([]byte, error) {
@@ -96,16 +98,14 @@ func CreateSessionFromCache(sessionID string) (*session.Session, error) {
 		return nil, err
 	}
 
-	if err != nil {
-		return nil, err
-	}
 	seleniumSession := session.Session{
-		Quota:    s.Quota,
-		Caps:     s.Caps,
-		URL:      s.URL,
-		HostPort: s.HostPort,
-		Started:  s.Started,
-		TaskID:   s.TaskID,
+		Quota:     s.Quota,
+		Caps:      s.Caps,
+		URL:       s.URL,
+		HostPort:  s.HostPort,
+		Started:   s.Started,
+		TaskID:    s.TaskID,
+		Workspace: s.Workspace,
 	}
 	seleniumSession.Cancel = cancelAndRenameFiles(s.TaskID)
 	return &seleniumSession, nil
@@ -117,12 +117,12 @@ func cancelAndRenameFiles(taskID string) func() {
 	}
 }
 
-func Delete(taskId string) {
-	log.WithField("taskID", taskId).Info("Session timed out. Removing ECS task forcibly")
-	service.RemoveTask(taskId)
-}
+// func Delete(taskId string) {
+// 	log.WithField("taskID", taskId).Info("Session timed out. Removing ECS task forcibly")
+// 	service.RemoveTask(taskId)
+// }
 
-func CloseSession(sessionID string) {
+func CloseSession(workspace string, sessionID string) {
 	sess, err := CreateSessionFromCache(sessionID)
 	if err != nil {
 		log.WithError(err).Error("Failed to get session from cache")
@@ -155,6 +155,9 @@ func CloseSession(sessionID string) {
 		return
 	}
 
+	if config.ZebrunnerIsIntegrated() {
+		go service.SendSessionDuration(workspace, time.Since(sess.Started))
+	}
 	_, err = RDB.Del(context.Background(), sessionID).Result()
 	if err != nil {
 		log.WithError(err).Error("Failed to delete session from redis")
@@ -324,7 +327,12 @@ func Create(c *gin.Context) {
 		return
 	}
 
-	startedService, err := starter.StartWithCancel(username)
+	ctx, ctxCancel := context.WithTimeout(context.Background(), config.ServiceStartupTimeout)
+	defer ctxCancel()
+	startedService, err := starter.StartWithCancel(ctx, username)
+	if err == context.DeadlineExceeded {
+		err = errors.New("session startup timed out")
+	}
 	if err != nil {
 		l.WithError(err).Error("Service startup failed")
 		c.Error(creationError("Failed to start browser", err)).SetType(gin.ErrorTypePublic)
@@ -418,12 +426,13 @@ func Create(c *gin.Context) {
 	sess.Cancel = cancelAndRenameFiles
 	sessions.Put(s.ID, sess)
 	redisSession := CachedSession{
-		Quota:    sess.Quota,
-		Caps:     sess.Caps,
-		URL:      sess.URL,
-		HostPort: sess.HostPort,
-		Started:  sess.Started,
-		TaskID:   startedService.TaskID,
+		Quota:     sess.Quota,
+		Caps:      sess.Caps,
+		URL:       sess.URL,
+		HostPort:  sess.HostPort,
+		Started:   sess.Started,
+		TaskID:    startedService.TaskID,
+		Workspace: username,
 	}
 	err = RDB.Set(context.Background(), s.ID, redisSession, 0).Err()
 	if err != nil {
@@ -515,6 +524,9 @@ func Proxy(c *gin.Context) {
 					os.RemoveAll(filepath.Join(os.TempDir(), sessionID))
 				}
 				cancel = sess.Cancel
+				if config.ZebrunnerIsIntegrated() {
+					go service.SendSessionDuration(sess.Workspace, time.Since(sess.Started))
+				}
 				sessions.Remove(sessionID)
 				RDB.Del(context.Background(), sessionID).Result()
 				log.WithField("sessionID", sessionID).Info("Session deleted")

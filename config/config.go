@@ -24,7 +24,7 @@ var (
 	SessionDeleteTimeout  time.Duration
 	ServiceStartupTimeout time.Duration
 	VideoRecorderImage    string
-	LogLevel              string = "debug"
+	LogLevel              = "debug"
 
 	AwsRegion            string
 	AwsRetry             int
@@ -43,6 +43,10 @@ var (
 	DbConnectionString   string
 	TrustedMode          bool
 	Tenant               string
+
+	ZebrunnerHost                string
+	ZebrunnerIntegrationUser     string
+	ZebrunnerIntegrationPassword string
 )
 
 func ParseLogLevel() logrus.Level {
@@ -64,4 +68,8 @@ func ParseLogLevel() logrus.Level {
 	default:
 		return logrus.DebugLevel
 	}
+}
+
+func ZebrunnerIsIntegrated() bool {
+	return ZebrunnerHost != "" && ZebrunnerIntegrationUser != "" && ZebrunnerIntegrationPassword != "" && !TrustedMode
 }

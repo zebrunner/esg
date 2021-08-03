@@ -14,7 +14,6 @@ migrate -path migrations -database $DATABASE up
   -aws-retry 2 \
   -aws-cluster esg-dev \
   -aws-elastic-cache redis:6379 \
-  -aws-auto-scaling-group esg-dev-asg \
   -db-connection $DATABASE \
   -listen :4444 \
   -log-level debug \

@@ -42,6 +42,10 @@ func init() {
 	flag.IntVar(&config.MinCpu, "min-cpu", 1024, "AWS minimum CPU limitation for session")
 	flag.IntVar(&config.MaxCpu, "max-cpu", 4096, "AWS maximum CPU limitation for session")
 
+	flag.StringVar(&config.ZebrunnerHost, "zebrunner-host", "", "Host for zebrunner integration for this environment")
+	flag.StringVar(&config.ZebrunnerIntegrationUser, "zebrunner-integration-user", "", "User for zebrunner for current env")
+	flag.StringVar(&config.ZebrunnerIntegrationPassword, "zebrunner-integration-password", "", "Password for zebrunner for current env")
+
 	flag.Parse()
 }
 
@@ -61,20 +65,26 @@ func ClearSessions() {
 				continue
 			}
 
-			if idle > config.Timeout {
-				result, err := handlers.RDB.Get(context.Background(), key).Result()
-				if err != nil {
-					log.WithError(err).Error("Failed to get session from cache")
-					continue
-				}
-				s := handlers.CachedSession{}
-				err = json.Unmarshal([]byte(result), &s)
-				if err != nil {
-					log.WithError(err).Error("Failed to unmarshal redis response")
-					continue
-				}
+			result, err := handlers.RDB.Get(context.Background(), key).Result()
+			if err != nil {
+				log.WithError(err).Error("Failed to get session from cache")
+				continue
+			}
+
+			s := handlers.CachedSession{}
+			err = json.Unmarshal([]byte(result), &s)
+			if err != nil {
+				log.WithError(err).Error("Failed to unmarshal redis response")
+				continue
+			}
+
+			timeout := config.Timeout
+			if s.Caps.IdleTimeout != 0 {
+				timeout = time.Duration(s.Caps.IdleTimeout) * time.Second
+			}
+			if idle > timeout {
 				log.WithField("task", s.TaskID).Info("Deleting task. Reason: idle timeout")
-				handlers.CloseSession(key)
+				handlers.CloseSession(s.Workspace, key)
 				_, err = handlers.RDB.Del(context.Background(), key).Result()
 				if err != nil {
 					log.WithError(err).WithField("session", key).Error("Failed to delete session from cache")
@@ -106,7 +116,7 @@ func RefreshTaskDefinitions() {
 			log.WithError(err).WithField("family", family).Error("Failed to create task definitions")
 		}
 
-    time.Sleep(250 * time.Millisecond)
+		time.Sleep(250 * time.Millisecond)
 	}
 }
 

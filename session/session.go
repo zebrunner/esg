@@ -39,6 +39,7 @@ type Caps struct {
 	Memory                string            `json:"Memory,omitempty"`
 	MemoryReservation     string            `json:"MemoryReservation,omitempty"`
 	Cpu                   string            `json:"Cpu,omitempty"`
+	IdleTimeout           int               `json:"idleTimeout,omitempty"`
 }
 
 func (c *Caps) ProcessExtensionCapabilities() {
@@ -89,6 +90,7 @@ type Session struct {
 	Started   time.Time
 	Lock      sync.Mutex
 	TaskID    string
+	Workspace string
 }
 
 // HostPort - hold host-port values for all forwarded ports
