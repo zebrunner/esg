@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+
+	// "io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -27,7 +29,8 @@ import (
 	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
-	"github.com/zebrunner/esg/zebrunner"
+
+	// "github.com/zebrunner/esg/zebrunner"
 	"golang.org/x/net/websocket"
 )
 
@@ -145,8 +148,11 @@ func Create(c *gin.Context) {
 		"remote": remote,
 	})
 
+	var j interface{}
+	err := c.BindJSON(&j)
+
 	body, err := ioutil.ReadAll(c.Request.Body)
-	c.Request.Body.Close()
+	defer c.Request.Body.Close()
 	if err != nil {
 		l.WithError(err).Error("Failed to read request")
 		c.Error(creationError("Failed to read request", err)).SetType(gin.ErrorTypePublic)
@@ -159,10 +165,13 @@ func Create(c *gin.Context) {
 			FirstMatch []*selenium.Caps `json:"firstMatch"`
 		} `json:"capabilities"`
 	}
-	err = json.Unmarshal(body, &browser)
+
+	// var j interface{}
+	err = c.BindJSON(&browser)
+	err = c.BindJSON(&j)
 	if err != nil {
-		l.WithError(err).Error("Bad JSON format")
-		c.Error(creationError("Bad JSON fromat", err)).SetType(gin.ErrorTypePublic)
+		l.WithError(err).Error("Failed to bind json to browser struct")
+		c.Error(creationError("Bad JSON format", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
 	if browser.W3CCaps.Caps.BrowserName() != "" && browser.Caps.BrowserName() == "" {
@@ -338,6 +347,11 @@ func Proxy(c *gin.Context) {
 			fragments := strings.Split(r.URL.Path, "/")
 			sessionID := fragments[2]
 
+			workspace, _, _ := c.Request.BasicAuth()
+			if workspace == "" {
+				workspace = "zebrunner"
+			}
+
 			sess, err := selenium.CreateSessionFromCache(sessionID)
 			if err != nil {
 				log.WithError(err).WithField("sessionID", sessionID).Error("Cant find session")
@@ -345,17 +359,8 @@ func Proxy(c *gin.Context) {
 				return
 			}
 
-			sess.Lock.Lock()
-			defer sess.Lock.Unlock()
 			if r.Method == http.MethodDelete && len(fragments) == 3 {
-				if config.EnableFileUpload {
-					os.RemoveAll(filepath.Join(os.TempDir(), sessionID))
-				}
-				defer service.RemoveTask(sess.TaskID)
-				if config.ZebrunnerIsIntegrated() {
-					go zebrunner.SendSessionDuration(sess.Workspace, time.Since(sess.Started))
-				}
-				config.RedisConnection.Del(context.Background(), sessionID).Result()
+				selenium.CloseSession(workspace, sessionID)
 				log.WithField("sessionID", sessionID).Info("Session deleted")
 			} else {
 				if len(fragments) == 4 && fragments[len(fragments)-1] == "file" && config.EnableFileUpload {
