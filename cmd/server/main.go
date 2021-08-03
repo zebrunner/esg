@@ -30,7 +30,7 @@ func init() {
 	flag.DurationVar(&config.Timeout, "timeout", 60*time.Second, "Session idle timeout in time.Duration format")
 	flag.DurationVar(&config.MaxTimeout, "max-timeout", 1*time.Hour, "Maximum valid session idle timeout in time.Duration format")
 	flag.DurationVar(&config.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
-	flag.DurationVar(&config.ServiceStartupTimeout, "service-startup-timeout", 3*time.Minute, "Service startup timeout in time.Duration format")
+	flag.DurationVar(&config.ServiceStartupTimeout, "service-startup-timeout", 4*time.Minute, "Service startup timeout in time.Duration format")
 	flag.StringVar(&config.VideoRecorderImage, "video-recorder-image", "selenoid/video-recorder:latest-release", "Image to use as video recorder")
 	flag.DurationVar(&gracefulPeriod, "graceful-period", 300*time.Second, "graceful shutdown period in time.Duration format, e.g. 300s or 500ms")
 	// AWS Related args
