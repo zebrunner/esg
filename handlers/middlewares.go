@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -109,6 +110,31 @@ func Authentication(c *gin.Context) {
 	err := service.CheckAuth(username, password)
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{
+			"client":   c.ClientIP(),
+			"user":     username,
+			"password": password,
+		}).Warn("Failed to authenticate user")
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"message": "Provided credentials not valid",
+		})
+		c.Abort()
+		return
+	}
+}
+
+func APIAuthentication(c *gin.Context) {
+	username, password, ok := c.Request.BasicAuth()
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"message": "Auth credentials not found",
+		})
+		log.WithField("client", c.ClientIP()).Warn("Auth credentials not found")
+		c.Abort()
+		return
+	}
+
+	if username != "root" || password != os.Getenv("API_ACCESS_KEY") {
+		log.WithFields(log.Fields{
 			"client":   c.ClientIP(),
 			"user":     username,
 			"password": password,
