@@ -48,7 +48,7 @@ func APIError(c *gin.Context) {
 func SeleniumError(c *gin.Context) {
 	// Add sessionID to gin context for logging purposes
 	path := c.Request.URL.Path
-	if strings.HasPrefix(path, "/wd/hub/session") && len(strings.Split(path, "")) >= 3 {
+	if strings.HasPrefix(path, "/wd/hub/session") && len(strings.Split(path, "/")) >= 3 {
 		sessionID := strings.Split(path, "/")[2]
 		c.Set("sessionID", sessionID)
 	}
