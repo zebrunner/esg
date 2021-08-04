@@ -289,7 +289,7 @@ func (d *Task) RunTask(ctx context.Context, family string, username string) (tas
 	for i := 0; i < 25; i++ {
 		select {
 		case <-ctx.Done():
-			return
+			return "", ctx.Err()
 		default:
 		}
 		// Trying to minimize random sleep this needs performance test. If it doesn't works return old sleep.
