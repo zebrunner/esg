@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -49,6 +50,13 @@ func DeleteUser(c *gin.Context) {
 	}
 	err := service.DeleteUser(username)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			c.Error(&utils.HTTPError{
+				Status:  http.StatusNotFound,
+				Message: "User not found",
+			}).SetType(gin.ErrorTypePublic)
+			return
+		}
 		c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
@@ -66,6 +74,13 @@ func RefreshToken(c *gin.Context) {
 	}
 	password, err := service.RefreshToken(user)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			c.Error(&utils.HTTPError{
+				Status:  http.StatusNotFound,
+				Message: "User not found",
+			}).SetType(gin.ErrorTypePublic)
+			return
+		}
 		c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
@@ -96,6 +111,13 @@ func UserActivation(c *gin.Context) {
 
 	err = service.ActivationUser(user, body.IsActive)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			c.Error(&utils.HTTPError{
+				Status:  http.StatusNotFound,
+				Message: "User not found",
+			}).SetType(gin.ErrorTypePublic)
+			return
+		}
 		c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
