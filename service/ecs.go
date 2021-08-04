@@ -215,12 +215,9 @@ func CreateTaskDefinition(browser string, family string) (taskDefinition *ecs.Ta
 func (d *Task) RunTask(ctx context.Context, family string, username string) (taskArn string, returnErr error) {
 	svc := ecs.New(AwsSess)
 
-	memory, memErr := getEcsMemory(d.Caps)
-	memoryReservation, memResErr := getEcsMemoryReservation(d.Caps)
-	cpu, cpuErr := getEcsCpu(d.Caps)
-	if memErr != nil || memResErr != nil || cpuErr != nil {
-		return "", fmt.Errorf("error happend while parsing resources. Errors: [%v, %v, %v]", memErr, memResErr, cpuErr)
-	}
+	memory := d.Caps.Memory()
+	memoryReservation := d.Caps.Memory()
+	cpu := d.Caps.Cpu()
 
 	browserContainerName := "browser"
 	id := uuid.New().String()
@@ -235,7 +232,7 @@ func (d *Task) RunTask(ctx context.Context, family string, username string) (tas
 				},
 				{
 					Name:  aws.String("ENABLE_VNC"),
-					Value: aws.String(strconv.FormatBool(d.Caps.VNC)),
+					Value: aws.String(strconv.FormatBool(d.Caps.EnableVNC)),
 				},
 			},
 			Cpu:               &cpu,
@@ -617,59 +614,6 @@ func getFailReason(svc *ecs.ECS, taskId string) (*string, error) {
 	return &resultReason, nil
 }
 
-func parseResourceCapability(cap string, defaultValue int, capabilityName string) (int, error) {
-	if cap == "" {
-		return defaultValue, nil
-	}
-	resource, err := strconv.Atoi(cap)
-	if err != nil {
-		return 0, fmt.Errorf("unexpected %s capability format. %v Expected integer, got: %v", capabilityName, err, cap)
-	}
-	return resource, nil
-}
-
-func getEcsMemory(caps selenium.Caps) (int64, error) {
-	memory, err := parseResourceCapability(caps.Memory, config.MinMemory, "Memory")
-	if err != nil {
-		return 0, err
-	}
-	if memory < config.MinMemory {
-		fmt.Println("[WARN] Requested Memory is lower than MinMemory. Using MinMemory as default. Requested:", memory, "MinMemory:", config.MinMemory)
-		return int64(config.MinMemory), nil
-	} else if memory > config.MaxMemory {
-		return 0, fmt.Errorf("Requested Memory is grater than MaxMemory allowed by system administrator. Requested: %d. MaxMemory: %d", memory, config.MaxMemory)
-	}
-	return int64(memory), nil
-}
-
-func getEcsMemoryReservation(caps selenium.Caps) (int64, error) {
-	memoryReservation, err := parseResourceCapability(caps.MemoryReservation, config.MinMemoryReservation, "MemoryReservation")
-	if err != nil {
-		return 0, err
-	}
-	if memoryReservation < config.MinMemoryReservation {
-		fmt.Println("[WARN] Requested MemoryReservation lower than MinMemoryReservation. Using MinMemoryReservation as default. Requested:", memoryReservation, "MinMemoryReservation:", config.MinMemoryReservation)
-		return int64(config.MinMemoryReservation), nil
-	} else if memoryReservation > config.MaxMemoryReservation {
-		return 0, fmt.Errorf("Requested MemoryReservation is grater than MaxMemoryReservation allowed by system administrator. Requested: %d. MaxMemory: %d", memoryReservation, config.MaxMemoryReservation)
-	}
-	return int64(memoryReservation), nil
-}
-
-func getEcsCpu(caps selenium.Caps) (int64, error) {
-	cpu, err := parseResourceCapability(caps.Cpu, config.MinCpu, "Cpu")
-	if err != nil {
-		return 0, err
-	}
-	if cpu < config.MinCpu {
-		fmt.Println("[WARN] Requested CPU lower than MinCpu. Using MinCpu as default. Requested:", cpu, "MinCpu:", config.MinCpu)
-		return int64(config.MinCpu), nil
-	} else if cpu > config.MaxCpu {
-		return 0, fmt.Errorf("Requested CPU is grater than MaxCpu allowed by system administrator. Requested: %d. MaxCpu: %d", cpu, config.MaxCpu)
-	}
-	return int64(cpu), nil
-}
-
 func getTaskHostPort(caps selenium.Caps, taskIP string, pc *ecsPortConfig) selenium.HostPort {
 	containerIP := taskIP
 	fn := func(containerPort int64) string {
@@ -683,7 +627,7 @@ func getTaskHostPort(caps selenium.Caps, taskIP string, pc *ecsPortConfig) selen
 		Devtools:   fn(pc.DevtoolsPort),
 	}
 
-	if caps.VNC {
+	if caps.EnableVNC {
 		hp.VNC = fn(pc.VNCPort)
 	}
 

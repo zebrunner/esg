@@ -12,74 +12,11 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/imdario/mergo"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/utils"
 	"github.com/zebrunner/esg/zebrunner"
 )
-
-// Caps - user capabilities
-type Caps struct {
-	Name                  string            `json:"browserName,omitempty"`
-	DeviceName            string            `json:"deviceName,omitempty"`
-	Version               string            `json:"version,omitempty"`
-	W3CVersion            string            `json:"browserVersion,omitempty"`
-	Platform              string            `json:"platform,omitempty"`
-	W3CPlatform           string            `json:"platformName,omitempty"`
-	ScreenResolution      string            `json:"screenResolution,omitempty"`
-	Skin                  string            `json:"skin,omitempty"`
-	VNC                   bool              `json:"enableVNC,omitempty"`
-	Video                 bool              `json:"enableVideo,omitempty"`
-	Log                   bool              `json:"enableLog,omitempty"`
-	VideoScreenSize       string            `json:"videoScreenSize,omitempty"`
-	VideoFrameRate        uint16            `json:"videoFrameRate,omitempty"`
-	VideoCodec            string            `json:"videoCodec,omitempty"`
-	LogName               string            `json:"logName,omitempty"`
-	TestName              string            `json:"name,omitempty"`
-	TimeZone              string            `json:"timeZone,omitempty"`
-	ContainerHostname     string            `json:"containerHostname,omitempty"`
-	Env                   []string          `json:"env,omitempty"`
-	ApplicationContainers []string          `json:"applicationContainers,omitempty"`
-	HostsEntries          []string          `json:"hostsEntries,omitempty"`
-	DNSServers            []string          `json:"dnsServers,omitempty"`
-	Labels                map[string]string `json:"labels,omitempty"`
-	SessionTimeout        string            `json:"sessionTimeout,omitempty"`
-	S3KeyPattern          string            `json:"s3KeyPattern,omitempty"`
-	ExtensionCapabilities *Caps             `json:"selenoid:options,omitempty"`
-	Memory                string            `json:"Memory,omitempty"`
-	MemoryReservation     string            `json:"MemoryReservation,omitempty"`
-	Cpu                   string            `json:"Cpu,omitempty"`
-	IdleTimeout           int               `json:"idleTimeout,omitempty"`
-}
-
-func (c *Caps) ProcessExtensionCapabilities() {
-	if c.W3CVersion != "" {
-		c.Version = c.W3CVersion
-	}
-	if c.W3CPlatform != "" {
-		c.Platform = c.W3CPlatform
-	}
-
-	if c.ExtensionCapabilities != nil {
-		err := mergo.Merge(c, *c.ExtensionCapabilities, mergo.WithOverride) //We probably need to handle returned error
-		if err != nil {
-			return
-		}
-
-		//According to Selenium standard vendor-specific capabilities for
-		//intermediary node should not be proxied to endpoint node
-		c.ExtensionCapabilities = nil
-	}
-}
-
-func (c *Caps) BrowserName() string {
-	browserName := c.Name
-	if browserName != "" {
-		return browserName
-	}
-	return c.DeviceName
-}
 
 // Container - container information
 type Container struct {

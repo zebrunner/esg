@@ -25,7 +25,6 @@ import (
 	"github.com/imdario/mergo"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
-	"github.com/zebrunner/esg/event"
 	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
@@ -113,6 +112,8 @@ func Create(c *gin.Context) {
 	sessionStartTime := time.Now()
 	username, password, ok := c.Request.BasicAuth()
 	remote := c.ClientIP()
+
+	// Authentication related logic
 	if config.TrustedMode {
 		username = "zebrunner"
 		ok = true
@@ -148,9 +149,7 @@ func Create(c *gin.Context) {
 		"remote": remote,
 	})
 
-	var j interface{}
-	err := c.BindJSON(&j)
-
+	// Capability processing/validation
 	body, err := ioutil.ReadAll(c.Request.Body)
 	defer c.Request.Body.Close()
 	if err != nil {
@@ -166,9 +165,7 @@ func Create(c *gin.Context) {
 		} `json:"capabilities"`
 	}
 
-	// var j interface{}
 	err = c.BindJSON(&browser)
-	err = c.BindJSON(&j)
 	if err != nil {
 		l.WithError(err).Error("Failed to bind json to browser struct")
 		c.Error(creationError("Bad JSON format", err)).SetType(gin.ErrorTypePublic)
@@ -189,7 +186,7 @@ func Create(c *gin.Context) {
 		if err != nil {
 			c.Error(err)
 		}
-		caps.ProcessExtensionCapabilities()
+		//caps.ProcessExtensionCapabilities()
 		if err != nil {
 			l.WithError(err).Error("Bas session timeout")
 			c.Error(creationError("Failed to parse `sessionTimeout` capability.", err)).SetType(gin.ErrorTypePublic)
@@ -312,16 +309,6 @@ func Create(c *gin.Context) {
 		Started:  time.Now(),
 	}
 
-	cancelAndRenameFiles := func() {
-		cancel()
-		sessionId := s.ID
-		e := event.Event{
-			SessionId: sessionId,
-			Session:   sess,
-		}
-		event.SessionStopped(event.StoppedSession{Event: e})
-	}
-	sess.Cancel = cancelAndRenameFiles
 	redisSession := selenium.CachedSession{
 		Quota:     sess.Quota,
 		Caps:      sess.Caps,

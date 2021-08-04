@@ -22,6 +22,7 @@ var (
 )
 
 func init() {
+	//rename to idle timeout
 	flag.DurationVar(&config.Timeout, "timeout", 60*time.Second, "Session idle timeout in time.Duration format")
 	// AWS Related args
 	flag.StringVar(&config.AwsRegion, "aws-region", "us-east-1", "AWS region name")
