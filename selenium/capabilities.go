@@ -129,9 +129,21 @@ func (c *Caps) Cpu() int64 {
 type RequestCaps struct {
 	DesiredCapabilities Caps `json:"desiredCapabilities"`
 	Capabilities        struct {
-		Caps       Caps    `json:"alwaysMatch"`
-		FirstMatch []*Caps `json:"firstMatch"`
+		AlwaysMatch Caps    `json:"alwaysMatch"`
+		FirstMatch  []*Caps `json:"firstMatch"`
 	} `json:"capabilities"`
+}
+
+func (rc *RequestCaps) ProcessRequestCaps() (Caps, error) {
+	// Method for processing and validation requested capabilities following W3C algorithm
+	// https://www.w3.org/TR/webdriver/#processing-capabilities
+	// Method should also validate capabilities and return validation error if some fields are invalid
+	requiredCapabilites := rc.Capabilities.FirstMatch
+	fmCapabilities := rc.
+
+
+
+	return caps, nil
 }
 
 //func (c *Caps) ProcessExtensionCapabilities() {

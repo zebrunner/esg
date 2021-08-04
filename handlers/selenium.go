@@ -150,71 +150,75 @@ func Create(c *gin.Context) {
 	})
 
 	// Capability processing/validation
-	body, err := ioutil.ReadAll(c.Request.Body)
-	defer c.Request.Body.Close()
-	if err != nil {
-		l.WithError(err).Error("Failed to read request")
-		c.Error(creationError("Failed to read request", err)).SetType(gin.ErrorTypePublic)
-		return
-	}
+	//body, err := ioutil.ReadAll(c.Request.Body)
+	//defer c.Request.Body.Close()
+	//if err != nil {
+	//	l.WithError(err).Error("Failed to read request")
+	//	c.Error(creationError("Failed to read request", err)).SetType(gin.ErrorTypePublic)
+	//	return
+	//}
 
 	requestCapabilities := selenium.RequestCaps{}
-	err = c.BindJSON(&requestCapabilities)
+	err := c.BindJSON(&requestCapabilities)
 	if err != nil {
 		l.WithError(err).Error("Failed to bind json to browser struct")
 		c.Error(creationError("Bad JSON format", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
-	if requestCapabilities.Capabilities.Caps.BrowserName() != "" && requestCapabilities.Capabilities.Caps.BrowserName() == "" {
-		requestCapabilities.DesiredCapabilities = requestCapabilities.Capabilities.Caps
-	}
-	firstMatchCaps := requestCapabilities.Capabilities.FirstMatch
-	if len(firstMatchCaps) == 0 {
-		firstMatchCaps = append(firstMatchCaps, &selenium.Caps{})
-	}
-	var caps selenium.Caps
-	var starter service.Starter
-	for _, fmc := range firstMatchCaps {
-		caps = requestCapabilities.DesiredCapabilities
-		err := mergo.Merge(&caps, *fmc)
-		if err != nil {
-			c.Error(err)
-		}
-		//caps.ProcessExtensionCapabilities()
-		if err != nil {
-			l.WithError(err).Error("Bas session timeout")
-			c.Error(creationError("Failed to parse `sessionTimeout` capability.", err)).SetType(gin.ErrorTypePublic)
-			return
-		}
 
-		resolution, err := caps.GetScreenResolution()
-		if err != nil {
-			l.WithError(err).WithField("resolution", caps.ScreenResolution).Error("Bad screen resolution")
-			c.Error(creationError("Failed to parse `resolution` capability", err)).SetType(gin.ErrorTypePublic)
-			return
-		}
-
-		caps.ScreenResolution = resolution
-		videoScreenSize, err := caps.GetVideoScreenSize()
-		if err != nil {
-			l.WithError(err).WithField("videoScreenSize", caps.VideoScreenSize).Error("Bad video screen size")
-			c.Error(creationError("Failed to parse `videoScreenSize` capability", err)).SetType(gin.ErrorTypePublic)
-			return
-		}
-		caps.VideoScreenSize = videoScreenSize
-		starter, ok = manager.Find(caps)
-		if ok {
-			break
-		}
-	}
-	if !ok {
-		l.WithFields(log.Fields{
-			"browserName":    caps.BrowserName(),
-			"browserVersion": caps.Version,
-		}).Error("Environment not available")
-		c.Error(creationError("Requested browser not available", nil)).SetType(gin.ErrorTypePublic)
+	sessionCaps, err := requestCapabilities.ProcessRequestCaps()
+	if err != nil {
+		// TODO: Return some error for a client
 		return
 	}
+	fmt.Println(sessionCaps)
+
+	//if requestCapabilities.Capabilities.Caps.BrowserName() != "" && requestCapabilities.Capabilities.Caps.BrowserName() == "" {
+	//	requestCapabilities.DesiredCapabilities = requestCapabilities.Capabilities.Caps
+	//}
+	//firstMatchCaps := requestCapabilities.Capabilities.FirstMatch
+	//if len(firstMatchCaps) == 0 {
+	//	firstMatchCaps = append(firstMatchCaps, &selenium.Caps{})
+	//}
+	//var caps selenium.Caps
+	//var starter service.Starter
+	//for _, fmc := range firstMatchCaps {
+	//	caps = requestCapabilities.DesiredCapabilities
+	//	err := mergo.Merge(&caps, *fmc)
+	//	if err != nil {
+	//		c.Error(err)
+	//	}
+	//	//caps.ProcessExtensionCapabilities()
+	//	if err != nil {
+	//		l.WithError(err).Error("Bas session timeout")
+	//		c.Error(creationError("Failed to parse `sessionTimeout` capability.", err)).SetType(gin.ErrorTypePublic)
+	//		return
+	//	}
+	//
+	//	resolution, err := caps.GetScreenResolution()
+	//	if err != nil {
+	//		l.WithError(err).WithField("resolution", caps.ScreenResolution).Error("Bad screen resolution")
+	//		c.Error(creationError("Failed to parse `resolution` capability", err)).SetType(gin.ErrorTypePublic)
+	//		return
+	//	}
+	//
+	//	caps.ScreenResolution = resolution
+	//	videoScreenSize, err := caps.GetVideoScreenSize()
+	//	if err != nil {
+	//		l.WithError(err).WithField("videoScreenSize", caps.VideoScreenSize).Error("Bad video screen size")
+	//		c.Error(creationError("Failed to parse `videoScreenSize` capability", err)).SetType(gin.ErrorTypePublic)
+	//		return
+	//	}
+	starter, ok := manager.Find(sessionCaps)
+	//}
+	//if !ok {
+	//	l.WithFields(log.Fields{
+	//		"browserName":    caps.BrowserName(),
+	//		"browserVersion": caps.Version,
+	//	}).Error("Environment not available")
+	//	c.Error(creationError("Requested browser not available", nil)).SetType(gin.ErrorTypePublic)
+	//	return
+	//}
 
 	ctx, ctxCancel := context.WithTimeout(context.Background(), config.ServiceStartupTimeout)
 	defer ctxCancel()
@@ -297,7 +301,7 @@ func Create(c *gin.Context) {
 
 	sess := &selenium.Session{
 		Quota:    username,
-		Caps:     caps,
+		Caps:     sessionCaps,
 		URL:      u,
 		HostPort: startedService.HostPort,
 		Started:  time.Now(),
