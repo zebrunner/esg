@@ -177,6 +177,7 @@ func createSession(ctx context.Context, sessionUrl string, header http.Header, b
 			req.Header.Add(key, value)
 		}
 	}
+        req.Host = "localhost"
 	req.Header.Del("Accept-Encoding")
 	ctx, cancel := context.WithTimeout(ctx, config.Timeout)
 	defer cancel()
@@ -357,6 +358,7 @@ func Create(c *gin.Context) {
 			"serviceUrl": u,
 			"attempt":    i,
 		}).Info("Session attempted")
+
 		resp, status := createSession(c.Request.Context(), c.Request.URL.String(), c.Request.Header, body)
 		select {
 		case <-c.Request.Context().Done():
