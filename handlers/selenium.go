@@ -157,31 +157,25 @@ func Create(c *gin.Context) {
 		c.Error(creationError("Failed to read request", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
-	var browser struct {
-		Caps    selenium.Caps `json:"desiredCapabilities"`
-		W3CCaps struct {
-			Caps       selenium.Caps    `json:"alwaysMatch"`
-			FirstMatch []*selenium.Caps `json:"firstMatch"`
-		} `json:"capabilities"`
-	}
 
-	err = c.BindJSON(&browser)
+	requestCapabilities := selenium.RequestCaps{}
+	err = c.BindJSON(&requestCapabilities)
 	if err != nil {
 		l.WithError(err).Error("Failed to bind json to browser struct")
 		c.Error(creationError("Bad JSON format", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
-	if browser.W3CCaps.Caps.BrowserName() != "" && browser.Caps.BrowserName() == "" {
-		browser.Caps = browser.W3CCaps.Caps
+	if requestCapabilities.Capabilities.Caps.BrowserName() != "" && requestCapabilities.Capabilities.Caps.BrowserName() == "" {
+		requestCapabilities.DesiredCapabilities = requestCapabilities.Capabilities.Caps
 	}
-	firstMatchCaps := browser.W3CCaps.FirstMatch
+	firstMatchCaps := requestCapabilities.Capabilities.FirstMatch
 	if len(firstMatchCaps) == 0 {
 		firstMatchCaps = append(firstMatchCaps, &selenium.Caps{})
 	}
 	var caps selenium.Caps
 	var starter service.Starter
 	for _, fmc := range firstMatchCaps {
-		caps = browser.Caps
+		caps = requestCapabilities.DesiredCapabilities
 		err := mergo.Merge(&caps, *fmc)
 		if err != nil {
 			c.Error(err)

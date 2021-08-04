@@ -127,6 +127,11 @@ func (c *Caps) Cpu() int64 {
 }
 
 type RequestCaps struct {
+	DesiredCapabilities Caps `json:"desiredCapabilities"`
+	Capabilities        struct {
+		Caps       Caps    `json:"alwaysMatch"`
+		FirstMatch []*Caps `json:"firstMatch"`
+	} `json:"capabilities"`
 }
 
 //func (c *Caps) ProcessExtensionCapabilities() {
