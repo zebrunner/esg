@@ -4,11 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"github.com/aerokube/util"
+	"github.com/gin-gonic/gin"
+	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/config"
+	"github.com/zebrunner/esg/selenium"
+	"github.com/zebrunner/esg/service"
+	"github.com/zebrunner/esg/utils"
 	"io"
-	"io/ioutil"
-
 	// "io/ioutil"
 	"net"
 	"net/http"
@@ -18,16 +22,6 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"time"
-
-	"github.com/aerokube/util"
-	"github.com/gin-gonic/gin"
-	"github.com/imdario/mergo"
-	log "github.com/sirupsen/logrus"
-	"github.com/zebrunner/esg/config"
-	"github.com/zebrunner/esg/selenium"
-	"github.com/zebrunner/esg/service"
-	"github.com/zebrunner/esg/utils"
 
 	// "github.com/zebrunner/esg/zebrunner"
 	"golang.org/x/net/websocket"
@@ -109,7 +103,7 @@ func creationError(msg string, err error) *utils.SeleniumError {
 }
 
 func Create(c *gin.Context) {
-	sessionStartTime := time.Now()
+	//sessionStartTime := time.Now()
 	username, password, ok := c.Request.BasicAuth()
 	remote := c.ClientIP()
 
@@ -158,21 +152,23 @@ func Create(c *gin.Context) {
 	//	return
 	//}
 
-	requestCapabilities := selenium.RequestCaps{}
-	err := c.BindJSON(&requestCapabilities)
+	var body map[string]interface{}
+	err := c.BindJSON(body)
 	if err != nil {
 		l.WithError(err).Error("Failed to bind json to browser struct")
 		c.Error(creationError("Bad JSON format", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
 
-	sessionCaps, err := requestCapabilities.ProcessRequestCaps()
+	configuration := selenium.GetContainerConfiguration(body)
+	body = selenium.UpdateCapabilities(body)
 	if err != nil {
 		// TODO: Return some error for a client
 		return
 	}
-	fmt.Println(sessionCaps)
+	fmt.Println(configuration)
 
+	//
 	//if requestCapabilities.Capabilities.Caps.BrowserName() != "" && requestCapabilities.Capabilities.Caps.BrowserName() == "" {
 	//	requestCapabilities.DesiredCapabilities = requestCapabilities.Capabilities.Caps
 	//}
@@ -209,7 +205,7 @@ func Create(c *gin.Context) {
 	//		c.Error(creationError("Failed to parse `videoScreenSize` capability", err)).SetType(gin.ErrorTypePublic)
 	//		return
 	//	}
-	starter, ok := manager.Find(sessionCaps)
+	//starter, ok := manager.Find(sessionCaps)
 	//}
 	//if !ok {
 	//	l.WithFields(log.Fields{
@@ -220,110 +216,110 @@ func Create(c *gin.Context) {
 	//	return
 	//}
 
-	ctx, ctxCancel := context.WithTimeout(context.Background(), config.ServiceStartupTimeout)
-	defer ctxCancel()
-	startedService, err := starter.StartWithCancel(ctx, username)
-	if err == context.DeadlineExceeded {
-		err = errors.New("session startup timed out")
-	}
-	if err != nil {
-		l.WithError(err).Error("Service startup failed")
-		c.Error(creationError("Failed to start browser", err)).SetType(gin.ErrorTypePublic)
-		return
-	}
-	l.WithField("taskID", startedService.TaskID).Info("Service started successfully")
-	u := startedService.Url
-	cancel := startedService.Cancel
-	i := 1
-
-	var s struct {
-		Value struct {
-			ID string `json:"sessionId"`
-		}
-		ID string `json:"sessionId"`
-	}
-	for ; ; i++ {
-		c.Request.URL.Host, c.Request.URL.Path = u.Host, path.Join(u.Path, c.Request.URL.Path)
-		c.Request.URL.Scheme = "http"
-
-		l.WithFields(log.Fields{
-			"serviceUrl": u,
-			"attempt":    i,
-		}).Info("Session attempted")
-		resp, status := createSession(c.Request.Context(), c.Request.URL.String(), c.Request.Header, body)
-		select {
-		case <-c.Request.Context().Done():
-			l.Info("Client disconnected")
-			cancel()
-			return
-		default:
-		}
-		if status == browserStarted {
-			sess, ok := resp["sessionId"].(string)
-			if !ok {
-				protocolError := func() {
-					l.Error("Bad response")
-					c.Error(creationError("Protocol error", nil))
-				}
-				value, ok := resp["value"]
-				if !ok {
-					protocolError()
-					cancel()
-					return
-				}
-				valueMap, ok := value.(map[string]interface{})
-				if !ok {
-					protocolError()
-					cancel()
-					return
-				}
-				sess, ok = valueMap["sessionId"].(string)
-				if !ok {
-					protocolError()
-					cancel()
-					return
-				}
-				s.ID = sess
-				resp["value"].(map[string]interface{})["sessionId"] = s.ID
-			} else {
-				sess, _ := resp["sessionId"].(string)
-				s.ID = sess
-				resp["sessionId"] = s.ID
-			}
-			c.JSON(http.StatusOK, resp)
-			break
-		} else {
-			l.Warn("Session failed")
-			cancel()
-			return
-		}
-	}
-
-	sess := &selenium.Session{
-		Quota:    username,
-		Caps:     sessionCaps,
-		URL:      u,
-		HostPort: startedService.HostPort,
-		Started:  time.Now(),
-	}
-
-	redisSession := selenium.CachedSession{
-		Quota:     sess.Quota,
-		Caps:      sess.Caps,
-		URL:       sess.URL,
-		HostPort:  sess.HostPort,
-		Started:   sess.Started,
-		TaskID:    startedService.TaskID,
-		Workspace: username,
-	}
-	err = config.RedisConnection.Set(context.Background(), s.ID, redisSession, 0).Err()
-	if err != nil {
-		fmt.Println("Session not cached", err)
-	}
-	l.WithFields(log.Fields{
-		"sessionID": s.ID,
-		"latency":   util.SecondsSince(sessionStartTime),
-	}).Info("Session created")
+	//ctx, ctxCancel := context.WithTimeout(context.Background(), config.ServiceStartupTimeout)
+	//defer ctxCancel()
+	//startedService, err := starter.StartWithCancel(ctx, username)
+	//if err == context.DeadlineExceeded {
+	//	err = errors.New("session startup timed out")
+	//}
+	//if err != nil {
+	//	l.WithError(err).Error("Service startup failed")
+	//	c.Error(creationError("Failed to start browser", err)).SetType(gin.ErrorTypePublic)
+	//	return
+	//}
+	//l.WithField("taskID", startedService.TaskID).Info("Service started successfully")
+	//u := startedService.Url
+	//cancel := startedService.Cancel
+	//i := 1
+	//
+	//var s struct {
+	//	Value struct {
+	//		ID string `json:"sessionId"`
+	//	}
+	//	ID string `json:"sessionId"`
+	//}
+	//for ; ; i++ {
+	//	c.Request.URL.Host, c.Request.URL.Path = u.Host, path.Join(u.Path, c.Request.URL.Path)
+	//	c.Request.URL.Scheme = "http"
+	//
+	//	l.WithFields(log.Fields{
+	//		"serviceUrl": u,
+	//		"attempt":    i,
+	//	}).Info("Session attempted")
+	//	resp, status := createSession(c.Request.Context(), c.Request.URL.String(), c.Request.Header, body)
+	//	select {
+	//	case <-c.Request.Context().Done():
+	//		l.Info("Client disconnected")
+	//		cancel()
+	//		return
+	//	default:
+	//	}
+	//	if status == browserStarted {
+	//		sess, ok := resp["sessionId"].(string)
+	//		if !ok {
+	//			protocolError := func() {
+	//				l.Error("Bad response")
+	//				c.Error(creationError("Protocol error", nil))
+	//			}
+	//			value, ok := resp["value"]
+	//			if !ok {
+	//				protocolError()
+	//				cancel()
+	//				return
+	//			}
+	//			valueMap, ok := value.(map[string]interface{})
+	//			if !ok {
+	//				protocolError()
+	//				cancel()
+	//				return
+	//			}
+	//			sess, ok = valueMap["sessionId"].(string)
+	//			if !ok {
+	//				protocolError()
+	//				cancel()
+	//				return
+	//			}
+	//			s.ID = sess
+	//			resp["value"].(map[string]interface{})["sessionId"] = s.ID
+	//		} else {
+	//			sess, _ := resp["sessionId"].(string)
+	//			s.ID = sess
+	//			resp["sessionId"] = s.ID
+	//		}
+	//		c.JSON(http.StatusOK, resp)
+	//		break
+	//	} else {
+	//		l.Warn("Session failed")
+	//		cancel()
+	//		return
+	//	}
+	//}
+	//
+	//sess := &selenium.Session{
+	//	Quota:    username,
+	//	Caps:     sessionCaps,
+	//	URL:      u,
+	//	HostPort: startedService.HostPort,
+	//	Started:  time.Now(),
+	//}
+	//
+	//redisSession := selenium.CachedSession{
+	//	Quota:     sess.Quota,
+	//	Caps:      sess.Caps,
+	//	URL:       sess.URL,
+	//	HostPort:  sess.HostPort,
+	//	Started:   sess.Started,
+	//	TaskID:    startedService.TaskID,
+	//	Workspace: username,
+	//}
+	//err = config.RedisConnection.Set(context.Background(), s.ID, redisSession, 0).Err()
+	//if err != nil {
+	//	fmt.Println("Session not cached", err)
+	//}
+	//l.WithFields(log.Fields{
+	//	"sessionID": s.ID,
+	//	"latency":   util.SecondsSince(sessionStartTime),
+	//}).Info("Session created")
 }
 
 func Proxy(c *gin.Context) {
