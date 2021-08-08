@@ -30,7 +30,8 @@ type Container struct {
 // Session - holds session info
 type Session struct {
 	Quota     string
-	Caps      Caps
+	Conf      ContainerConfiguration
+	Caps      map[string]interface{}
 	URL       *url.URL
 	Container *Container
 	HostPort  HostPort
@@ -41,12 +42,11 @@ type Session struct {
 	Workspace string
 }
 
-var (
-	fullFormat  = regexp.MustCompile(`^([0-9]+x[0-9]+)x(8|16|24)$`)
-	shortFormat = regexp.MustCompile(`^[0-9]+x[0-9]+$`)
-)
-
-func (c *Caps) GetScreenResolution() (string, error) {
+func (c *ContainerConfiguration) GetScreenResolution() (string, error) {
+	var (
+		fullFormat  = regexp.MustCompile(`^([0-9]+x[0-9]+)x(8|16|24)$`)
+		shortFormat = regexp.MustCompile(`^[0-9]+x[0-9]+$`)
+	)
 	if c.ScreenResolution == "" {
 		return "1920x1080x24", nil
 	}
@@ -62,22 +62,15 @@ func (c *Caps) GetScreenResolution() (string, error) {
 	)
 }
 
-func (c *Caps) GetVideoScreenSize() (string, error) {
-	if c.VideoScreenSize != "" {
-		if shortFormat.MatchString(c.VideoScreenSize) {
-			return c.VideoScreenSize, nil
-		}
-		return "", fmt.Errorf(
-			"Malformed videoScreenSize capability: %s. Correct format is WxH (1920x1080).",
-			c.VideoScreenSize,
-		)
-	}
-
+func (c *ContainerConfiguration) GetVideoScreenSize() (string, error) {
 	screenResolution, err := c.GetScreenResolution()
 	if err != nil {
-		return "", fmt.Errorf("Failed to get screen resolution. %v", err)
+		return "", fmt.Errorf(
+			"Malformed screenResolution capability: %s. Correct format is WxH (1920x1080) or WxHxD (1920x1080x24).",
+			c.ScreenResolution,
+		)
 	}
-	return fullFormat.FindStringSubmatch(screenResolution)[1], nil
+	return screenResolution, nil
 }
 
 // HostPort - hold host-port values for all forwarded ports
@@ -89,17 +82,10 @@ type HostPort struct {
 	Devtools   string
 }
 
-// Metadata - session metadata saved to file
-type Metadata struct {
-	ID           string    `json:"id"`
-	Capabilities Caps      `json:"capabilities"`
-	Started      time.Time `json:"started"`
-	Finished     time.Time `json:"finished"`
-}
-
 type CachedSession struct {
 	Quota     string
-	Caps      Caps
+	Caps      map[string]interface{}
+	Conf      ContainerConfiguration
 	URL       *url.URL
 	HostPort  HostPort
 	Timeout   time.Duration

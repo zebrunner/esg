@@ -5,41 +5,36 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-
-	"github.com/aws/aws-sdk-go/service/ecrpublic"
-
-	"github.com/aws/aws-sdk-go/service/s3"
-
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aerokube/util"
-	"github.com/zebrunner/esg/config"
-	"github.com/zebrunner/esg/selenium"
-
-	"strings"
-
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/client"
 	awsSession "github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go/service/ecrpublic"
 	"github.com/aws/aws-sdk-go/service/ecs"
-
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/config"
+	"github.com/zebrunner/esg/selenium"
+)
+
+const (
+	SeleniumPort   = 4444
+	VncPort        = 5900
+	DevtoolsPort   = 7070
+	FileServerPort = 8080
+	ClipboardPort  = 9090
 )
 
 var (
 	AwsSess *awsSession.Session
 )
-
-// Task - ecs task container manager
-type Task struct {
-	ServiceBase
-	Environment
-	selenium.Caps
-}
 
 type ecsPortConfig struct {
 	SeleniumPort   int64
@@ -64,14 +59,6 @@ func InitAws() (*awsSession.Session, error) {
 
 	return sess, nil
 }
-
-const (
-	SeleniumPort   = 4444
-	VncPort        = 5900
-	DevtoolsPort   = 7070
-	FileServerPort = 8080
-	ClipboardPort  = 9090
-)
 
 func ListBrowsers() ([]string, error) {
 	sess, err := awsSession.NewSession(&aws.Config{
@@ -212,12 +199,12 @@ func CreateTaskDefinition(browser string, family string) (taskDefinition *ecs.Ta
 	return resultTaskDefinition.TaskDefinition, nil
 }
 
-func (d *Task) RunTask(ctx context.Context, family string, username string) (taskArn string, returnErr error) {
+func RunTask(ctx context.Context, conf selenium.ContainerConfiguration, family string, username string) (taskArn string, returnErr error) {
 	svc := ecs.New(AwsSess)
 
-	memory := d.Caps.Memory()
-	memoryReservation := d.Caps.Memory()
-	cpu := d.Caps.Cpu()
+	memory := conf.Memory()
+	memoryReservation := conf.Memory()
+	cpu := conf.Cpu()
 
 	browserContainerName := "browser"
 	id := uuid.New().String()
@@ -232,7 +219,7 @@ func (d *Task) RunTask(ctx context.Context, family string, username string) (tas
 				},
 				{
 					Name:  aws.String("ENABLE_VNC"),
-					Value: aws.String(strconv.FormatBool(d.Caps.EnableVNC)),
+					Value: aws.String(strconv.FormatBool(conf.EnableVNC)),
 				},
 			},
 			Cpu:               &cpu,
@@ -373,7 +360,7 @@ func FindHostPort(container *ecs.Container, containerPort int) int64 {
 	return 0
 }
 
-func (d *Task) GetStartedServiceInfo(taskArn string) (*StartedService, error) {
+func GetStartedServiceInfo(conf selenium.ContainerConfiguration, taskArn string) (*StartedService, error) {
 	svc := ecs.New(AwsSess)
 
 	taskId := strings.Split(taskArn, "/")[2]
@@ -453,11 +440,11 @@ func (d *Task) GetStartedServiceInfo(taskArn string) (*StartedService, error) {
 		DevtoolsPort:   FindHostPort(container, FileServerPort),
 	}
 
-	hostPort := getTaskHostPort(d.Caps, ipAddress, &portConfig)
+	hostPort := getTaskHostPort(conf, ipAddress, &portConfig)
 	log.WithField("hostPort", hostPort).Debug()
 	log.WithField("VNCPort", hostPort.VNC).Debug("VNC")
 
-	u := &url.URL{Scheme: "http", Host: hostPort.Selenium, Path: d.Service.Path}
+	u := &url.URL{Scheme: "http", Host: hostPort.Selenium, Path: conf.Browser().Path}
 	log.WithField("containerServiceUrl", u).Debug()
 
 	serviceStartTime := time.Now()
@@ -483,10 +470,9 @@ func (d *Task) GetStartedServiceInfo(taskArn string) (*StartedService, error) {
 	return &s, nil
 }
 
-// StartWithCancel - Starter interface implementation
-func (d *Task) StartWithCancel(ctx context.Context, username string) (*StartedService, error) {
+func StartWithCancel(ctx context.Context, conf selenium.ContainerConfiguration, username string) (*StartedService, error) {
 	svc := ecs.New(AwsSess)
-	parts := strings.Split(d.Service.Image, "/")
+	parts := strings.Split(conf.Browser().Image, "/")
 	browser := parts[len(parts)-1]
 	browser = strings.ReplaceAll(browser, ":", "-")
 	browser = strings.ReplaceAll(browser, ".", "-")
@@ -500,7 +486,7 @@ out:
 		default:
 		}
 		startTime := time.Now()
-		taskArn, err := d.RunTask(ctx, browser, username)
+		taskArn, err := RunTask(ctx, conf, browser, username)
 		log.WithField("latency", time.Since(startTime)).Info("RunTask delay")
 		if err != nil {
 			log.WithError(err).WithField("attempt", i).Error("Failed to run task")
@@ -523,7 +509,7 @@ out:
 		}
 
 		startTime = time.Now()
-		sessionInfo, err := d.GetStartedServiceInfo(taskArn)
+		sessionInfo, err := GetStartedServiceInfo(conf, taskArn)
 		log.WithField("latency", time.Since(startTime)).Info("GetStartedServiceInfo delay")
 		if err != nil {
 			RemoveTask(taskArn)
@@ -535,7 +521,7 @@ out:
 			continue
 		}
 
-		err = wait(ctx, sessionInfo.Url.String(), d.StartupTimeout)
+		err = wait(ctx, sessionInfo.Url.String(), config.ServiceStartupTimeout)
 		if err != nil {
 			RemoveTask(taskArn)
 			log.WithError(err).WithFields(log.Fields{
@@ -614,7 +600,7 @@ func getFailReason(svc *ecs.ECS, taskId string) (*string, error) {
 	return &resultReason, nil
 }
 
-func getTaskHostPort(caps selenium.Caps, taskIP string, pc *ecsPortConfig) selenium.HostPort {
+func getTaskHostPort(conf selenium.ContainerConfiguration, taskIP string, pc *ecsPortConfig) selenium.HostPort {
 	containerIP := taskIP
 	fn := func(containerPort int64) string {
 		return containerIP + ":" + strconv.FormatInt(containerPort, 10)
@@ -627,7 +613,7 @@ func getTaskHostPort(caps selenium.Caps, taskIP string, pc *ecsPortConfig) selen
 		Devtools:   fn(pc.DevtoolsPort),
 	}
 
-	if caps.EnableVNC {
+	if conf.EnableVNC {
 		hp.VNC = fn(pc.VNCPort)
 	}
 

@@ -81,8 +81,8 @@ func ClearSessions() {
 			}
 
 			timeout := config.Timeout
-			if s.Caps.IdleTimeout != 0 {
-				timeout = time.Duration(s.Caps.IdleTimeout) * time.Second
+			if s.Conf.IdleTimeout != 0 {
+				timeout = time.Duration(s.Conf.IdleTimeout) * time.Second
 			}
 			if idle > timeout {
 				log.WithField("task", s.TaskID).Info("Deleting task. Reason: idle timeout")

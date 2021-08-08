@@ -57,8 +57,6 @@ func init() {
 	flag.StringVar(&config.ZebrunnerIntegrationPassword, "zebrunner-integration-password", "", "Password for zebrunner for current env")
 
 	flag.Parse()
-
-	handlers.InitManager()
 }
 
 func ReverseProxy() gin.HandlerFunc {

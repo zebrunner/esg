@@ -5,15 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/aerokube/util"
-	"github.com/gin-gonic/gin"
-	log "github.com/sirupsen/logrus"
-	"github.com/zebrunner/esg/config"
-	"github.com/zebrunner/esg/selenium"
-	"github.com/zebrunner/esg/service"
-	"github.com/zebrunner/esg/utils"
 	"io"
-	// "io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -23,7 +15,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	// "github.com/zebrunner/esg/zebrunner"
+	"github.com/aerokube/util"
+	"github.com/gin-gonic/gin"
+	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/config"
+	"github.com/zebrunner/esg/selenium"
+	"github.com/zebrunner/esg/service"
+	"github.com/zebrunner/esg/utils"
 	"golang.org/x/net/websocket"
 )
 
@@ -39,17 +37,7 @@ var (
 			return http.ErrUseLastResponse
 		},
 	}
-	manager service.Manager
 )
-
-func InitManager() {
-	environment := service.Environment{
-		StartupTimeout:       config.ServiceStartupTimeout,
-		SessionDeleteTimeout: config.SessionDeleteTimeout,
-		VideoContainerImage:  config.VideoRecorderImage,
-	}
-	manager = &service.DefaultManager{Environment: &environment}
-}
 
 // create() method from ggr.
 func createSession(ctx context.Context, sessionUrl string, header http.Header, body []byte) (map[string]interface{}, int) {

@@ -1,47 +1,55 @@
 package selenium
 
 import (
-	"github.com/zebrunner/esg/config"
+	"fmt"
+	"strings"
 	"time"
+
+	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/config"
 )
 
 type ContainerConfiguration struct {
-	BrowserName string
-	BrowserVersion string
-	PlatformName string
-	Proxy map[string]interface{}
-	Timeouts string
-	EnableVNC bool
-	EnableVideo bool
-	EnableLog bool
+	BrowserName      string
+	BrowserVersion   string
+	PlatformName     string
+	Proxy            map[string]interface{}
+	Timeouts         string
+	EnableVNC        bool
+	EnableVideo      bool
+	EnableLog        bool
 	ScreenResolution string
-	DeviceName string
-	Skin string
-	CpuResource int64
-	MemoryResource int64
-	IdleTimeout time.Duration
-	VideoCodec string
-	TimeZone string
-	Env []string
-	HostEntries []string
-	DNSServers []string
+	DeviceName       string
+	Skin             string
+	CpuResource      int64
+	MemoryResource   int64
+	IdleTimeout      time.Duration
+	VideoCodec       string
+	TimeZone         string
+	Env              []string
+	HostEntries      []string
+	DNSServers       []string
 }
 
 type LegacyCaps struct {
-	Name string
+	Name     string
 	Platform string
-	Version string
+	Version  string
 }
 
-func GetContainerConfiguration(capabilities map[string]interface{}) *ContainerConfiguration {
+func GetContainerConfiguration(caps map[string]interface{}) *ContainerConfiguration {
 	// The method extracts capabilities used in configuring new task.
 
 	return nil
 }
 
-func UpdateCapabilities(capabilities map[string]interface{}) map[string]interface{} {
+func UpdateCapabilities(caps map[string]interface{}) map[string]interface{} {
 	// The method does some capabilities changes to support legacy capabilities, fix some grid  specific behavior
-	return capabilities
+	return caps
+}
+
+func PreprocessCapabilities(caps map[string]interface{}) map[string]interface{} {
+	return caps
 }
 
 func (c *ContainerConfiguration) Memory() int64 {
@@ -66,22 +74,53 @@ func (c *ContainerConfiguration) Cpu() int64 {
 	return cpu
 }
 
-//func (c *Caps) ProcessExtensionCapabilities() {
-//	if c.W3CVersion != "" {
-//		c.Version = c.W3CVersion
-//	}
-//	if c.W3CPlatform != "" {
-//		c.Platform = c.W3CPlatform
-//	}
-//
-//	if c.ExtensionCapabilities != nil {
-//		err := mergo.Merge(c, *c.ExtensionCapabilities, mergo.WithOverride) //We probably need to handle returned error
-//		if err != nil {
-//			return
-//		}
-//
-//		//According to Selenium standard vendor-specific capabilities for
-//		//intermediary node should not be proxied to endpoint node
-//		c.ExtensionCapabilities = nil
-//	}
-//}
+// Browser configuration
+type Browser struct {
+	Image string
+	Path  string
+	Port  int64
+}
+
+func (conf ContainerConfiguration) Browser() Browser {
+	browser := conf.BrowserName
+	version := strings.ToLower(conf.BrowserVersion)
+	log.WithFields(log.Fields{
+		"browser": browser,
+		"version": version,
+	}).Info("Locating service")
+
+	org := "public.ecr.aws/zebrunner" //public zebrunner ECR docker registry
+	if browser == "MicrosoftEdge" {
+		browser = "edge"
+	}
+
+	if browser == "operablink" {
+		browser = "opera"
+	}
+
+	useAsLatest := []string{
+		"null",
+		"latest",
+		"",
+	}
+
+	for _, item := range useAsLatest {
+		if item == version {
+			version = "latest"
+			break
+		}
+	}
+
+	image := fmt.Sprintf("%s/%s:%s", org, browser, version)
+
+	path := ""
+	if browser == "firefox" {
+		path = "/wd/hub"
+	}
+
+	return Browser{
+		Image: image,
+		Path:  path,
+		Port:  4444,
+	}
+}
