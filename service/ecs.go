@@ -219,7 +219,7 @@ func RunTask(ctx context.Context, conf selenium.ContainerConfiguration, family s
 				},
 				{
 					Name:  aws.String("ENABLE_VNC"),
-					Value: aws.String(strconv.FormatBool(conf.EnableVNC)),
+					Value: aws.String(strconv.FormatBool(conf.EnableVnc)),
 				},
 			},
 			Cpu:               &cpu,
@@ -470,7 +470,7 @@ func GetStartedServiceInfo(conf selenium.ContainerConfiguration, taskArn string)
 	return &s, nil
 }
 
-func StartWithCancel(ctx context.Context, conf selenium.ContainerConfiguration, username string) (*StartedService, error) {
+func StartDriver(ctx context.Context, conf selenium.ContainerConfiguration, username string) (*StartedService, error) {
 	svc := ecs.New(AwsSess)
 	parts := strings.Split(conf.Browser().Image, "/")
 	browser := parts[len(parts)-1]
@@ -613,7 +613,7 @@ func getTaskHostPort(conf selenium.ContainerConfiguration, taskIP string, pc *ec
 		Devtools:   fn(pc.DevtoolsPort),
 	}
 
-	if conf.EnableVNC {
+	if conf.EnableVnc {
 		hp.VNC = fn(pc.VNCPort)
 	}
 

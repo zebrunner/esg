@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -14,6 +15,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/aerokube/util"
 	"github.com/gin-gonic/gin"
@@ -25,12 +27,6 @@ import (
 	"golang.org/x/net/websocket"
 )
 
-const (
-	browserStarted = iota
-	browserFailed
-	seleniumError
-)
-
 var (
 	httpClient = &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -39,11 +35,10 @@ var (
 	}
 )
 
-// create() method from ggr.
-func createSession(ctx context.Context, sessionUrl string, header http.Header, body []byte) (map[string]interface{}, int) {
+func startSession(ctx context.Context, sessionUrl string, header http.Header, body []byte) (map[string]interface{}, error) {
 	req, err := http.NewRequest(http.MethodPost, sessionUrl, bytes.NewReader(body))
 	if err != nil {
-		return nil, seleniumError
+		return nil, err
 	}
 	for key, values := range header {
 		for _, value := range values {
@@ -51,35 +46,35 @@ func createSession(ctx context.Context, sessionUrl string, header http.Header, b
 		}
 	}
 	req.Header.Del("Accept-Encoding")
+	req.Header.Set("Content-Type", "application/json")
+
 	ctx, cancel := context.WithTimeout(ctx, config.Timeout)
 	defer cancel()
 	req = req.WithContext(ctx)
-	req.Header.Set("Content-Type", "application/json")
 	resp, err := httpClient.Do(req)
-	if resp != nil {
-		defer resp.Body.Close()
-	}
 	if err != nil {
-		return nil, seleniumError
+		return nil, err
 	}
+
+	defer resp.Body.Close()
 	location := resp.Header.Get("Location")
 	if location != "" {
 		l, err := url.Parse(location)
 		if err != nil {
-			return nil, seleniumError
+			return nil, err
 		}
 		fragments := strings.Split(l.Path, "/")
-		return map[string]interface{}{"sessionId": fragments[len(fragments)-1], "status": 0, "value": struct{}{}}, browserStarted
+		return map[string]interface{}{"sessionId": fragments[len(fragments)-1], "status": 0, "value": struct{}{}}, nil
 	}
 	var reply map[string]interface{}
 	err = json.NewDecoder(resp.Body).Decode(&reply)
 	if err != nil {
-		return nil, seleniumError
+		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return reply, browserFailed
+		return reply, errors.New("unsuccessful response code")
 	}
-	return reply, browserStarted
+	return reply, nil
 }
 
 func creationError(msg string, err error) *utils.SeleniumError {
@@ -131,183 +126,141 @@ func Create(c *gin.Context) {
 		"remote": remote,
 	})
 
-	// Capability processing/validation
-	//body, err := ioutil.ReadAll(c.Request.Body)
-	//defer c.Request.Body.Close()
-	//if err != nil {
-	//	l.WithError(err).Error("Failed to read request")
-	//	c.Error(creationError("Failed to read request", err)).SetType(gin.ErrorTypePublic)
-	//	return
-	//}
-
 	var body map[string]interface{}
-	err := c.BindJSON(body)
+	err := c.BindJSON(&body)
 	if err != nil {
 		l.WithError(err).Error("Failed to bind json to browser struct")
 		c.Error(creationError("Bad JSON format", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
 
-	configuration := selenium.GetContainerConfiguration(body)
-	body = selenium.UpdateCapabilities(body)
+	caps, err := selenium.PreprocessCapabilities(body)
 	if err != nil {
-		// TODO: Return some error for a client
 		return
 	}
-	fmt.Println(configuration)
 
-	//
-	//if requestCapabilities.Capabilities.Caps.BrowserName() != "" && requestCapabilities.Capabilities.Caps.BrowserName() == "" {
-	//	requestCapabilities.DesiredCapabilities = requestCapabilities.Capabilities.Caps
-	//}
-	//firstMatchCaps := requestCapabilities.Capabilities.FirstMatch
-	//if len(firstMatchCaps) == 0 {
-	//	firstMatchCaps = append(firstMatchCaps, &selenium.Caps{})
-	//}
-	//var caps selenium.Caps
-	//var starter service.Starter
-	//for _, fmc := range firstMatchCaps {
-	//	caps = requestCapabilities.DesiredCapabilities
-	//	err := mergo.Merge(&caps, *fmc)
-	//	if err != nil {
-	//		c.Error(err)
-	//	}
-	//	//caps.ProcessExtensionCapabilities()
-	//	if err != nil {
-	//		l.WithError(err).Error("Bas session timeout")
-	//		c.Error(creationError("Failed to parse `sessionTimeout` capability.", err)).SetType(gin.ErrorTypePublic)
-	//		return
-	//	}
-	//
-	//	resolution, err := caps.GetScreenResolution()
-	//	if err != nil {
-	//		l.WithError(err).WithField("resolution", caps.ScreenResolution).Error("Bad screen resolution")
-	//		c.Error(creationError("Failed to parse `resolution` capability", err)).SetType(gin.ErrorTypePublic)
-	//		return
-	//	}
-	//
-	//	caps.ScreenResolution = resolution
-	//	videoScreenSize, err := caps.GetVideoScreenSize()
-	//	if err != nil {
-	//		l.WithError(err).WithField("videoScreenSize", caps.VideoScreenSize).Error("Bad video screen size")
-	//		c.Error(creationError("Failed to parse `videoScreenSize` capability", err)).SetType(gin.ErrorTypePublic)
-	//		return
-	//	}
-	//starter, ok := manager.Find(sessionCaps)
-	//}
-	//if !ok {
-	//	l.WithFields(log.Fields{
-	//		"browserName":    caps.BrowserName(),
-	//		"browserVersion": caps.Version,
-	//	}).Error("Environment not available")
-	//	c.Error(creationError("Requested browser not available", nil)).SetType(gin.ErrorTypePublic)
-	//	return
-	//}
+	j, _ := json.MarshalIndent(caps, "", "\t")
+	fmt.Println(string(j))
 
-	//ctx, ctxCancel := context.WithTimeout(context.Background(), config.ServiceStartupTimeout)
-	//defer ctxCancel()
-	//startedService, err := starter.StartWithCancel(ctx, username)
-	//if err == context.DeadlineExceeded {
-	//	err = errors.New("session startup timed out")
-	//}
-	//if err != nil {
-	//	l.WithError(err).Error("Service startup failed")
-	//	c.Error(creationError("Failed to start browser", err)).SetType(gin.ErrorTypePublic)
-	//	return
-	//}
-	//l.WithField("taskID", startedService.TaskID).Info("Service started successfully")
-	//u := startedService.Url
-	//cancel := startedService.Cancel
-	//i := 1
-	//
-	//var s struct {
-	//	Value struct {
-	//		ID string `json:"sessionId"`
-	//	}
-	//	ID string `json:"sessionId"`
-	//}
-	//for ; ; i++ {
-	//	c.Request.URL.Host, c.Request.URL.Path = u.Host, path.Join(u.Path, c.Request.URL.Path)
-	//	c.Request.URL.Scheme = "http"
-	//
-	//	l.WithFields(log.Fields{
-	//		"serviceUrl": u,
-	//		"attempt":    i,
-	//	}).Info("Session attempted")
-	//	resp, status := createSession(c.Request.Context(), c.Request.URL.String(), c.Request.Header, body)
-	//	select {
-	//	case <-c.Request.Context().Done():
-	//		l.Info("Client disconnected")
-	//		cancel()
-	//		return
-	//	default:
-	//	}
-	//	if status == browserStarted {
-	//		sess, ok := resp["sessionId"].(string)
-	//		if !ok {
-	//			protocolError := func() {
-	//				l.Error("Bad response")
-	//				c.Error(creationError("Protocol error", nil))
-	//			}
-	//			value, ok := resp["value"]
-	//			if !ok {
-	//				protocolError()
-	//				cancel()
-	//				return
-	//			}
-	//			valueMap, ok := value.(map[string]interface{})
-	//			if !ok {
-	//				protocolError()
-	//				cancel()
-	//				return
-	//			}
-	//			sess, ok = valueMap["sessionId"].(string)
-	//			if !ok {
-	//				protocolError()
-	//				cancel()
-	//				return
-	//			}
-	//			s.ID = sess
-	//			resp["value"].(map[string]interface{})["sessionId"] = s.ID
-	//		} else {
-	//			sess, _ := resp["sessionId"].(string)
-	//			s.ID = sess
-	//			resp["sessionId"] = s.ID
-	//		}
-	//		c.JSON(http.StatusOK, resp)
-	//		break
-	//	} else {
-	//		l.Warn("Session failed")
-	//		cancel()
-	//		return
-	//	}
-	//}
-	//
-	//sess := &selenium.Session{
-	//	Quota:    username,
-	//	Caps:     sessionCaps,
-	//	URL:      u,
-	//	HostPort: startedService.HostPort,
-	//	Started:  time.Now(),
-	//}
-	//
-	//redisSession := selenium.CachedSession{
-	//	Quota:     sess.Quota,
-	//	Caps:      sess.Caps,
-	//	URL:       sess.URL,
-	//	HostPort:  sess.HostPort,
-	//	Started:   sess.Started,
-	//	TaskID:    startedService.TaskID,
-	//	Workspace: username,
-	//}
-	//err = config.RedisConnection.Set(context.Background(), s.ID, redisSession, 0).Err()
-	//if err != nil {
-	//	fmt.Println("Session not cached", err)
-	//}
-	//l.WithFields(log.Fields{
-	//	"sessionID": s.ID,
-	//	"latency":   util.SecondsSince(sessionStartTime),
-	//}).Info("Session created")
+	conf, err := selenium.GetContainerConfiguration(*caps)
+	if err != nil {
+		return
+	}
+
+	fmt.Println(caps, conf)
+
+	sessionStartTime := time.Now()
+	ctx, ctxCancel := context.WithTimeout(context.Background(), config.ServiceStartupTimeout)
+	defer ctxCancel()
+	startedService, err := service.StartDriver(ctx, *conf, username)
+	if err == context.DeadlineExceeded {
+		err = errors.New("session startup timed out")
+	}
+	if err != nil {
+		l.WithError(err).Error("Service startup failed")
+		c.Error(creationError("Failed to start browser", err)).SetType(gin.ErrorTypePublic)
+		return
+	}
+	l.WithField("taskID", startedService.TaskID).Info("Service started successfully")
+	u := startedService.Url
+	cancel := startedService.Cancel
+	i := 1
+
+	var s struct {
+		Value struct {
+			ID string `json:"sessionId"`
+		}
+		ID string `json:"sessionId"`
+	}
+
+	requestBody, err := json.Marshal(caps)
+	if err != nil {
+		return
+	}
+	for ; ; i++ {
+		c.Request.URL.Host, c.Request.URL.Path = u.Host, path.Join(u.Path, c.Request.URL.Path)
+		c.Request.URL.Scheme = "http"
+
+		l.WithFields(log.Fields{
+			"serviceUrl": u,
+			"attempt":    i,
+		}).Info("Session attempted")
+		resp, status := startSession(c.Request.Context(), c.Request.URL.String(), c.Request.Header, requestBody)
+		select {
+		case <-c.Request.Context().Done():
+			l.Info("Client disconnected")
+			cancel()
+			return
+		default:
+		}
+		j, _ := json.MarshalIndent(resp, "", "\t")
+		fmt.Println(string(j))
+		if status == nil {
+			sess, ok := resp["sessionId"].(string)
+			if !ok {
+				protocolError := func() {
+					l.Error("Bad response")
+					c.Error(creationError("Protocol error", nil))
+				}
+				value, ok := resp["value"]
+				if !ok {
+					protocolError()
+					cancel()
+					return
+				}
+				valueMap, ok := value.(map[string]interface{})
+				if !ok {
+					protocolError()
+					cancel()
+					return
+				}
+				sess, ok = valueMap["sessionId"].(string)
+				if !ok {
+					protocolError()
+					cancel()
+					return
+				}
+				s.ID = sess
+				resp["value"].(map[string]interface{})["sessionId"] = s.ID
+			} else {
+				sess, _ := resp["sessionId"].(string)
+				s.ID = sess
+			}
+			c.JSON(http.StatusOK, resp)
+			break
+		} else {
+			l.Warn("Session failed")
+			cancel()
+			return
+		}
+	}
+
+	sess := &selenium.Session{
+		Quota:    username,
+		Caps:     *caps,
+		Conf:     *conf,
+		URL:      u,
+		HostPort: startedService.HostPort,
+		Started:  time.Now(),
+	}
+
+	redisSession := selenium.CachedSession{
+		Quota:     sess.Quota,
+		Caps:      sess.Caps,
+		URL:       sess.URL,
+		HostPort:  sess.HostPort,
+		Started:   sess.Started,
+		TaskID:    startedService.TaskID,
+		Workspace: username,
+	}
+	err = config.RedisConnection.Set(context.Background(), s.ID, redisSession, 0).Err()
+	if err != nil {
+		fmt.Println("Session not cached", err)
+	}
+	l.WithFields(log.Fields{
+		"sessionID": s.ID,
+		"latency":   util.SecondsSince(sessionStartTime),
+	}).Info("Session created")
 }
 
 func Proxy(c *gin.Context) {

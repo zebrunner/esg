@@ -13,6 +13,7 @@ var (
 		"opera",
 		"edge",
 	}
+	VendorPrefix = "zebrunner"
 )
 
 var (
