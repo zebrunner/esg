@@ -141,8 +141,6 @@ func PreprocessCapabilities(caps map[string]interface{}) (*map[string]interface{
 
 	// TODO: do I need to validate caps here?
 
-	requiredCaps["browserName"] = "firefox"
-
 	resultCaps := map[string]interface{}{
 		"capabilities": map[string]interface{}{
 			"alwaysMatch": requiredCaps,
