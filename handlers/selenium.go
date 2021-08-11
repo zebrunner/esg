@@ -125,7 +125,7 @@ func Create(c *gin.Context) {
 		"remote": remote,
 	})
 
-	var body map[string]interface{}
+	var body selenium.RequestCaps
 	err := c.BindJSON(&body)
 	if err != nil {
 		l.WithError(err).Error("Failed to bind json to browser struct")
@@ -136,16 +136,16 @@ func Create(c *gin.Context) {
 	originalJ, _ := json.MarshalIndent(&body, "", "\t")
 	fmt.Println("Original request", string(originalJ))
 
-	caps, err := selenium.PreprocessCapabilities(body)
+	err = body.ProcessLegacy()
 	if err != nil {
 		log.WithError(err).Error("Failed to process capabilities")
 		return
 	}
 
-	j, _ := json.MarshalIndent(caps, "", "\t")
+	j, _ := json.MarshalIndent(body, "", "\t")
 	fmt.Println(string(j))
 
-	conf, err := selenium.GetContainerConfiguration(*caps)
+	conf, err := body.GetContainerConfiguration()
 	if err != nil {
 		return
 	}
@@ -174,7 +174,7 @@ func Create(c *gin.Context) {
 		ID string `json:"sessionId"`
 	}
 
-	requestBody, err := json.Marshal(caps)
+	requestBody, err := json.Marshal(body)
 	if err != nil {
 		return
 	}
@@ -238,7 +238,7 @@ func Create(c *gin.Context) {
 
 	sess := &selenium.Session{
 		Quota:    username,
-		Caps:     *caps,
+		Caps:     body.ToMap(),
 		Conf:     *conf,
 		URL:      u,
 		HostPort: startedService.HostPort,

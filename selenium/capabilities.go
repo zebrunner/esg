@@ -3,109 +3,12 @@ package selenium
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/imdario/mergo"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 	"strings"
 )
 
-type ContainerConfiguration struct {
-	BrowserName      string
-	BrowserVersion   string
-	PlatformName     string
-	Proxy            map[string]interface{}
-	Timeouts         string
-	EnableVnc        bool
-	EnableVideo      bool
-	EnableLog        bool
-	ScreenResolution string
-	DeviceName       string
-	Skin             string
-	CpuResource      int64
-	MemoryResource   int64
-	IdleTimeout      int64
-	VideoCodec       string
-	TimeZone         string
-	Env              []string
-	HostEntries      []string
-	DNSServers       []string
-}
-
-type LegacyCaps struct {
-	Name     string
-	Platform string
-	Version  string
-}
-
-func RemovePrefix(caps map[string]interface{}) map[string]interface{} {
-	newCaps := map[string]interface{}{}
-	for key, value := range caps {
-		newCaps[strings.TrimPrefix(key, config.VendorPrefix+":")] = value
-	}
-	return newCaps
-}
-
-func MapConfig(m map[string]interface{}) (*ContainerConfiguration, error) {
-	jsonCaps, err := json.Marshal(m)
-	if err != nil {
-		return nil, err
-	}
-
-	conf := ContainerConfiguration{}
-	err = json.Unmarshal(jsonCaps, &conf)
-	if err != nil {
-		return nil, err
-	}
-
-	return &conf, nil
-}
-
-func GetContainerConfiguration(caps map[string]interface{}) (*ContainerConfiguration, error) {
-	conf := ContainerConfiguration{}
-
-	capabilities, ok := caps["capabilities"].(map[string]interface{})
-	if !ok {
-		return nil, errors.New("caps invalid")
-	}
-
-	alwaysMatch, ok := capabilities["alwaysMatch"].(map[string]interface{})
-	if ok {
-		alwaysMatch = RemovePrefix(alwaysMatch)
-		amConf, err := MapConfig(alwaysMatch)
-		if err != nil {
-			log.WithError(err).Warn("Failed to map config")
-		}
-
-		err = mergo.Merge(&conf, amConf)
-		if err != nil {
-			log.WithError(err).Warn("Failed to map config")
-		}
-	}
-
-	firstMatch, ok := capabilities["firstMatch"].([]map[string]interface{})
-	if !ok {
-		return nil, errors.New("caps invalid")
-	}
-	for _, fmCaps := range firstMatch {
-		fmCapsMap := fmCaps
-		//fmCapsMap, ok := fmCaps.(map[string]interface{})
-		//if !ok {
-		//	continue
-		//}
-		fmCapsMap = RemovePrefix(fmCapsMap)
-		fmConf, err := MapConfig(fmCapsMap)
-		if err != nil {
-			continue
-		}
-		err = mergo.Merge(&conf, fmConf)
-		if err != nil {
-			continue
-		}
-	}
-
-	return &conf, nil
-}
 
 type CapProcessor struct {
 	KeyProcessor   func(string) string
@@ -113,12 +16,8 @@ type CapProcessor struct {
 	Validator      func(interface{}) error
 }
 
-func ProcessCapabilities(caps map[string]interface{}) (map[string]interface{}, error) {
-	return nil, nil
-}
-
 func replaceName(name string) func(string) string {
-	return func (_ string) string {
+	return func(_ string) string {
 		return name
 	}
 }
@@ -155,8 +54,95 @@ func applyProcessor(caps map[string]interface{}, processors map[string]*CapProce
 	return newCaps, nil
 }
 
+type RequestCaps struct {
+	Capabilities struct {
+		AlwaysMatch map[string]interface{}   `json:"alwaysMatch,omitempty"`
+		FirstMatch  []map[string]interface{} `json:"firstMatch,omitempty"`
+	} `json:"capabilities,omitempty"`
+	DesiredCapabilities map[string]interface{} `json:"desiredCapabilities,omitempty"`
+}
+
+func (c *RequestCaps) ToMap() map[string]interface{} {
+	return map[string]interface{}{
+		"capabilities": map[string]interface{}{
+			"alwaysMatch": c.Capabilities.AlwaysMatch,
+			"firstMatch":  c.Capabilities.FirstMatch,
+		},
+		"desiredCapabilities": c.DesiredCapabilities,
+	}
+}
+
+func (c *RequestCaps) ProcessLegacy() error {
+	requiredCaps := map[string]interface{}{}
+
+	processedDesiredCaps := map[string]interface{}{}
+	for k, v := range c.DesiredCapabilities {
+		processedDesiredCaps[k] = v
+	}
+
+	// Process desired caps
+	processedDesiredCaps, err := processLegacyCaps(processedDesiredCaps)
+	if err != nil {
+		return err
+	}
+	processedDesiredCaps, err = processVendorCaps(processedDesiredCaps)
+	if err != nil {
+		return err
+	}
+
+	// Remove what already present in alwaysMatch
+	for key, _ := range requiredCaps {
+		delete(processedDesiredCaps, key)
+	}
+
+	// Add vendor caps to all from firstMatch
+	for _, fmCaps := range c.Capabilities.FirstMatch {
+		for name, value := range processedDesiredCaps {
+			if strings.Contains(name, ":") {
+				fmCaps[name] = value
+			}
+		}
+
+		renamedLegacy := []string{"browserName", "platformName", "browserVersion"}
+		for _, name := range renamedLegacy {
+			if fmCaps[name] == nil && processedDesiredCaps[name] != nil {
+				fmCaps[name] = processedDesiredCaps[name]
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (c *RequestCaps) GetContainerConfiguration() (*ContainerConfiguration, error) {
+	conf := ContainerConfiguration{}
+	amConf, err := MapConfig(RemovePrefix(c.Capabilities.AlwaysMatch))
+	if err != nil {
+		log.WithError(err).Warn("Failed to map config")
+	}
+
+	err = mergo.Merge(&conf, amConf)
+	if err != nil {
+		log.WithError(err).Warn("Failed to map config")
+	}
+
+	for _, fmCaps := range c.Capabilities.FirstMatch {
+		fmConf, err := MapConfig(RemovePrefix(fmCaps))
+		if err != nil {
+			continue
+		}
+		err = mergo.Merge(&conf, fmConf)
+		if err != nil {
+			continue
+		}
+	}
+
+	return &conf, nil
+}
+
 func processLegacyCaps(caps map[string]interface{}) (map[string]interface{}, error) {
-	allowedPlatforms := []string{"linux"}
+	allowedPlatforms := []string{"linux", "any"}
 	legacyProcessors := map[string]*CapProcessor{
 		"platform": {
 			KeyProcessor:   replaceName("platformName"),
@@ -218,145 +204,26 @@ func processVendorCaps(caps map[string]interface{}) (map[string]interface{}, err
 	return newCaps, nil
 }
 
-func PreprocessCapabilities(caps map[string]interface{}) (*map[string]interface{}, error) {
-	capsRequest, ok := caps["capabilities"].(map[string]interface{})
-	if !ok {
-		return nil, errors.New("caps validation")
-	}
-
-	desiredCaps, ok := caps["desiredCapabilities"].(map[string]interface{})
-	if !ok {
-		return nil, errors.New("caps validation")
-	}
-
-	requiredCaps := map[string]interface{}{}
-	if alwaysMatch, ok := capsRequest["alwaysMatch"].(map[string]interface{}); ok {
-		requiredCaps = alwaysMatch
-	}
-
-	firstMatchCaps := []map[string]interface{}{}
-	if firstMatch, ok := capsRequest["firstMatch"].([]interface{}); ok {
-		for i, v := range firstMatch {
-			if c, ok := v.(map[string]interface{}); ok {
-				firstMatchCaps = append(firstMatchCaps, c)
-			} else {
-				log.Warnf("Failed to process firstMatch capabilities at position %d", i)
-			}
-		}
-	}
-
-	processedDesiredCaps := map[string]interface{}{}
-	for k, v := range desiredCaps {
-		processedDesiredCaps[k] = v
-	}
-
-	// Process desired caps
-	processedDesiredCaps, err := processLegacyCaps(processedDesiredCaps)
-	if err != nil {
-		return nil, err
-	}
-	processedDesiredCaps, err = processVendorCaps(processedDesiredCaps)
+func MapConfig(m map[string]interface{}) (*ContainerConfiguration, error) {
+	jsonCaps, err := json.Marshal(m)
 	if err != nil {
 		return nil, err
 	}
 
-	// Remove what already present in alwaysMatch
-	for key, _ := range requiredCaps {
-		delete(processedDesiredCaps, key)
+	conf := ContainerConfiguration{}
+	err = json.Unmarshal(jsonCaps, &conf)
+	if err != nil {
+		return nil, err
 	}
 
-	// Add vendor caps to all from firstMatch
-	for _, fmCaps := range firstMatchCaps {
-		for name, value := range processedDesiredCaps {
-			if strings.Contains(name, ":") && requiredCaps[name] == nil {
-				fmCaps[name] = value
-			}
-		}
-	}
-
-	// TODO: do I need to validate caps here?
-
-	capabilities := map[string]interface{}{}
-	if len(requiredCaps) != 0 {
-		capabilities["alwaysMatch"] = requiredCaps
-	}
-	capabilities["firstMatch"] = firstMatchCaps
-
-	return &map[string]interface{}{
-		"capabilities":        capabilities,
-		"desiredCapabilities": desiredCaps,
-	}, nil
+	return &conf, nil
 }
 
-func (c *ContainerConfiguration) Memory() int64 {
-	memory := int64(config.MinMemory)
-	if c.MemoryResource > memory {
-		memory = c.MemoryResource
-	}
-	if memory > int64(config.MaxMemory) {
-		memory = int64(config.MaxMemory)
-	}
-	return memory
-}
 
-func (c *ContainerConfiguration) Cpu() int64 {
-	cpu := int64(config.MinCpu)
-	if c.CpuResource > cpu {
-		cpu = c.CpuResource
+func RemovePrefix(caps map[string]interface{}) map[string]interface{} {
+	newCaps := map[string]interface{}{}
+	for key, value := range caps {
+		newCaps[strings.TrimPrefix(key, config.VendorPrefix+":")] = value
 	}
-	if cpu > int64(config.MaxCpu) {
-		cpu = int64(config.MaxCpu)
-	}
-	return cpu
-}
-
-// Browser configuration
-type Browser struct {
-	Image string
-	Path  string
-	Port  int64
-}
-
-func (c *ContainerConfiguration) Browser() Browser {
-	browser := c.BrowserName
-	version := strings.ToLower(c.BrowserVersion)
-	log.WithFields(log.Fields{
-		"browser": browser,
-		"version": version,
-	}).Info("Locating service")
-
-	org := "public.ecr.aws/zebrunner" //public zebrunner ECR docker registry
-	if browser == "MicrosoftEdge" {
-		browser = "edge"
-	}
-
-	if browser == "operablink" {
-		browser = "opera"
-	}
-
-	useAsLatest := []string{
-		"null",
-		"latest",
-		"",
-	}
-
-	for _, item := range useAsLatest {
-		if item == version {
-			version = "latest"
-			break
-		}
-	}
-
-	image := fmt.Sprintf("%s/%s:%s", org, browser, version)
-
-	path := ""
-	if browser == "firefox" {
-		path = "/wd/hub"
-	}
-
-	return Browser{
-		Image: image,
-		Path:  path,
-		Port:  4444,
-	}
+	return newCaps
 }
