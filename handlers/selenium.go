@@ -86,7 +86,6 @@ func creationError(msg string, err error) *utils.SeleniumError {
 }
 
 func Create(c *gin.Context) {
-	//sessionStartTime := time.Now()
 	username, password, ok := c.Request.BasicAuth()
 	remote := c.ClientIP()
 
@@ -134,8 +133,12 @@ func Create(c *gin.Context) {
 		return
 	}
 
+	originalJ, _ := json.MarshalIndent(&body, "", "\t")
+	fmt.Println("Original request", string(originalJ))
+
 	caps, err := selenium.PreprocessCapabilities(body)
 	if err != nil {
+		log.WithError(err).Error("Failed to process capabilities")
 		return
 	}
 
@@ -146,8 +149,6 @@ func Create(c *gin.Context) {
 	if err != nil {
 		return
 	}
-
-	fmt.Println(caps, conf)
 
 	sessionStartTime := time.Now()
 	ctx, ctxCancel := context.WithTimeout(context.Background(), config.ServiceStartupTimeout)

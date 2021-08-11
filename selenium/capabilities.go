@@ -41,7 +41,7 @@ type LegacyCaps struct {
 func RemovePrefix(caps map[string]interface{}) map[string]interface{} {
 	newCaps := map[string]interface{}{}
 	for key, value := range caps {
-		newCaps[strings.TrimPrefix(key, config.VendorPrefix + ":")] = value
+		newCaps[strings.TrimPrefix(key, config.VendorPrefix+":")] = value
 	}
 	return newCaps
 }
@@ -70,26 +70,29 @@ func GetContainerConfiguration(caps map[string]interface{}) (*ContainerConfigura
 	}
 
 	alwaysMatch, ok := capabilities["alwaysMatch"].(map[string]interface{})
-	if !ok {
-		return nil, errors.New("caps invalid")
-	}
-	alwaysMatch = RemovePrefix(alwaysMatch)
-	amConf, err := MapConfig(alwaysMatch)
-	if err != nil {
-		return nil, err
+	if ok {
+		alwaysMatch = RemovePrefix(alwaysMatch)
+		amConf, err := MapConfig(alwaysMatch)
+		if err != nil {
+			log.WithError(err).Warn("Failed to map config")
+		}
+
+		err = mergo.Merge(&conf, amConf)
+		if err != nil {
+			log.WithError(err).Warn("Failed to map config")
+		}
 	}
 
-	err = mergo.Merge(&conf, amConf)
-
-	firstMatch, ok := capabilities["firstMatch"].([]interface{})
+	firstMatch, ok := capabilities["firstMatch"].([]map[string]interface{})
 	if !ok {
 		return nil, errors.New("caps invalid")
 	}
 	for _, fmCaps := range firstMatch {
-		fmCapsMap, ok := fmCaps.(map[string]interface{})
-		if !ok {
-			continue
-		}
+		fmCapsMap := fmCaps
+		//fmCapsMap, ok := fmCaps.(map[string]interface{})
+		//if !ok {
+		//	continue
+		//}
 		fmCapsMap = RemovePrefix(fmCapsMap)
 		fmConf, err := MapConfig(fmCapsMap)
 		if err != nil {
@@ -104,6 +107,117 @@ func GetContainerConfiguration(caps map[string]interface{}) (*ContainerConfigura
 	return &conf, nil
 }
 
+type CapProcessor struct {
+	KeyProcessor   func(string) string
+	ValueProcessor func(interface{}) interface{}
+	Validator      func(interface{}) error
+}
+
+func ProcessCapabilities(caps map[string]interface{}) (map[string]interface{}, error) {
+	return nil, nil
+}
+
+func replaceName(name string) func(string) string {
+	return func (_ string) string {
+		return name
+	}
+}
+
+func addPrefix(prefix string) func(string) string {
+	return func(name string) string {
+		return prefix + ":" + name
+	}
+}
+
+func applyProcessor(caps map[string]interface{}, processors map[string]*CapProcessor) (map[string]interface{}, error) {
+	newCaps := map[string]interface{}{}
+	for name, value := range caps {
+		newKey := name
+		newValue := value
+
+		if processor := processors[name]; processor != nil {
+			if processor.KeyProcessor != nil {
+				newKey = processor.KeyProcessor(name)
+			}
+			if processor.ValueProcessor != nil {
+				newValue = processor.ValueProcessor(value)
+			}
+			if processor.Validator != nil {
+				err := processor.Validator(newValue)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+
+		newCaps[newKey] = newValue
+	}
+	return newCaps, nil
+}
+
+func processLegacyCaps(caps map[string]interface{}) (map[string]interface{}, error) {
+	allowedPlatforms := []string{"linux"}
+	legacyProcessors := map[string]*CapProcessor{
+		"platform": {
+			KeyProcessor:   replaceName("platformName"),
+			ValueProcessor: func(x interface{}) interface{} { return strings.ToLower(x.(string)) },
+			Validator: func(x interface{}) error {
+				for _, platform := range allowedPlatforms {
+					if platform == x.(string) {
+						return nil
+					}
+				}
+				return errors.New("platform not allowed")
+			},
+		},
+		"name": {
+			KeyProcessor: replaceName("browserName"),
+		},
+		"version": {
+			KeyProcessor: replaceName("browserVersion"),
+		},
+	}
+
+	newCaps, err := applyProcessor(caps, legacyProcessors)
+	if err != nil {
+		return nil, err
+	}
+
+	return newCaps, nil
+}
+
+func processVendorCaps(caps map[string]interface{}) (map[string]interface{}, error) {
+	vendorCapNames := []string{
+		"enableVnc",
+		"enableVideo",
+		"enableLog",
+		"idleTimeout",
+		"screenResolution",
+		"deviceName",
+		"skin",
+		"cpu",
+		"memory",
+		"videoCodec",
+		"timeZone",
+		"env",
+		"hostEntries",
+		"dnsServers",
+	}
+	processors := map[string]*CapProcessor{}
+	for _, name := range vendorCapNames {
+		processors[name] = &CapProcessor{
+			KeyProcessor: addPrefix(config.VendorPrefix),
+		}
+	}
+
+	newCaps, err := applyProcessor(caps, processors)
+	if err != nil {
+		return nil, err
+	}
+
+	return newCaps, nil
+}
+
 func PreprocessCapabilities(caps map[string]interface{}) (*map[string]interface{}, error) {
 	capsRequest, ok := caps["capabilities"].(map[string]interface{})
 	if !ok {
@@ -115,82 +229,63 @@ func PreprocessCapabilities(caps map[string]interface{}) (*map[string]interface{
 		return nil, errors.New("caps validation")
 	}
 
-	requiredCaps, ok := capsRequest["alwaysMatch"].(map[string]interface{})
-	if !ok {
-		requiredCaps = map[string]interface{}{}
+	requiredCaps := map[string]interface{}{}
+	if alwaysMatch, ok := capsRequest["alwaysMatch"].(map[string]interface{}); ok {
+		requiredCaps = alwaysMatch
 	}
 
-	firstMatchCaps, ok := capsRequest["firstMatch"].([]interface{})
-	if !ok {
-		firstMatchCaps = []interface{}{map[string]interface{}{}}
+	firstMatchCaps := []map[string]interface{}{}
+	if firstMatch, ok := capsRequest["firstMatch"].([]interface{}); ok {
+		for i, v := range firstMatch {
+			if c, ok := v.(map[string]interface{}); ok {
+				firstMatchCaps = append(firstMatchCaps, c)
+			} else {
+				log.Warnf("Failed to process firstMatch capabilities at position %d", i)
+			}
+		}
 	}
 
-	newCaps := ProcessLegacyCaps(desiredCaps)
+	processedDesiredCaps := map[string]interface{}{}
+	for k, v := range desiredCaps {
+		processedDesiredCaps[k] = v
+	}
+
+	// Process desired caps
+	processedDesiredCaps, err := processLegacyCaps(processedDesiredCaps)
+	if err != nil {
+		return nil, err
+	}
+	processedDesiredCaps, err = processVendorCaps(processedDesiredCaps)
+	if err != nil {
+		return nil, err
+	}
+
+	// Remove what already present in alwaysMatch
+	for key, _ := range requiredCaps {
+		delete(processedDesiredCaps, key)
+	}
+
+	// Add vendor caps to all from firstMatch
 	for _, fmCaps := range firstMatchCaps {
-		fmCapsMap, ok := fmCaps.(map[string]interface{})
-		if !ok {
-			continue
+		for name, value := range processedDesiredCaps {
+			if strings.Contains(name, ":") && requiredCaps[name] == nil {
+				fmCaps[name] = value
+			}
 		}
-		err := mergo.Merge(&fmCapsMap, newCaps, mergo.WithOverride)
-		if err != nil {
-			log.WithError(err).Warn("Failed to merge caps")
-			continue
-		}
-		fmCaps = fmCapsMap
 	}
 
 	// TODO: do I need to validate caps here?
 
-	resultCaps := map[string]interface{}{
-		"capabilities": map[string]interface{}{
-			"alwaysMatch": requiredCaps,
-			"firstMatch": firstMatchCaps,
-		},
+	capabilities := map[string]interface{}{}
+	if len(requiredCaps) != 0 {
+		capabilities["alwaysMatch"] = requiredCaps
+	}
+	capabilities["firstMatch"] = firstMatchCaps
+
+	return &map[string]interface{}{
+		"capabilities":        capabilities,
 		"desiredCapabilities": desiredCaps,
-	}
-	return &resultCaps, nil
-}
-
-func ProcessLegacyCaps(desiredCaps map[string]interface{}) map[string]interface{} {
-	// Support for legacy capabilities used by some clients
-	legacyMappings := map[string]string{
-		"name": "browserName",
-		"version": "browserVersion",
-		"platform": "platformName",
-	}
-	vendorMappings := map[string]string{
-		"enableVnc": config.VendorPrefix + ":" + "enableVnc",
-		"enableVideo": config.VendorPrefix + ":" + "enableVideo",
-		"enableLog": config.VendorPrefix + ":" + "enableLog",
-		"idleTimeout": config.VendorPrefix + ":" + "idleTimeout",
-		"screenResolution": config.VendorPrefix + ":" + "screenResolution",
-		"deviceName": config.VendorPrefix + ":" + "deviceName",
-		"skin": config.VendorPrefix + ":" + "skin",
-		"cpu": config.VendorPrefix + ":" + "cpu",
-		"memory": config.VendorPrefix + ":" + "memory",
-		"videoCodec": config.VendorPrefix + ":" + "videoCodec",
-		"timeZone": config.VendorPrefix + ":" + "timeZone",
-		"env": config.VendorPrefix + ":" + "env",
-		"hostEntries": config.VendorPrefix + ":" + "hostEntries",
-		"dnsServers": config.VendorPrefix + ":" + "dnsServers",
-	}
-
-	newCaps := map[string]interface{}{}
-	for oldKey, newKey := range legacyMappings {
-		value := desiredCaps[oldKey]
-		if value != nil {
-			newCaps[newKey] = value
-		}
-	}
-
-	for oldKey, newKey := range vendorMappings {
-		value := desiredCaps[oldKey]
-		if value != nil {
-			newCaps[newKey] = value
-		}
-	}
-
-	return newCaps
+	}, nil
 }
 
 func (c *ContainerConfiguration) Memory() int64 {
