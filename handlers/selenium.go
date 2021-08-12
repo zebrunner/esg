@@ -43,8 +43,6 @@ func startSession(ctx context.Context, sessionUrl string, header http.Header, bo
 			req.Header.Add(key, value)
 		}
 	}
-	//req.Header.Del("Accept-Encoding")
-	//req.Header.Set("Content-Type", "application/json")
 
 	req = req.WithContext(ctx)
 	resp, err := httpClient.Do(req)
@@ -53,15 +51,6 @@ func startSession(ctx context.Context, sessionUrl string, header http.Header, bo
 	}
 
 	defer resp.Body.Close()
-	//location := resp.Header.Get("Location")
-	//if location != "" {
-	//	l, err := url.Parse(location)
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//	fragments := strings.Split(l.Path, "/")
-	//	return map[string]interface{}{"sessionId": fragments[len(fragments)-1], "status": 0, "value": struct{}{}}, nil
-	//}
 	var reply map[string]interface{}
 	err = json.NewDecoder(resp.Body).Decode(&reply)
 	if err != nil {
