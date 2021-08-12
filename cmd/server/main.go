@@ -119,6 +119,7 @@ func CreateRouter() *gin.Engine {
 
 		hub.GET("/download/:session/:file", handlers.Downloads)
 		hub.DELETE("/download/:session/:file", handlers.Downloads)
+		hub.HEAD("/download/:session/:file", handlers.Downloads)
 
 		hub.GET("/clipboard/:session", handlers.Clipboard)
 		hub.POST("/clipboard/:session", handlers.Clipboard)
