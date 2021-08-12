@@ -472,10 +472,7 @@ func GetStartedServiceInfo(conf selenium.ContainerConfiguration, taskArn string)
 
 func StartDriver(ctx context.Context, conf selenium.ContainerConfiguration, username string) (*StartedService, error) {
 	svc := ecs.New(AwsSess)
-	parts := strings.Split(conf.Browser().Image, "/")
-	browser := parts[len(parts)-1]
-	browser = strings.ReplaceAll(browser, ":", "-")
-	browser = strings.ReplaceAll(browser, ".", "-")
+	browser := conf.Browser().TaskDefinitionFamily()
 
 	var outputErr error
 out:

@@ -174,7 +174,7 @@ func Create(c *gin.Context) {
 	sessionStartTime := time.Now()
 	ctx, ctxCancel := context.WithTimeout(context.Background(), config.ServiceStartupTimeout)
 	defer ctxCancel()
-	startedService, err := service.StartDriver(ctx, *conf, username)
+	driver, err := service.StartDriver(ctx, *conf, username)
 	if err == context.DeadlineExceeded {
 		err = errors.New("session startup timed out")
 	}
@@ -183,9 +183,9 @@ func Create(c *gin.Context) {
 		c.Error(creationError("Failed to start browser", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
-	l.WithField("taskID", startedService.TaskID).Info("Service started successfully")
-	u := startedService.Url
-	cancel := startedService.Cancel
+	l.WithField("taskID", driver.TaskID).Info("Service started successfully")
+	u := driver.Url
+	cancel := driver.Cancel
 
 	requestBody, err := json.Marshal(body)
 	if err != nil {
@@ -219,14 +219,14 @@ func Create(c *gin.Context) {
 	}
 
 	sess := &selenium.Session{
-		ID:       sessionId,
-		Quota:    username,
-		Caps:     body.ToMap(),
-		Conf:     *conf,
-		URL:      u,
-		HostPort: startedService.HostPort,
-		Started:  time.Now(),
-		TaskID: startedService.TaskID,
+		ID:        sessionId,
+		Quota:     username,
+		Caps:      body.ToMap(),
+		Conf:      *conf,
+		URL:       u,
+		HostPort:  driver.HostPort,
+		Started:   time.Now(),
+		TaskID:    driver.TaskID,
 		Workspace: username,
 	}
 
@@ -258,21 +258,27 @@ func Proxy(c *gin.Context) {
 				return
 			}
 
-			if r.Method == http.MethodDelete && len(fragments) == 3 {
-				selenium.CloseSession(workspace, sessionID)
-				log.WithField("sessionID", sessionID).Info("Session deleted")
-			} else {
-				if len(fragments) == 4 && fragments[len(fragments)-1] == "file" && config.EnableFileUpload {
-					r.Header.Set("X-Selenoid-File", filepath.Join(os.TempDir(), sessionID))
-					r.URL.Path = "/file"
-					return
-				}
+			if len(fragments) == 4 && fragments[len(fragments)-1] == "file" && config.EnableFileUpload {
+				r.Header.Set("X-Selenoid-File", filepath.Join(os.TempDir(), sessionID))
+				r.URL.Path = "/file"
+				return
 			}
+
 			r.URL.Host, r.URL.Path = sess.URL.Host, path.Clean(sess.URL.Path+r.URL.Path)
 			r.URL.Scheme = "http"
 		},
 		ErrorHandler: defaultErrorHandler(c),
 	}).ServeHTTP(c.Writer, c.Request)
+}
+
+func CloseSession(c *gin.Context) {
+	workspace, _, _ := c.Request.BasicAuth()
+	if workspace == "" {
+		workspace = "zebrunner"
+	}
+	sessionId := c.Param("session")
+	selenium.CloseSession(workspace, sessionId)
+	log.WithField("sessionID", sessionId).Info("Session closed")
 }
 
 func defaultErrorHandler(с *gin.Context) func(http.ResponseWriter, *http.Request, error) {

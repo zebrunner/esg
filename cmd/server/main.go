@@ -98,7 +98,8 @@ func CreateRouter() *gin.Engine {
 
 		hub.Any("/wd/hub/*action", ReverseProxy())
 		hub.POST("/session", handlers.Create) // Auth logic moved to handler
-		hub.Any("/session/*action", handlers.Proxy)
+		hub.DELETE("/session/:session", handlers.CloseSession)
+		hub.Any("/session/:session/*action", handlers.Proxy)
 
 		hub.GET("/vnc/:session", func(c *gin.Context) {
 			handler := websocket.Handler(handlers.Vnc)

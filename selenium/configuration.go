@@ -52,12 +52,21 @@ func (c *ContainerConfiguration) Cpu() int64 {
 }
 
 type Browser struct {
-	Image string
-	Path  string
-	Port  int64
+	Image                string
+	Path                 string
+	Port                 int64
 }
 
-func (c *ContainerConfiguration) Browser() Browser {
+func (b *Browser) TaskDefinitionFamily() string {
+	parts := strings.Split(b.Image, "/")
+	browser := parts[len(parts)-1]
+	browser = strings.ReplaceAll(browser, ":", "-")
+	browser = strings.ReplaceAll(browser, ".", "-")
+
+	return browser
+}
+
+func (c *ContainerConfiguration) Browser() *Browser {
 	browser := c.BrowserName
 	version := strings.ToLower(c.BrowserVersion)
 	log.WithFields(log.Fields{
@@ -94,10 +103,9 @@ func (c *ContainerConfiguration) Browser() Browser {
 		path = "/wd/hub"
 	}
 
-	return Browser{
+	return &Browser{
 		Image: image,
 		Path:  path,
 		Port:  4444,
 	}
 }
-
