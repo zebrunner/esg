@@ -45,8 +45,8 @@ func startSession(ctx context.Context, sessionUrl string, header http.Header, bo
 			req.Header.Add(key, value)
 		}
 	}
-	req.Header.Del("Accept-Encoding")
-	req.Header.Set("Content-Type", "application/json")
+	//req.Header.Del("Accept-Encoding")
+	//req.Header.Set("Content-Type", "application/json")
 
 	req = req.WithContext(ctx)
 	resp, err := httpClient.Do(req)
@@ -158,6 +158,7 @@ func Create(c *gin.Context) {
 	err = body.ProcessLegacy()
 	if err != nil {
 		log.WithError(err).Error("Failed to process capabilities")
+		// TODO return error message
 		return
 	}
 
@@ -166,6 +167,7 @@ func Create(c *gin.Context) {
 
 	conf, err := body.GetContainerConfiguration()
 	if err != nil {
+		// TODO return error message
 		return
 	}
 
@@ -185,51 +187,39 @@ func Create(c *gin.Context) {
 	u := startedService.Url
 	cancel := startedService.Cancel
 
-	var s struct {
-		Value struct {
-			ID string `json:"sessionId"`
-		}
-		ID string `json:"sessionId"`
-	}
-
 	requestBody, err := json.Marshal(body)
 	if err != nil {
 		return
 	}
-	for i := 0; i < 1; i++ {
-		select {
-		case <-c.Request.Context().Done():
-			l.Info("Client disconnected")
-			cancel()
-			return
-		default:
-		}
-		c.Request.URL.Host, c.Request.URL.Path = u.Host, path.Join(u.Path, c.Request.URL.Path)
-		c.Request.URL.Scheme = "http"
+	sessionId := ""
+	c.Request.URL.Host, c.Request.URL.Path = u.Host, path.Join(u.Path, c.Request.URL.Path)
+	c.Request.URL.Scheme = "http"
 
-		l.WithFields(log.Fields{
-			"serviceUrl": u,
-			"attempt":    i,
-		}).Info("Session attempted")
-		resp, err := startSession(c.Request.Context(), c.Request.URL.String(), c.Request.Header, requestBody)
-		j, _ := json.MarshalIndent(resp, "", "\t")
-		fmt.Println(string(j))
-		if err != nil {
-			log.WithError(err).Warn("Session attempt failed")
-			continue
-		}
+	l.WithFields(log.Fields{
+		"serviceUrl": u,
+	}).Info("Session attempted")
+	resp, err := startSession(c.Request.Context(), c.Request.URL.String(), c.Request.Header, requestBody)
+	j, _ = json.MarshalIndent(resp, "", "\t")
+	fmt.Println(string(j))
+	if err != nil {
+		log.WithError(err).Warn("Session attempt failed")
+		cancel()
+	}
 
-		sessionId, err := getSessionId(resp)
-		if err != nil {
-			return
-		}
-		s.ID = sessionId
-		c.JSON(http.StatusOK, resp)
-		break
+	sessionId, err = getSessionId(resp)
+	if err != nil {
+		// TODO return error message
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+
+	if sessionId == "" {
+		// TODO return error message
+		return
 	}
 
 	sess := &selenium.Session{
-		ID:       s.ID,
+		ID:       sessionId,
 		Quota:    username,
 		Caps:     body.ToMap(),
 		Conf:     *conf,
@@ -245,7 +235,7 @@ func Create(c *gin.Context) {
 		fmt.Println("Session not cached", err)
 	}
 	l.WithFields(log.Fields{
-		"sessionID": s.ID,
+		"sessionID": sessionId,
 		"latency":   util.SecondsSince(sessionStartTime),
 	}).Info("Session created")
 }

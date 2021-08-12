@@ -114,16 +114,18 @@ func (c *RequestCaps) ProcessLegacy() error {
 	// Replace latest version
 	if c.Capabilities.AlwaysMatch != nil && c.Capabilities.AlwaysMatch["browserName"] == "firefox" {
 		version, ok := c.Capabilities.AlwaysMatch["browserVersion"].(string)
-		if ok && (strings.ToLower(version) == "latest" || strings.ToLower(version) == "null") {
-			c.Capabilities.AlwaysMatch["browserVersion"] = ""
+		version = strings.ToLower(version)
+		if ok && (version == "latest" || version == "null" || version == "") {
+			delete(c.Capabilities.AlwaysMatch, "browserVersion")
 		}
 	}
 
 	for _, fmCaps := range c.Capabilities.FirstMatch {
 		version, ok := fmCaps["browserVersion"].(string)
 		name := fmCaps["browserName"]
-		if ok && name == "firefox" && (strings.ToLower(version) == "latest" || strings.ToLower(version) == "null") {
-			fmCaps["browserVersion"] = ""
+		version = strings.ToLower(version)
+		if ok && name == "firefox" && (version == "latest" || version == "null" || version == "") {
+			delete(fmCaps, "browserVersion")
 		}
 	}
 
