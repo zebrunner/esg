@@ -133,22 +133,22 @@ func Create(c *gin.Context) {
 		return
 	}
 
-	originalJ, _ := json.MarshalIndent(&body, "", "\t")
-	fmt.Println("Original request", string(originalJ))
-
+	processingError := utils.SeleniumError{
+		SeleniumCode: "invalid argument",
+		ResponseStatus: http.StatusBadRequest,
+		Message: "Failed to process capabilities. " + err.Error(),
+	}
 	err = body.ProcessLegacy()
 	if err != nil {
-		log.WithError(err).Error("Failed to process capabilities")
-		// TODO return error message
+		l.WithError(err).Error("Failed to process capabilities")
+		c.Error(&processingError).SetType(gin.ErrorTypePublic)
 		return
 	}
 
-	j, _ := json.MarshalIndent(body, "", "\t")
-	fmt.Println(string(j))
-
 	conf, err := body.GetContainerConfiguration()
 	if err != nil {
-		// TODO return error message
+		l.WithError(err).Error("Failed to get container configuration")
+		c.Error(&processingError).SetType(gin.ErrorTypePublic)
 		return
 	}
 
@@ -166,36 +166,38 @@ func Create(c *gin.Context) {
 	}
 	l.WithField("taskID", driver.TaskID).Info("Service started successfully")
 	u := driver.Url
-	cancel := driver.Cancel
 
 	requestBody, err := json.Marshal(body)
 	if err != nil {
+		l.WithError(err).Error("Failed to marshal request")
+		c.Error(creationError("Failed to start browser", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
+
 	sessionId := ""
 	c.Request.URL.Host, c.Request.URL.Path = u.Host, path.Join(u.Path, c.Request.URL.Path)
 	c.Request.URL.Scheme = "http"
-
 	l.WithFields(log.Fields{
 		"serviceUrl": u,
 	}).Info("Session attempted")
 	resp, err := startSession(c.Request.Context(), c.Request.URL.String(), c.Request.Header, requestBody)
-	j, _ = json.MarshalIndent(resp, "", "\t")
-	fmt.Println(string(j))
 	if err != nil {
-		log.WithError(err).Warn("Session attempt failed")
-		cancel()
+		l.WithError(err).Error("Session attempt failed")
+		c.Error(creationError("failed to create session", err)).SetType(gin.ErrorTypePublic)
+		service.RemoveTask(driver.TaskID)
+		return
 	}
 
 	sessionId, err = getSessionId(resp)
 	if err != nil {
-		// TODO return error message
+		l.WithError(err).Error("Failed to get sessionId from driver response")
+		c.Error(creationError("failed to create session", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
-	c.JSON(http.StatusOK, resp)
 
 	if sessionId == "" {
-		// TODO return error message
+		l.WithError(err).Error("Failed to get sessionId from driver response. sessionId is empty")
+		c.Error(creationError("failed to create session", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
 
@@ -213,12 +215,13 @@ func Create(c *gin.Context) {
 
 	err = selenium.SaveSessionToCache(sess)
 	if err != nil {
-		fmt.Println("Session not cached", err)
+		l.WithError(err).Error("Session not cached")
 	}
 	l.WithFields(log.Fields{
 		"sessionID": sessionId,
 		"latency":   util.SecondsSince(sessionStartTime),
 	}).Info("Session created")
+	c.JSON(http.StatusOK, resp)
 }
 
 func Proxy(c *gin.Context) {
