@@ -9,11 +9,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/service"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
-	"github.com/zebrunner/esg/handlers"
 )
 
 var (
@@ -22,6 +22,7 @@ var (
 )
 
 func init() {
+	//rename to idle timeout
 	flag.DurationVar(&config.Timeout, "timeout", 60*time.Second, "Session idle timeout in time.Duration format")
 	// AWS Related args
 	flag.StringVar(&config.AwsRegion, "aws-region", "us-east-1", "AWS region name")
@@ -50,28 +51,29 @@ func init() {
 }
 
 func ClearSessions() {
+	rdb := config.RedisConnection
 	for {
 		time.Sleep(config.Timeout)
-		keys, err := handlers.RDB.Keys(context.Background(), "*").Result()
+		keys, err := rdb.Keys(context.Background(), "*").Result()
 		if err != nil {
 			log.WithError(err).Error("Failed to get list of keys")
 			continue
 		}
 
 		for _, key := range keys {
-			idle, err := handlers.RDB.ObjectIdleTime(context.Background(), key).Result()
+			idle, err := rdb.ObjectIdleTime(context.Background(), key).Result()
 			if err != nil {
 				log.WithError(err).WithField("session", key).Error("Failed to get IDLE time for session.")
 				continue
 			}
 
-			result, err := handlers.RDB.Get(context.Background(), key).Result()
+			result, err := rdb.Get(context.Background(), key).Result()
 			if err != nil {
 				log.WithError(err).Error("Failed to get session from cache")
 				continue
 			}
 
-			s := handlers.CachedSession{}
+			s := selenium.CachedSession{}
 			err = json.Unmarshal([]byte(result), &s)
 			if err != nil {
 				log.WithError(err).Error("Failed to unmarshal redis response")
@@ -79,13 +81,13 @@ func ClearSessions() {
 			}
 
 			timeout := config.Timeout
-			if s.Caps.IdleTimeout != 0 {
-				timeout = time.Duration(s.Caps.IdleTimeout) * time.Second
+			if s.Conf.IdleTimeout != 0 {
+				timeout = time.Duration(s.Conf.IdleTimeout) * time.Second
 			}
 			if idle > timeout {
 				log.WithField("task", s.TaskID).Info("Deleting task. Reason: idle timeout")
-				handlers.CloseSession(s.Workspace, key)
-				_, err = handlers.RDB.Del(context.Background(), key).Result()
+				selenium.CloseSession(s.Workspace, key)
+				_, err = rdb.Del(context.Background(), key).Result()
 				if err != nil {
 					log.WithError(err).WithField("session", key).Error("Failed to delete session from cache")
 				}
@@ -148,11 +150,11 @@ func main() {
 	}
 	service.AwsSess = awsSess
 
-	rdb, err := service.InitCache()
+	rdb, err := config.InitCache()
 	if err != nil {
 		log.WithError(err).Fatal("Failed to init redis connection")
 	}
-	handlers.RDB = rdb
+	config.RedisConnection = rdb
 
 	if browsersFile != "" {
 		RefreshTaskDefinitionsFromFile(browsersFile)

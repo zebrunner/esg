@@ -23,7 +23,6 @@ var (
 )
 
 func init() {
-	flag.BoolVar(&config.EnableFileUpload, "enable-file-upload", false, "File upload support")
 	flag.BoolVar(&config.UsePublicIp, "use-public-ip", false, "Use or no public ip address for browser slave instances")
 	flag.StringVar(&listen, "listen", ":4444", "Network address to accept connections")
 	flag.IntVar(&config.RetryCount, "retry-count", 1, "New session attempts retry count")
@@ -57,8 +56,6 @@ func init() {
 	flag.StringVar(&config.ZebrunnerIntegrationPassword, "zebrunner-integration-password", "", "Password for zebrunner for current env")
 
 	flag.Parse()
-
-	handlers.InitManager()
 }
 
 func ReverseProxy() gin.HandlerFunc {
@@ -100,7 +97,8 @@ func CreateRouter() *gin.Engine {
 
 		hub.Any("/wd/hub/*action", ReverseProxy())
 		hub.POST("/session", handlers.Create) // Auth logic moved to handler
-		hub.Any("/session/*action", handlers.Proxy)
+		hub.DELETE("/session/:session", handlers.CloseSession)
+		hub.Any("/session/:session/*action", handlers.Proxy)
 
 		hub.GET("/vnc/:session", func(c *gin.Context) {
 			handler := websocket.Handler(handlers.Vnc)
@@ -143,18 +141,18 @@ func main() {
 		ForceColors:     true,
 	})
 
-	db, err := service.InitDBConnection(config.DbConnectionString)
+	db, err := config.InitDBConnection(config.DbConnectionString)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to init DB client.")
 	}
-	service.DB = db
+	config.DbConnection = db
 	defer db.Close()
 
-	rdb, err := service.InitCache()
+	rdb, err := config.InitCache()
 	if err != nil {
 		log.WithError(err).Fatal("Failed to init Redis client")
 	}
-	handlers.RDB = rdb
+	config.RedisConnection = rdb
 	defer rdb.Close()
 
 	aws, err := service.InitAws()

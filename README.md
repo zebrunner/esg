@@ -24,3 +24,21 @@ Suitable for personal usage and in big clusters:
 * **Browser consumption API** working out of the box
 * Ability to send browser logs to **centralized log storage** (e.g. to the [ELK-stack](https://logz.io/learn/complete-guide-elk-stack/))
 * Fully **isolated** and **reproducible** environment
+
+
+
+## Capabilities
+- `zebrunner:enableVnc` - 
+- `zebrunner:enableVideo` - 
+- `zebrunner:enableLog` - 
+- `zebrunner:idleTimeout` - 
+- `zebrunner:screenResolution` - 
+- `zebrunner:deviceName` - ??? 
+- `zebrunner:skin` - ???
+- `zebrunner:cpu` - 
+- `zebrunner:memory` - 
+- `zebrunner:videoCodec` -
+- `zebrunner:timeZone` - 
+- `zebrunner:env` - 
+- `zebrunner:hostEntries` - 
+- `zebrunner:dnsServers` -

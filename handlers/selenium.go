@@ -7,37 +7,22 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"os"
 	"path"
-	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/aerokube/util"
 	"github.com/gin-gonic/gin"
-	"github.com/go-redis/redis/v8"
-	"github.com/imdario/mergo"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
-	"github.com/zebrunner/esg/event"
+	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/service"
-	"github.com/zebrunner/esg/session"
 	"github.com/zebrunner/esg/utils"
 	"golang.org/x/net/websocket"
-)
-
-const slash = "/"
-
-const (
-	browserStarted = iota
-	browserFailed
-	seleniumError
 )
 
 var (
@@ -46,168 +31,34 @@ var (
 			return http.ErrUseLastResponse
 		},
 	}
-	sessions = session.NewMap()
-	manager  service.Manager
-	RDB      *redis.Client
 )
 
-func InitManager() {
-	environment := service.Environment{
-		StartupTimeout:       config.ServiceStartupTimeout,
-		SessionDeleteTimeout: config.SessionDeleteTimeout,
-		VideoContainerImage:  config.VideoRecorderImage,
-	}
-	manager = &service.DefaultManager{Environment: &environment}
-}
-
-type Request struct {
-	*http.Request
-}
-
-type CachedSession struct {
-	Quota     string
-	Caps      session.Caps
-	URL       *url.URL
-	HostPort  session.HostPort
-	Timeout   time.Duration
-	Started   time.Time
-	TaskID    string
-	Workspace string
-}
-
-func (s CachedSession) MarshalBinary() ([]byte, error) {
-	return json.Marshal(s)
-}
-
-func CreateSessionFromCache(sessionID string) (*session.Session, error) {
-	result, err := RDB.Get(context.Background(), sessionID).Result()
-	if err == redis.Nil {
-		return nil, &utils.SeleniumError{
-			ResponseStatus: http.StatusNotFound,
-			SeleniumCode:   "invalid session id",
-			Message:        fmt.Sprintf("Session with id %s not found in active sessions.", sessionID),
-			Err:            err,
-		}
-	}
-	if err != nil {
-		return nil, err
-	}
-	s := CachedSession{}
-	err = json.Unmarshal([]byte(result), &s)
-	if err != nil {
-		return nil, err
-	}
-
-	seleniumSession := session.Session{
-		Quota:     s.Quota,
-		Caps:      s.Caps,
-		URL:       s.URL,
-		HostPort:  s.HostPort,
-		Started:   s.Started,
-		TaskID:    s.TaskID,
-		Workspace: s.Workspace,
-	}
-	seleniumSession.Cancel = cancelAndRenameFiles(s.TaskID)
-	return &seleniumSession, nil
-}
-
-func cancelAndRenameFiles(taskID string) func() {
-	return func() {
-		service.RemoveTask(taskID)
-	}
-}
-
-// func Delete(taskId string) {
-// 	log.WithField("taskID", taskId).Info("Session timed out. Removing ECS task forcibly")
-// 	service.RemoveTask(taskId)
-// }
-
-func CloseSession(workspace string, sessionID string) {
-	sess, err := CreateSessionFromCache(sessionID)
-	if err != nil {
-		log.WithError(err).Error("Failed to get session from cache")
-		return
-	}
-	defer sess.Cancel()
-
-	client := http.Client{}
-	sess.URL.Path = path.Clean(sess.URL.Path + fmt.Sprintf("/session/%s", sessionID))
-	timeoutCtx, cancel := context.WithTimeout(context.Background(), config.SessionDeleteTimeout)
-	defer cancel()
-	req, err := http.NewRequestWithContext(timeoutCtx, http.MethodDelete, sess.URL.String(), nil)
-	if err != nil {
-		log.WithError(err).Error("Failed to create request")
-		return
-	}
-
-	log.WithFields(log.Fields{
-		"method": req.Method,
-		"url":    req.URL,
-	}).Debug("Closing session.")
-	resp, err := client.Do(req)
-	if err != nil {
-		log.WithError(err).Error("Failed to cancel driver session")
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		log.WithField("statusCode", resp.Status).Error("Cancel request returned not success status code")
-		return
-	}
-
-	if config.ZebrunnerIsIntegrated() {
-		go service.SendSessionDuration(workspace, time.Since(sess.Started))
-	}
-	_, err = RDB.Del(context.Background(), sessionID).Result()
-	if err != nil {
-		log.WithError(err).Error("Failed to delete session from redis")
-		return
-	}
-	log.WithField("sessionID", sessionID).Info("Session closed.")
-}
-
-// create() method from ggr.
-func createSession(ctx context.Context, sessionUrl string, header http.Header, body []byte) (map[string]interface{}, int) {
+func startSession(ctx context.Context, sessionUrl string, header http.Header, body []byte) (map[string]interface{}, error) {
 	req, err := http.NewRequest(http.MethodPost, sessionUrl, bytes.NewReader(body))
 	if err != nil {
-		return nil, seleniumError
+		return nil, err
 	}
 	for key, values := range header {
 		for _, value := range values {
 			req.Header.Add(key, value)
 		}
 	}
-        req.Host = "localhost"
-	req.Header.Del("Accept-Encoding")
-	ctx, cancel := context.WithTimeout(ctx, config.Timeout)
-	defer cancel()
 	req = req.WithContext(ctx)
-	req.Header.Set("Content-Type", "application/json")
 	resp, err := httpClient.Do(req)
-	if resp != nil {
-		defer resp.Body.Close()
-	}
 	if err != nil {
-		return nil, seleniumError
+		return nil, err
 	}
-	location := resp.Header.Get("Location")
-	if location != "" {
-		l, err := url.Parse(location)
-		if err != nil {
-			return nil, seleniumError
-		}
-		fragments := strings.Split(l.Path, "/")
-		return map[string]interface{}{"sessionId": fragments[len(fragments)-1], "status": 0, "value": struct{}{}}, browserStarted
-	}
+
+	defer resp.Body.Close()
 	var reply map[string]interface{}
 	err = json.NewDecoder(resp.Body).Decode(&reply)
 	if err != nil {
-		return nil, seleniumError
+		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return reply, browserFailed
+		return reply, errors.New("unsuccessful response code")
 	}
-	return reply, browserStarted
+	return reply, nil
 }
 
 func creationError(msg string, err error) *utils.SeleniumError {
@@ -218,15 +69,33 @@ func creationError(msg string, err error) *utils.SeleniumError {
 	}
 }
 
-func Create(c *gin.Context) {
-	sessionStartTime := time.Now()
-	username, password, ok := c.Request.BasicAuth()
-	remote := c.ClientIP()
-	if config.TrustedMode {
-		username = "zebrunner"
-		ok = true
+func getSessionId(resp map[string]interface{}) (string, error) {
+	// Get sessionId from root. For unknown reason opera returns sessionId in root of object
+	sessionId, ok := resp["sessionId"].(string)
+	if ok {
+		return sessionId, nil
 	}
+
+	// Get session from value
+	value, ok := resp["value"].(map[string]interface{})
 	if !ok {
+		return "", errors.New("`value` must be an object")
+	}
+
+	sessionId, ok = value["sessionId"].(string)
+	if ok {
+		return sessionId, nil
+	}
+
+	return "", errors.New("failed to find sessionId field in response")
+}
+
+func Create(c *gin.Context) {
+	remote := c.ClientIP()
+
+	user, password, _ := c.Request.BasicAuth()
+	workspace, err := service.GetWorkspace(user)
+	if err != nil {
 		c.Error(&utils.SeleniumError{
 			SeleniumCode:   "session not created",
 			ResponseStatus: http.StatusUnauthorized,
@@ -235,102 +104,57 @@ func Create(c *gin.Context) {
 		return
 	}
 
-	if !config.TrustedMode {
-		err := service.CheckAuth(username, password)
-		if err != nil {
-			log.WithError(err).WithFields(log.Fields{
-				"client":   c.ClientIP(),
-				"user":     username,
-				"password": password,
-			}).Warn("Failed to authenticate user on session creation")
-			c.Error(&utils.SeleniumError{
-				SeleniumCode:   "session not created",
-				ResponseStatus: http.StatusUnauthorized,
-				Message:        "Session not created; Reason: Invalid username or password",
-			}).SetType(gin.ErrorTypePublic)
-			return
-		}
+	err = service.CheckAuth(user, password)
+	if err != nil {
+		log.WithError(err).WithFields(log.Fields{
+			"client":   c.ClientIP(),
+			"user":     user,
+			"password": password,
+		}).Warn("Failed to authenticate user on session creation")
+		c.Error(&utils.SeleniumError{
+			SeleniumCode:   "session not created",
+			ResponseStatus: http.StatusUnauthorized,
+			Message:        "Session not created; Reason: Invalid username or password",
+		}).SetType(gin.ErrorTypePublic)
+		return
 	}
 
 	l := log.WithFields(log.Fields{
-		"user":   username,
+		"user":   user,
 		"remote": remote,
 	})
 
-	body, err := ioutil.ReadAll(c.Request.Body)
-	c.Request.Body.Close()
+	var body selenium.RequestCaps
+	err = c.BindJSON(&body)
 	if err != nil {
-		l.WithError(err).Error("Failed to read request")
-		c.Error(creationError("Failed to read request", err)).SetType(gin.ErrorTypePublic)
+		l.WithError(err).Error("Failed to bind json to browser struct")
+		c.Error(creationError("Bad JSON format", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
-	var browser struct {
-		Caps    session.Caps `json:"desiredCapabilities"`
-		W3CCaps struct {
-			Caps       session.Caps    `json:"alwaysMatch"`
-			FirstMatch []*session.Caps `json:"firstMatch"`
-		} `json:"capabilities"`
+
+	processingError := utils.SeleniumError{
+		SeleniumCode:   "invalid argument",
+		ResponseStatus: http.StatusBadRequest,
+		Message:        "Failed to process capabilities. " + err.Error(),
 	}
-	err = json.Unmarshal(body, &browser)
+	err = body.ProcessLegacy()
 	if err != nil {
-		l.WithError(err).Error("Bad JSON format")
-		c.Error(creationError("Bad JSON fromat", err)).SetType(gin.ErrorTypePublic)
-		return
-	}
-	if browser.W3CCaps.Caps.BrowserName() != "" && browser.Caps.BrowserName() == "" {
-		browser.Caps = browser.W3CCaps.Caps
-	}
-	firstMatchCaps := browser.W3CCaps.FirstMatch
-	if len(firstMatchCaps) == 0 {
-		firstMatchCaps = append(firstMatchCaps, &session.Caps{})
-	}
-	var caps session.Caps
-	var starter service.Starter
-	for _, fmc := range firstMatchCaps {
-		caps = browser.Caps
-		err := mergo.Merge(&caps, *fmc)
-		if err != nil {
-			c.Error(err)
-		}
-		caps.ProcessExtensionCapabilities()
-		if err != nil {
-			l.WithError(err).Error("Bas session timeout")
-			c.Error(creationError("Failed to parse `sessionTimeout` capability.", err)).SetType(gin.ErrorTypePublic)
-			return
-		}
-
-		resolution, err := getScreenResolution(caps.ScreenResolution)
-		if err != nil {
-			l.WithError(err).WithField("resolution", caps.ScreenResolution).Error("Bad screen resolution")
-			c.Error(creationError("Failed to parse `resolution` capability", err)).SetType(gin.ErrorTypePublic)
-			return
-		}
-
-		caps.ScreenResolution = resolution
-		videoScreenSize, err := getVideoScreenSize(caps.VideoScreenSize, resolution)
-		if err != nil {
-			l.WithError(err).WithField("videoScreenSize", caps.VideoScreenSize).Error("Bad video screen size")
-			c.Error(creationError("Failed to parse `videoScreenSize` capability", err)).SetType(gin.ErrorTypePublic)
-			return
-		}
-		caps.VideoScreenSize = videoScreenSize
-		starter, ok = manager.Find(caps)
-		if ok {
-			break
-		}
-	}
-	if !ok {
-		l.WithFields(log.Fields{
-			"browserName":    caps.BrowserName(),
-			"browserVersion": caps.Version,
-		}).Error("Environment not available")
-		c.Error(creationError("Requested browser not available", nil)).SetType(gin.ErrorTypePublic)
+		l.WithError(err).Error("Failed to process capabilities")
+		c.Error(&processingError).SetType(gin.ErrorTypePublic)
 		return
 	}
 
+	conf, err := body.GetContainerConfiguration()
+	if err != nil {
+		l.WithError(err).Error("Failed to get container configuration")
+		c.Error(&processingError).SetType(gin.ErrorTypePublic)
+		return
+	}
+
+	sessionStartTime := time.Now()
 	ctx, ctxCancel := context.WithTimeout(context.Background(), config.ServiceStartupTimeout)
 	defer ctxCancel()
-	startedService, err := starter.StartWithCancel(ctx, username)
+	driver, err := service.StartDriver(ctx, *conf, workspace)
 	if err == context.DeadlineExceeded {
 		err = errors.New("session startup timed out")
 	}
@@ -339,211 +163,93 @@ func Create(c *gin.Context) {
 		c.Error(creationError("Failed to start browser", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
-	l.WithField("taskID", startedService.TaskID).Info("Service started successfully")
-	u := startedService.Url
-	cancel := startedService.Cancel
-	i := 1
+	l.WithField("taskID", driver.TaskID).Info("Service started successfully")
+	u := driver.Url
 
-	var s struct {
-		Value struct {
-			ID string `json:"sessionId"`
-		}
-		ID string `json:"sessionId"`
-	}
-	for ; ; i++ {
-		c.Request.URL.Host, c.Request.URL.Path = u.Host, path.Join(u.Path, c.Request.URL.Path)
-		c.Request.URL.Scheme = "http"
-
-		l.WithFields(log.Fields{
-			"serviceUrl": u,
-			"attempt":    i,
-		}).Info("Session attempted")
-
-		resp, status := createSession(c.Request.Context(), c.Request.URL.String(), c.Request.Header, body)
-		select {
-		case <-c.Request.Context().Done():
-			l.Info("Client disconnected")
-			cancel()
-			return
-		default:
-		}
-		if status == browserStarted {
-			sess, ok := resp["sessionId"].(string)
-			if !ok {
-				protocolError := func() {
-					l.Error("Bad response")
-					c.Error(creationError("Protocol error", nil))
-				}
-				value, ok := resp["value"]
-				if !ok {
-					protocolError()
-					cancel()
-					return
-				}
-				valueMap, ok := value.(map[string]interface{})
-				if !ok {
-					protocolError()
-					cancel()
-					return
-				}
-				sess, ok = valueMap["sessionId"].(string)
-				if !ok {
-					protocolError()
-					cancel()
-					return
-				}
-				s.ID = sess
-				resp["value"].(map[string]interface{})["sessionId"] = s.ID
-			} else {
-				sess, _ := resp["sessionId"].(string)
-				s.ID = sess
-				resp["sessionId"] = s.ID
-			}
-			c.JSON(http.StatusOK, resp)
-			break
-		} else {
-			l.Warn("Session failed")
-			cancel()
-			return
-		}
-	}
-
-	sess := &session.Session{
-		Quota:    username,
-		Caps:     caps,
-		URL:      u,
-		HostPort: startedService.HostPort,
-		Started:  time.Now(),
-	}
-
-	cancelAndRenameFiles := func() {
-		cancel()
-		sessionId := s.ID
-		e := event.Event{
-			SessionId: sessionId,
-			Session:   sess,
-		}
-		event.SessionStopped(event.StoppedSession{Event: e})
-	}
-	sess.Cancel = cancelAndRenameFiles
-	sessions.Put(s.ID, sess)
-	redisSession := CachedSession{
-		Quota:     sess.Quota,
-		Caps:      sess.Caps,
-		URL:       sess.URL,
-		HostPort:  sess.HostPort,
-		Started:   sess.Started,
-		TaskID:    startedService.TaskID,
-		Workspace: username,
-	}
-	err = RDB.Set(context.Background(), s.ID, redisSession, 0).Err()
+	requestBody, err := json.Marshal(body)
 	if err != nil {
-		fmt.Println("Session not cached", err)
+		l.WithError(err).Error("Failed to marshal request")
+		c.Error(creationError("Failed to start browser", err)).SetType(gin.ErrorTypePublic)
+		return
+	}
+
+	sessionId := ""
+	c.Request.URL.Host, c.Request.URL.Path = u.Host, path.Join(u.Path, c.Request.URL.Path)
+	c.Request.URL.Scheme = "http"
+	l.WithFields(log.Fields{
+		"serviceUrl": u,
+	}).Info("Session attempted")
+	resp, err := startSession(c.Request.Context(), c.Request.URL.String(), c.Request.Header, requestBody)
+	if err != nil {
+		l.WithError(err).Error("Session attempt failed")
+		c.Error(creationError("failed to create session", err)).SetType(gin.ErrorTypePublic)
+		service.RemoveTask(driver.TaskID)
+		return
+	}
+
+	sessionId, err = getSessionId(resp)
+	if err != nil {
+		l.WithError(err).Error("Failed to get sessionId from driver response")
+		c.Error(creationError("failed to create session", err)).SetType(gin.ErrorTypePublic)
+		return
+	}
+
+	if sessionId == "" {
+		l.WithError(err).Error("Failed to get sessionId from driver response. sessionId is empty")
+		c.Error(creationError("failed to create session", err)).SetType(gin.ErrorTypePublic)
+		return
+	}
+
+	sess := &selenium.Session{
+		ID:        sessionId,
+		Quota:     workspace,
+		Caps:      body.ToMap(),
+		Conf:      *conf,
+		URL:       u,
+		HostPort:  driver.HostPort,
+		Started:   time.Now(),
+		TaskID:    driver.TaskID,
+		Workspace: workspace,
+	}
+
+	err = selenium.SaveSessionToCache(sess)
+	if err != nil {
+		l.WithError(err).Error("Session not cached")
 	}
 	l.WithFields(log.Fields{
-		"sessionID": s.ID,
+		"sessionID": sessionId,
 		"latency":   util.SecondsSince(sessionStartTime),
 	}).Info("Session created")
-}
-
-var (
-	fullFormat  = regexp.MustCompile(`^([0-9]+x[0-9]+)x(8|16|24)$`)
-	shortFormat = regexp.MustCompile(`^[0-9]+x[0-9]+$`)
-)
-
-func getScreenResolution(input string) (string, error) {
-	if input == "" {
-		return "1920x1080x24", nil
-	}
-	if fullFormat.MatchString(input) {
-		return input, nil
-	}
-	if shortFormat.MatchString(input) {
-		return fmt.Sprintf("%sx24", input), nil
-	}
-	return "", fmt.Errorf(
-		"Malformed screenResolution capability: %s. Correct format is WxH (1920x1080) or WxHxD (1920x1080x24).",
-		input,
-	)
-}
-
-func shortenScreenResolution(screenResolution string) string {
-	return fullFormat.FindStringSubmatch(screenResolution)[1]
-}
-
-func getVideoScreenSize(videoScreenSize string, screenResolution string) (string, error) {
-	if videoScreenSize != "" {
-		if shortFormat.MatchString(videoScreenSize) {
-			return videoScreenSize, nil
-		}
-		return "", fmt.Errorf(
-			"Malformed videoScreenSize capability: %s. Correct format is WxH (1920x1080).",
-			videoScreenSize,
-		)
-	}
-	return shortenScreenResolution(screenResolution), nil
-}
-
-func getSessionTimeout(sessionTimeout string, maxTimeout time.Duration, defaultTimeout time.Duration) (time.Duration, error) {
-	if sessionTimeout != "" {
-		st, err := time.ParseDuration(sessionTimeout)
-		if err != nil {
-			return 0, fmt.Errorf("invalid sessionTimeout capability: %v", err)
-		}
-		if st <= maxTimeout {
-			return st, nil
-		}
-		return maxTimeout, nil
-	}
-	return defaultTimeout, nil
+	c.JSON(http.StatusOK, resp)
 }
 
 func Proxy(c *gin.Context) {
-	done := make(chan func())
-	go func() {
-		(<-done)()
-	}()
-	cancel := func() {}
-	defer func() {
-		done <- cancel
-	}()
 	(&httputil.ReverseProxy{
 		Director: func(r *http.Request) {
-			fragments := strings.Split(r.URL.Path, slash)
-			sessionID := fragments[2]
+			sessionID := c.Param("session")
 
-			sess, err := CreateSessionFromCache(sessionID)
+			sess, err := selenium.CreateSessionFromCache(sessionID)
 			if err != nil {
 				log.WithError(err).WithField("sessionID", sessionID).Error("Cant find session")
 				c.Error(err).SetType(gin.ErrorTypePublic)
 				return
 			}
 
-			sess.Lock.Lock()
-			defer sess.Lock.Unlock()
-			if r.Method == http.MethodDelete && len(fragments) == 3 {
-				if config.EnableFileUpload {
-					os.RemoveAll(filepath.Join(os.TempDir(), sessionID))
-				}
-				cancel = sess.Cancel
-				if config.ZebrunnerIsIntegrated() {
-					go service.SendSessionDuration(sess.Workspace, time.Since(sess.Started))
-				}
-				sessions.Remove(sessionID)
-				RDB.Del(context.Background(), sessionID).Result()
-				log.WithField("sessionID", sessionID).Info("Session deleted")
-			} else {
-				if len(fragments) == 4 && fragments[len(fragments)-1] == "file" && config.EnableFileUpload {
-					r.Header.Set("X-Selenoid-File", filepath.Join(os.TempDir(), sessionID))
-					r.URL.Path = "/file"
-					return
-				}
-			}
 			r.URL.Host, r.URL.Path = sess.URL.Host, path.Clean(sess.URL.Path+r.URL.Path)
 			r.URL.Scheme = "http"
 		},
 		ErrorHandler: defaultErrorHandler(c),
 	}).ServeHTTP(c.Writer, c.Request)
+}
+
+func CloseSession(c *gin.Context) {
+	workspace, _, _ := c.Request.BasicAuth()
+	if workspace == "" {
+		workspace = "zebrunner"
+	}
+	sessionId := c.Param("session")
+	selenium.CloseSession(workspace, sessionId)
+	log.WithField("sessionID", sessionId).Info("Session closed")
 }
 
 func defaultErrorHandler(с *gin.Context) func(http.ResponseWriter, *http.Request, error) {
@@ -564,8 +270,9 @@ func defaultErrorHandler(с *gin.Context) func(http.ResponseWriter, *http.Reques
 	}
 }
 
-func splitRequestPath(p string) (string, string) {
-	fragments := strings.Split(p, slash)
+func Vnc(wsconn *websocket.Conn) {
+	defer wsconn.Close()
+	fragments := strings.Split(wsconn.Request().Host, "/")
 	vncIndex := 0
 	for i, fragment := range fragments {
 		if fragment == "vnc" {
@@ -573,14 +280,9 @@ func splitRequestPath(p string) (string, string) {
 			break
 		}
 	}
-	return fragments[vncIndex+1], slash + strings.Join(fragments[vncIndex+2:], slash)
-}
-
-func Vnc(wsconn *websocket.Conn) {
-	defer wsconn.Close()
-	sid, _ := splitRequestPath(wsconn.Request().URL.Path)
+	sid := fragments[vncIndex+1]
 	l := log.WithField("sessionID", sid)
-	sess, err := CreateSessionFromCache(sid)
+	sess, err := selenium.CreateSessionFromCache(sid)
 
 	if err != nil {
 		l.WithError(err).Error("Session not found")
@@ -672,7 +374,7 @@ func Video(c *gin.Context) {
 func Downloads(c *gin.Context) {
 	sessionID := c.Param("session")
 	filename := c.Param("file")
-	sess, err := CreateSessionFromCache(sessionID)
+	sess, err := selenium.CreateSessionFromCache(sessionID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -691,7 +393,7 @@ func Downloads(c *gin.Context) {
 
 func Clipboard(c *gin.Context) {
 	sessionID := c.Param("session")
-	sess, err := CreateSessionFromCache(sessionID)
+	sess, err := selenium.CreateSessionFromCache(sessionID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -708,7 +410,7 @@ func Clipboard(c *gin.Context) {
 
 func Devtools(c *gin.Context) {
 	sessionID := c.Param("session")
-	sess, err := CreateSessionFromCache(sessionID)
+	sess, err := selenium.CreateSessionFromCache(sessionID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -718,16 +420,4 @@ func Devtools(c *gin.Context) {
 		Host: sess.HostPort.Devtools,
 	}
 	c.Redirect(http.StatusFound, fileUrl.String())
-}
-
-func onTimeout(t time.Duration, f func()) chan struct{} {
-	cancel := make(chan struct{})
-	go func(cancel chan struct{}) {
-		select {
-		case <-time.After(t):
-			f()
-		case <-cancel:
-		}
-	}(cancel)
-	return cancel
 }
