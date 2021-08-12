@@ -229,24 +229,18 @@ func Create(c *gin.Context) {
 	}
 
 	sess := &selenium.Session{
+		ID:       s.ID,
 		Quota:    username,
 		Caps:     body.ToMap(),
 		Conf:     *conf,
 		URL:      u,
 		HostPort: startedService.HostPort,
 		Started:  time.Now(),
-	}
-
-	redisSession := selenium.CachedSession{
-		Quota:     sess.Quota,
-		Caps:      sess.Caps,
-		URL:       sess.URL,
-		HostPort:  sess.HostPort,
-		Started:   sess.Started,
-		TaskID:    startedService.TaskID,
+		TaskID: startedService.TaskID,
 		Workspace: username,
 	}
-	err = config.RedisConnection.Set(context.Background(), s.ID, redisSession, 0).Err()
+
+	err = selenium.SaveSessionToCache(sess)
 	if err != nil {
 		fmt.Println("Session not cached", err)
 	}

@@ -29,6 +29,7 @@ type Container struct {
 
 // Session - holds session info
 type Session struct {
+	ID string
 	Quota     string
 	Conf      ContainerConfiguration
 	Caps      map[string]interface{}
@@ -124,6 +125,20 @@ func CreateSessionFromCache(sessionID string) (*Session, error) {
 	}
 	seleniumSession.Cancel = func() {}
 	return &seleniumSession, nil
+}
+
+func SaveSessionToCache(session *Session) error {
+	cacheSession := CachedSession{
+		Quota: session.Quota,
+		Caps: session.Caps,
+		URL: session.URL,
+		HostPort: session.HostPort,
+		Started: session.Started,
+		TaskID: session.TaskID,
+		Workspace: session.Workspace,
+	}
+	err := config.RedisConnection.Set(context.Background(), session.ID, cacheSession, 0).Err()
+	return err
 }
 
 func CloseSession(workspace string, sessionID string) {
