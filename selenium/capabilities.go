@@ -73,8 +73,6 @@ func (c *RequestCaps) ToMap() map[string]interface{} {
 }
 
 func (c *RequestCaps) ProcessLegacy() error {
-	requiredCaps := map[string]interface{}{}
-
 	processedDesiredCaps := map[string]interface{}{}
 	for k, v := range c.DesiredCapabilities {
 		processedDesiredCaps[k] = v
@@ -90,9 +88,10 @@ func (c *RequestCaps) ProcessLegacy() error {
 		return err
 	}
 
-	// Remove what already present in alwaysMatch
-	for key, _ := range requiredCaps {
-		delete(processedDesiredCaps, key)
+	if c.Capabilities.AlwaysMatch != nil {
+		for k, _ := range c.Capabilities.AlwaysMatch {
+			delete(processedDesiredCaps, k)
+		}
 	}
 
 	// Add vendor caps to all from firstMatch
@@ -110,6 +109,22 @@ func (c *RequestCaps) ProcessLegacy() error {
 			}
 		}
 
+	}
+
+	// Replace latest version
+	if c.Capabilities.AlwaysMatch != nil && c.Capabilities.AlwaysMatch["browserName"] == "firefox" {
+		version, ok := c.Capabilities.AlwaysMatch["browserVersion"].(string)
+		if ok && (strings.ToLower(version) == "latest" || strings.ToLower(version) == "null") {
+			c.Capabilities.AlwaysMatch["browserVersion"] = ""
+		}
+	}
+
+	for _, fmCaps := range c.Capabilities.FirstMatch {
+		version, ok := fmCaps["browserVersion"].(string)
+		name := fmCaps["browserName"]
+		if ok && name == "firefox" && (strings.ToLower(version) == "latest" || strings.ToLower(version) == "null") {
+			fmCaps["browserVersion"] = ""
+		}
 	}
 
 	return nil

@@ -48,8 +48,6 @@ func startSession(ctx context.Context, sessionUrl string, header http.Header, bo
 	req.Header.Del("Accept-Encoding")
 	req.Header.Set("Content-Type", "application/json")
 
-	ctx, cancel := context.WithTimeout(ctx, config.Timeout)
-	defer cancel()
 	req = req.WithContext(ctx)
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -57,15 +55,15 @@ func startSession(ctx context.Context, sessionUrl string, header http.Header, bo
 	}
 
 	defer resp.Body.Close()
-	location := resp.Header.Get("Location")
-	if location != "" {
-		l, err := url.Parse(location)
-		if err != nil {
-			return nil, err
-		}
-		fragments := strings.Split(l.Path, "/")
-		return map[string]interface{}{"sessionId": fragments[len(fragments)-1], "status": 0, "value": struct{}{}}, nil
-	}
+	//location := resp.Header.Get("Location")
+	//if location != "" {
+	//	l, err := url.Parse(location)
+	//	if err != nil {
+	//		return nil, err
+	//	}
+	//	fragments := strings.Split(l.Path, "/")
+	//	return map[string]interface{}{"sessionId": fragments[len(fragments)-1], "status": 0, "value": struct{}{}}, nil
+	//}
 	var reply map[string]interface{}
 	err = json.NewDecoder(resp.Body).Decode(&reply)
 	if err != nil {
@@ -83,6 +81,27 @@ func creationError(msg string, err error) *utils.SeleniumError {
 		ResponseStatus: http.StatusInternalServerError,
 		Message:        fmt.Sprintf("Session not created; Reason: %s; InternalError: %v", msg, err),
 	}
+}
+
+func getSessionId(resp map[string]interface{}) (string, error) {
+	// Get sessionId from root. For unknown reason opera returns sessionId in root of object
+	sessionId, ok := resp["sessionId"].(string)
+	if ok {
+		return sessionId, nil
+	}
+
+	// Get session from value
+	value, ok := resp["value"].(map[string]interface{})
+	if !ok {
+		return "", errors.New("`value` must be an object")
+	}
+
+	sessionId, ok = value["sessionId"].(string)
+	if ok {
+		return sessionId, nil
+	}
+
+	return "", errors.New("failed to find sessionId field in response")
 }
 
 func Create(c *gin.Context) {
@@ -165,7 +184,6 @@ func Create(c *gin.Context) {
 	l.WithField("taskID", startedService.TaskID).Info("Service started successfully")
 	u := startedService.Url
 	cancel := startedService.Cancel
-	i := 1
 
 	var s struct {
 		Value struct {
@@ -178,15 +196,7 @@ func Create(c *gin.Context) {
 	if err != nil {
 		return
 	}
-	for ; ; i++ {
-		c.Request.URL.Host, c.Request.URL.Path = u.Host, path.Join(u.Path, c.Request.URL.Path)
-		c.Request.URL.Scheme = "http"
-
-		l.WithFields(log.Fields{
-			"serviceUrl": u,
-			"attempt":    i,
-		}).Info("Session attempted")
-		resp, status := startSession(c.Request.Context(), c.Request.URL.String(), c.Request.Header, requestBody)
+	for i := 0; i < 1; i++ {
 		select {
 		case <-c.Request.Context().Done():
 			l.Info("Client disconnected")
@@ -194,46 +204,28 @@ func Create(c *gin.Context) {
 			return
 		default:
 		}
+		c.Request.URL.Host, c.Request.URL.Path = u.Host, path.Join(u.Path, c.Request.URL.Path)
+		c.Request.URL.Scheme = "http"
+
+		l.WithFields(log.Fields{
+			"serviceUrl": u,
+			"attempt":    i,
+		}).Info("Session attempted")
+		resp, err := startSession(c.Request.Context(), c.Request.URL.String(), c.Request.Header, requestBody)
 		j, _ := json.MarshalIndent(resp, "", "\t")
 		fmt.Println(string(j))
-		if status == nil {
-			sess, ok := resp["sessionId"].(string)
-			if !ok {
-				protocolError := func() {
-					l.Error("Bad response")
-					c.Error(creationError("Protocol error", nil))
-				}
-				value, ok := resp["value"]
-				if !ok {
-					protocolError()
-					cancel()
-					return
-				}
-				valueMap, ok := value.(map[string]interface{})
-				if !ok {
-					protocolError()
-					cancel()
-					return
-				}
-				sess, ok = valueMap["sessionId"].(string)
-				if !ok {
-					protocolError()
-					cancel()
-					return
-				}
-				s.ID = sess
-				resp["value"].(map[string]interface{})["sessionId"] = s.ID
-			} else {
-				sess, _ := resp["sessionId"].(string)
-				s.ID = sess
-			}
-			c.JSON(http.StatusOK, resp)
-			break
-		} else {
-			l.Warn("Session failed")
-			cancel()
+		if err != nil {
+			log.WithError(err).Warn("Session attempt failed")
+			continue
+		}
+
+		sessionId, err := getSessionId(resp)
+		if err != nil {
 			return
 		}
+		s.ID = sessionId
+		c.JSON(http.StatusOK, resp)
+		break
 	}
 
 	sess := &selenium.Session{
