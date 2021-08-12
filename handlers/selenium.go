@@ -92,15 +92,11 @@ func getSessionId(resp map[string]interface{}) (string, error) {
 }
 
 func Create(c *gin.Context) {
-	username, password, ok := c.Request.BasicAuth()
 	remote := c.ClientIP()
 
-	// Authentication related logic
-	if config.TrustedMode {
-		username = "zebrunner"
-		ok = true
-	}
-	if !ok {
+	user, password, _ := c.Request.BasicAuth()
+	workspace, err := service.GetWorkspace(user)
+	if err != nil {
 		c.Error(&utils.SeleniumError{
 			SeleniumCode:   "session not created",
 			ResponseStatus: http.StatusUnauthorized,
@@ -109,30 +105,28 @@ func Create(c *gin.Context) {
 		return
 	}
 
-	if !config.TrustedMode {
-		err := service.CheckAuth(username, password)
-		if err != nil {
-			log.WithError(err).WithFields(log.Fields{
-				"client":   c.ClientIP(),
-				"user":     username,
-				"password": password,
-			}).Warn("Failed to authenticate user on session creation")
-			c.Error(&utils.SeleniumError{
-				SeleniumCode:   "session not created",
-				ResponseStatus: http.StatusUnauthorized,
-				Message:        "Session not created; Reason: Invalid username or password",
-			}).SetType(gin.ErrorTypePublic)
-			return
-		}
+	err = service.CheckAuth(user, password)
+	if err != nil {
+		log.WithError(err).WithFields(log.Fields{
+			"client":   c.ClientIP(),
+			"user":     user,
+			"password": password,
+		}).Warn("Failed to authenticate user on session creation")
+		c.Error(&utils.SeleniumError{
+			SeleniumCode:   "session not created",
+			ResponseStatus: http.StatusUnauthorized,
+			Message:        "Session not created; Reason: Invalid username or password",
+		}).SetType(gin.ErrorTypePublic)
+		return
 	}
 
 	l := log.WithFields(log.Fields{
-		"user":   username,
+		"user":   user,
 		"remote": remote,
 	})
 
 	var body selenium.RequestCaps
-	err := c.BindJSON(&body)
+	err = c.BindJSON(&body)
 	if err != nil {
 		l.WithError(err).Error("Failed to bind json to browser struct")
 		c.Error(creationError("Bad JSON format", err)).SetType(gin.ErrorTypePublic)
@@ -161,7 +155,7 @@ func Create(c *gin.Context) {
 	sessionStartTime := time.Now()
 	ctx, ctxCancel := context.WithTimeout(context.Background(), config.ServiceStartupTimeout)
 	defer ctxCancel()
-	driver, err := service.StartDriver(ctx, *conf, username)
+	driver, err := service.StartDriver(ctx, *conf, workspace)
 	if err == context.DeadlineExceeded {
 		err = errors.New("session startup timed out")
 	}
@@ -207,14 +201,14 @@ func Create(c *gin.Context) {
 
 	sess := &selenium.Session{
 		ID:        sessionId,
-		Quota:     username,
+		Quota:     workspace,
 		Caps:      body.ToMap(),
 		Conf:      *conf,
 		URL:       u,
 		HostPort:  driver.HostPort,
 		Started:   time.Now(),
 		TaskID:    driver.TaskID,
-		Workspace: username,
+		Workspace: workspace,
 	}
 
 	err = selenium.SaveSessionToCache(sess)
@@ -231,11 +225,6 @@ func Proxy(c *gin.Context) {
 	(&httputil.ReverseProxy{
 		Director: func(r *http.Request) {
 			sessionID := c.Param("session")
-
-			workspace, _, _ := c.Request.BasicAuth()
-			if workspace == "" {
-				workspace = "zebrunner"
-			}
 
 			sess, err := selenium.CreateSessionFromCache(sessionID)
 			if err != nil {

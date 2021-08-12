@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -126,11 +127,32 @@ func DeleteUser(name string) error {
 	return nil
 }
 
+func GetWorkspace(name string) (string, error) {
+	if config.TrustedMode {
+		return "zebrunner", nil
+	}
+
+	if name == "" {
+		return "", errors.New("failed to get auth credentials")
+	}
+	return name, nil
+}
+
 func CheckAuth(name, password string) error {
 	authenticationError := utils.HTTPError{
 		Status:  http.StatusUnauthorized,
 		Message: "Invalid username or password",
 	}
+
+	if config.TrustedMode {
+		return nil
+	}
+
+	if name == "" || password == "" {
+		authenticationError.Message = "Failed to get auth credentials"
+		return &authenticationError
+	}
+
 	user, err := GetUser(name)
 	if err != nil {
 		return &authenticationError
