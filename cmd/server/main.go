@@ -82,7 +82,6 @@ func CreateRouter() *gin.Engine {
 
 	api := r.Group("/api")
 	api.Use(handlers.APIError)
-	api.Use(handlers.APIAuthentication)
 	{
 		api.POST("/users", handlers.CreateUser)
 		api.DELETE("/users/:username", handlers.DeleteUser)

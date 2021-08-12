@@ -18,8 +18,6 @@ services:
      options:
       max-size: "512m"
     restart: always
-    environment:
-      - API_ACCESS_KEY=secure_password
   management:
     container_name: cluster-manager
     build:

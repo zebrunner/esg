@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -49,7 +48,7 @@ func APIError(c *gin.Context) {
 func SeleniumError(c *gin.Context) {
 	// Add sessionID to gin context for logging purposes
 	path := c.Request.URL.Path
-	if strings.HasPrefix(path, "/wd/hub/session") && len(strings.Split(path, "")) >= 3 {
+	if strings.HasPrefix(path, "/wd/hub/session") && len(strings.Split(path, "/")) >= 3 {
 		sessionID := strings.Split(path, "/")[2]
 		c.Set("sessionID", sessionID)
 	}
@@ -110,31 +109,6 @@ func Authentication(c *gin.Context) {
 	err := service.CheckAuth(username, password)
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{
-			"client":   c.ClientIP(),
-			"user":     username,
-			"password": password,
-		}).Warn("Failed to authenticate user")
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"message": "Provided credentials not valid",
-		})
-		c.Abort()
-		return
-	}
-}
-
-func APIAuthentication(c *gin.Context) {
-	username, password, ok := c.Request.BasicAuth()
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"message": "Auth credentials not found",
-		})
-		log.WithField("client", c.ClientIP()).Warn("Auth credentials not found")
-		c.Abort()
-		return
-	}
-
-	if username != "root" || password != os.Getenv("API_ACCESS_KEY") {
-		log.WithFields(log.Fields{
 			"client":   c.ClientIP(),
 			"user":     username,
 			"password": password,
