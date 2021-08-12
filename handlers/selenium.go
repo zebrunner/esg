@@ -11,9 +11,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"os"
 	"path"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -243,8 +241,7 @@ func Create(c *gin.Context) {
 func Proxy(c *gin.Context) {
 	(&httputil.ReverseProxy{
 		Director: func(r *http.Request) {
-			fragments := strings.Split(r.URL.Path, "/")
-			sessionID := fragments[2]
+			sessionID := c.Param("session")
 
 			workspace, _, _ := c.Request.BasicAuth()
 			if workspace == "" {
@@ -255,12 +252,6 @@ func Proxy(c *gin.Context) {
 			if err != nil {
 				log.WithError(err).WithField("sessionID", sessionID).Error("Cant find session")
 				c.Error(err).SetType(gin.ErrorTypePublic)
-				return
-			}
-
-			if len(fragments) == 4 && fragments[len(fragments)-1] == "file" && config.EnableFileUpload {
-				r.Header.Set("X-Selenoid-File", filepath.Join(os.TempDir(), sessionID))
-				r.URL.Path = "/file"
 				return
 			}
 
