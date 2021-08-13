@@ -135,7 +135,7 @@ func Create(c *gin.Context) {
 	processingError := utils.SeleniumError{
 		SeleniumCode:   "invalid argument",
 		ResponseStatus: http.StatusBadRequest,
-		Message:        "Failed to process capabilities. " + err.Error(),
+		Message:        "Failed to process capabilities. ",
 	}
 	err = body.ProcessLegacy()
 	if err != nil {
