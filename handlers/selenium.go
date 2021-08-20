@@ -248,7 +248,14 @@ func CloseSession(c *gin.Context) {
 		workspace = "zebrunner"
 	}
 	sessionId := c.Param("session")
-	selenium.CloseSession(workspace, sessionId)
+	sess, err := selenium.CreateSessionFromCache(sessionId)
+	if err != nil {
+		log.WithError(err).WithField("sessionID", sessionId).Error("Cant find session")
+		c.Error(err).SetType(gin.ErrorTypePublic)
+		return
+	}
+	selenium.CloseSession(sess.Workspace, sess.ID)
+	service.RemoveTask(sess.TaskID)
 	log.WithField("sessionID", sessionId).Info("Session closed")
 }
 

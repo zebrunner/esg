@@ -29,7 +29,7 @@ type Container struct {
 
 // Session - holds session info
 type Session struct {
-	ID string
+	ID        string
 	Quota     string
 	Conf      ContainerConfiguration
 	Caps      map[string]interface{}
@@ -84,6 +84,7 @@ type HostPort struct {
 }
 
 type CachedSession struct {
+	ID        string
 	Quota     string
 	Caps      map[string]interface{}
 	Conf      ContainerConfiguration
@@ -115,6 +116,7 @@ func CreateSessionFromCache(sessionID string) (*Session, error) {
 	}
 
 	seleniumSession := Session{
+		ID:        s.ID,
 		Quota:     s.Quota,
 		Caps:      s.Caps,
 		URL:       s.URL,
@@ -129,12 +131,13 @@ func CreateSessionFromCache(sessionID string) (*Session, error) {
 
 func SaveSessionToCache(session *Session) error {
 	cacheSession := CachedSession{
-		Quota: session.Quota,
-		Caps: session.Caps,
-		URL: session.URL,
-		HostPort: session.HostPort,
-		Started: session.Started,
-		TaskID: session.TaskID,
+		ID:        session.ID,
+		Quota:     session.Quota,
+		Caps:      session.Caps,
+		URL:       session.URL,
+		HostPort:  session.HostPort,
+		Started:   session.Started,
+		TaskID:    session.TaskID,
 		Workspace: session.Workspace,
 	}
 	err := config.RedisConnection.Set(context.Background(), session.ID, cacheSession, 0).Err()
