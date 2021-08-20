@@ -23,7 +23,7 @@ var (
 
 func init() {
 	//rename to idle timeout
-	flag.DurationVar(&config.Timeout, "timeout", 60*time.Second, "Session idle timeout in time.Duration format")
+	flag.DurationVar(&config.IdleTimeout, "idle-timeout", 60*time.Second, "Session idle timeout in time.Duration format")
 	// AWS Related args
 	flag.StringVar(&config.AwsRegion, "aws-region", "us-east-1", "AWS region name")
 	flag.IntVar(&config.AwsRetry, "aws-retry", 10, "AWS client retry count")
@@ -53,7 +53,7 @@ func init() {
 func ClearSessions() {
 	rdb := config.RedisConnection
 	for {
-		time.Sleep(config.Timeout)
+		time.Sleep(config.IdleTimeout)
 		keys, err := rdb.Keys(context.Background(), "*").Result()
 		if err != nil {
 			log.WithError(err).Error("Failed to get list of keys")
@@ -80,7 +80,7 @@ func ClearSessions() {
 				continue
 			}
 
-			timeout := config.Timeout
+			timeout := config.IdleTimeout
 			if s.Conf.IdleTimeout != 0 {
 				timeout = time.Duration(s.Conf.IdleTimeout) * time.Second
 			}
