@@ -51,13 +51,15 @@ func startSession(ctx context.Context, sessionUrl string, header http.Header, bo
 
 	defer resp.Body.Close()
 	var reply map[string]interface{}
+	if resp.StatusCode != http.StatusOK {
+		return reply, errors.New(fmt.Sprintf("unsuccessful response code. Status: %s", resp.Status))
+	}
+
 	err = json.NewDecoder(resp.Body).Decode(&reply)
 	if err != nil {
 		return nil, err
 	}
-	if resp.StatusCode != http.StatusOK {
-		return reply, errors.New("unsuccessful response code")
-	}
+
 	return reply, nil
 }
 
@@ -186,6 +188,9 @@ func Create(c *gin.Context) {
 		service.RemoveTask(driver.TaskID)
 		return
 	}
+
+	r, err := json.MarshalIndent(resp, "", "\t")
+	fmt.Println(string(r))
 
 	sessionId, err = getSessionId(resp)
 	if err != nil {

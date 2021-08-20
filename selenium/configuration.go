@@ -19,8 +19,8 @@ type ContainerConfiguration struct {
 	ScreenResolution string
 	DeviceName       string
 	Skin             string
-	CpuResource      int64
-	MemoryResource   int64
+	Cpu              int64
+	Memory           int64
 	IdleTimeout      int64
 	VideoCodec       string
 	TimeZone         string
@@ -29,10 +29,10 @@ type ContainerConfiguration struct {
 	DNSServers       []string
 }
 
-func (c *ContainerConfiguration) Memory() int64 {
+func (c *ContainerConfiguration) GetMemory() int64 {
 	memory := int64(config.MinMemory)
-	if c.MemoryResource > memory {
-		memory = c.MemoryResource
+	if c.Memory > memory {
+		memory = c.Memory
 	}
 	if memory > int64(config.MaxMemory) {
 		memory = int64(config.MaxMemory)
@@ -40,10 +40,10 @@ func (c *ContainerConfiguration) Memory() int64 {
 	return memory
 }
 
-func (c *ContainerConfiguration) Cpu() int64 {
+func (c *ContainerConfiguration) GetCpu() int64 {
 	cpu := int64(config.MinCpu)
-	if c.CpuResource > cpu {
-		cpu = c.CpuResource
+	if c.Cpu > cpu {
+		cpu = c.Cpu
 	}
 	if cpu > int64(config.MaxCpu) {
 		cpu = int64(config.MaxCpu)
@@ -52,9 +52,9 @@ func (c *ContainerConfiguration) Cpu() int64 {
 }
 
 type Browser struct {
-	Image                string
-	Path                 string
-	Port                 int64
+	Image string
+	Path  string
+	Port  int64
 }
 
 func (b *Browser) TaskDefinitionFamily() string {

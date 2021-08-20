@@ -202,9 +202,9 @@ func CreateTaskDefinition(browser string, family string) (taskDefinition *ecs.Ta
 func RunTask(ctx context.Context, conf selenium.ContainerConfiguration, family string, username string) (taskArn string, returnErr error) {
 	svc := ecs.New(AwsSess)
 
-	memory := conf.Memory()
-	memoryReservation := conf.Memory()
-	cpu := conf.Cpu()
+	memory := conf.GetMemory()
+	memoryReservation := conf.GetMemory()
+	cpu := conf.GetCpu()
 
 	browserContainerName := "browser"
 	id := uuid.New().String()
