@@ -36,8 +36,8 @@ func init() {
 	flag.DurationVar(&config.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
 	flag.StringVar(&browsersFile, "browsers-file", "", "Path to txt file with supported browsers")
 
-	flag.IntVar(&config.MinMemory, "min-memory", 1024, "AWS minimum memory limitation for session")
-	flag.IntVar(&config.MinMemoryReservation, "min-memory-reservation", 1024, "AWS minimum memory reservation limitation for session")
+	flag.IntVar(&config.MinMemory, "min-memory", 2048, "AWS minimum memory limitation for session")
+	flag.IntVar(&config.MinMemoryReservation, "min-memory-reservation", 2048, "AWS minimum memory reservation limitation for session")
 	flag.IntVar(&config.MaxMemory, "max-memory", 8192, "AWS maximum memory limitation for session")
 	flag.IntVar(&config.MaxMemoryReservation, "max-memory-reservation", 8192, "AWS maximum memory reservation limitation for session")
 	flag.IntVar(&config.MinCpu, "min-cpu", 1024, "AWS minimum CPU limitation for session")
