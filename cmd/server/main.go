@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	listen         string
+	listen string
 )
 
 func init() {

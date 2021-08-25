@@ -67,24 +67,32 @@ func ClearSessions() {
 				continue
 			}
 
-			result, err := rdb.Get(context.Background(), key).Result()
-			if err != nil {
-				log.WithError(err).Error("Failed to get session from cache")
+			// Temporary solution. Session timeout saved separately with session.
+			if strings.Contains(key, "timeout") {
 				continue
 			}
-
-			s := selenium.CachedSession{}
-			err = json.Unmarshal([]byte(result), &s)
+			sessionTimeout, err := rdb.Get(context.Background(), "timeout-"+key).Int64()
 			if err != nil {
-				log.WithError(err).Error("Failed to unmarshal redis response")
-				continue
+				log.WithError(err).WithField("session", key).Error("Failed to get idle timeout")
 			}
 
 			timeout := config.IdleTimeout
-			if s.Conf.IdleTimeout != 0 {
-				timeout = time.Duration(s.Conf.IdleTimeout) * time.Second
+			if sessionTimeout != 0 {
+				timeout = time.Duration(sessionTimeout) * time.Second
 			}
-			if idle > timeout {
+			if idle >= timeout {
+				result, err := rdb.Get(context.Background(), key).Result()
+				if err != nil {
+					log.WithError(err).Error("Failed to get session from cache")
+					continue
+				}
+
+				s := selenium.CachedSession{}
+				err = json.Unmarshal([]byte(result), &s)
+				if err != nil {
+					log.WithError(err).Error("Failed to unmarshal redis response")
+					continue
+				}
 				log.WithField("task", s.TaskID).Info("Deleting task. Reason: idle timeout")
 				selenium.CloseSession(s.Workspace, key)
 				_, err = rdb.Del(context.Background(), key).Result()

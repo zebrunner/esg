@@ -229,6 +229,11 @@ func Create(c *gin.Context) {
 }
 
 func Proxy(c *gin.Context) {
+	if c.Request.Method == http.MethodDelete && strings.Contains(c.Request.URL.Path, "/window") {
+		CloseSession(c)
+		return
+	}
+
 	(&httputil.ReverseProxy{
 		Director: func(r *http.Request) {
 			sessionID := c.Param("session")

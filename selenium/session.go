@@ -141,6 +141,12 @@ func SaveSessionToCache(session *Session) error {
 		Workspace: session.Workspace,
 	}
 	err := config.RedisConnection.Set(context.Background(), session.ID, cacheSession, 0).Err()
+	if err != nil {
+		return err
+	}
+
+	keyTimeout := time.Duration(session.Conf.IdleTimeout*int64(time.Second) + int64(10*time.Minute))
+	err = config.RedisConnection.Set(context.Background(), session.ID+"-timeout", session.Conf.IdleTimeout, keyTimeout).Err()
 	return err
 }
 
