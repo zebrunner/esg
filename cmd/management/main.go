@@ -71,7 +71,7 @@ func ClearSessions() {
 			if strings.Contains(key, "timeout") {
 				continue
 			}
-			sessionTimeout, err := rdb.Get(context.Background(), "timeout-"+key).Int64()
+			sessionTimeout, err := rdb.Get(context.Background(), key+"-timeout").Int64()
 			if err != nil {
 				log.WithError(err).WithField("session", key).Error("Failed to get idle timeout")
 			}
@@ -95,6 +95,7 @@ func ClearSessions() {
 				}
 				log.WithField("task", s.TaskID).Info("Deleting task. Reason: idle timeout")
 				selenium.CloseSession(s.Workspace, key)
+				service.StopTask(s.TaskID)
 				_, err = rdb.Del(context.Background(), key).Result()
 				if err != nil {
 					log.WithError(err).WithField("session", key).Error("Failed to delete session from cache")
