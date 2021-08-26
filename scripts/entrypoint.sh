@@ -16,5 +16,5 @@ migrate -path migrations -database $DATABASE up
   -aws-elastic-cache redis:6379 \
   -db-connection $DATABASE \
   -listen :4444 \
-  -log-level debug \
+  -log-level trace \
   -s3-bucket zebrunner.dev-assets

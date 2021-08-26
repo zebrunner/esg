@@ -18,28 +18,23 @@ import (
 )
 
 var (
-	listen         string
-	gracefulPeriod time.Duration
+	listen string
 )
 
 func init() {
-	flag.BoolVar(&config.EnableFileUpload, "enable-file-upload", false, "File upload support")
 	flag.BoolVar(&config.UsePublicIp, "use-public-ip", false, "Use or no public ip address for browser slave instances")
 	flag.StringVar(&listen, "listen", ":4444", "Network address to accept connections")
 	flag.IntVar(&config.RetryCount, "retry-count", 1, "New session attempts retry count")
-	flag.DurationVar(&config.Timeout, "timeout", 60*time.Second, "Session idle timeout in time.Duration format")
-	flag.DurationVar(&config.MaxTimeout, "max-timeout", 1*time.Hour, "Maximum valid session idle timeout in time.Duration format")
 	flag.DurationVar(&config.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
 	flag.DurationVar(&config.ServiceStartupTimeout, "service-startup-timeout", 4*time.Minute, "Service startup timeout in time.Duration format")
 	flag.StringVar(&config.VideoRecorderImage, "video-recorder-image", "selenoid/video-recorder:latest-release", "Image to use as video recorder")
-	flag.DurationVar(&gracefulPeriod, "graceful-period", 300*time.Second, "graceful shutdown period in time.Duration format, e.g. 300s or 500ms")
 	// AWS Related args
 	flag.StringVar(&config.AwsRegion, "aws-region", "us-east-1", "AWS region name")
 	flag.IntVar(&config.AwsRetry, "aws-retry", 10, "AWS client retry count")
 	flag.StringVar(&config.AwsCluster, "aws-cluster", "esg", "AWS cluster name")
 	flag.StringVar(&config.AwsElasticCache, "aws-elastic-cache", "localhost:6379", "AWS elastic cache connection URL")
-	flag.IntVar(&config.MinMemory, "min-memory", 1024, "AWS minimum memory limitation for session")
-	flag.IntVar(&config.MinMemoryReservation, "min-memory-reservation", 1024, "AWS minimum memory reservation limitation for session")
+	flag.IntVar(&config.MinMemory, "min-memory", 2048, "AWS minimum memory limitation for session")
+	flag.IntVar(&config.MinMemoryReservation, "min-memory-reservation", 2048, "AWS minimum memory reservation limitation for session")
 	flag.IntVar(&config.MaxMemory, "max-memory", 8192, "AWS maximum memory limitation for session")
 	flag.IntVar(&config.MaxMemoryReservation, "max-memory-reservation", 8192, "AWS maximum memory reservation limitation for session")
 	flag.IntVar(&config.MinCpu, "min-cpu", 1024, "AWS minimum CPU limitation for session")
@@ -57,8 +52,6 @@ func init() {
 	flag.StringVar(&config.ZebrunnerIntegrationPassword, "zebrunner-integration-password", "", "Password for zebrunner for current env")
 
 	flag.Parse()
-
-	handlers.InitManager()
 }
 
 func ReverseProxy() gin.HandlerFunc {
@@ -97,10 +90,12 @@ func CreateRouter() *gin.Engine {
 		hub.GET("/", handlers.Welcome)
 		hub.GET("/status", handlers.Authentication, handlers.ClusterStatus)
 		hub.GET("/ping", handlers.Ping)
+		hub.GET("/browsers", handlers.ListBrowsers)
 
 		hub.Any("/wd/hub/*action", ReverseProxy())
 		hub.POST("/session", handlers.Create) // Auth logic moved to handler
-		hub.Any("/session/*action", handlers.Proxy)
+		hub.DELETE("/session/:session", handlers.CloseSession)
+		hub.Any("/session/:session/*action", handlers.Proxy)
 
 		hub.GET("/vnc/:session", func(c *gin.Context) {
 			handler := websocket.Handler(handlers.Vnc)
@@ -143,18 +138,18 @@ func main() {
 		ForceColors:     true,
 	})
 
-	db, err := service.InitDBConnection(config.DbConnectionString)
+	db, err := config.InitDBConnection(config.DbConnectionString)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to init DB client.")
 	}
-	service.DB = db
+	config.DbConnection = db
 	defer db.Close()
 
-	rdb, err := service.InitCache()
+	rdb, err := config.InitCache()
 	if err != nil {
 		log.WithError(err).Fatal("Failed to init Redis client")
 	}
-	handlers.RDB = rdb
+	config.RedisConnection = rdb
 	defer rdb.Close()
 
 	aws, err := service.InitAws()

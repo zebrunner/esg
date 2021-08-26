@@ -1,9 +1,12 @@
 package handlers
 
 import (
+	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/service"
 	"net/http"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -49,6 +52,26 @@ func ClusterStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, status)
 }
 
+func ListBrowsers(c *gin.Context) {
+	browsers, err := service.ListBrowsers()
+	if err != nil {
+		log.WithError(err).Warn("Failed to get browser list")
+		c.Error(err).SetType(gin.ErrorTypePublic)
+		return
+	}
+
+	browsersResponse := []map[string]interface{}{}
+	for _, browser := range browsers {
+		browserData := map[string]interface{}{
+			"name": strings.Split(browser, ":")[0],
+			"version": strings.Split(browser, ":")[1],
+			"platform": "linux",
+		}
+		browsersResponse = append(browsersResponse, browserData)
+	}
+	c.JSON(http.StatusOK, browsersResponse)
+}
+
 func Welcome(c *gin.Context) {
-	c.String(http.StatusOK, "Welcome to Zebrunner Elastic Selenoid Grid!")
+	c.String(http.StatusOK, "Welcome to Zebrunner Elastic Selenium Grid!")
 }

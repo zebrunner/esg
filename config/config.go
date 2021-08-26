@@ -13,14 +13,13 @@ var (
 		"opera",
 		"edge",
 	}
+	VendorPrefix = "zebrunner"
 )
 
 var (
-	EnableFileUpload      bool
 	UsePublicIp           bool
 	RetryCount            int
-	Timeout               time.Duration
-	MaxTimeout            time.Duration
+	IdleTimeout           time.Duration
 	SessionDeleteTimeout  time.Duration
 	ServiceStartupTimeout time.Duration
 	VideoRecorderImage    string
