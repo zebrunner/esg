@@ -221,6 +221,14 @@ func RunTask(ctx context.Context, conf selenium.ContainerConfiguration, family s
 					Name:  aws.String("ENABLE_VNC"),
 					Value: aws.String(strconv.FormatBool(conf.EnableVnc)),
 				},
+				{
+					Name:  aws.String("DNS_SERVERS"),
+					Value: aws.String(strings.Join(conf.DNSServers, " ")),
+				},
+				{
+					Name:  aws.String("HOSTS_ENTRIES"),
+					Value: aws.String(strings.Join(conf.HostsEntries, " ")),
+				},
 			},
 			Cpu:               &cpu,
 			Memory:            &memory,
