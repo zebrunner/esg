@@ -2,9 +2,10 @@ package selenium
 
 import (
 	"fmt"
+	"strings"
+
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
-	"strings"
 )
 
 type ContainerConfiguration struct {
@@ -25,7 +26,7 @@ type ContainerConfiguration struct {
 	VideoCodec       string
 	TimeZone         string
 	Env              []string
-	HostEntries      []string
+	HostsEntries     []string
 	DNSServers       []string
 }
 
