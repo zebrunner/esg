@@ -43,6 +43,7 @@ func startSession(ctx context.Context, sessionUrl string, header http.Header, bo
 			req.Header.Add(key, value)
 		}
 	}
+        req.Host = "localhost"
 	req = req.WithContext(ctx)
 	resp, err := httpClient.Do(req)
 	if err != nil {
