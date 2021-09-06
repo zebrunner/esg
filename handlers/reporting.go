@@ -62,9 +62,14 @@ func ListBrowsers(c *gin.Context) {
 
 	browsersResponse := []map[string]interface{}{}
 	for _, browser := range browsers {
+		browserName := strings.Split(browser, ":")[0]
+		if browserName == "edge" {
+			browserName = "MicrosoftEdge"
+		}
+
 		browserData := map[string]interface{}{
-			"name": strings.Split(browser, ":")[0],
-			"version": strings.Split(browser, ":")[1],
+			"name":     browserName,
+			"version":  strings.Split(browser, ":")[1],
 			"platform": "linux",
 		}
 		browsersResponse = append(browsersResponse, browserData)
