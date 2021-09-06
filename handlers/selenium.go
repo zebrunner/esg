@@ -43,7 +43,7 @@ func startSession(ctx context.Context, sessionUrl string, header http.Header, bo
 			req.Header.Add(key, value)
 		}
 	}
-        req.Host = "localhost"
+	req.Host = "localhost"
 	req = req.WithContext(ctx)
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -230,11 +230,6 @@ func Create(c *gin.Context) {
 }
 
 func Proxy(c *gin.Context) {
-	if c.Request.Method == http.MethodDelete && strings.Contains(c.Request.URL.Path, "/window") {
-		CloseSession(c)
-		return
-	}
-
 	(&httputil.ReverseProxy{
 		Director: func(r *http.Request) {
 			sessionID := c.Param("session")
