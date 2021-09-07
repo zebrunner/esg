@@ -80,26 +80,37 @@ func getInstanceResources() (*Resources, error) {
 }
 
 func getTasks(svc *ecs.ECS) ([]*ecs.Task, error) {
-	listTasksInput := &ecs.ListTasksInput{
-		Cluster: &config.AwsCluster,
-	}
-	listTasksResult, err := svc.ListTasks(listTasksInput)
-	if err != nil {
-		return nil, err
-	}
-	if len(listTasksResult.TaskArns) == 0 {
-		return []*ecs.Task{}, nil
-	}
-	describeTasksInput := &ecs.DescribeTasksInput{
-		Cluster: &config.AwsCluster,
-		Tasks:   listTasksResult.TaskArns,
-	}
-	describeTasksResult, err := svc.DescribeTasks(describeTasksInput)
-	if err != nil {
-		return nil, err
-	}
+    tasks := []*ecs.Task{}
+    listTasksInput := &ecs.ListTasksInput{
+        Cluster: &config.AwsCluster,
+    }
+    for {
+        listTasksResult, err := svc.ListTasks(listTasksInput)
+        if err != nil {
+            return nil, err
+        }
+        if len(listTasksResult.TaskArns) == 0 {
+            break
+        }
 
-	return describeTasksResult.Tasks, nil
+        describeTasksInput := &ecs.DescribeTasksInput{
+            Cluster: &config.AwsCluster,
+            Tasks: listTasksResult.TaskArns,
+        }
+        describeTasksResult, err := svc.DescribeTasks(describeTasksInput)
+        if err != nil {
+            log.WithError(err).Warn("Failed to get all tasks. Only partial results returned")
+            break
+        }
+        tasks = append(tasks, describeTasksResult.Tasks...)
+
+        if listTasksResult.NextToken == nil {
+            break
+        }
+        listTasksInput = listTasksInput.SetNextToken(*listTasksResult.NextToken)
+    }
+
+	return tasks, nil
 }
 
 func getTasksResources(tasks []*ecs.Task, status string) []*Resources {
