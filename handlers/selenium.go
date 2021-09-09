@@ -43,6 +43,7 @@ func startSession(ctx context.Context, sessionUrl string, header http.Header, bo
 			req.Header.Add(key, value)
 		}
 	}
+	req.Host = "localhost"
 	req = req.WithContext(ctx)
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -51,13 +52,14 @@ func startSession(ctx context.Context, sessionUrl string, header http.Header, bo
 
 	defer resp.Body.Close()
 	var reply map[string]interface{}
-	if resp.StatusCode != http.StatusOK {
-		return reply, errors.New(fmt.Sprintf("unsuccessful response code. Status: %s", resp.Status))
-	}
 
 	err = json.NewDecoder(resp.Body).Decode(&reply)
 	if err != nil {
 		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return reply, errors.New(fmt.Sprintf("unsuccessful response code. Status: %s", resp.Status))
 	}
 
 	return reply, nil
@@ -183,14 +185,11 @@ func Create(c *gin.Context) {
 	}).Info("Session attempted")
 	resp, err := startSession(c.Request.Context(), c.Request.URL.String(), c.Request.Header, requestBody)
 	if err != nil {
-		l.WithError(err).Error("Session attempt failed")
+		l.WithError(err).WithField("response", resp).Error("Session attempt failed")
 		c.Error(creationError("failed to create session", err)).SetType(gin.ErrorTypePublic)
 		service.RemoveTask(driver.TaskID)
 		return
 	}
-
-	r, err := json.MarshalIndent(resp, "", "\t")
-	fmt.Println(string(r))
 
 	sessionId, err = getSessionId(resp)
 	if err != nil {
@@ -229,11 +228,6 @@ func Create(c *gin.Context) {
 }
 
 func Proxy(c *gin.Context) {
-	if c.Request.Method == http.MethodDelete && strings.Contains(c.Request.URL.Path, "/window") {
-		CloseSession(c)
-		return
-	}
-
 	(&httputil.ReverseProxy{
 		Director: func(r *http.Request) {
 			sessionID := c.Param("session")
