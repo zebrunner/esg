@@ -17,13 +17,14 @@ var (
 )
 
 var (
-	UsePublicIp           bool
-	RetryCount            int
-	IdleTimeout           time.Duration
-	SessionDeleteTimeout  time.Duration
-	ServiceStartupTimeout time.Duration
-	VideoRecorderImage    string
-	LogLevel              = "debug"
+	UsePublicIp             bool
+	RetryCount              int
+	IdleTimeout             time.Duration
+	SessionDeleteTimeout    time.Duration
+	ServiceStartupTimeout   time.Duration
+	VideoRecorderImage      string
+	LogLevel                = "debug"
+	ReserveInstancesPercent float64
 
 	AwsRegion            string
 	AwsRetry             int

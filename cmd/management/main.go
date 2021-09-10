@@ -35,6 +35,7 @@ func init() {
 	flag.StringVar(&config.LogLevel, "log-level", "debug", "Desired log level. Valid levels: `panic`, `fatal`, `error`, `warning`, `info`, `debug`, `trace`")
 	flag.DurationVar(&config.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
 	flag.StringVar(&browsersFile, "browsers-file", "", "Path to txt file with supported browsers")
+	flag.Float64Var(&config.ReserveInstancesPercent, "reserve-instances-percent", 0.3, "Percent of instance to keep alive in scale down")
 
 	flag.IntVar(&config.MinMemory, "min-memory", 2048, "AWS minimum memory limitation for session")
 	flag.IntVar(&config.MinMemoryReservation, "min-memory-reservation", 2048, "AWS minimum memory reservation limitation for session")
@@ -112,6 +113,13 @@ func ScaleCluster() {
 	}
 }
 
+func ScaleDownCluster() {
+	for {
+		time.Sleep(30 * time.Second)
+		service.ScaleDown()
+	}
+}
+
 func RefreshTaskDefinitions() {
 	images, err := service.ListBrowsers()
 	if err != nil {
@@ -174,6 +182,8 @@ func main() {
 
 	wg.Add(1)
 	go ScaleCluster()
+	wg.Add(1)
+	go ScaleDownCluster()
 	wg.Add(1)
 	go ClearSessions()
 

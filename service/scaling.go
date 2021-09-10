@@ -3,6 +3,7 @@ package service
 import (
 	"math"
 	"strconv"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	awsSession "github.com/aws/aws-sdk-go/aws/session"
@@ -80,35 +81,35 @@ func getInstanceResources() (*Resources, error) {
 }
 
 func getTasks(svc *ecs.ECS) ([]*ecs.Task, error) {
-    tasks := []*ecs.Task{}
-    listTasksInput := &ecs.ListTasksInput{
-        Cluster: &config.AwsCluster,
-    }
-    for {
-        listTasksResult, err := svc.ListTasks(listTasksInput)
-        if err != nil {
-            return nil, err
-        }
-        if len(listTasksResult.TaskArns) == 0 {
-            break
-        }
+	tasks := []*ecs.Task{}
+	listTasksInput := &ecs.ListTasksInput{
+		Cluster: &config.AwsCluster,
+	}
+	for {
+		listTasksResult, err := svc.ListTasks(listTasksInput)
+		if err != nil {
+			return nil, err
+		}
+		if len(listTasksResult.TaskArns) == 0 {
+			break
+		}
 
-        describeTasksInput := &ecs.DescribeTasksInput{
-            Cluster: &config.AwsCluster,
-            Tasks: listTasksResult.TaskArns,
-        }
-        describeTasksResult, err := svc.DescribeTasks(describeTasksInput)
-        if err != nil {
-            log.WithError(err).Warn("Failed to get all tasks. Only partial results returned")
-            break
-        }
-        tasks = append(tasks, describeTasksResult.Tasks...)
+		describeTasksInput := &ecs.DescribeTasksInput{
+			Cluster: &config.AwsCluster,
+			Tasks:   listTasksResult.TaskArns,
+		}
+		describeTasksResult, err := svc.DescribeTasks(describeTasksInput)
+		if err != nil {
+			log.WithError(err).Warn("Failed to get all tasks. Only partial results returned")
+			break
+		}
+		tasks = append(tasks, describeTasksResult.Tasks...)
 
-        if listTasksResult.NextToken == nil {
-            break
-        }
-        listTasksInput = listTasksInput.SetNextToken(*listTasksResult.NextToken)
-    }
+		if listTasksResult.NextToken == nil {
+			break
+		}
+		listTasksInput = listTasksInput.SetNextToken(*listTasksResult.NextToken)
+	}
 
 	return tasks, nil
 }
@@ -254,7 +255,7 @@ func ScaleUp() {
 
 	// No new resources required right now
 	if len(requiredTaskResources) == 0 {
-                log.Trace("No new resources required")
+		log.Trace("No new resources required")
 		return
 	}
 
@@ -276,4 +277,71 @@ func ScaleUp() {
 
 	requiredInstances := currentInstanceCount + int64(math.Ceil(math.Max(requiredCpu, requiredMemory)))
 	setDesiredCapacity(autoscalingSvc, requiredInstances)
+}
+
+func ScaleDown() {
+	session, err := awsSession.NewSession(&aws.Config{Region: &config.AwsRegion, MaxRetries: &config.AwsRetry})
+	if err != nil {
+		log.WithError(err).Error("Failed to create AWS session")
+		return
+	}
+	svc := ecs.New(session)
+	autoscalingSvc := autoscaling.New(session)
+	if err != nil {
+		log.WithError(err).Error("Failed to get list of running task")
+		return
+	}
+
+	instances := []*ecs.ContainerInstance{}
+	listInstancesInput := ecs.ListContainerInstancesInput{
+		Cluster: &config.AwsCluster,
+	}
+	for {
+		listInstancesResult, err := svc.ListContainerInstances(&listInstancesInput)
+		if err != nil || len(listInstancesResult.ContainerInstanceArns) == 0 {
+			log.WithError(err).WithField("count", len(listInstancesResult.ContainerInstanceArns)).Error("Failed to list instances")
+			return
+		}
+
+		describeInstancesInput := ecs.DescribeContainerInstancesInput{
+			Cluster:            &config.AwsCluster,
+			ContainerInstances: listInstancesResult.ContainerInstanceArns,
+		}
+		describeInstancesResult, err := svc.DescribeContainerInstances(&describeInstancesInput)
+		if err != nil {
+			log.WithError(err).Error("Failed to describe instances")
+			break
+		}
+
+		instances = append(instances, describeInstancesResult.ContainerInstances...)
+		if listInstancesResult.NextToken != nil {
+			listInstancesInput.NextToken = listInstancesResult.NextToken
+		} else {
+			break
+		}
+	}
+
+	instancesToDelete := []*ecs.ContainerInstance{}
+	for _, instance := range instances {
+		if *instance.PendingTasksCount == 0 {
+			instancesToDelete = append(instancesToDelete, instance)
+		}
+	}
+
+	reserve := int(math.Ceil(float64(len(instancesToDelete)) * (1 - config.ReserveInstancesPercent)))
+	if reserve < len(instancesToDelete) {
+		instancesToDelete = instancesToDelete[:reserve+1]
+	}
+
+	for _, instance := range instancesToDelete {
+		stopInstanceInput := autoscaling.TerminateInstanceInAutoScalingGroupInput{
+			InstanceId:                     instance.Ec2InstanceId,
+			ShouldDecrementDesiredCapacity: aws.Bool(true),
+		}
+		_, err := autoscalingSvc.TerminateInstanceInAutoScalingGroup(&stopInstanceInput)
+		if err != nil {
+			log.WithError(err).Error("Failed to stop instance")
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
 }
