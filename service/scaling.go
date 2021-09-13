@@ -323,10 +323,22 @@ func ScaleDown() {
 
 	instancesToDelete := []*ecs.ContainerInstance{}
 	for _, instance := range instances {
-		if *instance.PendingTasksCount == 0 {
+		if *instance.PendingTasksCount == 0 && *instance.RunningTasksCount == 0 {
 			instancesToDelete = append(instancesToDelete, instance)
 		}
 	}
+
+	describeAutoScalingGroupsInput := &autoscaling.DescribeAutoScalingGroupsInput{
+		AutoScalingGroupNames: []*string{&config.AwsAutoScalingGroup},
+	}
+	describeAutoScalingGroupsOutput, err := autoscalingSvc.DescribeAutoScalingGroups(describeAutoScalingGroupsInput)
+	if err != nil {
+		log.WithError(err).Error("Failed to set desired capacity. Can't describe auto scaling group.")
+		return
+	}
+	autoScalingGroup := describeAutoScalingGroupsOutput.AutoScalingGroups[0]
+	minSize := *autoScalingGroup.MinSize
+	desiredCapacity := *autoScalingGroup.DesiredCapacity
 
 	reserve := int(math.Ceil(float64(len(instancesToDelete)) * (1 - config.ReserveInstancesPercent)))
 	if reserve < len(instancesToDelete) {
@@ -334,14 +346,20 @@ func ScaleDown() {
 	}
 
 	for _, instance := range instancesToDelete {
+		if desiredCapacity <= minSize {
+			break
+		}
+
 		stopInstanceInput := autoscaling.TerminateInstanceInAutoScalingGroupInput{
 			InstanceId:                     instance.Ec2InstanceId,
 			ShouldDecrementDesiredCapacity: aws.Bool(true),
 		}
 		_, err := autoscalingSvc.TerminateInstanceInAutoScalingGroup(&stopInstanceInput)
 		if err != nil {
-			log.WithError(err).Error("Failed to stop instance")
+			log.WithError(err).WithField("instance", *instance.Ec2InstanceId).Error("Failed to stop instance")
 		}
+		log.WithField("instance", *instance.Ec2InstanceId).Trace("Stopping instance")
+		desiredCapacity -= 1
 		time.Sleep(250 * time.Millisecond)
 	}
 }
