@@ -261,6 +261,7 @@ func CloseSession(c *gin.Context) {
 	selenium.CloseSession(sess.Workspace, sess.ID)
 	service.RemoveTask(sess.TaskID)
 	log.WithField("sessionID", sessionId).Info("Session closed")
+	c.JSON(http.StatusOK, gin.H{"value": nil})
 }
 
 func defaultErrorHandler(с *gin.Context) func(http.ResponseWriter, *http.Request, error) {
