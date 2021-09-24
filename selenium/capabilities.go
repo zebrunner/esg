@@ -3,12 +3,12 @@ package selenium
 import (
 	"encoding/json"
 	"errors"
+	"strings"
+
 	"github.com/imdario/mergo"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
-	"strings"
 )
-
 
 type CapProcessor struct {
 	KeyProcessor   func(string) string
@@ -89,7 +89,7 @@ func (c *RequestCaps) ProcessLegacy() error {
 	}
 
 	if c.Capabilities.AlwaysMatch != nil {
-		for k, _ := range c.Capabilities.AlwaysMatch {
+		for k := range c.Capabilities.AlwaysMatch {
 			delete(processedDesiredCaps, k)
 		}
 	}
@@ -134,24 +134,28 @@ func (c *RequestCaps) ProcessLegacy() error {
 
 func (c *RequestCaps) GetContainerConfiguration() (*ContainerConfiguration, error) {
 	conf := ContainerConfiguration{}
+	validationErr := errors.New("wrong capabilities format")
 	amConf, err := MapConfig(RemovePrefix(c.Capabilities.AlwaysMatch))
 	if err != nil {
 		log.WithError(err).Warn("Failed to map config")
+		return nil, validationErr
 	}
 
 	err = mergo.Merge(&conf, amConf)
 	if err != nil {
 		log.WithError(err).Warn("Failed to map config")
+		return nil, validationErr
 	}
 
 	for _, fmCaps := range c.Capabilities.FirstMatch {
 		fmConf, err := MapConfig(RemovePrefix(fmCaps))
 		if err != nil {
-			continue
+
+			return nil, validationErr
 		}
 		err = mergo.Merge(&conf, fmConf)
 		if err != nil {
-			continue
+			return nil, validationErr
 		}
 	}
 
@@ -224,18 +228,19 @@ func processVendorCaps(caps map[string]interface{}) (map[string]interface{}, err
 func MapConfig(m map[string]interface{}) (*ContainerConfiguration, error) {
 	jsonCaps, err := json.Marshal(m)
 	if err != nil {
+		log.WithError(err).Warn("Failed to serialize caps")
 		return nil, err
 	}
 
 	conf := ContainerConfiguration{}
 	err = json.Unmarshal(jsonCaps, &conf)
 	if err != nil {
+		log.WithError(err).Warn("Failed to deserialize caps")
 		return nil, err
 	}
 
 	return &conf, nil
 }
-
 
 func RemovePrefix(caps map[string]interface{}) map[string]interface{} {
 	newCaps := map[string]interface{}{}
