@@ -167,6 +167,7 @@ func CloseSession(workspace string, sessionID string) {
 		log.WithError(err).Error("Failed to create request")
 		return
 	}
+	req.Host = "localhost"
 
 	log.WithFields(log.Fields{
 		"method": req.Method,
