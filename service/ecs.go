@@ -285,7 +285,7 @@ func RunTask(ctx context.Context, conf selenium.ContainerConfiguration, family s
 		default:
 		}
 		// Trying to minimize random sleep this needs performance test. If it doesn't works return old sleep.
-		sleep := time.Duration(rand.Intn(15)) * time.Second
+		sleep := time.Duration(rand.Intn(30)) * time.Second
 		time.Sleep(sleep)
 		var resultRunTask *ecs.RunTaskOutput
 		resultRunTask, err := svc.RunTask(runTaskInput)
