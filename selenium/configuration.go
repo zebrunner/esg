@@ -3,6 +3,7 @@ package selenium
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
@@ -50,6 +51,20 @@ func (c *ContainerConfiguration) GetCpu() int64 {
 		cpu = int64(config.MaxCpu)
 	}
 	return cpu
+}
+
+func (c *ContainerConfiguration) GetTimeZone() (*time.Location, error) {
+	timeZone := time.UTC
+	if c.TimeZone != "" {
+		tz, err := time.LoadLocation(c.TimeZone)
+		if err != nil {
+			log.WithError(err).WithField("value", c.TimeZone).Warn("Bad timezone specified")
+		} else {
+			timeZone = tz
+		}
+	}
+
+	return timeZone, nil
 }
 
 type Browser struct {
