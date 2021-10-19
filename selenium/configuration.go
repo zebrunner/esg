@@ -14,7 +14,7 @@ type ContainerConfiguration struct {
 	PlatformName     string
 	Proxy            map[string]interface{}
 	Timeouts         string
-	EnableVnc        bool
+	EnableVNC        bool
 	EnableVideo      bool
 	EnableLog        bool
 	ScreenResolution string
