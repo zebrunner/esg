@@ -83,6 +83,7 @@ func (b *Browser) TaskDefinitionFamily() string {
 }
 
 func (c *ContainerConfiguration) Browser() *Browser {
+	//TODO: rename browser here to task!
 	browser := c.BrowserName
 	version := strings.ToLower(c.BrowserVersion)
 	log.WithFields(log.Fields{
@@ -91,6 +92,11 @@ func (c *ContainerConfiguration) Browser() *Browser {
 	}).Info("Locating service")
 
 	org := "public.ecr.aws/zebrunner" //public zebrunner ECR docker registry
+        if browser == "" {
+		//TODO: made better analysis via platformName=ANDROID
+                browser = "redroid"
+        }
+
 	if browser == "MicrosoftEdge" {
 		browser = "edge"
 	}
@@ -118,6 +124,10 @@ func (c *ContainerConfiguration) Browser() *Browser {
 	if browser == "firefox" {
 		path = "/wd/hub"
 	}
+        if browser == "redroid" {
+                path = "/wd/hub"
+        }
+
 
 	return &Browser{
 		Image: image,

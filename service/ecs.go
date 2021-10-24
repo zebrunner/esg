@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	SeleniumPort   = 4444
+	SeleniumPort   = 4723
 	VncPort        = 5900
 	DevtoolsPort   = 7070
 	FileServerPort = 8080
@@ -154,8 +154,8 @@ func CreateTaskDefinition(browser string, family string) (taskDefinition *ecs.Ta
 				},
 			},
 			{
-				Name:              aws.String("artifacts-uploader"),
-				Image:             aws.String("public.ecr.aws/zebrunner/artifacts-uploader:latest"),
+				Name:              aws.String("appium"),
+				Image:             aws.String("public.ecr.aws/zebrunner/appium:esg"),
 				Essential:         aws.Bool(false), //If the essential parameter of a container is marked as true, the failure of that container will stop the task.
 				Cpu:               aws.Int64(256),
 				Memory:            aws.Int64(768),
@@ -171,6 +171,22 @@ func CreateTaskDefinition(browser string, family string) (taskDefinition *ecs.Ta
 						SourceVolume:  aws.String(sharedVolume),
 					},
 				},
+                                Environment: []*ecs.KeyValuePair{
+                                        {
+                                                Name:  aws.String("ANDROID_DEVICES"),
+                                                Value: aws.String("browser:5555"),
+                                        },
+                                        {
+                                                Name:  aws.String("VERBOSE"),
+                                                Value: aws.String("1"),
+                                        },
+                                },
+                                PortMappings: []*ecs.PortMapping{
+                                        {
+                                                ContainerPort: aws.Int64(SeleniumPort),
+                                                HostPort:      aws.Int64(0),
+                                        },
+                                },
 			},
 		},
 		Family: aws.String(family),
@@ -244,7 +260,7 @@ func RunTask(ctx context.Context, conf selenium.ContainerConfiguration, family s
 			MemoryReservation: &memoryReservation,
 		},
 		{
-			Name: aws.String("artifacts-uploader"),
+			Name: aws.String("appium"),
 			Environment: []*ecs.KeyValuePair{
 				{
 					Name:  aws.String("BROWSER_CONTAINER_NAME"),
@@ -395,7 +411,7 @@ func GetStartedServiceInfo(conf selenium.ContainerConfiguration, taskArn string)
 
 	var container *ecs.Container
 	for _, c := range resultDescribeTask.Tasks[0].Containers {
-		if *c.Name == "browser" {
+		if *c.Name == "appium" {
 			container = c
 		}
 	}
@@ -490,6 +506,7 @@ func GetStartedServiceInfo(conf selenium.ContainerConfiguration, taskArn string)
 func StartDriver(ctx context.Context, conf selenium.ContainerConfiguration, username string) (*StartedService, error) {
 	svc := ecs.New(AwsSess)
 	browser := conf.Browser().TaskDefinitionFamily()
+//	browser := "redroid-latest"
 
 	var outputErr error
 out:
