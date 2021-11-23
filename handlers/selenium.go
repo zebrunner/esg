@@ -285,15 +285,6 @@ func defaultErrorHandler(с *gin.Context) func(http.ResponseWriter, *http.Reques
 func Vnc(wsconn *websocket.Conn) {
 	defer wsconn.Close()
 	fragments := strings.Split(wsconn.Request().URL.Path, "/")
-	/*
-		vncIndex := 0
-		for i, fragment := range fragments {
-			if fragment == "vnc" {
-				vncIndex = i
-				break
-			}
-		}
-	*/
 	sid := fragments[len(fragments)-1]
 	l := log.WithField("sessionID", sid)
 	sess, err := selenium.CreateSessionFromCache(sid)

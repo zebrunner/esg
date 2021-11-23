@@ -21,7 +21,7 @@ RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./cmd/server
 
 
 FROM alpine:latest
-RUN apk add -U git
+RUN apk add -U git tzdata
 COPY ./.git /
 COPY ./migrations/ /migrations/
 

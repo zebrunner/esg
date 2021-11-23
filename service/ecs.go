@@ -209,6 +209,11 @@ func RunTask(ctx context.Context, conf selenium.ContainerConfiguration, family s
 	browserContainerName := "browser"
 	id := uuid.New().String()
 
+	tz, err := conf.GetTimeZone()
+	if err != nil {
+		return "", err
+	}
+
 	overrides := []*ecs.ContainerOverride{
 		{
 			Name: &browserContainerName,
@@ -228,6 +233,10 @@ func RunTask(ctx context.Context, conf selenium.ContainerConfiguration, family s
 				{
 					Name:  aws.String("HOSTS_ENTRIES"),
 					Value: aws.String(strings.Join(conf.HostsEntries, " ")),
+				},
+				{
+					Name:  aws.String("TZ"),
+					Value: aws.String(tz.String()),
 				},
 			},
 			Cpu:               &cpu,
@@ -285,7 +294,7 @@ func RunTask(ctx context.Context, conf selenium.ContainerConfiguration, family s
 		default:
 		}
 		// Trying to minimize random sleep this needs performance test. If it doesn't works return old sleep.
-		sleep := time.Duration(rand.Intn(15)) * time.Second
+		sleep := time.Duration(rand.Intn(30)) * time.Second
 		time.Sleep(sleep)
 		var resultRunTask *ecs.RunTaskOutput
 		resultRunTask, err := svc.RunTask(runTaskInput)
