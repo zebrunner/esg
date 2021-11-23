@@ -195,7 +195,7 @@ func processLegacyCaps(caps map[string]interface{}) (map[string]interface{}, err
 
 func processVendorCaps(caps map[string]interface{}) (map[string]interface{}, error) {
 	vendorCapNames := []string{
-		"enableVnc",
+		"enableVNC",
 		"enableVideo",
 		"enableLog",
 		"idleTimeout",

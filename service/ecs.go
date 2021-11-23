@@ -219,7 +219,7 @@ func RunTask(ctx context.Context, conf selenium.ContainerConfiguration, family s
 				},
 				{
 					Name:  aws.String("ENABLE_VNC"),
-					Value: aws.String(strconv.FormatBool(conf.EnableVnc)),
+					Value: aws.String(strconv.FormatBool(conf.EnableVNC)),
 				},
 				{
 					Name:  aws.String("DNS_SERVERS"),
@@ -618,7 +618,7 @@ func getTaskHostPort(conf selenium.ContainerConfiguration, taskIP string, pc *ec
 		Devtools:   fn(pc.DevtoolsPort),
 	}
 
-	if conf.EnableVnc {
+	if conf.EnableVNC {
 		hp.VNC = fn(pc.VNCPort)
 	}
 
