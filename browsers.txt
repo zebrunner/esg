@@ -1,5 +1,6 @@
-chrome:95.0
 chrome:latest
+chrome:96.0
+chrome:95.0
 chrome:94.0
 chrome:93.0
 chrome:92.0
@@ -7,10 +8,9 @@ chrome:91.0
 chrome:90.0
 chrome:89.0
 chrome:88.0
-chrome:debug
+firefox:latest
 firefox:94.0
 firefox:93.0
-firefox:latest
 firefox:92.0
 firefox:91.0
 firefox:90.0
