@@ -11,6 +11,7 @@ import (
 
 type CreateUserModel struct {
 	Username string `json:"username" binding:"required"`
+	Password *string `json:"password"`
 }
 
 type UserActivationModel struct {
@@ -28,7 +29,7 @@ func CreateUser(c *gin.Context) {
 		return
 	}
 
-	password, err := service.CreateUser(body.Username)
+	password, err := service.CreateUser(body.Username, body.Password)
 	if err != nil {
 		c.Error(err).SetType(gin.ErrorTypePublic)
 		return
