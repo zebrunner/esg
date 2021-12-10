@@ -35,7 +35,7 @@ func generatePassword() (string, error) {
 	return password.Generate(passwordLength, digitCount, symbolCount, noUpper, allowRepeat)
 }
 
-func CreateUser(name string) (string, error) {
+func CreateUser(name string, password *string) (string, error) {
 	dbUser, _ := GetUser(name)
 	if dbUser != nil {
 		return "", &utils.HTTPError{
@@ -43,9 +43,10 @@ func CreateUser(name string) (string, error) {
 			Status:  http.StatusBadRequest,
 		}
 	}
+
 	pwd, err := generatePassword()
-	if err != nil {
-		return "", err
+	if password != nil {
+		pwd = *password
 	}
 
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(pwd), bcrypt.DefaultCost)
