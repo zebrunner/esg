@@ -281,6 +281,12 @@ func RunTask(ctx context.Context, conf selenium.ContainerConfiguration, family s
 		Cluster:        &config.AwsCluster,
 		TaskDefinition: aws.String(family),
 		Overrides:      &ecs.TaskOverride{ContainerOverrides: overrides},
+		PlacementStrategy: []*ecs.PlacementStrategy{
+			{
+				Field: aws.String("memory"),
+				Type:  aws.String("binstack"),
+			},
+		},
 	}
 
 	// TODO: explicitly minimize errors range to wait only by well-knoen reasons aka RESOURCE:CPU etc
