@@ -284,7 +284,7 @@ func RunTask(ctx context.Context, conf selenium.ContainerConfiguration, family s
 		PlacementStrategy: []*ecs.PlacementStrategy{
 			{
 				Field: aws.String("memory"),
-				Type:  aws.String("binstack"),
+				Type:  aws.String("binpack"),
 			},
 		},
 	}
