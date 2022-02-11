@@ -36,7 +36,7 @@ func init() {
 	flag.StringVar(&config.LogLevel, "log-level", "debug", "Desired log level. Valid levels: `panic`, `fatal`, `error`, `warning`, `info`, `debug`, `trace`")
 	flag.DurationVar(&config.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
 	flag.StringVar(&browsersFile, "browsers-file", "", "Path to txt file with supported browsers")
-	flag.BoolVar(&enableFastScaleDown, "enable-fast-scale-down", false, "Flag enables force stop logic for instances")
+	flag.BoolVar(&enableFastScaleDown, "enable-fast-scale-down", true, "Flag enables force stop logic for instances")
 	flag.Float64Var(&config.ReserveInstancesPercent, "reserve-instances-percent", 0.3, "Percent of instance to keep alive in scale down")
 
 	flag.IntVar(&config.MinMemory, "min-memory", 2048, "AWS minimum memory limitation for session")
