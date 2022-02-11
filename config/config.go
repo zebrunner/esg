@@ -10,7 +10,6 @@ var (
 	SupportedBrowsers = []string{
 		"chrome",
 		"firefox",
-		"opera",
 		"edge",
 	}
 	VendorPrefix = "zebrunner"
