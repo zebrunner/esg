@@ -349,7 +349,7 @@ func ScaleDown() {
 		}
 
                 if maxInstancesToDelete <= 0 {
-	                log.WithField("instance", *instance.Ec2InstanceId).Info("Keep instance for reservation")
+	                log.WithField("instance", *instance.Ec2InstanceId).Trace("Keep instance for reservation")
                         break
                 }
 
