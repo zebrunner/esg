@@ -276,7 +276,8 @@ func ScaleUp() {
 	requiredMemory := float64(totalRequiredResources.Memory) / float64(instanceTypeResources.Memory)
 
 	requiredInstances := currentInstanceCount + int64(math.Ceil(math.Max(requiredCpu, requiredMemory)))
-	setDesiredCapacity(autoscalingSvc, requiredInstances)
+        maxInstancesWithReservation := int64(math.Ceil(float64(requiredInstances) * (1 + config.ReserveInstancesPercent)))
+	setDesiredCapacity(autoscalingSvc, maxInstancesWithReservation)
 }
 
 func ScaleDown() {
@@ -291,6 +292,18 @@ func ScaleDown() {
 		log.WithError(err).Error("Failed to get list of running task")
 		return
 	}
+
+        describeAutoScalingGroupsInput := &autoscaling.DescribeAutoScalingGroupsInput{
+                AutoScalingGroupNames: []*string{&config.AwsAutoScalingGroup},
+        }
+        describeAutoScalingGroupsOutput, err := autoscalingSvc.DescribeAutoScalingGroups(describeAutoScalingGroupsInput)
+        if err != nil {
+                log.WithError(err).Error("Can't describe auto scaling group.")
+                return
+        }
+        autoScalingGroup := describeAutoScalingGroupsOutput.AutoScalingGroups[0]
+        minSize := *autoScalingGroup.MinSize
+        desiredCapacity := *autoScalingGroup.DesiredCapacity
 
 	instances := []*ecs.ContainerInstance{}
 	listInstancesInput := ecs.ListContainerInstancesInput{
@@ -328,27 +341,17 @@ func ScaleDown() {
 		}
 	}
 
-	describeAutoScalingGroupsInput := &autoscaling.DescribeAutoScalingGroupsInput{
-		AutoScalingGroupNames: []*string{&config.AwsAutoScalingGroup},
-	}
-	describeAutoScalingGroupsOutput, err := autoscalingSvc.DescribeAutoScalingGroups(describeAutoScalingGroupsInput)
-	if err != nil {
-		log.WithError(err).Error("Failed to set desired capacity. Can't describe auto scaling group.")
-		return
-	}
-	autoScalingGroup := describeAutoScalingGroupsOutput.AutoScalingGroups[0]
-	minSize := *autoScalingGroup.MinSize
-	desiredCapacity := *autoScalingGroup.DesiredCapacity
-
-	reserve := int(math.Ceil(float64(len(instancesToDelete)) * (1 - config.ReserveInstancesPercent)))
-	if reserve < len(instancesToDelete) {
-		instancesToDelete = instancesToDelete[:reserve+1]
-	}
+	maxInstancesToDelete := int(math.Ceil(float64(len(instancesToDelete)) * (1 - config.ReserveInstancesPercent)))
 
 	for _, instance := range instancesToDelete {
 		if desiredCapacity <= minSize {
 			break
 		}
+
+                if maxInstancesToDelete <= 0 {
+	                log.WithField("instance", *instance.Ec2InstanceId).Info("Keep instance for reservation")
+                        break
+                }
 
 		stopInstanceInput := autoscaling.TerminateInstanceInAutoScalingGroupInput{
 			InstanceId:                     instance.Ec2InstanceId,
@@ -360,6 +363,7 @@ func ScaleDown() {
 		}
 		log.WithField("instance", *instance.Ec2InstanceId).Trace("Stopping instance")
 		desiredCapacity -= 1
+		maxInstancesToDelete -= 1
 		time.Sleep(250 * time.Millisecond)
 	}
 }
