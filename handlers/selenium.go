@@ -96,10 +96,12 @@ func getSessionId(resp map[string]interface{}) (string, error) {
 
 func Create(c *gin.Context) {
 	remote := c.ClientIP()
-
 	user, password, _ := c.Request.BasicAuth()
 	workspace, err := service.GetWorkspace(user)
 	if err != nil {
+		// Hotfix: Selenium java client don't send request with credentials without this sleep.
+		// Remove with full migration to Selenium 4.0
+		time.Sleep(500 * time.Millisecond)
 		c.Error(&utils.SeleniumError{
 			SeleniumCode:   "session not created",
 			ResponseStatus: http.StatusUnauthorized,
