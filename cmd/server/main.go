@@ -26,7 +26,7 @@ func init() {
 	flag.StringVar(&listen, "listen", ":4444", "Network address to accept connections")
 	flag.IntVar(&config.RetryCount, "retry-count", 1, "New session attempts retry count")
 	flag.DurationVar(&config.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
-	flag.DurationVar(&config.ServiceStartupTimeout, "service-startup-timeout", 5*time.Minute, "Service startup timeout in time.Duration format")
+	flag.DurationVar(&config.ServiceStartupTimeout, "service-startup-timeout", 4*time.Minute, "Service startup timeout in time.Duration format")
 	flag.StringVar(&config.VideoRecorderImage, "video-recorder-image", "selenoid/video-recorder:latest-release", "Image to use as video recorder")
 	// AWS Related args
 	flag.StringVar(&config.AwsRegion, "aws-region", "us-east-1", "AWS region name")
