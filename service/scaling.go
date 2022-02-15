@@ -276,7 +276,7 @@ func ScaleUp() {
 	requiredMemory := float64(totalRequiredResources.Memory) / float64(instanceTypeResources.Memory)
 
 	requiredInstances := currentInstanceCount + int64(math.Ceil(math.Max(requiredCpu, requiredMemory)))
-        maxInstancesWithReservation := int64(math.Ceil(float64(requiredInstances) * (1 + config.ReserveInstancesPercent)))
+	maxInstancesWithReservation := int64(math.Ceil(float64(requiredInstances) * (1 + config.ReserveInstancesPercent)))
 	setDesiredCapacity(autoscalingSvc, maxInstancesWithReservation)
 }
 
@@ -293,17 +293,17 @@ func ScaleDown() {
 		return
 	}
 
-        describeAutoScalingGroupsInput := &autoscaling.DescribeAutoScalingGroupsInput{
-                AutoScalingGroupNames: []*string{&config.AwsAutoScalingGroup},
-        }
-        describeAutoScalingGroupsOutput, err := autoscalingSvc.DescribeAutoScalingGroups(describeAutoScalingGroupsInput)
-        if err != nil {
-                log.WithError(err).Error("Can't describe auto scaling group.")
-                return
-        }
-        autoScalingGroup := describeAutoScalingGroupsOutput.AutoScalingGroups[0]
-        minSize := *autoScalingGroup.MinSize
-        desiredCapacity := *autoScalingGroup.DesiredCapacity
+	describeAutoScalingGroupsInput := &autoscaling.DescribeAutoScalingGroupsInput{
+		AutoScalingGroupNames: []*string{&config.AwsAutoScalingGroup},
+	}
+	describeAutoScalingGroupsOutput, err := autoscalingSvc.DescribeAutoScalingGroups(describeAutoScalingGroupsInput)
+	if err != nil {
+		log.WithError(err).Error("Can't describe auto scaling group.")
+		return
+	}
+	autoScalingGroup := describeAutoScalingGroupsOutput.AutoScalingGroups[0]
+	minSize := *autoScalingGroup.MinSize
+	desiredCapacity := *autoScalingGroup.DesiredCapacity
 
 	instances := []*ecs.ContainerInstance{}
 	listInstancesInput := ecs.ListContainerInstancesInput{
@@ -348,10 +348,10 @@ func ScaleDown() {
 			break
 		}
 
-                if maxInstancesToDelete <= 0 {
-	                log.WithField("instance", *instance.Ec2InstanceId).Trace("Keep instance for reservation")
-                        break
-                }
+		if maxInstancesToDelete <= 0 {
+			log.WithField("instance", *instance.Ec2InstanceId).Trace("Keep instance for reservation")
+			break
+		}
 
 		stopInstanceInput := autoscaling.TerminateInstanceInAutoScalingGroupInput{
 			InstanceId:                     instance.Ec2InstanceId,

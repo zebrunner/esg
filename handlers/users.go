@@ -10,7 +10,7 @@ import (
 )
 
 type CreateUserModel struct {
-	Username string `json:"username" binding:"required"`
+	Username string  `json:"username" binding:"required"`
 	Password *string `json:"password"`
 }
 
