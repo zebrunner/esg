@@ -17,4 +17,7 @@ migrate -path migrations -database $DATABASE up
   -db-connection $DATABASE \
   -listen :4444 \
   -log-level trace \
-  -s3-bucket zebrunner.dev-assets
+  -s3-bucket zebrunner.dev-engine \
+  -zebrunner-integration-user esg \
+  -zebrunner-integration-password pass \
+  -zebrunner-host https://zebrunner.dev
