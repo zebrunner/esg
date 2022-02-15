@@ -21,16 +21,13 @@ func main() {
 		log.WithError(err).Error("Failed to get image list")
 	}
 
-	browserImages := []string{}
-
-	for _, image := range images {
-		browserImages = append(browserImages, image)
-	}
-
 	f, err := os.Create("browsers.txt")
 	if err != nil {
 		log.WithError(err).Fatal("Failed to create file")
 	}
-	f.WriteString(strings.Join(browserImages, "\n"))
+	_, err = f.WriteString(strings.Join(images, "\n"))
+	if err != nil {
+		log.WithError(err).Fatal("Failed to write file")
+	}
 	log.Info("File browsers.txt successfully created")
 }

@@ -28,17 +28,17 @@ Suitable for personal usage and in big clusters:
 
 
 ## Capabilities
-- `zebrunner:enableVnc` - 
-- `zebrunner:enableVideo` - 
-- `zebrunner:enableLog` - 
-- `zebrunner:idleTimeout` - 
-- `zebrunner:screenResolution` - 
-- `zebrunner:deviceName` - ??? 
+- `zebrunner:enableVnc` -
+- `zebrunner:enableVideo` -
+- `zebrunner:enableLog` -
+- `zebrunner:idleTimeout` -
+- `zebrunner:screenResolution` -
+- `zebrunner:deviceName` - ???
 - `zebrunner:skin` - ???
-- `zebrunner:cpu` - 
-- `zebrunner:memory` - 
+- `zebrunner:cpu` -
+- `zebrunner:memory` -
 - `zebrunner:videoCodec` -
-- `zebrunner:timeZone` - 
-- `zebrunner:env` - 
-- `zebrunner:hostEntries` - 
+- `zebrunner:timeZone` -
+- `zebrunner:env` -
+- `zebrunner:hostEntries` -
 - `zebrunner:dnsServers` -

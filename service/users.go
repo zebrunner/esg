@@ -45,7 +45,8 @@ func CreateUser(name string, password *string) (string, error) {
 	}
 
 	pwd, err := generatePassword()
-	if password != nil {
+	if err != nil {
+		log.WithError(err).Error("Failed to generate password")
 		pwd = *password
 	}
 

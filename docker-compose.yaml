@@ -1,10 +1,10 @@
 version: "3.8"
-services: 
+services:
   grid:
     build:
       context: .
       dockerfile: ./build/Dockerfile.server
-    ports: 
+    ports:
         - "4444-4445:4444"
     volumes:
       - "${HOME}/.aws:/root/.aws"
@@ -37,7 +37,7 @@ services:
     container_name: esg-postgres
     volumes:
       - "pgdata-volume:/var/lib/postgresql/data"
-    environment: 
+    environment:
       POSTGRES_PASSWORD: postgres
     ports:
       - "5432:5432"

@@ -1,13 +1,14 @@
 package handlers
 
 import (
-	log "github.com/sirupsen/logrus"
-	"github.com/zebrunner/esg/service"
 	"net/http"
 	"os"
 	"runtime"
 	"strings"
 	"time"
+
+	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -56,7 +57,7 @@ func ListBrowsers(c *gin.Context) {
 	browsers, err := service.ListBrowsers()
 	if err != nil {
 		log.WithError(err).Warn("Failed to get browser list")
-		c.Error(err).SetType(gin.ErrorTypePublic)
+		_ = c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
 
