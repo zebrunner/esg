@@ -22,7 +22,7 @@ func CreateUser(c *gin.Context) {
 	body := CreateUserModel{}
 	err := c.ShouldBindJSON(&body)
 	if err != nil {
-		c.Error(&utils.HTTPError{
+		_ = c.Error(&utils.HTTPError{
 			Status:  http.StatusBadRequest,
 			Message: "request body is invalid",
 		}).SetType(gin.ErrorTypePublic).SetMeta(err.Error())
@@ -31,7 +31,7 @@ func CreateUser(c *gin.Context) {
 
 	password, err := service.CreateUser(body.Username, body.Password)
 	if err != nil {
-		c.Error(err).SetType(gin.ErrorTypePublic)
+		_ = c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
 
@@ -43,7 +43,7 @@ func CreateUser(c *gin.Context) {
 func DeleteUser(c *gin.Context) {
 	username := c.Param("username")
 	if username == "" {
-		c.Error(&utils.HTTPError{
+		_ = c.Error(&utils.HTTPError{
 			Status:  http.StatusBadRequest,
 			Message: "username parameter not found",
 		})
@@ -52,13 +52,13 @@ func DeleteUser(c *gin.Context) {
 	err := service.DeleteUser(username)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			c.Error(&utils.HTTPError{
+			_ = c.Error(&utils.HTTPError{
 				Status:  http.StatusNotFound,
 				Message: "User not found",
 			}).SetType(gin.ErrorTypePublic)
 			return
 		}
-		c.Error(err).SetType(gin.ErrorTypePublic)
+		_ = c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
 	c.Status(http.StatusOK)
@@ -67,7 +67,7 @@ func DeleteUser(c *gin.Context) {
 func RefreshToken(c *gin.Context) {
 	user := c.Param("username")
 	if user == "" {
-		c.Error(&utils.HTTPError{
+		_ = c.Error(&utils.HTTPError{
 			Status:  http.StatusBadRequest,
 			Message: "username parameter not found",
 		}).SetType(gin.ErrorTypePublic)
@@ -76,13 +76,13 @@ func RefreshToken(c *gin.Context) {
 	password, err := service.RefreshToken(user)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			c.Error(&utils.HTTPError{
+			_ = c.Error(&utils.HTTPError{
 				Status:  http.StatusNotFound,
 				Message: "User not found",
 			}).SetType(gin.ErrorTypePublic)
 			return
 		}
-		c.Error(err).SetType(gin.ErrorTypePublic)
+		_ = c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -93,7 +93,7 @@ func RefreshToken(c *gin.Context) {
 func UserActivation(c *gin.Context) {
 	user := c.Param("username")
 	if user == "" {
-		c.Error(&utils.HTTPError{
+		_ = c.Error(&utils.HTTPError{
 			Status:  http.StatusBadRequest,
 			Message: "username parameter not found",
 		}).SetType(gin.ErrorTypePublic)
@@ -103,7 +103,7 @@ func UserActivation(c *gin.Context) {
 	body := UserActivationModel{}
 	err := c.ShouldBindJSON(&body)
 	if err != nil {
-		c.Error(&utils.HTTPError{
+		_ = c.Error(&utils.HTTPError{
 			Status:  http.StatusBadRequest,
 			Message: "request body is invalid",
 		}).SetType(gin.ErrorTypePublic).SetMeta(err.Error())
@@ -113,13 +113,13 @@ func UserActivation(c *gin.Context) {
 	err = service.ActivationUser(user, body.IsActive)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			c.Error(&utils.HTTPError{
+			_ = c.Error(&utils.HTTPError{
 				Status:  http.StatusNotFound,
 				Message: "User not found",
 			}).SetType(gin.ErrorTypePublic)
 			return
 		}
-		c.Error(err).SetType(gin.ErrorTypePublic)
+		_ = c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
 	c.Status(http.StatusOK)

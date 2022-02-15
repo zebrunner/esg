@@ -59,7 +59,7 @@ func startSession(ctx context.Context, sessionUrl string, header http.Header, bo
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return reply, errors.New(fmt.Sprintf("unsuccessful response code. Status: %s", resp.Status))
+		return reply, fmt.Errorf("unsuccessful response code. Status: %s", resp.Status)
 	}
 
 	return reply, nil
@@ -100,7 +100,7 @@ func Create(c *gin.Context) {
 	user, password, _ := c.Request.BasicAuth()
 	workspace, err := service.GetWorkspace(user)
 	if err != nil {
-		c.Error(&utils.SeleniumError{
+		_ = c.Error(&utils.SeleniumError{
 			SeleniumCode:   "session not created",
 			ResponseStatus: http.StatusUnauthorized,
 			Message:        "Session not created; Reason: Failed to get auth credentials.",
@@ -115,7 +115,7 @@ func Create(c *gin.Context) {
 			"user":     user,
 			"password": password,
 		}).Warn("Failed to authenticate user on session creation")
-		c.Error(&utils.SeleniumError{
+		_ = c.Error(&utils.SeleniumError{
 			SeleniumCode:   "session not created",
 			ResponseStatus: http.StatusUnauthorized,
 			Message:        "Session not created; Reason: Invalid username or password",
@@ -132,7 +132,7 @@ func Create(c *gin.Context) {
 	err = c.BindJSON(&body)
 	if err != nil {
 		l.WithError(err).Error("Failed to bind json to browser struct")
-		c.Error(creationError("Bad JSON format", err)).SetType(gin.ErrorTypePublic)
+		_ = c.Error(creationError("Bad JSON format", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
 
@@ -144,14 +144,14 @@ func Create(c *gin.Context) {
 	err = body.ProcessLegacy()
 	if err != nil {
 		l.WithError(err).Error("Failed to process capabilities")
-		c.Error(&processingError).SetType(gin.ErrorTypePublic)
+		_ = c.Error(&processingError).SetType(gin.ErrorTypePublic)
 		return
 	}
 
 	conf, err := body.GetContainerConfiguration()
 	if err != nil {
 		l.WithError(err).Error("Failed to get container configuration")
-		c.Error(&processingError).SetType(gin.ErrorTypePublic)
+		_ = c.Error(&processingError).SetType(gin.ErrorTypePublic)
 		return
 	}
 
@@ -164,7 +164,7 @@ func Create(c *gin.Context) {
 	}
 	if err != nil {
 		l.WithError(err).Error("Service startup failed")
-		c.Error(creationError("Failed to start browser", err)).SetType(gin.ErrorTypePublic)
+		_ = c.Error(creationError("Failed to start browser", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
 	l.WithField("taskID", driver.TaskID).Info("Service started successfully")
@@ -173,7 +173,7 @@ func Create(c *gin.Context) {
 	requestBody, err := json.Marshal(body)
 	if err != nil {
 		l.WithError(err).Error("Failed to marshal request")
-		c.Error(creationError("Failed to start browser", err)).SetType(gin.ErrorTypePublic)
+		_ = c.Error(creationError("Failed to start browser", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
 
@@ -186,7 +186,7 @@ func Create(c *gin.Context) {
 	resp, err := startSession(c.Request.Context(), c.Request.URL.String(), c.Request.Header, requestBody)
 	if err != nil {
 		l.WithError(err).WithField("response", resp).Error("Session attempt failed")
-		c.Error(creationError("failed to create session", err)).SetType(gin.ErrorTypePublic)
+		_ = c.Error(creationError("failed to create session", err)).SetType(gin.ErrorTypePublic)
 		service.RemoveTask(driver.TaskID)
 		return
 	}
@@ -194,13 +194,13 @@ func Create(c *gin.Context) {
 	sessionId, err = getSessionId(resp)
 	if err != nil {
 		l.WithError(err).Error("Failed to get sessionId from driver response")
-		c.Error(creationError("failed to create session", err)).SetType(gin.ErrorTypePublic)
+		_ = c.Error(creationError("failed to create session", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
 
 	if sessionId == "" {
 		l.WithError(err).Error("Failed to get sessionId from driver response. sessionId is empty")
-		c.Error(creationError("failed to create session", err)).SetType(gin.ErrorTypePublic)
+		_ = c.Error(creationError("failed to create session", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
 
@@ -235,7 +235,7 @@ func Proxy(c *gin.Context) {
 			sess, err := selenium.CreateSessionFromCache(sessionID)
 			if err != nil {
 				log.WithError(err).WithField("sessionID", sessionID).Error("Cant find session")
-				c.Error(err).SetType(gin.ErrorTypePublic)
+				_ = c.Error(err).SetType(gin.ErrorTypePublic)
 				return
 			}
 
@@ -247,15 +247,11 @@ func Proxy(c *gin.Context) {
 }
 
 func CloseSession(c *gin.Context) {
-	workspace, _, _ := c.Request.BasicAuth()
-	if workspace == "" {
-		workspace = "zebrunner"
-	}
 	sessionId := c.Param("session")
 	sess, err := selenium.CreateSessionFromCache(sessionId)
 	if err != nil {
 		log.WithError(err).WithField("sessionID", sessionId).Error("Cant find session")
-		c.Error(err).SetType(gin.ErrorTypePublic)
+		_ = c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
 	selenium.CloseSession(sess.Workspace, sess.ID)
@@ -278,7 +274,7 @@ func defaultErrorHandler(с *gin.Context) func(http.ResponseWriter, *http.Reques
 				"message": "Driver connection refused",
 			},
 		}
-		json.NewEncoder(w).Encode(driverError)
+		_ = json.NewEncoder(w).Encode(driverError)
 	}
 }
 
@@ -332,7 +328,7 @@ func Logs(c *gin.Context) {
 	}
 
 	if !ok {
-		c.Error(&utils.HTTPError{
+		_ = c.Error(&utils.HTTPError{
 			Status:  http.StatusBadRequest,
 			Message: "Auth data not provided"},
 		).SetType(gin.ErrorTypePublic)
@@ -355,7 +351,7 @@ func Video(c *gin.Context) {
 		ok = true
 	}
 	if !ok {
-		c.Error(&utils.HTTPError{
+		_ = c.Error(&utils.HTTPError{
 			Status:  http.StatusBadRequest,
 			Message: "Auth data not provided"},
 		).SetType(gin.ErrorTypePublic)
@@ -370,7 +366,7 @@ func Video(c *gin.Context) {
 			"remote":    c.ClientIP(),
 			"sessionID": sessionID,
 		}).Error("Failed to create pre signed url to session video")
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	c.Redirect(http.StatusFound, presignedUrl)
@@ -381,7 +377,7 @@ func Downloads(c *gin.Context) {
 	filename := c.Param("file")
 	sess, err := selenium.CreateSessionFromCache(sessionID)
 	if err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 
@@ -400,7 +396,7 @@ func Clipboard(c *gin.Context) {
 	sessionID := c.Param("session")
 	sess, err := selenium.CreateSessionFromCache(sessionID)
 	if err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 
@@ -417,7 +413,7 @@ func Devtools(c *gin.Context) {
 	sessionID := c.Param("session")
 	sess, err := selenium.CreateSessionFromCache(sessionID)
 	if err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 

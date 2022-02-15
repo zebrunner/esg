@@ -600,26 +600,6 @@ func waitUntilTaskIsRunning(ctx context.Context, svc *ecs.ECS, taskId string, sl
 	return errors.New("failed to wait successfull task status. Max attempt limit exceeded")
 }
 
-func getFailReason(svc *ecs.ECS, taskId string) (*string, error) {
-	describeTaskInput := &ecs.DescribeTasksInput{
-		Cluster: &config.AwsCluster,
-		Tasks:   []*string{aws.String(taskId)},
-	}
-	describeTaskResult, err := svc.DescribeTasks(describeTaskInput)
-	if err != nil {
-		return nil, err
-	}
-
-	resultReason := ""
-	for _, container := range describeTaskResult.Tasks[0].Containers {
-		if container.Reason != nil {
-			resultReason += *container.Reason
-		}
-	}
-
-	return &resultReason, nil
-}
-
 func getTaskHostPort(conf selenium.ContainerConfiguration, taskIP string, pc *ecsPortConfig) selenium.HostPort {
 	containerIP := taskIP
 	fn := func(containerPort int64) string {

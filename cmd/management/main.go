@@ -98,7 +98,11 @@ func ClearSessions() {
 				}
 				log.WithField("task", s.TaskID).Info("Deleting task. Reason: idle timeout")
 				selenium.CloseSession(s.Workspace, key)
-				service.StopTask(s.TaskID)
+				_, err = service.StopTask(s.TaskID)
+				if err != nil {
+					log.WithError(err).Error("Failed to stop task")
+				}
+
 				_, err = rdb.Del(context.Background(), key).Result()
 				if err != nil {
 					log.WithError(err).WithField("session", key).Error("Failed to delete session from cache")

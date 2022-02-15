@@ -48,7 +48,10 @@ func SendSessionDuration(workspace string, d time.Duration) {
 
 	if resp.StatusCode != http.StatusNoContent {
 		data := map[string]interface{}{}
-		json.NewDecoder(resp.Body).Decode(&data)
+		err = json.NewDecoder(resp.Body).Decode(&data)
+		if err != nil {
+			log.WithError(err).Error("Failed to send session duration to zebrunner")
+		}
 		log.WithFields(log.Fields{
 			"status":   resp.Status,
 			"response": data,
