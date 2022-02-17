@@ -155,7 +155,7 @@ func CreateTaskDefinition(browser string, family string) (taskDefinition *ecs.Ta
 			},
 			{
 				Name:              aws.String("appium"),
-				Image:             aws.String("public.ecr.aws/zebrunner/appium:esg"),
+				Image:             aws.String("public.ecr.aws/zebrunner/appium:1.1"), //public.ecr.aws/zebrunner/esg-appium
 				Essential:         aws.Bool(false), //If the essential parameter of a container is marked as true, the failure of that container will stop the task.
 				Cpu:               aws.Int64(256),
 				Memory:            aws.Int64(768),
@@ -175,6 +175,10 @@ func CreateTaskDefinition(browser string, family string) (taskDefinition *ecs.Ta
                                         {
                                                 Name:  aws.String("ANDROID_DEVICES"),
                                                 Value: aws.String("browser:5555"),
+                                        },
+                                        {
+                                                Name:  aws.String("RETAIN_TASK"),
+                                                Value: aws.String("false"),
                                         },
                                         {
                                                 Name:  aws.String("VERBOSE"),
