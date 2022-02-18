@@ -14,7 +14,6 @@ require (
 	github.com/jmoiron/sqlx v1.3.3
 	github.com/sethvargo/go-password v0.2.0
 	github.com/sirupsen/logrus v1.8.1
-	golang.org/x/tools/cmd/goimports v0.1.9
 	golang.org/x/crypto v0.0.0-20210506145944-38f3c27a63bf
 	golang.org/x/net v0.0.0-20210614182718-04defd469f4e
 	golang.org/x/sys v0.0.0-20210616094352-59db8d763f22 // indirect
