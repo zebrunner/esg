@@ -6,16 +6,14 @@ import (
 	"net/http"
 	"net/url"
 	"time"
-
-	"github.com/zebrunner/esg/selenium"
 )
 
 // StartedService - all started service properties
 type StartedService struct {
-	Url      *url.URL
-	HostPort selenium.HostPort
-	TaskID   string
-	Cancel   func()
+	Url       *url.URL
+	Endpoints map[string]string
+	TaskID    string
+	Cancel    func()
 }
 
 func wait(ctx context.Context, u string, t time.Duration) error {

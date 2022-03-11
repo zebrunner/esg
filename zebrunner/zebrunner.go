@@ -13,10 +13,14 @@ import (
 	"github.com/zebrunner/esg/config"
 )
 
-func SendSessionDuration(workspace string, d time.Duration) {
-	resource := fmt.Sprintf("/api/quota/v1/org-metrics/%s/alterations/engine-execution-time", workspace)
+const (
+	DURATION_API_PATH = "/api/quota/v1/org-metrics/%s/alterations/engine-execution-time"
+)
 
-	requestUrl, err := url.ParseRequestURI(config.ZebrunnerHost)
+func SendSessionDuration(workspace string, d time.Duration, conf *config.Config) {
+	resource := fmt.Sprintf(DURATION_API_PATH, workspace)
+
+	requestUrl, err := url.ParseRequestURI(conf.ZebrunnerHost)
 	if err != nil {
 		log.WithError(err).Error("Failed to parse zebrunner base url")
 		return
@@ -37,7 +41,7 @@ func SendSessionDuration(workspace string, d time.Duration) {
 	if err != nil {
 		log.WithError(err).Error("Failed to create request")
 	}
-	req.SetBasicAuth(config.ZebrunnerIntegrationUser, config.ZebrunnerIntegrationPassword)
+	req.SetBasicAuth(conf.ZebrunnerIntegrationUser, conf.ZebrunnerIntegrationPassword)
 	req.Header.Add("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)

@@ -14,7 +14,7 @@ var (
 
 func InitCache() (*redis.Client, error) {
 	client := redis.NewClient(&redis.Options{
-		Addr:     AwsElasticCache,
+		Addr:     Conf.RedisConnectionString,
 		Password: "",
 		DB:       0,
 	})

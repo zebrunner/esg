@@ -1,0 +1,73 @@
+package environment
+
+import (
+	"github.com/zebrunner/esg/config"
+	"github.com/zebrunner/esg/selenium"
+)
+
+const (
+	appiumPort int64 = 4723
+
+	appiumCpu    = 256
+	appiumMemory = 768
+)
+
+func buildAppiumRedroid(workspace string, caps *selenium.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {
+	sharedFolder := "/opt/zebrunner"
+	sharedVolume := "data"
+
+	deviceImage, err := buildImage(caps)
+	if err != nil {
+		return nil, err
+	}
+
+	deviceContainer := Container{
+		Name:      "device",
+		Image:     deviceImage,
+		Essential: true,
+		Env: map[string]string{
+			"VERBOSE": "1",
+		},
+		Mounts: []string{sharedVolume},
+	}
+	deviceContainer.SetCpu(caps.Cpu)
+	deviceContainer.SetMemory(caps.Memory)
+	deviceContainer.SetMemoryReservation(caps.MemoryReservation)
+
+	appiumImage := imageRepo + "appium:1.1"
+	appiumContainer := Container{
+		Name:              "appium",
+		Image:             appiumImage,
+		cpu:               appiumCpu,
+		memory:            appiumMemory,
+		memoryReservation: appiumMemory,
+		Privileged:        false,
+		Essential:         true,
+		Ports: map[string]portMapping{
+			"driver": {appiumPort, 0},
+		},
+		Env: map[string]string{
+			"VERBOSE":         "1",
+			"RETAIN_TASK":     "false",
+			"ANDROID_DEVICES": "device:5555",
+		},
+		Mounts: []string{sharedVolume},
+	}
+
+	environment := ExecutionEnvironment{
+		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
+		Containers:           []*Container{&deviceContainer, &appiumContainer},
+		Capabilities:         caps,
+		Volumes: map[string]volume{
+			sharedVolume: {ContainerPath: sharedFolder, HostPath: sharedFolder, ReadOnly: false},
+		},
+		Network: &NetworkConfiguration{
+			IP: "",
+			Endpoints: map[string]*Endpoint{
+				"driver": {Port: appiumPort, Path: "/"},
+			},
+		},
+	}
+
+	return &environment, nil
+}

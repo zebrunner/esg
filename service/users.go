@@ -130,7 +130,7 @@ func DeleteUser(name string) error {
 }
 
 func GetWorkspace(name string) (string, error) {
-	if config.TrustedMode {
+	if config.Conf.TrustedMode {
 		return "zebrunner", nil
 	}
 
@@ -146,7 +146,7 @@ func CheckAuth(name, password string) error {
 		Message: "Invalid username or password",
 	}
 
-	if config.TrustedMode {
+	if config.Conf.TrustedMode {
 		return nil
 	}
 
