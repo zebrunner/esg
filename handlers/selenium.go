@@ -104,7 +104,7 @@ func Create(c *gin.Context) {
 		return
 	}
 	// l.WithField("taskID", driver.TaskID).Info("Service started successfully")
-	u, ok := env.GetUrl("driver")
+	u, ok := env.Network.GetUrl("driver")
 	if !ok {
 		l.Error("failed to get url for `driver` service")
 		_ = c.Error(creationError("Failed to start browser", err)).SetType(gin.ErrorTypePublic)
@@ -124,7 +124,7 @@ func Create(c *gin.Context) {
 	l.WithFields(log.Fields{
 		"serviceUrl": u,
 	}).Info("Session attempted")
-	resp, err := selenium.StartSession(c.Request.Context(), c.Request.URL, c.Request.Header, requestBody)
+	resp, err := environment.StartSession(c.Request.Context(), c.Request.URL, c.Request.Header, requestBody)
 	if err != nil {
 		l.WithError(err).WithField("response", resp).Error("Session attempt failed")
 		_ = c.Error(creationError("failed to create session", err)).SetType(gin.ErrorTypePublic)
@@ -145,17 +145,17 @@ func Create(c *gin.Context) {
 		return
 	}
 
-	sess := &selenium.Session{
+	sess := &environment.Session{
 		ID:              sessionId,
 		RawCapabilities: body.ToMap(),
 		Capabilities:    *caps,
-		Urls:            map[string]url.URL{},
+		Network:         *env.Network,
 		StartedAt:       time.Now(),
 		TaskID:          env.TaskId,
 		Workspace:       workspace,
 	}
 
-	err = selenium.SaveSessionToCache(sess)
+	err = environment.SaveSessionToCache(sess)
 	if err != nil {
 		l.WithError(err).Error("Session not cached")
 	}
@@ -171,15 +171,19 @@ func Proxy(c *gin.Context) {
 		Director: func(r *http.Request) {
 			sessionID := c.Param("session")
 
-			sess, err := selenium.CreateSessionFromCache(sessionID)
+			sess, err := environment.CreateSessionFromCache(sessionID)
 			if err != nil {
 				log.WithError(err).WithField("sessionID", sessionID).Error("Cant find session")
 				_ = c.Error(err).SetType(gin.ErrorTypePublic)
 				return
 			}
 
-			vncUrl := sess.Urls["vnc"]
-			r.URL.Host, r.URL.Path = vncUrl.Host, path.Clean(vncUrl.Path+r.URL.Path)
+			url, ok := sess.Network.GetUrl("driver")
+			if !ok {
+				log.Error("failed to get `driver` url from session")
+				_ = c.Error(fmt.Errorf("internal error")).SetType(gin.ErrorTypePublic)
+			}
+			r.URL.Host, r.URL.Path = url.Host, path.Clean(url.Path+r.URL.Path)
 			r.URL.Scheme = "http"
 		},
 		ErrorHandler: defaultErrorHandler(c),
@@ -188,13 +192,13 @@ func Proxy(c *gin.Context) {
 
 func CloseSession(c *gin.Context) {
 	sessionId := c.Param("session")
-	sess, err := selenium.CreateSessionFromCache(sessionId)
+	sess, err := environment.CreateSessionFromCache(sessionId)
 	if err != nil {
 		log.WithError(err).WithField("sessionID", sessionId).Error("Cant find session")
 		_ = c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
-	selenium.CloseSession(sess.Workspace, sess.ID, &config.Conf)
+	environment.CloseSession(sess.Workspace, sess.ID, &config.Conf)
 	service.RemoveTask(sess.TaskID)
 	log.WithField("sessionID", sessionId).Info("Session closed")
 	c.JSON(http.StatusOK, gin.H{"value": nil})
@@ -205,18 +209,18 @@ func Vnc(wsconn *websocket.Conn) {
 	fragments := strings.Split(wsconn.Request().URL.Path, "/")
 	sid := fragments[len(fragments)-1]
 	l := log.WithField("sessionID", sid)
-	sess, err := selenium.CreateSessionFromCache(sid)
+	sess, err := environment.CreateSessionFromCache(sid)
 
 	if err != nil {
 		l.WithError(err).Error("Session not found")
 		return
 	}
 
-	vncUrl := sess.Urls["vnc"]
-	// if vncHostPort == "" {
-	// 	l.Debug("Vnc not enabled")
-	// 	return
-	// }
+	vncUrl, ok := sess.Network.GetUrl("vnc")
+	if !ok {
+		l.Debug("Vnc not enabled")
+		return
+	}
 
 	l.Debug("Vnc enabled")
 	var d net.Dialer
@@ -297,7 +301,7 @@ func Video(c *gin.Context) {
 func Downloads(c *gin.Context) {
 	sessionID := c.Param("session")
 	filename := c.Param("file")
-	sess, err := selenium.CreateSessionFromCache(sessionID)
+	sess, err := environment.CreateSessionFromCache(sessionID)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -305,8 +309,9 @@ func Downloads(c *gin.Context) {
 
 	director := func(req *http.Request) {
 		req.URL.Scheme = "http"
-		req.URL.Host = sess.Urls["fileserver"].Host
-		req.Host = sess.Urls["fileserver"].Host
+		url, _ := sess.Network.GetUrl("fileserver")
+		req.URL.Host = url.Host
+		req.Host = url.Host
 		req.URL.Path = "/" + filename
 	}
 	proxy := &httputil.ReverseProxy{Director: director}
@@ -316,7 +321,7 @@ func Downloads(c *gin.Context) {
 
 func Clipboard(c *gin.Context) {
 	sessionID := c.Param("session")
-	sess, err := selenium.CreateSessionFromCache(sessionID)
+	sess, err := environment.CreateSessionFromCache(sessionID)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -324,8 +329,9 @@ func Clipboard(c *gin.Context) {
 
 	director := func(req *http.Request) {
 		req.URL.Scheme = "http"
-		req.URL.Host = sess.Urls["clipboard"].Host
-		req.Host = sess.Urls["clipboard"].Host
+		url, _ := sess.Network.GetUrl("clipboard")
+		req.URL.Host = url.Host
+		req.Host = url.Host
 	}
 	proxy := &httputil.ReverseProxy{Director: director}
 	proxy.ServeHTTP(c.Writer, c.Request)
@@ -333,14 +339,15 @@ func Clipboard(c *gin.Context) {
 
 func Devtools(c *gin.Context) {
 	sessionID := c.Param("session")
-	sess, err := selenium.CreateSessionFromCache(sessionID)
+	sess, err := environment.CreateSessionFromCache(sessionID)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
 
+	u, _ := sess.Network.GetUrl("devtools")
 	fileUrl := url.URL{
-		Host: sess.Urls["devtools"].Host,
+		Host: u.Host,
 	}
 	c.Redirect(http.StatusFound, fileUrl.String())
 }

@@ -64,7 +64,8 @@ func buildAppiumRedroid(workspace string, caps *selenium.Capabilities, conf *con
 		Network: &NetworkConfiguration{
 			IP: "",
 			Endpoints: map[string]*Endpoint{
-				"driver": {Port: appiumPort, Path: "/"},
+				"driver":      {Port: appiumPort, Path: "/"},
+				"healthcheck": {Port: appiumPort, Path: "/status"},
 			},
 		},
 	}

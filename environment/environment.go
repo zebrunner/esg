@@ -132,13 +132,13 @@ func (e *ExecutionEnvironment) GetPorts() map[string]portMapping {
 	return ports
 }
 
-func (e *ExecutionEnvironment) GetUrl(endpointName string) (u *url.URL, ok bool) {
-	endpoint, ok := e.Network.Endpoints[endpointName]
+func (n *NetworkConfiguration) GetUrl(endpointName string) (u *url.URL, ok bool) {
+	endpoint, ok := n.Endpoints[endpointName]
 	if !ok {
 		return nil, false
 	}
 
-	ip := e.Network.IP
+	ip := n.IP
 	if ip == "" {
 		return nil, false
 	}

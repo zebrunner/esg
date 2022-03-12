@@ -65,14 +65,14 @@ func ClearSessions() {
 					continue
 				}
 
-				s := selenium.CachedSession{}
+				s := environment.CachedSession{}
 				err = json.Unmarshal([]byte(result), &s)
 				if err != nil {
 					log.WithError(err).Error("Failed to unmarshal redis response")
 					continue
 				}
 				log.WithField("task", s.TaskID).Info("Deleting task. Reason: idle timeout")
-				selenium.CloseSession(s.Workspace, key, &config.Conf)
+				environment.CloseSession(s.Workspace, key, &config.Conf)
 				_, err = service.StopTask(s.TaskID)
 				if err != nil {
 					log.WithError(err).Error("Failed to stop task")

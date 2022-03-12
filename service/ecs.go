@@ -316,7 +316,7 @@ out:
 			continue
 		}
 
-		url, ok := env.GetUrl("driver")
+		url, ok := env.Network.GetUrl("healthcheck")
 		if !ok {
 			RemoveTask(taskArn)
 			l.Error("Driver healthcheck failed. Urls  doesn't contains `driver` key")

@@ -96,17 +96,19 @@ func buildBrowser(workspace string, caps *selenium.Capabilities, conf *config.Co
 		Network: &NetworkConfiguration{
 			IP: "",
 			Endpoints: map[string]*Endpoint{
-				"driver":     {Port: seleniumPort, Path: "/"},
-				"vnc":        {Port: vncPort, Path: "/"},
-				"clipboard":  {Port: clipboardPort, Path: "/"},
-				"devtools":   {Port: devtoolsPort, Path: "/"},
-				"fileserver": {Port: fileserverPort, Path: "/"},
+				"driver":      {Port: seleniumPort, Path: "/"},
+				"vnc":         {Port: vncPort, Path: "/"},
+				"clipboard":   {Port: clipboardPort, Path: "/"},
+				"devtools":    {Port: devtoolsPort, Path: "/"},
+				"fileserver":  {Port: fileserverPort, Path: "/"},
+				"healthcheck": {Port: seleniumPort, Path: "/"},
 			},
 		},
 	}
 
 	if caps.BrowserName == "firefox" {
 		environment.Network.Endpoints["driver"].Path = "/wd/hub"
+		environment.Network.Endpoints["healthcheck"].Path = "/wd/hub"
 	}
 
 	return &environment, nil

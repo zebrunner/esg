@@ -1,4 +1,4 @@
-package selenium
+package environment
 
 import (
 	"bytes"
@@ -12,6 +12,7 @@ import (
 	"github.com/go-redis/redis/v8"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
+	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/utils"
 	"github.com/zebrunner/esg/zebrunner"
 )
@@ -27,9 +28,9 @@ var (
 // Session - holds session info
 type Session struct {
 	ID              string
-	Capabilities    Capabilities
+	Capabilities    selenium.Capabilities
 	RawCapabilities map[string]interface{}
-	Urls            map[string]url.URL
+	Network         NetworkConfiguration
 	Cancel          func()
 	StartedAt       time.Time
 	TaskID          string
@@ -38,9 +39,9 @@ type Session struct {
 
 type CachedSession struct {
 	ID              string
-	Capabilities    Capabilities
+	Capabilities    selenium.Capabilities
 	RawCapabilities map[string]interface{}
-	Urls            map[string]url.URL
+	Network         NetworkConfiguration
 	Timeout         time.Duration
 	StartedAt       time.Time
 	TaskID          string
@@ -106,7 +107,7 @@ func CreateSessionFromCache(sessionID string) (*Session, error) {
 	seleniumSession := Session{
 		ID:              s.ID,
 		RawCapabilities: s.RawCapabilities,
-		Urls:            s.Urls,
+		Network:         s.Network,
 		StartedAt:       s.StartedAt,
 		TaskID:          s.TaskID,
 		Workspace:       s.Workspace,
@@ -119,7 +120,7 @@ func SaveSessionToCache(session *Session) error {
 	cacheSession := CachedSession{
 		ID:              session.ID,
 		RawCapabilities: session.RawCapabilities,
-		Urls:            session.Urls,
+		Network:         session.Network,
 		StartedAt:       session.StartedAt,
 		TaskID:          session.TaskID,
 		Workspace:       session.Workspace,
@@ -143,30 +144,34 @@ func CloseSession(workspace string, sessionID string, conf *config.Config) {
 	defer sess.Cancel()
 
 	client := http.Client{}
-	sessionUrl := sess.Urls["driver"]
-	sessionUrl.Path = sessionUrl.Path + fmt.Sprintf("/session/%s", sessionID)
-	timeoutCtx, cancel := context.WithTimeout(context.Background(), conf.SessionDeleteTimeout)
-	defer cancel()
-	req, err := http.NewRequestWithContext(timeoutCtx, http.MethodDelete, sessionUrl.String(), nil)
-	if err != nil {
-		log.WithError(err).Error("Failed to create request")
-		return
-	}
-	req.Host = "localhost"
+	sessionUrl, ok := sess.Network.GetUrl("driver")
+	if ok {
+		sessionUrl.Path = sessionUrl.Path + fmt.Sprintf("session/%s", sessionID)
+		timeoutCtx, cancel := context.WithTimeout(context.Background(), conf.SessionDeleteTimeout)
+		defer cancel()
+		req, err := http.NewRequestWithContext(timeoutCtx, http.MethodDelete, sessionUrl.String(), nil)
+		if err != nil {
+			log.WithError(err).Error("Failed to create request")
+			return
+		}
+		req.Host = "localhost"
 
-	log.WithFields(log.Fields{
-		"method": req.Method,
-		"url":    req.URL,
-	}).Debug("Closing session.")
-	resp, err := client.Do(req)
-	if err != nil {
-		log.WithError(err).Error("Failed to cancel driver session")
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		log.WithField("statusCode", resp.Status).Error("Cancel request returned not success status code")
-		return
+		log.WithFields(log.Fields{
+			"method": req.Method,
+			"url":    req.URL,
+		}).Debug("Closing session")
+		resp, err := client.Do(req)
+		if err != nil {
+			log.WithError(err).Error("Failed to cancel driver session")
+			return
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			log.WithField("statusCode", resp.Status).Error("Cancel request returned not success status code")
+			return
+		}
+	} else {
+		log.Warn("failed to get driver url")
 	}
 
 	if conf.ZebrunnerIsIntegrated() {
