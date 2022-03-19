@@ -24,6 +24,7 @@ func buildAppiumRedroid(workspace string, caps *selenium.Capabilities, conf *con
 	deviceContainer := Container{
 		Name:      "device",
 		Image:     deviceImage,
+                Privileged: true,
 		Essential: true,
 		Env: map[string]string{
 			"VERBOSE": "1",
@@ -34,7 +35,7 @@ func buildAppiumRedroid(workspace string, caps *selenium.Capabilities, conf *con
 	deviceContainer.SetMemory(caps.Memory)
 	deviceContainer.SetMemoryReservation(caps.MemoryReservation)
 
-	appiumImage := imageRepo + "appium:1.1"
+	appiumImage := imageRepo + "appium:1.2-beta9"
 	appiumContainer := Container{
 		Name:              "appium",
 		Image:             appiumImage,
@@ -50,8 +51,10 @@ func buildAppiumRedroid(workspace string, caps *selenium.Capabilities, conf *con
 			"VERBOSE":         "1",
 			"RETAIN_TASK":     "false",
 			"ANDROID_DEVICES": "device:5555",
+                        "REMOTE_ADB": "true",
 		},
 		Mounts: []string{sharedVolume},
+               Links: []string{"device"},
 	}
 
 	environment := ExecutionEnvironment{
@@ -64,8 +67,8 @@ func buildAppiumRedroid(workspace string, caps *selenium.Capabilities, conf *con
 		Network: &NetworkConfiguration{
 			IP: "",
 			Endpoints: map[string]*Endpoint{
-				"driver":      {Port: appiumPort, Path: "/"},
-				"healthcheck": {Port: appiumPort, Path: "/status"},
+				"driver":      {Port: appiumPort, Path: "/wd/hub"},
+				"healthcheck": {Port: appiumPort, Path: "/wd/hub/status"},
 			},
 		},
 	}
