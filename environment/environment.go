@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/selenium"
+
 )
 
 const (
@@ -98,10 +99,12 @@ func (e *ExecutionEnvironment) ContainerOverrides() []*ecs.ContainerOverride {
 
 		env := []*ecs.KeyValuePair{}
 		for k, v := range container.Env {
-			env = append(env, &ecs.KeyValuePair{Name: &k, Value: &v})
+			// need to dclare local variables to provide as pointer later
+			key := k
+			value := v
+			env = append(env, &ecs.KeyValuePair{Name: &key, Value: &value})
 		}
 		override.Environment = env
-
 		overrides = append(overrides, &override)
 	}
 
