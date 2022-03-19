@@ -63,7 +63,6 @@ func (e *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefinition
                         links = append(links, &linkName)
                 }
                 definition.Links = links
-                fmt.Printf("links: %T", definition.Links)
 
 		volumes := []*ecs.MountPoint{}
 		for _, volumeName := range c.Mounts {
@@ -79,7 +78,6 @@ func (e *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefinition
 			})
 		}
 		definition.MountPoints = volumes
-		fmt.Printf("volumes: %T", volumes)
 
 		portMappings := []*ecs.PortMapping{}
 		for _, mapping := range c.Ports {
