@@ -57,16 +57,29 @@ func (e *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefinition
 			Privileged:        &c.Privileged,
 		}
 
+                links := []*string{}
+                for _, link := range c.Links {
+			linkName := link //local declaration required to append all values
+                        links = append(links, &linkName)
+                }
+                definition.Links = links
+                fmt.Printf("links: %T", definition.Links)
+
 		volumes := []*ecs.MountPoint{}
 		for _, volumeName := range c.Mounts {
+			// local declarations required to append all values
 			volume := e.Volumes[volumeName]
+			name := volumeName
+			containerPath := volume.ContainerPath
+			readOnly := volume.ReadOnly
 			volumes = append(volumes, &ecs.MountPoint{
-				ContainerPath: &volume.ContainerPath,
-				SourceVolume:  &volumeName,
-				ReadOnly:      &volume.ReadOnly,
+				ContainerPath: &containerPath,
+				SourceVolume:  &name,
+				ReadOnly:      &readOnly,
 			})
 		}
 		definition.MountPoints = volumes
+		fmt.Printf("volumes: %T", volumes)
 
 		portMappings := []*ecs.PortMapping{}
 		for _, mapping := range c.Ports {

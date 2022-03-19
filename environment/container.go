@@ -27,6 +27,7 @@ type Container struct {
 
 	Ports  map[string]portMapping
 	Mounts []string // List of names of volumes
+        Links []string // List of linked containers
 	Env    envVariables
 }
 

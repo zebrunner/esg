@@ -54,6 +54,7 @@ func buildBrowser(workspace string, caps *selenium.Capabilities, conf *config.Co
 			"TZ":            tz.String(),
 		},
 		Mounts: []string{"shm", sharedVolume},
+
 	}
 	browserContainer.SetCpu(caps.Cpu)
 	browserContainer.SetMemory(caps.Memory)
@@ -83,6 +84,7 @@ func buildBrowser(workspace string, caps *selenium.Capabilities, conf *config.Co
 			"AWS_DEFAULT_REGION":     conf.AwsRegion,
 		},
 		Mounts: []string{sharedVolume},
+                Links: []string{"browser"},
 	}
 
 	environment := ExecutionEnvironment{
