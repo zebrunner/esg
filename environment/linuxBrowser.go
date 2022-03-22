@@ -65,7 +65,7 @@ func buildBrowser(workspace string, caps *selenium.Capabilities, conf *config.Co
 		return nil, fmt.Errorf("failed to parse timezone. error=%s", err)
 	}
 
-	recorderImage := imageRepo + "artifacts-uploader" + ":" + "1.3-beta1"
+	recorderImage := imageRepo + "artifacts-uploader" + ":" + "1.3"
 	videoRecorderContainer := Container{
 		Name:              "artifacts-uploader",
 		Image:             recorderImage,
