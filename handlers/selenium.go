@@ -224,7 +224,7 @@ func Vnc(wsconn *websocket.Conn) {
 
 	l.Debug("Vnc enabled")
 	var d net.Dialer
-	conn, err := d.DialContext(wsconn.Request().Context(), "tcp", vncUrl.String())
+	conn, err := d.DialContext(wsconn.Request().Context(), "tcp", vncUrl.Host)
 	if err != nil {
 		l.WithError(err).Error("Vnc error")
 		return
