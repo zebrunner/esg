@@ -10,7 +10,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/selenium"
-
 )
 
 const (
@@ -57,12 +56,12 @@ func (e *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefinition
 			Privileged:        &c.Privileged,
 		}
 
-                links := []*string{}
-                for _, link := range c.Links {
+		links := []*string{}
+		for _, link := range c.Links {
 			linkName := link //local declaration required to append all values
-                        links = append(links, &linkName)
-                }
-                definition.Links = links
+			links = append(links, &linkName)
+		}
+		definition.Links = links
 
 		volumes := []*ecs.MountPoint{}
 		for _, volumeName := range c.Mounts {
@@ -110,7 +109,7 @@ func (e *ExecutionEnvironment) ContainerOverrides() []*ecs.ContainerOverride {
 
 		env := []*ecs.KeyValuePair{}
 		for k, v := range container.Env {
-			// need to dclare local variables to provide as pointer later
+			// need to declare local variables to provide as pointer later
 			key := k
 			value := v
 			env = append(env, &ecs.KeyValuePair{Name: &key, Value: &value})
@@ -174,13 +173,13 @@ func buildImage(caps *selenium.Capabilities) (string, error) {
 		return imageRepo + name + ":" + version, nil
 	} else if platformName == linuxPlatform || platformName == "" {
 		remapName := map[string]string{
-			"MicrosoftEdge": "edge",
+			"microsoftedge": "edge",
 			"operablink":    "opera",
 		}
 		useAsLatest := []string{"", "null", "latest"}
 
 		name := strings.ToLower(caps.BrowserName)
-		if imageName, ok := remapName[caps.BrowserName]; ok {
+		if imageName, ok := remapName[name]; ok {
 			name = imageName
 		}
 
