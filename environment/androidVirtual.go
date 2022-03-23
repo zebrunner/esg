@@ -35,7 +35,7 @@ func buildAppiumRedroid(workspace string, caps *selenium.Capabilities, conf *con
 	deviceContainer.SetMemory(caps.Memory)
 	deviceContainer.SetMemoryReservation(caps.MemoryReservation)
 
-	appiumImage := imageRepo + "appium:1.3-beta2"
+	appiumImage := imageRepo + "appium:1.3-beta5"
 	appiumContainer := Container{
 		Name:              "appium",
 		Image:             appiumImage,
@@ -51,7 +51,13 @@ func buildAppiumRedroid(workspace string, caps *selenium.Capabilities, conf *con
 			"VERBOSE":         "1",
 			"RETAIN_TASK":     "false",
 			"ANDROID_DEVICES": "device:5555",
-                        "REMOTE_ADB": "true",
+                        "REMOTE_ADB":      "true",
+			"MCLOUD":          "true",
+                        "BUCKET":                 conf.S3Bucket,
+                        "TENANT":                 workspace,
+                        "AWS_ACCESS_KEY_ID":      conf.AwsAccessKeyID,
+                        "AWS_SECRET_ACCESS_KEY":  conf.AwsSecretAccessKey,
+                        "AWS_DEFAULT_REGION":     conf.AwsRegion,
 		},
 		Mounts: []string{sharedVolume},
                Links: []string{"device"},
