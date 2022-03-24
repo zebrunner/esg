@@ -31,7 +31,7 @@ type ClusterResources struct {
 
 func getInstanceCount(svc *ecs.ECS) (int64, error) {
 	listInstancesInput := &ecs.ListContainerInstancesInput{
-		Cluster: &config.AwsCluster,
+		Cluster: &config.Conf.AwsCluster,
 	}
 	listInstancesOutput, err := svc.ListContainerInstances(listInstancesInput)
 	if err != nil {
@@ -42,14 +42,14 @@ func getInstanceCount(svc *ecs.ECS) (int64, error) {
 }
 
 func getInstanceResources() (*Resources, error) {
-	session, err := awsSession.NewSession(&aws.Config{Region: &config.AwsRegion, MaxRetries: &config.AwsRetry})
+	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
 	if err != nil {
 		return nil, err
 	}
 
-	autoscalingSvc := autoscaling.New(session, &aws.Config{Region: &config.AwsRegion, MaxRetries: &config.AwsRetry})
+	autoscalingSvc := autoscaling.New(session, &aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
 	describeGroupInput := autoscaling.DescribeAutoScalingGroupsInput{
-		AutoScalingGroupNames: []*string{aws.String(config.AwsAutoScalingGroup)},
+		AutoScalingGroupNames: []*string{aws.String(config.Conf.AwsAutoScalingGroup)},
 	}
 	describeGroupOutput, err := autoscalingSvc.DescribeAutoScalingGroups(&describeGroupInput)
 	if err != nil {
@@ -66,7 +66,7 @@ func getInstanceResources() (*Resources, error) {
 	}
 
 	instanceType := result.LaunchConfigurations[0].InstanceType
-	ec2Svc := ec2.New(session, &aws.Config{Region: &config.AwsRegion, MaxRetries: &config.AwsRetry})
+	ec2Svc := ec2.New(session, &aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
 	describeInstanceTypeInput := ec2.DescribeInstanceTypesInput{
 		InstanceTypes: []*string{instanceType},
 	}
@@ -83,7 +83,7 @@ func getInstanceResources() (*Resources, error) {
 func getTasks(svc *ecs.ECS) ([]*ecs.Task, error) {
 	tasks := []*ecs.Task{}
 	listTasksInput := &ecs.ListTasksInput{
-		Cluster: &config.AwsCluster,
+		Cluster: &config.Conf.AwsCluster,
 	}
 	for {
 		listTasksResult, err := svc.ListTasks(listTasksInput)
@@ -95,7 +95,7 @@ func getTasks(svc *ecs.ECS) ([]*ecs.Task, error) {
 		}
 
 		describeTasksInput := &ecs.DescribeTasksInput{
-			Cluster: &config.AwsCluster,
+			Cluster: &config.Conf.AwsCluster,
 			Tasks:   listTasksResult.TaskArns,
 		}
 		describeTasksResult, err := svc.DescribeTasks(describeTasksInput)
@@ -132,7 +132,7 @@ func getTasksResources(tasks []*ecs.Task, status string) []*Resources {
 
 func setDesiredCapacity(autoscalingService *autoscaling.AutoScaling, newDesiredCapacity int64) {
 	describeAutoScalingGroupsInput := &autoscaling.DescribeAutoScalingGroupsInput{
-		AutoScalingGroupNames: []*string{&config.AwsAutoScalingGroup},
+		AutoScalingGroupNames: []*string{&config.Conf.AwsAutoScalingGroup},
 	}
 	describeAutoScalingGroupsOutput, err := autoscalingService.DescribeAutoScalingGroups(describeAutoScalingGroupsInput)
 	if err != nil {
@@ -171,7 +171,7 @@ func setDesiredCapacity(autoscalingService *autoscaling.AutoScaling, newDesiredC
 }
 
 func ScaleUp() {
-	session, err := awsSession.NewSession(&aws.Config{Region: &config.AwsRegion, MaxRetries: &config.AwsRetry})
+	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
 	if err != nil {
 		log.WithError(err).Error("Failed to create AWS session")
 		return
@@ -229,7 +229,7 @@ func ScaleUp() {
 	// Remove all instances that couldn't run a tasks
 	freeInstanceResources := []*Resources{}
 	for _, i := range instanceResources {
-		if i.CPU >= int64(config.MinCpu) && i.Memory >= int64(config.MinMemory) {
+		if i.CPU >= int64(config.Conf.MinCpu) && i.Memory >= int64(config.Conf.MinMemory) {
 			freeInstanceResources = append(freeInstanceResources, i)
 		}
 	}
@@ -276,12 +276,12 @@ func ScaleUp() {
 	requiredMemory := float64(totalRequiredResources.Memory) / float64(instanceTypeResources.Memory)
 
 	requiredInstances := currentInstanceCount + int64(math.Ceil(math.Max(requiredCpu, requiredMemory)))
-	maxInstancesWithReservation := int64(math.Ceil(float64(requiredInstances) * (1 + config.ReserveInstancesPercent)))
+	maxInstancesWithReservation := int64(math.Ceil(float64(requiredInstances) * (1 + config.Conf.ReserveInstancesPercent)))
 	setDesiredCapacity(autoscalingSvc, maxInstancesWithReservation)
 }
 
 func ScaleDown() {
-	session, err := awsSession.NewSession(&aws.Config{Region: &config.AwsRegion, MaxRetries: &config.AwsRetry})
+	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
 	if err != nil {
 		log.WithError(err).Error("Failed to create AWS session")
 		return
@@ -294,7 +294,7 @@ func ScaleDown() {
 	}
 
 	describeAutoScalingGroupsInput := &autoscaling.DescribeAutoScalingGroupsInput{
-		AutoScalingGroupNames: []*string{&config.AwsAutoScalingGroup},
+		AutoScalingGroupNames: []*string{&config.Conf.AwsAutoScalingGroup},
 	}
 	describeAutoScalingGroupsOutput, err := autoscalingSvc.DescribeAutoScalingGroups(describeAutoScalingGroupsInput)
 	if err != nil {
@@ -307,7 +307,7 @@ func ScaleDown() {
 
 	instances := []*ecs.ContainerInstance{}
 	listInstancesInput := ecs.ListContainerInstancesInput{
-		Cluster: &config.AwsCluster,
+		Cluster: &config.Conf.AwsCluster,
 	}
 	for {
 		listInstancesResult, err := svc.ListContainerInstances(&listInstancesInput)
@@ -317,7 +317,7 @@ func ScaleDown() {
 		}
 
 		describeInstancesInput := ecs.DescribeContainerInstancesInput{
-			Cluster:            &config.AwsCluster,
+			Cluster:            &config.Conf.AwsCluster,
 			ContainerInstances: listInstancesResult.ContainerInstanceArns,
 		}
 		describeInstancesResult, err := svc.DescribeContainerInstances(&describeInstancesInput)
@@ -341,7 +341,7 @@ func ScaleDown() {
 		}
 	}
 
-	maxInstancesToDelete := int(math.Ceil(float64(len(instancesToDelete)) * (1 - config.ReserveInstancesPercent)))
+	maxInstancesToDelete := int(math.Ceil(float64(len(instancesToDelete)) * (1 - config.Conf.ReserveInstancesPercent)))
 
 	for _, instance := range instancesToDelete {
 		if desiredCapacity <= minSize {

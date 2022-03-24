@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/zebrunner/esg/environment"
 	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/service"
 
@@ -23,40 +24,14 @@ var (
 )
 
 func init() {
-	//rename to idle timeout
-	flag.DurationVar(&config.IdleTimeout, "idle-timeout", 60*time.Second, "Session idle timeout in time.Duration format")
-	// AWS Related args
-	flag.StringVar(&config.AwsRegion, "aws-region", "us-east-1", "AWS region name")
-	flag.IntVar(&config.AwsRetry, "aws-retry", 10, "AWS client retry count")
-	flag.StringVar(&config.AwsCluster, "aws-cluster", "esg", "AWS cluster name")
-	flag.StringVar(&config.AwsElasticCache, "aws-elastic-cache", "localhost:6379", "AWS elastic cache connection URL")
-	flag.StringVar(&config.AwsAutoScalingGroup, "aws-auto-scaling-group", "esg-asg", "AWS auto scaling group name")
-	flag.StringVar(&config.AwsAccessKeyID, "aws-access-key-id", "", "Access key for S3 bucket")
-	flag.StringVar(&config.AwsSecretAccessKey, "aws-secret-access-key", "", "Secret key for S3 bucket")
-	flag.StringVar(&config.LogLevel, "log-level", "debug", "Desired log level. Valid levels: `panic`, `fatal`, `error`, `warning`, `info`, `debug`, `trace`")
-	flag.DurationVar(&config.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time. Duration format")
 	flag.StringVar(&browsersFile, "browsers-file", "", "Path to txt file with supported browsers")
 	flag.BoolVar(&enableFastScaleDown, "enable-fast-scale-down", true, "Enable ESG scale down option")
-	flag.Float64Var(&config.ReserveInstancesPercent, "reserve-instances-percent", 0.25, "Reserved cluster capacity quota during scale up and down operations")
-
-	flag.IntVar(&config.MinMemory, "min-memory", 2048, "AWS minimum memory limitation for session")
-	flag.IntVar(&config.MinMemoryReservation, "min-memory-reservation", 2048, "AWS minimum memory reservation limitation for session")
-	flag.IntVar(&config.MaxMemory, "max-memory", 8192, "AWS maximum memory limitation for session")
-	flag.IntVar(&config.MaxMemoryReservation, "max-memory-reservation", 8192, "AWS maximum memory reservation limitation for session")
-	flag.IntVar(&config.MinCpu, "min-cpu", 1024, "AWS minimum CPU limitation for session")
-	flag.IntVar(&config.MaxCpu, "max-cpu", 4096, "AWS maximum CPU limitation for session")
-
-	flag.StringVar(&config.ZebrunnerHost, "zebrunner-host", "", "Host for zebrunner integration for this environment")
-	flag.StringVar(&config.ZebrunnerIntegrationUser, "zebrunner-integration-user", "", "User for zebrunner for current env")
-	flag.StringVar(&config.ZebrunnerIntegrationPassword, "zebrunner-integration-password", "", "Password for zebrunner for current env")
-
-	flag.Parse()
 }
 
 func ClearSessions() {
 	rdb := config.RedisConnection
 	for {
-		time.Sleep(config.IdleTimeout)
+		time.Sleep(config.Conf.IdleTimeout)
 		keys, err := rdb.Keys(context.Background(), "*").Result()
 		if err != nil {
 			log.WithError(err).Error("Failed to get list of keys")
@@ -79,7 +54,7 @@ func ClearSessions() {
 				log.WithError(err).WithField("session", key).Error("Failed to get idle timeout")
 			}
 
-			timeout := config.IdleTimeout
+			timeout := config.Conf.IdleTimeout
 			if sessionTimeout != 0 {
 				timeout = time.Duration(sessionTimeout) * time.Second
 			}
@@ -90,14 +65,14 @@ func ClearSessions() {
 					continue
 				}
 
-				s := selenium.CachedSession{}
+				s := environment.CachedSession{}
 				err = json.Unmarshal([]byte(result), &s)
 				if err != nil {
 					log.WithError(err).Error("Failed to unmarshal redis response")
 					continue
 				}
 				log.WithField("task", s.TaskID).Info("Deleting task. Reason: idle timeout")
-				selenium.CloseSession(s.Workspace, key)
+				environment.CloseSession(s.Workspace, key, &config.Conf)
 				_, err = service.StopTask(s.TaskID)
 				if err != nil {
 					log.WithError(err).Error("Failed to stop task")
@@ -126,6 +101,28 @@ func ScaleDownCluster() {
 	}
 }
 
+func RefreshTaskDefinition(image string) error {
+	caps, err := selenium.FromImage(image)
+	if err != nil {
+		log.WithError(err).WithField("image", image).Error("Failed to build capabilities for image")
+		return err
+	}
+
+	env, err := environment.Build("", caps, &config.Conf)
+	if err != nil {
+		log.WithError(err).WithField("image", image).Error("Failed to build execution environment")
+		return err
+	}
+
+	_, err = service.CreateTaskDefinition(env)
+	if err != nil {
+		log.WithError(err).WithField("image", image).Error("Failed to create task definitions")
+		return err
+	}
+
+	return nil
+}
+
 func RefreshTaskDefinitions() {
 	images, err := service.ListBrowsers()
 	if err != nil {
@@ -133,15 +130,11 @@ func RefreshTaskDefinitions() {
 	}
 
 	for _, image := range images {
-		family := strings.ReplaceAll(image, ":", "-")
-		family = strings.ReplaceAll(family, ".", "-")
-
-		_, err = service.CreateTaskDefinition(image, family)
-		if err != nil {
-			log.WithError(err).WithField("family", family).Error("Failed to create task definitions")
-		}
-
 		time.Sleep(1000 * time.Millisecond)
+		err = RefreshTaskDefinition(image)
+		if err != nil {
+			continue
+		}
 	}
 }
 
@@ -152,20 +145,18 @@ func RefreshTaskDefinitionsFromFile(path string) {
 	}
 	imageList := strings.Split(string(images), "\n")
 	for _, image := range imageList {
-		family := strings.ReplaceAll(image, ":", "-")
-		family = strings.ReplaceAll(family, ".", "-")
-
-		_, err = service.CreateTaskDefinition(image, family)
-		if err != nil {
-			log.WithError(err).WithField("family", family).Error("Failed to create task definitions")
-		}
-
 		time.Sleep(1000 * time.Millisecond)
+		err = RefreshTaskDefinition(image)
+		if err != nil {
+			continue
+		}
 	}
 }
 
 func main() {
-	log.SetLevel(config.ParseLogLevel())
+	flag.Parse()
+
+	log.SetLevel(config.Conf.ParseLogLevel())
 
 	awsSess, err := service.InitAws()
 	if err != nil {
