@@ -172,24 +172,11 @@ func buildImage(caps *selenium.Capabilities) (string, error) {
 		}
 		return imageRepo + name + ":" + version, nil
 	} else if platformName == linuxPlatform || platformName == "" {
-		remapName := map[string]string{
-			"microsoftedge": "edge",
-			"operablink":    "opera",
-		}
-		useAsLatest := []string{"", "null", "latest"}
-
 		name := strings.ToLower(caps.BrowserName)
-		if imageName, ok := remapName[name]; ok {
-			name = imageName
-		}
+		name = remapName(name)
+		version := strings.ToLower(caps.BrowserVersion)
+		version = remapVersion(version)
 
-		version := caps.BrowserVersion
-		for _, remapVersion := range useAsLatest {
-			if strings.ToLower(caps.BrowserVersion) == remapVersion {
-				version = "latest"
-				break
-			}
-		}
 		return imageRepo + name + ":" + version, nil
 	} else {
 		return "", fmt.Errorf("filed to build container image name. unsupported platform specified. platformName=%s", caps.PlatformName)
@@ -215,17 +202,36 @@ func buildTaskDefinitionFamily(caps *selenium.Capabilities) string {
 
 	browserName := strings.ToLower(caps.BrowserName)
 	if browserName != "" {
-		familyParts = append(familyParts, browserName)
-	}
-
-	browserVersion := strings.ToLower(caps.BrowserVersion)
-	if browserName != "" && browserVersion == "" {
-		browserVersion = "latest"
-	}
-	if browserVersion != "" {
+		familyParts = append(familyParts, remapName(browserName))
+		browserVersion := strings.ToLower(caps.BrowserVersion)
+		browserVersion = remapVersion(browserVersion)
 		browserVersion = strings.Replace(browserVersion, ".", "-", -1)
 		familyParts = append(familyParts, browserVersion)
 	}
 
 	return strings.Join(familyParts, "-")
+}
+
+func remapName(name string) string {
+	remapName := map[string]string{
+		"microsoftedge": "edge",
+		"operablink":    "opera",
+	}
+	if newName, ok := remapName[name]; ok {
+		return newName
+	}
+
+	return name
+}
+
+func remapVersion(version string) string {
+	remapVersion := map[string]string{
+		"":     "latest",
+		"null": "latest",
+	}
+	if newVersion, ok := remapVersion[version]; ok {
+		return newVersion
+	}
+
+	return version
 }

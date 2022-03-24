@@ -34,6 +34,8 @@ func buildBrowser(workspace string, caps *selenium.Capabilities, conf *config.Co
 	sharedVolume := "data"
 
 	tz, err := caps.TimeZone()
+	// In future maybe there will be need to disable vnc
+	enableVNC := true
 	browserContainer := Container{
 		Name:      "browser",
 		Image:     browserImage,
@@ -48,13 +50,12 @@ func buildBrowser(workspace string, caps *selenium.Capabilities, conf *config.Co
 		Env: map[string]string{
 			"VERBOSE":       "1",
 			"UUID":          id,
-			"ENABLE_VNC":    strconv.FormatBool(caps.EnableVNC),
+			"ENABLE_VNC":    strconv.FormatBool(enableVNC),
 			"DNS_SERVERS":   strings.Join(caps.DNSServers, " "),
 			"HOSTS_ENTRIES": strings.Join(caps.HostsEntries, " "),
 			"TZ":            tz.String(),
 		},
 		Mounts: []string{"shm", sharedVolume},
-
 	}
 	browserContainer.SetCpu(caps.Cpu)
 	browserContainer.SetMemory(caps.Memory)
@@ -84,7 +85,7 @@ func buildBrowser(workspace string, caps *selenium.Capabilities, conf *config.Co
 			"AWS_DEFAULT_REGION":     conf.AwsRegion,
 		},
 		Mounts: []string{sharedVolume},
-                Links: []string{"browser"},
+		Links:  []string{"browser"},
 	}
 
 	environment := ExecutionEnvironment{
