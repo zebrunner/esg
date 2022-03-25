@@ -201,7 +201,7 @@ func buildTaskDefinitionFamily(caps *selenium.Capabilities) string {
 	}
 
 	browserName := strings.ToLower(caps.BrowserName)
-	if browserName != "" {
+	if browserName != "" && deviceName != "redroid" {
 		familyParts = append(familyParts, remapName(browserName))
 		browserVersion := strings.ToLower(caps.BrowserVersion)
 		browserVersion = remapVersion(browserVersion)
