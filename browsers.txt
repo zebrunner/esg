@@ -1,3 +1,4 @@
+chrome:99.0
 chrome:latest
 chrome:98.0
 chrome:97.0
@@ -10,6 +11,8 @@ chrome:91.0
 chrome:90.0
 chrome:89.0
 chrome:88.0
+firefox:98.0
+firefox:97.0
 firefox:latest
 firefox:96.0
 firefox:95.0
@@ -23,6 +26,8 @@ firefox:88.0
 firefox:85.0
 firefox:87.0
 firefox:86.0
+edge:99.0
+edge:98.0
 edge:latest
 edge:97.0
 edge:96.0
