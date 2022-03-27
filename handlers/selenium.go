@@ -127,7 +127,7 @@ func Create(c *gin.Context) {
 	resp, err := environment.StartSession(c.Request.Context(), c.Request.URL, c.Request.Header, requestBody)
 	if err != nil {
 		l.WithError(err).WithField("response", resp).Error("Session attempt failed")
-		_ = c.Error(creationError("failed to create session", err)).SetType(gin.ErrorTypePublic)
+		c.JSON(http.StatusInternalServerError, resp)
 		service.RemoveTask(env.TaskId)
 		return
 	}
