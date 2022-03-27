@@ -50,6 +50,7 @@ func buildAppiumRedroid(workspace string, caps *selenium.Capabilities, conf *con
 		Env: map[string]string{
 			"VERBOSE":         "1",
 			"RETAIN_TASK":     "false",
+			"DEVICE_NAME":     "ReDroid",
 			"ANDROID_DEVICES": "device:5555",
                         "REMOTE_ADB":      "true",
 			"MCLOUD":          "true",
