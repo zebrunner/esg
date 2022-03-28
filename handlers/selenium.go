@@ -96,8 +96,9 @@ func Create(c *gin.Context) {
 	}
 	err = service.StartDriver(ctx, env)
 	if err == context.DeadlineExceeded {
-		err = errors.New("session startup timed out")
+		err = errors.New("Driver startup timed out")
 	}
+
 	if err != nil {
 		l.WithError(err).Error("Service startup failed")
 		_ = c.Error(creationError("Failed to start browser", err)).SetType(gin.ErrorTypePublic)
@@ -123,10 +124,10 @@ func Create(c *gin.Context) {
 	c.Request.URL.Scheme = "http"
 	l.WithFields(log.Fields{
 		"serviceUrl": u,
-	}).Info("Session attempted")
+	}).Info("Starting session")
 	resp, err := environment.StartSession(c.Request.Context(), c.Request.URL, c.Request.Header, requestBody)
 	if err != nil {
-		l.WithError(err).WithField("response", resp).Error("Session attempt failed")
+		l.WithError(err).WithField("response", resp).Error("Session startup failed")
 		c.JSON(http.StatusInternalServerError, resp)
 		service.RemoveTask(env.TaskId)
 		return
