@@ -134,26 +134,26 @@ func RunTask(ctx context.Context, env *environment.ExecutionEnvironment) (taskAr
 		resultRunTask, err := svc.RunTask(runTaskInput)
 		// Not good solution but aws doesn't give a choice
 		if err != nil && err.Error() == "ClientException: TaskDefinition not found." {
-			return "", fmt.Errorf("browser %s not found", env.TaskDefinitionFamily)
+			return "", fmt.Errorf("image %s not found", env.TaskDefinitionFamily)
 		}
 
 		if err != nil {
-			log.WithError(err).WithField("attempt", i).Debug("RunTask attempt failed.")
+			log.WithError(err).WithField("retry", i).Debug("Run task failed.")
 			outputErr = err
 			continue
 		}
 
 		if len(resultRunTask.Failures) != 0 {
 			log.WithFields(log.Fields{
-				"attempt": i,
+				"retry": i,
 				"error":   *resultRunTask.Failures[0].Reason,
-			}).Debug("Run task attempt failed. Response contains failures")
+			}).Debug("Run task failed. Response contains failures")
 			outputErr = errors.New("response contains failures")
 			continue
 		}
 
 		if len(resultRunTask.Tasks) == 0 {
-			log.WithField("attempt", i).Debug("Run task attempt failed. Response doesn't contains tasks")
+			log.WithField("retry", i).Debug("Run task failed. Response doesn't contains tasks")
 			outputErr = errors.New("response doesn't contains tasks")
 			continue
 		}
@@ -284,12 +284,14 @@ out:
 			break out
 		default:
 		}
+
 		startTime := time.Now()
 		taskArn, err := RunTask(ctx, env)
+
 		l.WithField("latency", time.Since(startTime)).Info("RunTask delay")
 		if err != nil {
 			l.WithError(err).WithField("attempt", i).Error("Failed to run task")
-			outputErr = fmt.Errorf("failed to start task. InternalError: %v", err)
+			outputErr = fmt.Errorf("failed to run task. InternalError: %v", err)
 			continue
 		}
 
@@ -302,7 +304,7 @@ out:
 		if err != nil {
 			RemoveTask(taskArn)
 			l.WithError(err).Error("Failed to wait task RUNNING state")
-			outputErr = fmt.Errorf("failed to wait until task is running. InternalError: %v", err)
+			outputErr = fmt.Errorf("failed to wait task RUNNING state. InternalError: %v", err)
 			continue
 		}
 
@@ -319,15 +321,15 @@ out:
 		url, ok := env.Network.GetUrl("healthcheck")
 		if !ok {
 			RemoveTask(taskArn)
-			l.Error("Driver healthcheck failed. Urls  doesn't contains `driver` key")
-			outputErr = fmt.Errorf("driver healthcheck failed")
+			l.Error("Driver healthcheck missed.")
+			outputErr = fmt.Errorf("driver healthcheck missed")
 			continue
 		}
 
 		err = wait(ctx, url.String(), config.Conf.ServiceStartupTimeout)
 		if err != nil {
 			RemoveTask(taskArn)
-			l.WithError(err).Error("Failed to wait browser response")
+			l.WithError(err).Error("Failed to wait driver healthcheck response")
 			outputErr = err
 			continue
 		}
@@ -377,7 +379,7 @@ func waitUntilTaskIsRunning(ctx context.Context, svc *ecs.ECS, taskId string, sl
 		time.Sleep(sleepFn(i))
 	}
 
-	return nil, errors.New("failed to wait successfull task status. Max attempt limit exceeded")
+	return nil, errors.New("failed to wait successfull task status.")
 }
 
 func GeneratePreSignedURL(key string) (string, error) {
