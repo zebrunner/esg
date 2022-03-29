@@ -53,7 +53,7 @@ func ClusterStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, status)
 }
 
-func ListBrowsers(c *gin.Context) {
+func ListDrivers(c *gin.Context) {
 	browsers, err := service.ListBrowsers()
 	if err != nil {
 		log.WithError(err).Warn("Failed to get browser list")
@@ -63,15 +63,19 @@ func ListBrowsers(c *gin.Context) {
 
 	browsersResponse := []map[string]interface{}{}
 	for _, browser := range browsers {
-		browserName := strings.Split(browser, ":")[0]
-		if browserName == "edge" {
-			browserName = "MicrosoftEdge"
+		executionEnvironment := strings.Split(browser, ":")[0]
+
+		driver := strings.Split(executionEnvironment, "-")[1]
+		platform := strings.Split(executionEnvironment, "-")[0]
+
+		if driver == "edge" {
+			driver = "MicrosoftEdge"
 		}
 
 		browserData := map[string]interface{}{
-			"name":     browserName,
+			"name":     driver,
 			"version":  strings.Split(browser, ":")[1],
-			"platform": "linux",
+			"platform": platform,
 		}
 		browsersResponse = append(browsersResponse, browserData)
 	}
