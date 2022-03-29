@@ -17,8 +17,8 @@ const (
 	fileserverPort int64 = 8080
 	clipboardPort  int64 = 9090
 
-	recorderCpu    int64 = 256
-	recorderMemory int64 = 768
+	recorderCpu    int64 = 320
+	recorderMemory int64 = 1024
 )
 
 func buildBrowser(workspace string, caps *selenium.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {

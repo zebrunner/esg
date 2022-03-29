@@ -8,8 +8,8 @@ import (
 const (
 	appiumPort int64 = 4723
 
-	appiumCpu    = 256
-	appiumMemory = 768
+	appiumCpu    = 320
+	appiumMemory = 1024
 )
 
 func buildAppiumRedroid(workspace string, caps *selenium.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {
