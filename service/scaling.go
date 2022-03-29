@@ -337,7 +337,10 @@ func ScaleDown() {
 	instancesToDelete := []*ecs.ContainerInstance{}
 	for _, instance := range instances {
 		if *instance.PendingTasksCount == 0 && *instance.RunningTasksCount == 0 {
-			instancesToDelete = append(instancesToDelete, instance)
+			registeredAt := time.Since(*instance.RegisteredAt)
+			if registeredAt > config.Conf.InstanceCooldownTimeout {
+				instancesToDelete = append(instancesToDelete, instance)
+			}
 		}
 	}
 

@@ -40,9 +40,10 @@ type Config struct {
 	MaxCpu               int64
 
 	// Timeouts
-	IdleTimeout           time.Duration
-	SessionDeleteTimeout  time.Duration
-	ServiceStartupTimeout time.Duration
+	IdleTimeout             time.Duration
+	SessionDeleteTimeout    time.Duration
+	ServiceStartupTimeout   time.Duration
+	InstanceCooldownTimeout time.Duration
 
 	// External connections
 	DbConnectionString           string
@@ -78,6 +79,7 @@ func init() {
 	flag.DurationVar(&Conf.IdleTimeout, "idle-timeout", 60*time.Second, "Session idle timeout in time.Duration format")
 	flag.DurationVar(&Conf.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
 	flag.DurationVar(&Conf.ServiceStartupTimeout, "service-startup-timeout", 4*time.Minute, "Service startup timeout in time.Duration format")
+	flag.DurationVar(&Conf.InstanceCooldownTimeout, "instance-cooldown-timeout", 1*time.Minute, "Time after instance start when shutdown is prohibited on scale down in time.Duration format")
 
 	flag.StringVar(&Conf.DbConnectionString, "db-connection", "", "Connection string for database")
 	flag.StringVar(&Conf.RedisConnectionString, "aws-elastic-cache", "localhost:6379", "Connection string for Session cache")
