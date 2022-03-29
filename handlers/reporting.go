@@ -54,7 +54,7 @@ func ClusterStatus(c *gin.Context) {
 }
 
 func ListDrivers(c *gin.Context) {
-	browsers, err := service.ListBrowsers()
+	images, err := service.ListBrowsers()
 	if err != nil {
 		log.WithError(err).Warn("Failed to get browser list")
 		_ = c.Error(err).SetType(gin.ErrorTypePublic)
@@ -62,19 +62,25 @@ func ListDrivers(c *gin.Context) {
 	}
 
 	browsersResponse := []map[string]interface{}{}
-	for _, browser := range browsers {
-		executionEnvironment := strings.Split(browser, ":")[0]
+	imagesPlatforms := map[string]string{
+		"redroid": "android",
+	}
+	for _, image := range images {
+		name := strings.Split(image, ":")[0]
+		version := strings.Split(image, ":")[1]
 
-		driver := strings.Split(executionEnvironment, "-")[1]
-		platform := strings.Split(executionEnvironment, "-")[0]
+		if name == "edge" {
+			name = "MicrosoftEdge"
+		}
 
-		if driver == "edge" {
-			driver = "MicrosoftEdge"
+		platform := "linux"
+		if _, ok := imagesPlatforms[name]; ok {
+			platform = imagesPlatforms[name]
 		}
 
 		browserData := map[string]interface{}{
-			"name":     driver,
-			"version":  strings.Split(browser, ":")[1],
+			"name":     name,
+			"version":  version,
 			"platform": platform,
 		}
 		browsersResponse = append(browsersResponse, browserData)
