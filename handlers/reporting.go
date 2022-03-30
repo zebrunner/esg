@@ -73,16 +73,18 @@ func ListDrivers(c *gin.Context) {
 			name = "MicrosoftEdge"
 		}
 
-		platform := "linux"
-		if _, ok := imagesPlatforms[name]; ok {
-			platform = imagesPlatforms[name]
-		}
-
 		browserData := map[string]interface{}{
 			"name":     name,
 			"version":  version,
-			"platform": platform,
+			"platform": "linux",
 		}
+
+		if _, ok := imagesPlatforms[name]; ok {
+			browserData["platform"] = imagesPlatforms[name]
+			browserData["browserName"] = "chrome"
+			browserData["browserVersion"] = "99.0"
+		}
+
 		browsersResponse = append(browsersResponse, browserData)
 	}
 	c.JSON(http.StatusOK, browsersResponse)
