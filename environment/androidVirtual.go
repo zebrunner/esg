@@ -8,8 +8,8 @@ import (
 const (
 	appiumPort int64 = 4723
 
-	appiumCpu    = 256
-	appiumMemory = 768
+	appiumCpu    = 320
+	appiumMemory = 1024
 )
 
 func buildAppiumRedroid(workspace string, caps *selenium.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {
@@ -35,7 +35,7 @@ func buildAppiumRedroid(workspace string, caps *selenium.Capabilities, conf *con
 	deviceContainer.SetMemory(caps.Memory)
 	deviceContainer.SetMemoryReservation(caps.MemoryReservation)
 
-	appiumImage := imageRepo + "appium:1.3-beta14"
+	appiumImage := imageRepo + "appium:1.3-beta15"
 	appiumContainer := Container{
 		Name:              "appium",
 		Image:             appiumImage,
