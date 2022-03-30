@@ -80,40 +80,6 @@ func getInstanceResources() (*Resources, error) {
 	return &Resources{CPU: *instanceInfo.VCpuInfo.DefaultVCpus * 1024, Memory: *instanceInfo.MemoryInfo.SizeInMiB}, nil
 }
 
-func getTasks(svc *ecs.ECS) ([]*ecs.Task, error) {
-	tasks := []*ecs.Task{}
-	listTasksInput := &ecs.ListTasksInput{
-		Cluster: &config.Conf.AwsCluster,
-	}
-	for {
-		listTasksResult, err := svc.ListTasks(listTasksInput)
-		if err != nil {
-			return nil, err
-		}
-		if len(listTasksResult.TaskArns) == 0 {
-			break
-		}
-
-		describeTasksInput := &ecs.DescribeTasksInput{
-			Cluster: &config.Conf.AwsCluster,
-			Tasks:   listTasksResult.TaskArns,
-		}
-		describeTasksResult, err := svc.DescribeTasks(describeTasksInput)
-		if err != nil {
-			log.WithError(err).Warn("Failed to get all tasks. Only partial results returned")
-			break
-		}
-		tasks = append(tasks, describeTasksResult.Tasks...)
-
-		if listTasksResult.NextToken == nil {
-			break
-		}
-		listTasksInput = listTasksInput.SetNextToken(*listTasksResult.NextToken)
-	}
-
-	return tasks, nil
-}
-
 func getTasksResources(tasks []*ecs.Task, status string) []*Resources {
 	resources := []*Resources{}
 	for _, task := range tasks {
@@ -178,7 +144,7 @@ func ScaleUp() {
 	}
 	svc := ecs.New(session)
 	autoscalingSvc := autoscaling.New(session)
-	tasks, err := getTasks(svc)
+	tasks, err := GetClusterTasks(svc)
 	if err != nil {
 		log.WithError(err).Error("Failed to get list of running task")
 		return
