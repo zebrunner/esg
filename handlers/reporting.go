@@ -1,13 +1,14 @@
 package handlers
 
 import (
-	log "github.com/sirupsen/logrus"
-	"github.com/zebrunner/esg/service"
 	"net/http"
 	"os"
 	"runtime"
 	"strings"
 	"time"
+
+	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -52,26 +53,38 @@ func ClusterStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, status)
 }
 
-func ListBrowsers(c *gin.Context) {
-	browsers, err := service.ListBrowsers()
+func ListDrivers(c *gin.Context) {
+	images, err := service.ListBrowsers()
 	if err != nil {
 		log.WithError(err).Warn("Failed to get browser list")
-		c.Error(err).SetType(gin.ErrorTypePublic)
+		_ = c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
 
 	browsersResponse := []map[string]interface{}{}
-	for _, browser := range browsers {
-		browserName := strings.Split(browser, ":")[0]
-		if browserName == "edge" {
-			browserName = "MicrosoftEdge"
+	imagesPlatforms := map[string]string{
+		"redroid": "android",
+	}
+	for _, image := range images {
+		name := strings.Split(image, ":")[0]
+		version := strings.Split(image, ":")[1]
+
+		if name == "edge" {
+			name = "MicrosoftEdge"
 		}
 
 		browserData := map[string]interface{}{
-			"name":     browserName,
-			"version":  strings.Split(browser, ":")[1],
+			"name":     name,
+			"version":  version,
 			"platform": "linux",
 		}
+
+		if _, ok := imagesPlatforms[name]; ok {
+			browserData["platform"] = imagesPlatforms[name]
+			browserData["browserName"] = "chrome"
+			browserData["browserVersion"] = "99.0"
+		}
+
 		browsersResponse = append(browsersResponse, browserData)
 	}
 	c.JSON(http.StatusOK, browsersResponse)

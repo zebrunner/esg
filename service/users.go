@@ -45,7 +45,8 @@ func CreateUser(name string, password *string) (string, error) {
 	}
 
 	pwd, err := generatePassword()
-	if password != nil {
+	if err != nil {
+		log.WithError(err).Error("Failed to generate password")
 		pwd = *password
 	}
 
@@ -129,7 +130,7 @@ func DeleteUser(name string) error {
 }
 
 func GetWorkspace(name string) (string, error) {
-	if config.TrustedMode {
+	if config.Conf.TrustedMode {
 		return "zebrunner", nil
 	}
 
@@ -145,7 +146,7 @@ func CheckAuth(name, password string) error {
 		Message: "Invalid username or password",
 	}
 
-	if config.TrustedMode {
+	if config.Conf.TrustedMode {
 		return nil
 	}
 
