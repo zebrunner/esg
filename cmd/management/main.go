@@ -9,10 +9,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/zebrunner/esg/environment"
 	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/service"
 
+	awsSession "github.com/aws/aws-sdk-go/aws/session"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 )
@@ -153,6 +156,30 @@ func RefreshTaskDefinitionsFromFile(path string) {
 	}
 }
 
+func CleanDeadTasks() {
+	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
+	if err != nil {
+		log.WithError(err).Error("Failed to create AWS session")
+		return
+	}
+
+	for {
+		svc := ecs.New(session)
+		tasks, err := service.GetClusterTasks(svc)
+		if err != nil {
+			log.WithError(err).Warn("Failed to get cluster tasks")
+		}
+
+		for _, task := range tasks {
+			if time.Since(*task.StartedAt) > 24*time.Hour {
+				service.RemoveTask(*task.TaskArn)
+			}
+		}
+
+		time.Sleep(1 * time.Hour)
+	}
+}
+
 func main() {
 	flag.Parse()
 
@@ -185,6 +212,9 @@ func main() {
 	}
 	wg.Add(1)
 	go ClearSessions()
+
+	wg.Add(1)
+	go CleanDeadTasks()
 
 	wg.Wait()
 	log.Fatal("Background worker stopped!")
