@@ -35,9 +35,5 @@ edge:95.0
 edge:94.0
 edge:93.0
 edge:92.0
-edge:91.0
-edge:90.0
-edge:89.0
-edge:88.0
 redroid:11
 redroid:latest
