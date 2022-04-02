@@ -35,4 +35,5 @@ edge:95.0
 edge:94.0
 edge:93.0
 edge:92.0
+redroid:latest
 redroid:11.0
