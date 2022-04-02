@@ -5,5 +5,4 @@
   -aws-cluster esg-dev \
   -aws-elastic-cache redis:6379 \
   -aws-auto-scaling-group esg-dev-asg \
-  -log-level trace \
-  -enable-fast-scale-down \
+  -log-level debug
