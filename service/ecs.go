@@ -46,7 +46,14 @@ func InitAws() (*awsSession.Session, error) {
 }
 
 func ListBrowsers() ([]string, error) {
-	sess, err := InitAws()
+	sess, err := awsSession.NewSession(&aws.Config{
+		Region:     aws.String("us-east-1"), // Hardcoded because ecr-public has only this region
+		MaxRetries: &config.Conf.AwsRetry,
+		Retryer: client.DefaultRetryer{
+			MaxThrottleDelay: 30 * time.Second,
+			MinThrottleDelay: 5 * time.Second,
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +153,7 @@ func RunTask(ctx context.Context, env *environment.ExecutionEnvironment) (taskAr
 		if len(resultRunTask.Failures) != 0 {
 			log.WithFields(log.Fields{
 				"retry": i,
-				"error":   *resultRunTask.Failures[0].Reason,
+				"error": *resultRunTask.Failures[0].Reason,
 			}).Debug("Run task failed. Response contains failures")
 			outputErr = errors.New("response contains failures")
 			continue
