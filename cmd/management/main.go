@@ -142,12 +142,21 @@ func RefreshTaskDefinitions() {
 }
 
 func RefreshTaskDefinitionsFromFile(path string) {
-	images, err := ioutil.ReadFile(path)
+	text, err := ioutil.ReadFile(path)
 	if err != nil {
 		log.WithError(err).Error("Failed to read file browsers.txt")
 	}
-	imageList := strings.Split(string(images), "\n")
-	for _, image := range imageList {
+	lines := strings.Split(string(text), "\n")
+
+	images := []string{}
+	for _, line := range lines {
+		if line != "" {
+			images = append(images, line)
+		}
+	}
+
+	log.WithField("images", images).Trace("Refreshing task definition using file")
+	for _, image := range images {
 		time.Sleep(1000 * time.Millisecond)
 		err = RefreshTaskDefinition(image)
 		if err != nil {
