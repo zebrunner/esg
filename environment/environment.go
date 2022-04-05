@@ -16,6 +16,7 @@ const (
 	linuxPlatform   = "linux"
 	androidPlatform = "android"
 	redroidDevice   = "redroid"
+	anyPlatform     = "any"
 	imageRepo       = "public.ecr.aws/zebrunner/" //public zebrunner ECR docker registry
 )
 
@@ -122,12 +123,13 @@ func (e *ExecutionEnvironment) ContainerOverrides() []*ecs.ContainerOverride {
 }
 
 func Build(workspace string, caps *selenium.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {
-	if caps.PlatformName == androidPlatform {
+	platform := strings.ToLower(caps.PlatformName)
+	if platform == androidPlatform {
 		if strings.ToLower(caps.DeviceName) == redroidDevice {
 			return buildAppiumRedroid(workspace, caps, conf)
 		}
 		return nil, fmt.Errorf("device is not supported. deviceName=%s", caps.DeviceName)
-	} else if caps.PlatformName == linuxPlatform || caps.PlatformName == "" {
+	} else if platform == linuxPlatform || platform == "" || platform == anyPlatform {
 		return buildBrowser(workspace, caps, conf)
 	}
 
