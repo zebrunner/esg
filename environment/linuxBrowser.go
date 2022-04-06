@@ -110,8 +110,8 @@ func buildBrowser(workspace string, caps *selenium.Capabilities, conf *config.Co
 	}
 
 	if caps.BrowserName == "firefox" {
-		environment.Network.Endpoints["driver"].Path = "/wd/hub"
-		environment.Network.Endpoints["healthcheck"].Path = "/wd/hub"
+		environment.Network.Endpoints["driver"].Path = "/wd/hub/"
+		environment.Network.Endpoints["healthcheck"].Path = "/wd/hub/"
 	}
 
 	return &environment, nil

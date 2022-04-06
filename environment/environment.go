@@ -16,6 +16,7 @@ const (
 	linuxPlatform   = "linux"
 	androidPlatform = "android"
 	redroidDevice   = "redroid"
+	anyPlatform     = "any"
 	imageRepo       = "public.ecr.aws/zebrunner/" //public zebrunner ECR docker registry
 )
 
@@ -122,12 +123,13 @@ func (e *ExecutionEnvironment) ContainerOverrides() []*ecs.ContainerOverride {
 }
 
 func Build(workspace string, caps *selenium.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {
-	if caps.PlatformName == androidPlatform {
+	platform := strings.ToLower(caps.PlatformName)
+	if platform == androidPlatform {
 		if strings.ToLower(caps.DeviceName) == redroidDevice {
 			return buildAppiumRedroid(workspace, caps, conf)
 		}
 		return nil, fmt.Errorf("device is not supported. deviceName=%s", caps.DeviceName)
-	} else if caps.PlatformName == linuxPlatform || caps.PlatformName == "" {
+	} else if platform == linuxPlatform || platform == "" || platform == anyPlatform {
 		return buildBrowser(workspace, caps, conf)
 	}
 
@@ -164,6 +166,10 @@ func buildImage(caps *selenium.Capabilities) (string, error) {
 	platformName := strings.ToLower(caps.PlatformName)
 	deviceName := strings.ToLower(caps.DeviceName)
 
+	if platformName == anyPlatform || platformName == "" {
+		platformName = "linux"
+	}
+
 	if platformName == androidPlatform && deviceName == redroidDevice {
 		name := redroidDevice
 		version := caps.PlatformVersion
@@ -171,7 +177,7 @@ func buildImage(caps *selenium.Capabilities) (string, error) {
 			version = "latest"
 		}
 		return imageRepo + name + ":" + version, nil
-	} else if platformName == linuxPlatform || platformName == "" {
+	} else if platformName == linuxPlatform {
 		name := strings.ToLower(caps.BrowserName)
 		name = remapName(name)
 		version := strings.ToLower(caps.BrowserVersion)
@@ -185,11 +191,12 @@ func buildImage(caps *selenium.Capabilities) (string, error) {
 
 func buildTaskDefinitionFamily(caps *selenium.Capabilities) string {
 	familyParts := []string{}
+	platformName := strings.ToLower(caps.PlatformName)
 
-	platformName := "linux"
-	if caps.PlatformName != "" {
-		platformName = strings.ToLower(caps.PlatformName)
+	if caps.PlatformName == "" || platformName == "any" {
+		platformName = "linux"
 	}
+
 	familyParts = append(familyParts, platformName)
 
 	deviceName := strings.ToLower(caps.DeviceName)

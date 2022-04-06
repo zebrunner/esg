@@ -93,7 +93,9 @@ func Create(c *gin.Context) {
 	if err != nil {
 		log.WithError(err).Error("Failed to build execution environment")
 		_ = c.Error(creationError("failed to start executor", err)).SetType(gin.ErrorTypePublic)
+		return
 	}
+
 	err = service.StartDriver(ctx, env)
 	if err == context.DeadlineExceeded {
 		err = errors.New("Driver startup timed out")
