@@ -166,6 +166,10 @@ func buildImage(caps *selenium.Capabilities) (string, error) {
 	platformName := strings.ToLower(caps.PlatformName)
 	deviceName := strings.ToLower(caps.DeviceName)
 
+	if platformName == anyPlatform || platformName == "" {
+		platformName = "linux"
+	}
+
 	if platformName == androidPlatform && deviceName == redroidDevice {
 		name := redroidDevice
 		version := caps.PlatformVersion
@@ -173,7 +177,7 @@ func buildImage(caps *selenium.Capabilities) (string, error) {
 			version = "latest"
 		}
 		return imageRepo + name + ":" + version, nil
-	} else if platformName == linuxPlatform || platformName == "" {
+	} else if platformName == linuxPlatform {
 		name := strings.ToLower(caps.BrowserName)
 		name = remapName(name)
 		version := strings.ToLower(caps.BrowserVersion)
@@ -187,11 +191,12 @@ func buildImage(caps *selenium.Capabilities) (string, error) {
 
 func buildTaskDefinitionFamily(caps *selenium.Capabilities) string {
 	familyParts := []string{}
+	platformName := strings.ToLower(caps.PlatformName)
 
-	platformName := "linux"
-	if caps.PlatformName != "" {
-		platformName = strings.ToLower(caps.PlatformName)
+	if caps.PlatformName == "" || platformName == "any" {
+		platformName = "linux"
 	}
+
 	familyParts = append(familyParts, platformName)
 
 	deviceName := strings.ToLower(caps.DeviceName)
