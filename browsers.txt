@@ -13,7 +13,6 @@ chrome:89.0
 chrome:88.0
 firefox:98.0
 firefox:97.0
-firefox:latest
 firefox:96.0
 firefox:95.0
 firefox:94.0

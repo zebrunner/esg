@@ -160,3 +160,6 @@ coverage.*
 *.log
 .vscode
 esg
+
+entrypoint.sh
+management_entrypoint.sh
