@@ -69,6 +69,11 @@ func ListDrivers(c *gin.Context) {
 		name := strings.Split(image, ":")[0]
 		version := strings.Split(image, ":")[1]
 
+                if version == "latest" || version == "debug" {
+                        continue
+                }
+
+
 		if name == "edge" {
 			name = "MicrosoftEdge"
 		}
