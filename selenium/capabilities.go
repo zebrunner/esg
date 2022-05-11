@@ -29,7 +29,7 @@ type Capabilities struct {
 	Skin             string
 	IdleTimeout      int64
 	VideoCodec       string
-	timeZone         string
+	TimeZone         string
 	Env              []string
 	HostsEntries     []string
 	DNSServers       []string
@@ -39,12 +39,12 @@ type Capabilities struct {
 	MemoryReservation int64
 }
 
-func (c *Capabilities) TimeZone() (*time.Location, error) {
+func (c *Capabilities) GetTimeZone() (*time.Location, error) {
 	timeZone := time.UTC
-	if c.timeZone != "" {
-		tz, err := time.LoadLocation(c.timeZone)
+	if c.TimeZone != "" {
+		tz, err := time.LoadLocation(c.TimeZone)
 		if err != nil {
-			log.WithError(err).WithField("value", c.TimeZone).Warn("Bad timezone specified")
+			log.WithError(err).WithField("value", c.GetTimeZone).Warn("Bad timezone specified")
 		} else {
 			timeZone = tz
 		}

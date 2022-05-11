@@ -33,7 +33,7 @@ func buildBrowser(workspace string, caps *selenium.Capabilities, conf *config.Co
 	sharedFolder := "/opt/zebrunner"
 	sharedVolume := "data"
 
-	tz, err := caps.TimeZone()
+	tz, err := caps.GetTimeZone()
 	// In future maybe there will be need to disable vnc
 	enableVNC := true
 	browserContainer := Container{
