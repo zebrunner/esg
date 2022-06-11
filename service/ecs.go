@@ -209,6 +209,9 @@ func RemoveTask(taskArn string) {
 }
 
 func searchHostPort(task *ecs.Task, containerPort int64) (port int64, ok bool) {
+	// #284: improve container host/port detection via searchHostPort
+        time.Sleep(time.Duration(5) * time.Second)
+
 	for _, container := range task.Containers {
 		for _, networkBinding := range container.NetworkBindings {
 			if *networkBinding.ContainerPort == containerPort {
