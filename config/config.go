@@ -41,6 +41,7 @@ type Config struct {
 
 	// Timeouts
 	IdleTimeout             time.Duration
+        SessionStartupTimeout   time.Duration
 	SessionDeleteTimeout    time.Duration
 	ServiceStartupTimeout   time.Duration
 	InstanceCooldownTimeout time.Duration
@@ -77,6 +78,7 @@ func init() {
 	flag.Int64Var(&Conf.MaxCpu, "max-cpu", 4096, "maximum CPU limitation for session")
 
 	flag.DurationVar(&Conf.IdleTimeout, "idle-timeout", 60*time.Second, "Session idle timeout in time.Duration format")
+        flag.DurationVar(&Conf.SessionStartupTimeout, "session-startup-timeout", 60*time.Second, "Session healthcheck(s) startup timeout in time.Duration format")
 	flag.DurationVar(&Conf.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
 	flag.DurationVar(&Conf.ServiceStartupTimeout, "service-startup-timeout", 5*time.Minute, "Service startup timeout in time.Duration format")
 	flag.DurationVar(&Conf.InstanceCooldownTimeout, "instance-cooldown-timeout", 4*time.Minute, "Time after instance start when shutdown is prohibited on scale down in time.Duration format")

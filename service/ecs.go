@@ -283,8 +283,10 @@ func StartDriver(ctx context.Context, env *environment.ExecutionEnvironment) err
 	svc := ecs.New(AwsSess)
 
 	var outputErr error
+        startTime := time.Now()
 out:
 	for i := 0; i < config.Conf.RetryCount; i++ {
+		outputErr = nil //reset outputErr for every new retry
 		l := log.WithField("attempt", i)
 		select {
 		case <-ctx.Done():
@@ -292,12 +294,11 @@ out:
 		default:
 		}
 
-		startTime := time.Now()
 		taskArn, err := RunTask(ctx, env)
 
 		l.WithField("latency", time.Since(startTime)).Info("RunTask delay")
 		if err != nil {
-			l.WithError(err).WithField("attempt", i).Error("Failed to run task")
+			l.WithError(err).WithField("attempt", i).Warn("Failed to run task")
 			outputErr = fmt.Errorf("failed to run task. InternalError: %v", err)
 			continue
 		}
@@ -305,38 +306,37 @@ out:
 		taskId := strings.Split(taskArn, "/")[2]
 		env.TaskId = taskId
 		l = l.WithField("taskId", taskId)
-		startTime = time.Now()
 		task, err := waitUntilTaskIsRunning(ctx, svc, taskId, ConstDelay(6*time.Second), 25)
-		l.WithField("latency", time.Since(startTime)).Info("WaitUntilTasksRunning delay")
+		l.WithField("attempt", i).WithField("latency", time.Since(startTime)).Info("WaitUntilTasksRunning delay")
 		if err != nil {
 			RemoveTask(taskArn)
-			l.WithError(err).Error("Failed to wait task RUNNING state")
+			l.WithField("attempt", i).WithError(err).Warn("Failed to wait task RUNNING state")
 			outputErr = fmt.Errorf("failed to wait task RUNNING state. InternalError: %v", err)
 			continue
 		}
 
-		startTime = time.Now()
 		err = setEnvironmentNetwork(env, task)
-		l.WithField("latency", time.Since(startTime)).Info("setEnvironmentNetwork delay")
+		l.WithField("attempt", i).WithField("latency", time.Since(startTime)).Info("setEnvironmentNetwork delay")
 		if err != nil {
 			RemoveTask(taskArn)
-			l.WithError(err).Error("Failed to get service info.")
+			l.WithField("attempt", i).WithError(err).Warn("Failed to get service info.")
 			outputErr = fmt.Errorf("failed to get service info. InternalError: %v", err)
 			continue
 		}
 
 		url, ok := env.Network.GetUrl("healthcheck")
 		if !ok {
+			//TODO: [VD] if no healthcheck do we really want to retry? Maybe force abort?
 			RemoveTask(taskArn)
 			l.Error("Driver healthcheck missed.")
 			outputErr = fmt.Errorf("driver healthcheck missed")
 			continue
 		}
 
-		err = wait(ctx, url.String(), config.Conf.ServiceStartupTimeout)
+		err = wait(ctx, url.String(), config.Conf.SessionStartupTimeout)
 		if err != nil {
 			RemoveTask(taskArn)
-			l.WithError(err).Error("Failed to wait driver healthcheck response")
+			l.WithField("attempt", i).WithError(err).Warn("Failed to wait driver healthcheck response")
 			outputErr = err
 			continue
 		}
