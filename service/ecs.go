@@ -298,7 +298,7 @@ out:
 
 		l.WithField("latency", time.Since(startTime)).Info("RunTask delay")
 		if err != nil {
-			l.WithError(err).WithField("attempt", i).Warn("Failed to run task")
+			l.WithError(err).WithField("attempt", i).WithField("latency", time.Since(startTime)).Warn("Failed to run task")
 			outputErr = fmt.Errorf("failed to run task. InternalError: %v", err)
 			continue
 		}
@@ -319,7 +319,7 @@ out:
 		l.WithField("attempt", i).WithField("latency", time.Since(startTime)).Info("setEnvironmentNetwork delay")
 		if err != nil {
 			RemoveTask(taskArn)
-			l.WithField("attempt", i).WithError(err).Warn("Failed to get service info.")
+			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to get service info.")
 			outputErr = fmt.Errorf("failed to get service info. InternalError: %v", err)
 			continue
 		}
@@ -328,7 +328,7 @@ out:
 		if !ok {
 			//TODO: [VD] if no healthcheck do we really want to retry? Maybe force abort?
 			RemoveTask(taskArn)
-			l.Error("Driver healthcheck missed.")
+			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).Error("Driver healthcheck missed.")
 			outputErr = fmt.Errorf("driver healthcheck missed")
 			continue
 		}
@@ -336,7 +336,7 @@ out:
 		err = wait(ctx, url.String(), config.Conf.SessionStartupTimeout)
 		if err != nil {
 			RemoveTask(taskArn)
-			l.WithField("attempt", i).WithError(err).Warn("Failed to wait driver healthcheck response")
+			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to wait driver healthcheck response")
 			outputErr = err
 			continue
 		}
