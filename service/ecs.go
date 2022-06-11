@@ -285,11 +285,11 @@ func StartDriver(ctx context.Context, env *environment.ExecutionEnvironment) err
 	var outputErr error
         startTime := time.Now()
 out:
-	for i := 0; i < config.Conf.RetryCount; i++ {
-		outputErr = nil //reset outputErr for every new retry
+	for i := 0; i < 100; i++ { //TODO: 100 is almost unlimited but think about do while...
 		l := log.WithField("attempt", i)
 		select {
 		case <-ctx.Done():
+			outputErr = fmt.Errorf("failed to run task. InternalError: Service startup timed out")
 			break out
 		default:
 		}
@@ -306,11 +306,11 @@ out:
 		taskId := strings.Split(taskArn, "/")[2]
 		env.TaskId = taskId
 		l = l.WithField("taskId", taskId)
-		task, err := waitUntilTaskIsRunning(ctx, svc, taskId, ConstDelay(6*time.Second), 25)
+		task, err := waitUntilTaskIsRunning(ctx, svc, taskId, ConstDelay(6*time.Second), 20)
 		l.WithField("attempt", i).WithField("latency", time.Since(startTime)).Info("WaitUntilTasksRunning delay")
 		if err != nil {
 			RemoveTask(taskArn)
-			l.WithField("attempt", i).WithError(err).Warn("Failed to wait task RUNNING state")
+			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to wait task RUNNING state")
 			outputErr = fmt.Errorf("failed to wait task RUNNING state. InternalError: %v", err)
 			continue
 		}

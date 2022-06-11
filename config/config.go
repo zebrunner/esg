@@ -54,7 +54,6 @@ type Config struct {
 	ZebrunnerIntegrationPassword string
 
 	UsePublicIp             bool
-	RetryCount              int
 	S3Bucket                string // For static artifacts
 	TrustedMode             bool
 	Tenant                  string
@@ -90,7 +89,6 @@ func init() {
 	flag.StringVar(&Conf.ZebrunnerIntegrationPassword, "zebrunner-integration-password", "", "Password for zebrunner for current env")
 
 	flag.BoolVar(&Conf.UsePublicIp, "use-public-ip", false, "Use or no public ip address for browser slave instances")
-	flag.IntVar(&Conf.RetryCount, "retry-count", 1, "New session attempts retry count")
 	flag.StringVar(&Conf.S3Bucket, "s3-bucket", "", "S3 Bucket name for pushing artifacts")
 	flag.StringVar(&Conf.Tenant, "tenant", "", "Zebrunner tenant name")
 	flag.BoolVar(&Conf.TrustedMode, "trusted", false, "If trusted mode enabled hub does not require any auth")
