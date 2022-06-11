@@ -289,7 +289,7 @@ out:
 		l := log.WithField("attempt", i)
 		select {
 		case <-ctx.Done():
-			outputErr = fmt.Errorf("failed to run task. InternalError: Service startup timed out")
+			outputErr = fmt.Errorf("failed to run task: Service startup timed out")
 			break out
 		default:
 		}
@@ -299,19 +299,19 @@ out:
 		l.WithField("latency", time.Since(startTime)).Info("RunTask delay")
 		if err != nil {
 			l.WithError(err).WithField("attempt", i).WithField("latency", time.Since(startTime)).Warn("Failed to run task")
-			outputErr = fmt.Errorf("failed to run task. InternalError: %v", err)
+			outputErr = fmt.Errorf("failed to run task: %v", err)
 			continue
 		}
 
 		taskId := strings.Split(taskArn, "/")[2]
 		env.TaskId = taskId
 		l = l.WithField("taskId", taskId)
-		task, err := waitUntilTaskIsRunning(ctx, svc, taskId, ConstDelay(6*time.Second), 20)
+		task, err := waitUntilTaskIsRunning(ctx, svc, taskId, ConstDelay(6*time.Second), 10)
 		l.WithField("attempt", i).WithField("latency", time.Since(startTime)).Info("WaitUntilTasksRunning delay")
 		if err != nil {
 			RemoveTask(taskArn)
 			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to wait task RUNNING state")
-			outputErr = fmt.Errorf("failed to wait task RUNNING state. InternalError: %v", err)
+			outputErr = fmt.Errorf("failed to wait for task RUNNING state: %v", err)
 			continue
 		}
 
@@ -320,7 +320,7 @@ out:
 		if err != nil {
 			RemoveTask(taskArn)
 			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to get service info.")
-			outputErr = fmt.Errorf("failed to get service info. InternalError: %v", err)
+			outputErr = fmt.Errorf("failed to get service info: %v", err)
 			continue
 		}
 
