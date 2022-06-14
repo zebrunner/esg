@@ -317,7 +317,7 @@ out:
 
 		err = setEnvironmentNetwork(env, task)
 		l.WithField("attempt", i).WithField("latency", time.Since(startTime)).Info("setEnvironmentNetwork delay")
-		if err != nil || i == 0 {
+		if err != nil {
 			RemoveTask(taskArn)
 			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to get service info.")
 			outputErr = fmt.Errorf("failed to get service info: %v", err)
