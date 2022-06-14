@@ -10,7 +10,6 @@ migrate -path migrations -database $DATABASE up
 
 
 ./server \
-  -retry-count 2 \
   -aws-retry 2 \
   -aws-cluster esg-dev \
   -aws-elastic-cache redis:6379 \
