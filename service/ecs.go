@@ -209,9 +209,6 @@ func RemoveTask(taskArn string) {
 }
 
 func searchHostPort(task *ecs.Task, containerPort int64) (port int64, ok bool) {
-	// #284: improve container host/port detection via searchHostPort
-        time.Sleep(time.Duration(5) * time.Second)
-
 	for _, container := range task.Containers {
 		for _, networkBinding := range container.NetworkBindings {
 			if *networkBinding.ContainerPort == containerPort {
@@ -267,11 +264,11 @@ func getTaskIp(task *ecs.Task) (string, error) {
 
 func setEnvironmentNetwork(env *environment.ExecutionEnvironment, task *ecs.Task) error {
 	for _, endpoint := range env.Network.Endpoints {
-		hostPort, ok := searchHostPort(task, endpoint.Port)
+		hostPort, ok := searchHostPort(task, endpoint.ContainerPort)
 		if !ok {
-			return fmt.Errorf("host port not found. containerPort=%d", endpoint.Port)
+			return fmt.Errorf("host port not found. containerPort=%d", endpoint.ContainerPort)
 		}
-		endpoint.Port = hostPort
+		endpoint.HostPort = hostPort
 	}
 
 	ip, err := getTaskIp(task)
@@ -286,7 +283,7 @@ func StartDriver(ctx context.Context, env *environment.ExecutionEnvironment) err
 	svc := ecs.New(AwsSess)
 
 	var outputErr error
-        startTime := time.Now()
+	startTime := time.Now()
 out:
 	for i := 0; i < 100; i++ { //TODO: 100 is almost unlimited but think about do while...
 		l := log.WithField("attempt", i)
@@ -320,7 +317,7 @@ out:
 
 		err = setEnvironmentNetwork(env, task)
 		l.WithField("attempt", i).WithField("latency", time.Since(startTime)).Info("setEnvironmentNetwork delay")
-		if err != nil {
+		if err != nil || i == 0 {
 			RemoveTask(taskArn)
 			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to get service info.")
 			outputErr = fmt.Errorf("failed to get service info: %v", err)
