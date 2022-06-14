@@ -264,11 +264,11 @@ func getTaskIp(task *ecs.Task) (string, error) {
 
 func setEnvironmentNetwork(env *environment.ExecutionEnvironment, task *ecs.Task) error {
 	for _, endpoint := range env.Network.Endpoints {
-		hostPort, ok := searchHostPort(task, endpoint.Port)
+		hostPort, ok := searchHostPort(task, endpoint.ContainerPort)
 		if !ok {
-			return fmt.Errorf("host port not found. containerPort=%d", endpoint.Port)
+			return fmt.Errorf("host port not found. containerPort=%d", endpoint.ContainerPort)
 		}
-		endpoint.Port = hostPort
+		endpoint.HostPort = hostPort
 	}
 
 	ip, err := getTaskIp(task)
@@ -283,60 +283,60 @@ func StartDriver(ctx context.Context, env *environment.ExecutionEnvironment) err
 	svc := ecs.New(AwsSess)
 
 	var outputErr error
+	startTime := time.Now()
 out:
-	for i := 0; i < config.Conf.RetryCount; i++ {
+	for i := 0; i < 100; i++ { //TODO: 100 is almost unlimited but think about do while...
 		l := log.WithField("attempt", i)
 		select {
 		case <-ctx.Done():
+			outputErr = fmt.Errorf("failed to run task: Service startup timed out")
 			break out
 		default:
 		}
 
-		startTime := time.Now()
 		taskArn, err := RunTask(ctx, env)
 
 		l.WithField("latency", time.Since(startTime)).Info("RunTask delay")
 		if err != nil {
-			l.WithError(err).WithField("attempt", i).Error("Failed to run task")
-			outputErr = fmt.Errorf("failed to run task. InternalError: %v", err)
+			l.WithError(err).WithField("attempt", i).WithField("latency", time.Since(startTime)).Warn("Failed to run task")
+			outputErr = fmt.Errorf("failed to run task: %v", err)
 			continue
 		}
 
 		taskId := strings.Split(taskArn, "/")[2]
 		env.TaskId = taskId
 		l = l.WithField("taskId", taskId)
-		startTime = time.Now()
-		task, err := waitUntilTaskIsRunning(ctx, svc, taskId, ConstDelay(6*time.Second), 25)
-		l.WithField("latency", time.Since(startTime)).Info("WaitUntilTasksRunning delay")
+		task, err := waitUntilTaskIsRunning(ctx, svc, taskId, ConstDelay(6*time.Second), 10)
+		l.WithField("attempt", i).WithField("latency", time.Since(startTime)).Info("WaitUntilTasksRunning delay")
 		if err != nil {
 			RemoveTask(taskArn)
-			l.WithError(err).Error("Failed to wait task RUNNING state")
-			outputErr = fmt.Errorf("failed to wait task RUNNING state. InternalError: %v", err)
+			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to wait task RUNNING state")
+			outputErr = fmt.Errorf("failed to wait for task RUNNING state: %v", err)
 			continue
 		}
 
-		startTime = time.Now()
 		err = setEnvironmentNetwork(env, task)
-		l.WithField("latency", time.Since(startTime)).Info("setEnvironmentNetwork delay")
+		l.WithField("attempt", i).WithField("latency", time.Since(startTime)).Info("setEnvironmentNetwork delay")
 		if err != nil {
 			RemoveTask(taskArn)
-			l.WithError(err).Error("Failed to get service info.")
-			outputErr = fmt.Errorf("failed to get service info. InternalError: %v", err)
+			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to get service info.")
+			outputErr = fmt.Errorf("failed to get service info: %v", err)
 			continue
 		}
 
 		url, ok := env.Network.GetUrl("healthcheck")
 		if !ok {
+			//TODO: [VD] if no healthcheck do we really want to retry? Maybe force abort?
 			RemoveTask(taskArn)
-			l.Error("Driver healthcheck missed.")
+			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).Error("Driver healthcheck missed.")
 			outputErr = fmt.Errorf("driver healthcheck missed")
 			continue
 		}
 
-		err = wait(ctx, url.String(), config.Conf.ServiceStartupTimeout)
+		err = wait(ctx, url.String(), config.Conf.SessionStartupTimeout)
 		if err != nil {
 			RemoveTask(taskArn)
-			l.WithError(err).Error("Failed to wait driver healthcheck response")
+			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to wait driver healthcheck response")
 			outputErr = err
 			continue
 		}
