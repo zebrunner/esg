@@ -22,10 +22,10 @@ func buildAppiumRedroid(workspace string, caps *selenium.Capabilities, conf *con
 	}
 
 	deviceContainer := Container{
-		Name:      "device",
-		Image:     deviceImage,
-                Privileged: true,
-		Essential: true,
+		Name:       "device",
+		Image:      deviceImage,
+		Privileged: true,
+		Essential:  true,
 		Env: map[string]string{
 			"VERBOSE": "1",
 		},
@@ -35,7 +35,7 @@ func buildAppiumRedroid(workspace string, caps *selenium.Capabilities, conf *con
 	deviceContainer.SetMemory(caps.Memory)
 	deviceContainer.SetMemoryReservation(caps.MemoryReservation)
 
-	appiumImage := imageRepo + "appium:1.3"
+	appiumImage := imageRepo + "appium:1.4.5"
 	appiumContainer := Container{
 		Name:              "appium",
 		Image:             appiumImage,
@@ -48,20 +48,20 @@ func buildAppiumRedroid(workspace string, caps *selenium.Capabilities, conf *con
 			"driver": {appiumPort, 0},
 		},
 		Env: map[string]string{
-			"VERBOSE":         "1",
-			"RETAIN_TASK":     "false",
-			"DEVICE_NAME":     "ReDroid",
-			"ANDROID_DEVICES": "device:5555",
-                        "REMOTE_ADB":      "true",
-			"MCLOUD":          "true",
-                        "BUCKET":                 conf.S3Bucket,
-                        "TENANT":                 workspace,
-                        "AWS_ACCESS_KEY_ID":      conf.AwsAccessKeyID,
-                        "AWS_SECRET_ACCESS_KEY":  conf.AwsSecretAccessKey,
-                        "AWS_DEFAULT_REGION":     conf.AwsRegion,
+			"VERBOSE":               "1",
+			"RETAIN_TASK":           "false",
+			"DEVICE_NAME":           "ReDroid",
+			"ANDROID_DEVICES":       "device:5555",
+			"REMOTE_ADB":            "true",
+			"MCLOUD":                "true",
+			"BUCKET":                conf.S3Bucket,
+			"TENANT":                workspace,
+			"AWS_ACCESS_KEY_ID":     conf.AwsAccessKeyID,
+			"AWS_SECRET_ACCESS_KEY": conf.AwsSecretAccessKey,
+			"AWS_DEFAULT_REGION":    conf.AwsRegion,
 		},
 		Mounts: []string{sharedVolume},
-               Links: []string{"device"},
+		Links:  []string{"device"},
 	}
 
 	environment := ExecutionEnvironment{
@@ -74,8 +74,8 @@ func buildAppiumRedroid(workspace string, caps *selenium.Capabilities, conf *con
 		Network: &NetworkConfiguration{
 			IP: "",
 			Endpoints: map[string]*Endpoint{
-				"driver":      {Port: appiumPort, Path: "/wd/hub"},
-				"healthcheck": {Port: appiumPort, Path: "/wd/hub/status-adb"},
+				"driver":      {ContainerPort: appiumPort, HostPort: 0, Path: "/wd/hub"},
+				"healthcheck": {ContainerPort: appiumPort, HostPort: 0, Path: "/wd/hub/status-adb"},
 			},
 		},
 	}

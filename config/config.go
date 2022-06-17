@@ -41,6 +41,7 @@ type Config struct {
 
 	// Timeouts
 	IdleTimeout             time.Duration
+        SessionStartupTimeout   time.Duration
 	SessionDeleteTimeout    time.Duration
 	ServiceStartupTimeout   time.Duration
 	InstanceCooldownTimeout time.Duration
@@ -53,7 +54,6 @@ type Config struct {
 	ZebrunnerIntegrationPassword string
 
 	UsePublicIp             bool
-	RetryCount              int
 	S3Bucket                string // For static artifacts
 	TrustedMode             bool
 	Tenant                  string
@@ -77,8 +77,9 @@ func init() {
 	flag.Int64Var(&Conf.MaxCpu, "max-cpu", 4096, "maximum CPU limitation for session")
 
 	flag.DurationVar(&Conf.IdleTimeout, "idle-timeout", 60*time.Second, "Session idle timeout in time.Duration format")
+        flag.DurationVar(&Conf.SessionStartupTimeout, "session-startup-timeout", 90*time.Second, "Session healthcheck(s) startup timeout in time.Duration format")
 	flag.DurationVar(&Conf.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
-	flag.DurationVar(&Conf.ServiceStartupTimeout, "service-startup-timeout", 5*time.Minute, "Service startup timeout in time.Duration format")
+	flag.DurationVar(&Conf.ServiceStartupTimeout, "service-startup-timeout", 10*time.Minute, "Service startup timeout in time.Duration format")
 	flag.DurationVar(&Conf.InstanceCooldownTimeout, "instance-cooldown-timeout", 4*time.Minute, "Time after instance start when shutdown is prohibited on scale down in time.Duration format")
 
 	flag.StringVar(&Conf.DbConnectionString, "db-connection", "", "Connection string for database")
@@ -88,7 +89,6 @@ func init() {
 	flag.StringVar(&Conf.ZebrunnerIntegrationPassword, "zebrunner-integration-password", "", "Password for zebrunner for current env")
 
 	flag.BoolVar(&Conf.UsePublicIp, "use-public-ip", false, "Use or no public ip address for browser slave instances")
-	flag.IntVar(&Conf.RetryCount, "retry-count", 1, "New session attempts retry count")
 	flag.StringVar(&Conf.S3Bucket, "s3-bucket", "", "S3 Bucket name for pushing artifacts")
 	flag.StringVar(&Conf.Tenant, "tenant", "", "Zebrunner tenant name")
 	flag.BoolVar(&Conf.TrustedMode, "trusted", false, "If trusted mode enabled hub does not require any auth")

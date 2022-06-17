@@ -99,12 +99,12 @@ func buildBrowser(workspace string, caps *selenium.Capabilities, conf *config.Co
 		Network: &NetworkConfiguration{
 			IP: "",
 			Endpoints: map[string]*Endpoint{
-				"driver":      {Port: seleniumPort, Path: "/"},
-				"vnc":         {Port: vncPort, Path: "/"},
-				"clipboard":   {Port: clipboardPort, Path: "/"},
-				"devtools":    {Port: devtoolsPort, Path: "/"},
-				"fileserver":  {Port: fileserverPort, Path: "/"},
-				"healthcheck": {Port: seleniumPort, Path: "/"},
+				"driver":      {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
+				"vnc":         {ContainerPort: vncPort, HostPort: 0, Path: "/"},
+				"clipboard":   {ContainerPort: clipboardPort, HostPort: 0, Path: "/"},
+				"devtools":    {ContainerPort: devtoolsPort, HostPort: 0, Path: "/"},
+				"fileserver":  {ContainerPort: fileserverPort, HostPort: 0, Path: "/"},
+				"healthcheck": {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
 			},
 		},
 	}

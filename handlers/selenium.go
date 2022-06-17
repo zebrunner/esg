@@ -103,21 +103,21 @@ func Create(c *gin.Context) {
 
 	if err != nil {
 		l.WithError(err).Error("Service startup failed")
-		_ = c.Error(creationError("Failed to start browser", err)).SetType(gin.ErrorTypePublic)
+		_ = c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
 	// l.WithField("taskID", driver.TaskID).Info("Service started successfully")
 	u, ok := env.Network.GetUrl("driver")
 	if !ok {
 		l.Error("failed to get url for `driver` service")
-		_ = c.Error(creationError("Failed to start browser", err)).SetType(gin.ErrorTypePublic)
+		_ = c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
 
 	requestBody, err := json.Marshal(body)
 	if err != nil {
 		l.WithError(err).Error("Failed to marshal request")
-		_ = c.Error(creationError("Failed to start browser", err)).SetType(gin.ErrorTypePublic)
+		_ = c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
 

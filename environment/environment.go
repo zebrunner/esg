@@ -26,8 +26,9 @@ type NetworkConfiguration struct {
 }
 
 type Endpoint struct {
-	Port int64
-	Path string
+	HostPort      int64
+	ContainerPort int64
+	Path          string
 }
 
 type ExecutionEnvironment struct {
@@ -158,7 +159,7 @@ func (n *NetworkConfiguration) GetUrl(endpointName string) (u *url.URL, ok bool)
 		return nil, false
 	}
 
-	host := ip + ":" + strconv.FormatInt(endpoint.Port, 10)
+	host := ip + ":" + strconv.FormatInt(endpoint.HostPort, 10)
 	return &url.URL{Scheme: "http", Host: host, Path: endpoint.Path}, true
 }
 
