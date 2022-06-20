@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"math"
 	"net/http"
 	"net/url"
@@ -25,6 +26,7 @@ func SendSessionDuration(workspace string, d time.Duration, conf *config.Config)
 		log.WithError(err).Error("Failed to parse zebrunner base url")
 		return
 	}
+	requestUrl.Host = workspace + "." + requestUrl.Host
 	requestUrl.Path = resource
 	requestBody := map[string]interface{}{
 		"instant": time.Now().UTC().Format("2006-01-02T15:04:05Z"),
@@ -53,6 +55,9 @@ func SendSessionDuration(workspace string, d time.Duration, conf *config.Config)
 	if resp.StatusCode != http.StatusNoContent {
 		data := map[string]interface{}{}
 		err = json.NewDecoder(resp.Body).Decode(&data)
+
+		bodystr, _ := ioutil.ReadAll(resp.Body)
+		log.WithField("body", string(bodystr)).Info("Response body")
 		if err != nil {
 			log.WithError(err).Error("Failed to send session duration to zebrunner")
 		}
