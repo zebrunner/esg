@@ -1,8 +1,8 @@
 package environment
 
 import (
+	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
-	"github.com/zebrunner/esg/selenium"
 )
 
 const (
@@ -12,7 +12,7 @@ const (
 	appiumMemory = 1024
 )
 
-func buildAppiumRedroid(workspace string, caps *selenium.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {
+func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {
 	sharedFolder := "/opt/zebrunner"
 	sharedVolume := "data"
 
