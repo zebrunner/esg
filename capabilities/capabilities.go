@@ -78,8 +78,9 @@ func FromImage(image string) (*Capabilities, error) {
 	version := parts[1]
 	if executor == "redroid" {
 		return &Capabilities{
-			PlatformName: "android",
-			DeviceName:   "redroid",
+			PlatformName:    "android",
+			DeviceName:      "redroid",
+			PlatformVersion: version,
 		}, nil
 	} else if in(executor, platforms["linux"]) {
 		return &Capabilities{

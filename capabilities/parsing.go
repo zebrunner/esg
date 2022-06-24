@@ -135,7 +135,10 @@ func (c *RequestCaps) ProcessLegacy() error {
 func (c *RequestCaps) GetContainerConfiguration() (*Capabilities, error) {
 	conf := Capabilities{}
 	validationErr := errors.New("wrong capabilities format")
-	amConf, err := MapConfig(RemovePrefix(c.Capabilities.AlwaysMatch))
+
+	amCaps := RemovePrefix(c.Capabilities.AlwaysMatch, config.VendorPrefix)
+	amCaps = RemovePrefix(amCaps, "appium")
+	amConf, err := MapConfig(amCaps)
 	if err != nil {
 		log.WithError(err).Warn("Failed to map config")
 		return nil, validationErr
@@ -148,7 +151,10 @@ func (c *RequestCaps) GetContainerConfiguration() (*Capabilities, error) {
 	}
 
 	for _, fmCaps := range c.Capabilities.FirstMatch {
-		fmConf, err := MapConfig(RemovePrefix(fmCaps))
+		caps := RemovePrefix(fmCaps, config.VendorPrefix)
+		caps = RemovePrefix(caps, "appium")
+
+		fmConf, err := MapConfig(caps)
 		if err != nil {
 
 			return nil, validationErr
@@ -242,10 +248,10 @@ func MapConfig(m map[string]interface{}) (*Capabilities, error) {
 	return &conf, nil
 }
 
-func RemovePrefix(caps map[string]interface{}) map[string]interface{} {
+func RemovePrefix(caps map[string]interface{}, prefix string) map[string]interface{} {
 	newCaps := map[string]interface{}{}
 	for key, value := range caps {
-		newCaps[strings.TrimPrefix(key, config.VendorPrefix+":")] = value
+		newCaps[strings.TrimPrefix(key, prefix+":")] = value
 	}
 	return newCaps
 }
