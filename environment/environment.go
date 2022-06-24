@@ -8,8 +8,8 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
+	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
-	"github.com/zebrunner/esg/selenium"
 )
 
 const (
@@ -35,7 +35,7 @@ type ExecutionEnvironment struct {
 	TaskDefinitionFamily string
 	Endpoints            map[string]*Endpoint
 	Containers           []*Container
-	Capabilities         *selenium.Capabilities
+	Capabilities         *capabilities.Capabilities
 	Volumes              map[string]volume
 	Network              *NetworkConfiguration
 	TaskId               string
@@ -123,7 +123,7 @@ func (e *ExecutionEnvironment) ContainerOverrides() []*ecs.ContainerOverride {
 	return overrides
 }
 
-func Build(workspace string, caps *selenium.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {
+func Build(workspace string, caps *capabilities.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {
 	platform := strings.ToLower(caps.PlatformName)
 	if platform == androidPlatform {
 		if strings.ToLower(caps.DeviceName) == redroidDevice {
@@ -163,7 +163,7 @@ func (n *NetworkConfiguration) GetUrl(endpointName string) (u *url.URL, ok bool)
 	return &url.URL{Scheme: "http", Host: host, Path: endpoint.Path}, true
 }
 
-func buildImage(caps *selenium.Capabilities) (string, error) {
+func buildImage(caps *capabilities.Capabilities) (string, error) {
 	platformName := strings.ToLower(caps.PlatformName)
 	deviceName := strings.ToLower(caps.DeviceName)
 
@@ -190,7 +190,7 @@ func buildImage(caps *selenium.Capabilities) (string, error) {
 	}
 }
 
-func buildTaskDefinitionFamily(caps *selenium.Capabilities) string {
+func buildTaskDefinitionFamily(caps *capabilities.Capabilities) string {
 	familyParts := []string{}
 	platformName := strings.ToLower(caps.PlatformName)
 

@@ -1,4 +1,4 @@
-package selenium
+package capabilities
 
 import (
 	"encoding/json"

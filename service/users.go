@@ -9,7 +9,7 @@ import (
 	"github.com/zebrunner/esg/utils"
 
 	"github.com/jackc/pgtype"
-	"github.com/jackc/pgx/v4"
+	pgx "github.com/jackc/pgx/v4"
 	_ "github.com/jackc/pgx/v4/stdlib"
 	"github.com/sethvargo/go-password/password"
 	log "github.com/sirupsen/logrus"

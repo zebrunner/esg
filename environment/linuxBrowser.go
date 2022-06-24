@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
-	"github.com/zebrunner/esg/selenium"
 )
 
 const (
@@ -21,7 +21,7 @@ const (
 	recorderMemory int64 = 1024
 )
 
-func buildBrowser(workspace string, caps *selenium.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {
+func buildBrowser(workspace string, caps *capabilities.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {
 	id := uuid.New().String()
 
 	browserImage, err := buildImage(caps)
