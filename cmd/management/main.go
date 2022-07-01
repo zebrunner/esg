@@ -53,8 +53,13 @@ func ClearSessions() {
 				continue
 			}
 
-			idleTime := time.Since(session.AccessedAt)
-			if idleTime > time.Duration(session.Capabilities.IdleTimeout) {
+			idleTimeout := float64(session.Capabilities.IdleTimeout)
+			if idleTimeout == 0 {
+				idleTimeout = config.Conf.IdleTimeout.Seconds()
+			}
+
+			idleTime := time.Since(session.AccessedAt).Seconds()
+			if idleTime > idleTimeout {
 				// Set stopped status and expiration time 10 minutes
 				session.Status = sessionmap.SessionStoppedIdle
 				err = sessionmap.Write(key, session, 10*time.Minute)

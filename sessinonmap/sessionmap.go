@@ -43,6 +43,7 @@ func Find(id string, rewriteAccessTime bool) (*Session, error) {
 	if rewriteAccessTime {
 		session.AccessedAt = time.Now()
 		err = Write(id, &session, 0)
+
 		if err != nil {
 			log.WithError(err).Error("Failed to update last access time")
 		}
