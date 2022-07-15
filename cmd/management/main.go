@@ -23,12 +23,10 @@ import (
 
 var (
 	wg                  sync.WaitGroup
-	browsersFile        string
 	enableFastScaleDown bool
 )
 
 func init() {
-	flag.StringVar(&browsersFile, "browsers-file", "", "Path to txt file with supported browsers")
 	flag.BoolVar(&enableFastScaleDown, "enable-fast-scale-down", true, "Enable ESG scale down option")
 }
 
@@ -191,8 +189,8 @@ func main() {
 	}
 	config.RedisConnection = rdb
 
-	if browsersFile != "" {
-		RefreshTaskDefinitionsFromFile(browsersFile)
+	if config.Conf.BrowsersFile != "" {
+		RefreshTaskDefinitionsFromFile(config.Conf.BrowsersFile)
 	} else {
 		RefreshTaskDefinitions()
 	}
