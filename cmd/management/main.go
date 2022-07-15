@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"io/ioutil"
 	"strings"
@@ -11,9 +10,11 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
+	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/environment"
 	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/service"
+	sessionmap "github.com/zebrunner/esg/sessinonmap"
 
 	awsSession "github.com/aws/aws-sdk-go/aws/session"
 	log "github.com/sirupsen/logrus"
@@ -22,12 +23,10 @@ import (
 
 var (
 	wg                  sync.WaitGroup
-	browsersFile        string
 	enableFastScaleDown bool
 )
 
 func init() {
-	flag.StringVar(&browsersFile, "browsers-file", "", "Path to txt file with supported browsers")
 	flag.BoolVar(&enableFastScaleDown, "enable-fast-scale-down", true, "Enable ESG scale down option")
 }
 
@@ -42,48 +41,32 @@ func ClearSessions() {
 		}
 
 		for _, key := range keys {
-			idle, err := rdb.ObjectIdleTime(context.Background(), key).Result()
+			session, err := sessionmap.Find(key, false)
 			if err != nil {
-				log.WithError(err).WithField("session", key).Error("Failed to get IDLE time for session.")
+				log.WithError(err).WithField("session", key).Error("Failed to get session from session map")
 				continue
 			}
 
-			// Temporary solution. Session timeout saved separately with session.
-			if strings.Contains(key, "timeout") {
+			if session.Status != sessionmap.SessionActive {
 				continue
 			}
-			sessionTimeout, err := rdb.Get(context.Background(), key+"-timeout").Int64()
-			if err != nil {
-				log.WithError(err).WithField("session", key).Error("Failed to get idle timeout")
+
+			idleTimeout := float64(session.Capabilities.IdleTimeout)
+			if idleTimeout == 0 {
+				idleTimeout = config.Conf.IdleTimeout.Seconds()
 			}
 
-			timeout := config.Conf.IdleTimeout
-			if sessionTimeout != 0 {
-				timeout = time.Duration(sessionTimeout) * time.Second
-			}
-			if idle >= timeout {
-				result, err := rdb.Get(context.Background(), key).Result()
-				if err != nil {
-					log.WithError(err).Error("Failed to get session from cache")
-					continue
-				}
+			idleTime := time.Since(session.AccessedAt).Seconds()
+			if idleTime > idleTimeout {
+				// Set stopped status and expiration time 10 minutes
+				session.Status = sessionmap.SessionStoppedIdle
+				err = sessionmap.Write(key, session, 10*time.Minute)
 
-				s := environment.CachedSession{}
-				err = json.Unmarshal([]byte(result), &s)
-				if err != nil {
-					log.WithError(err).Error("Failed to unmarshal redis response")
-					continue
-				}
-				log.WithField("task", s.TaskID).Info("Deleting task. Reason: idle timeout")
-				environment.CloseSession(s.Workspace, key, &config.Conf)
-				_, err = service.StopTask(s.TaskID)
+				log.WithField("task", session.TaskID).Info("Deleting task. Reason: idle timeout")
+				selenium.CloseSession(session.Workspace, key, &config.Conf)
+				_, err = service.StopTask(session.TaskID)
 				if err != nil {
 					log.WithError(err).Error("Failed to stop task")
-				}
-
-				_, err = rdb.Del(context.Background(), key).Result()
-				if err != nil {
-					log.WithError(err).WithField("session", key).Error("Failed to delete session from cache")
 				}
 			}
 		}
@@ -105,7 +88,7 @@ func ScaleDownCluster() {
 }
 
 func RefreshTaskDefinition(image string) error {
-	caps, err := selenium.FromImage(image)
+	caps, err := capabilities.FromImage(image)
 	if err != nil {
 		log.WithError(err).WithField("image", image).Error("Failed to build capabilities for image")
 		return err
@@ -206,8 +189,8 @@ func main() {
 	}
 	config.RedisConnection = rdb
 
-	if browsersFile != "" {
-		RefreshTaskDefinitionsFromFile(browsersFile)
+	if config.Conf.BrowsersFile != "" {
+		RefreshTaskDefinitionsFromFile(config.Conf.BrowsersFile)
 	} else {
 		RefreshTaskDefinitions()
 	}

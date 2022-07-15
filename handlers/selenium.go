@@ -17,13 +17,33 @@ import (
 	"github.com/aerokube/util"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
 	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/service"
+	sessionmap "github.com/zebrunner/esg/sessinonmap"
 	"github.com/zebrunner/esg/utils"
 	"golang.org/x/net/websocket"
 )
+
+func getSession(id string) (*sessionmap.Session, error) {
+	session, err := sessionmap.Find(id, true)
+	if err != nil {
+		return nil, err
+	}
+
+	if session.Status == sessionmap.SessionStoppedIdle {
+		return nil, &utils.SeleniumError{
+			ResponseStatus: http.StatusNotFound,
+			SeleniumCode:   "invalid session id",
+			Message:        fmt.Sprintf("Session stopped due IDLE timeout"),
+			Err:            err,
+		}
+	}
+
+	return session, nil
+}
 
 func Create(c *gin.Context) {
 	remote := c.ClientIP()
@@ -58,7 +78,7 @@ func Create(c *gin.Context) {
 
 	l := log.WithFields(log.Fields{"user": user, "remote": remote})
 
-	var body selenium.RequestCaps
+	var body capabilities.RequestCaps
 	err = c.BindJSON(&body)
 	if err != nil {
 		l.WithError(err).Error("Failed to bind json to browser struct")
@@ -127,7 +147,7 @@ func Create(c *gin.Context) {
 	l.WithFields(log.Fields{
 		"serviceUrl": u,
 	}).Info("Starting session")
-	resp, err := environment.StartSession(c.Request.Context(), c.Request.URL, c.Request.Header, requestBody)
+	resp, err := selenium.StartSession(c.Request.Context(), c.Request.URL, c.Request.Header, requestBody)
 	if err != nil {
 		l.WithError(err).WithField("response", resp).Error("Session startup failed")
 		c.JSON(http.StatusInternalServerError, resp)
@@ -148,17 +168,19 @@ func Create(c *gin.Context) {
 		return
 	}
 
-	sess := &environment.Session{
+	sess := sessionmap.Session{
 		ID:              sessionId,
 		RawCapabilities: body.ToMap(),
 		Capabilities:    *caps,
 		Network:         *env.Network,
 		StartedAt:       time.Now(),
+		AccessedAt:      time.Now(),
+		Status:          sessionmap.SessionActive,
 		TaskID:          env.TaskId,
 		Workspace:       workspace,
 	}
 
-	err = environment.SaveSessionToCache(sess)
+	err = sessionmap.Write(sess.ID, &sess, 0)
 	if err != nil {
 		l.WithError(err).Error("Session not cached")
 	}
@@ -170,17 +192,16 @@ func Create(c *gin.Context) {
 }
 
 func Proxy(c *gin.Context) {
+	sessionID := c.Param("session")
+	sess, err := getSession(sessionID)
+	if err != nil {
+		log.WithError(err).WithField("sessionID", sessionID).Error("Cant find session")
+		_ = c.Error(err).SetType(gin.ErrorTypePublic)
+		return
+	}
+
 	(&httputil.ReverseProxy{
 		Director: func(r *http.Request) {
-			sessionID := c.Param("session")
-
-			sess, err := environment.CreateSessionFromCache(sessionID)
-			if err != nil {
-				log.WithError(err).WithField("sessionID", sessionID).Error("Cant find session")
-				_ = c.Error(err).SetType(gin.ErrorTypePublic)
-				return
-			}
-
 			url, ok := sess.Network.GetUrl("driver")
 			if !ok {
 				log.Error("failed to get `driver` url from session")
@@ -195,14 +216,21 @@ func Proxy(c *gin.Context) {
 
 func CloseSession(c *gin.Context) {
 	sessionId := c.Param("session")
-	sess, err := environment.CreateSessionFromCache(sessionId)
+	sess, err := getSession(sessionId)
 	if err != nil {
 		log.WithError(err).WithField("sessionID", sessionId).Error("Cant find session")
 		_ = c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
-	environment.CloseSession(sess.Workspace, sess.ID, &config.Conf)
+	selenium.CloseSession(sess.Workspace, sess.ID, &config.Conf)
 	service.RemoveTask(sess.TaskID)
+
+	err = sessionmap.Remove(sessionId)
+	if err != nil {
+		log.WithError(err).WithField("sessionID", sessionId).Error("Failed to remove session from session map")
+		_ = c.Error(err).SetType(gin.ErrorTypePublic)
+		return
+	}
 	log.WithField("sessionID", sessionId).Info("Session closed")
 	c.JSON(http.StatusOK, gin.H{"value": nil})
 }
@@ -212,7 +240,7 @@ func Vnc(wsconn *websocket.Conn) {
 	fragments := strings.Split(wsconn.Request().URL.Path, "/")
 	sid := fragments[len(fragments)-1]
 	l := log.WithField("sessionID", sid)
-	sess, err := environment.CreateSessionFromCache(sid)
+	sess, err := getSession(sid)
 
 	if err != nil {
 		l.WithError(err).Error("Session not found")
@@ -304,7 +332,7 @@ func Video(c *gin.Context) {
 func Downloads(c *gin.Context) {
 	sessionID := c.Param("session")
 	filename := c.Param("file")
-	sess, err := environment.CreateSessionFromCache(sessionID)
+	sess, err := getSession(sessionID)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -324,7 +352,7 @@ func Downloads(c *gin.Context) {
 
 func Clipboard(c *gin.Context) {
 	sessionID := c.Param("session")
-	sess, err := environment.CreateSessionFromCache(sessionID)
+	sess, err := getSession(sessionID)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -342,7 +370,7 @@ func Clipboard(c *gin.Context) {
 
 func Devtools(c *gin.Context) {
 	sessionID := c.Param("session")
-	sess, err := environment.CreateSessionFromCache(sessionID)
+	sess, err := getSession(sessionID)
 	if err != nil {
 		_ = c.Error(err)
 		return
