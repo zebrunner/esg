@@ -306,14 +306,23 @@ out:
 		taskId := strings.Split(taskArn, "/")[2]
 		env.TaskId = taskId
 		l = l.WithField("taskId", taskId)
-		task, err := waitUntilTaskIsRunning(ctx, svc, taskId, ConstDelay(6*time.Second), 10)
-		l.WithField("attempt", i).WithField("latency", time.Since(startTime)).Info("WaitUntilTasksRunning delay")
-		if err != nil {
-			RemoveTask(taskArn)
-			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to wait task RUNNING state")
-			outputErr = fmt.Errorf("failed to wait for task RUNNING state: %v", err)
-			continue
+
+		req := worker.waitFor(ctx, taskId)
+		select {
+		case task := <-req.responseChan:
+			fmt.Println(task)
+		case <-req.ctx.Done():
+			// TODO: log error + Negative branch
 		}
+
+		//task, err := waitUntilTaskIsRunning(ctx, svc, taskId, ConstDelay(6*time.Second), 10)
+		//l.WithField("attempt", i).WithField("latency", time.Since(startTime)).Info("WaitUntilTasksRunning delay")
+		//if err != nil {
+		//	RemoveTask(taskArn)
+		//	l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to wait task RUNNING state")
+		//	outputErr = fmt.Errorf("failed to wait for task RUNNING state: %v", err)
+		//	continue
+		//}
 
 		err = setEnvironmentNetwork(env, task)
 		l.WithField("attempt", i).WithField("latency", time.Since(startTime)).Info("setEnvironmentNetwork delay")
