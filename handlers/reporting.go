@@ -1,16 +1,18 @@
 package handlers
 
 import (
+	"io/ioutil"
 	"net/http"
 	"os"
 	"runtime"
 	"strings"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/service"
 
 	"github.com/gin-gonic/gin"
+	log "github.com/sirupsen/logrus"
 )
 
 var (
@@ -54,14 +56,34 @@ func ClusterStatus(c *gin.Context) {
 }
 
 func ListDrivers(c *gin.Context) {
-	images, err := service.ListBrowsers()
-	if err != nil {
-		log.WithError(err).Warn("Failed to get browser list")
-		_ = c.Error(err).SetType(gin.ErrorTypePublic)
-		return
+	// TODO: Refactor code: code must be split in few different functions
+	var images []string
+
+	if config.Conf.BrowsersFile != "" {
+		text, err := ioutil.ReadFile(config.Conf.BrowsersFile)
+		if err != nil {
+			log.WithError(err).Error("Failed to read file browsers.txt")
+			_ = c.Error(err)
+			return
+		}
+		lines := strings.Split(string(text), "\n")
+
+		for _, line := range lines {
+			if line != "" {
+				images = append(images, line)
+			}
+		}
+	} else {
+		imgs, err := service.ListBrowsers()
+		if err != nil {
+			log.WithError(err).Warn("Failed to get browser list")
+			_ = c.Error(err).SetType(gin.ErrorTypePublic)
+			return
+		}
+		images = imgs
 	}
 
-	browsersResponse := []map[string]interface{}{}
+	var browsersResponse []map[string]interface{}
 	imagesPlatforms := map[string]string{
 		"redroid": "android",
 	}
@@ -69,10 +91,9 @@ func ListDrivers(c *gin.Context) {
 		name := strings.Split(image, ":")[0]
 		version := strings.Split(image, ":")[1]
 
-                if version == "latest" || version == "debug" {
-                        continue
-                }
-
+		if version == "latest" || version == "debug" {
+			continue
+		}
 
 		if name == "edge" {
 			name = "MicrosoftEdge"
