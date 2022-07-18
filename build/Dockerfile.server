@@ -28,3 +28,4 @@ COPY ./migrations/ /migrations/
 COPY --from=0 /esg/server /server
 COPY --from=0 /usr/bin/migrate /usr/bin/migrate
 COPY --from=0 /esg/scripts /scripts
+COPY --from=0 /esg/browsers.txt /browsers.txt

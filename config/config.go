@@ -41,7 +41,7 @@ type Config struct {
 
 	// Timeouts
 	IdleTimeout             time.Duration
-        SessionStartupTimeout   time.Duration
+	SessionStartupTimeout   time.Duration
 	SessionDeleteTimeout    time.Duration
 	ServiceStartupTimeout   time.Duration
 	InstanceCooldownTimeout time.Duration
@@ -59,6 +59,8 @@ type Config struct {
 	Tenant                  string
 	LogLevel                string
 	ReserveInstancesPercent float64
+
+	BrowsersFile string
 }
 
 func init() {
@@ -77,7 +79,7 @@ func init() {
 	flag.Int64Var(&Conf.MaxCpu, "max-cpu", 4096, "maximum CPU limitation for session")
 
 	flag.DurationVar(&Conf.IdleTimeout, "idle-timeout", 60*time.Second, "Session idle timeout in time.Duration format")
-        flag.DurationVar(&Conf.SessionStartupTimeout, "session-startup-timeout", 90*time.Second, "Session healthcheck(s) startup timeout in time.Duration format")
+	flag.DurationVar(&Conf.SessionStartupTimeout, "session-startup-timeout", 90*time.Second, "Session healthcheck(s) startup timeout in time.Duration format")
 	flag.DurationVar(&Conf.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
 	flag.DurationVar(&Conf.ServiceStartupTimeout, "service-startup-timeout", 10*time.Minute, "Service startup timeout in time.Duration format")
 	flag.DurationVar(&Conf.InstanceCooldownTimeout, "instance-cooldown-timeout", 4*time.Minute, "Time after instance start when shutdown is prohibited on scale down in time.Duration format")
@@ -94,6 +96,8 @@ func init() {
 	flag.BoolVar(&Conf.TrustedMode, "trusted", false, "If trusted mode enabled hub does not require any auth")
 	flag.StringVar(&Conf.LogLevel, "log-level", "debug", "Desired log level. Valid levels: `panic`, `fatal`, `error`, `warning`, `info`, `debug`, `trace`")
 	flag.Float64Var(&Conf.ReserveInstancesPercent, "reserve-instances-percent", 0.25, "Reserved cluster capacity quota during scale up and down operations")
+
+	flag.StringVar(&Conf.BrowsersFile, "browsers-file", "", "Path to txt file with supported browsers")
 }
 
 func (c *Config) ParseLogLevel() logrus.Level {
