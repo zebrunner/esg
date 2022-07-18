@@ -2,19 +2,20 @@ package service
 
 import (
 	"context"
-	"github.com/aws/aws-sdk-go/service/ecs"
-	"github.com/zebrunner/esg/config"
 	"strings"
 	"time"
+
+	"github.com/aws/aws-sdk-go/service/ecs"
+	"github.com/zebrunner/esg/config"
 )
 
-var worker *waitWorker
+var taskWaiter *waitWorker
 
 func init() {
-	worker = &waitWorker{
+	taskWaiter = &waitWorker{
 		requests: make(map[string]*waitRequest, 1000),
 	}
-	go worker.start()
+	go taskWaiter.start()
 }
 
 type waitRequest struct {
@@ -53,16 +54,13 @@ func (w *waitWorker) start() {
 		}
 
 		// Construct pages with 100 or fewer elements for requests. 100 is an AWS limitation for Describe* requests
-		var pages [][]*string
-		var page []*string
+		var taskIdsPtrs []*string
 		for k := range w.requests {
 			taskId := k
-			page = append(page, &taskId)
-			if len(page) == 100 {
-				pages = append(pages, page)
-				page = []*string{}
-			}
+			taskIdsPtrs = append(taskIdsPtrs, &taskId)
 		}
+
+		pages := paginate(taskIdsPtrs, 100)
 
 		// Send DescribeTasks requests and process errors
 		var tasks []*ecs.Task
@@ -92,7 +90,7 @@ func (w *waitWorker) start() {
 
 		// Send responses for running tasks
 		for _, task := range tasks {
-			if *task.LastStatus == "RUNNING" && *task.HealthStatus == "HEALTHY" {
+			if *task.LastStatus == "RUNNING" {
 				taskId := strings.Split(*task.TaskArn, "/")[2]
 				req := w.requests[taskId]
 

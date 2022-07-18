@@ -1,6 +1,6 @@
 module github.com/zebrunner/esg
 
-go 1.17
+go 1.18
 
 require (
 	github.com/aerokube/util v0.0.0-20190701120823-161c21b50f69
