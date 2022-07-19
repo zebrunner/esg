@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/client"
 	awsSession "github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ecrpublic"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/aws/aws-sdk-go/service/s3"
@@ -229,10 +230,23 @@ func searchHostPort(task *ecs.Task, containerPort int64) (port int64, ok bool) {
 
 func getTaskIp(task *ecs.Task) (string, error) {
 	containerInstanceArn := *task.ContainerInstanceArn
-	ec2Instance, ok := instanceWorker.getInstanceByContainerInstance(containerInstanceArn)
-	if !ok {
+	// TODO: use better wait mechanism
+	var ec2Instance *ec2.Instance
+	for i := 0; i < 3; i++ {
+		instance, ok := instanceWorker.getInstanceByContainerInstance(containerInstanceArn)
+		if ok {
+			ec2Instance = instance
+			break
+		}
+		time.Sleep(5 * time.Second)
+	}
+
+	if ec2Instance == nil {
 		return "", fmt.Errorf("instance with id: %s not found", containerInstanceArn)
 	}
+	// if !ok {
+	// 	return "", fmt.Errorf("instance with id: %s not found", containerInstanceArn)
+	// }
 
 	ipAddress := *ec2Instance.PrivateIpAddress
 	if config.Conf.UsePublicIp {
