@@ -20,14 +20,12 @@ func init() {
 
 type waitRequest struct {
 	ctx          context.Context
-	cancel       func()
 	responseChan chan *ecs.Task
 	taskId       string
 }
 
 func (r *waitRequest) finish() {
 	close(r.responseChan)
-	r.cancel()
 }
 
 type waitWorker struct {
@@ -104,10 +102,8 @@ func (w *waitWorker) start() {
 }
 
 func (w *waitWorker) waitFor(ctx context.Context, taskId string) *waitRequest {
-	timeoutCtx, cancel := context.WithTimeout(ctx, 1*time.Minute)
 	req := waitRequest{
-		ctx:          timeoutCtx,
-		cancel:       cancel,
+		ctx:          ctx,
 		responseChan: make(chan *ecs.Task),
 		taskId:       taskId,
 	}

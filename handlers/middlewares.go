@@ -64,7 +64,7 @@ func SeleniumError(c *gin.Context) {
 		if sess, ok := c.Get("sessionID"); ok {
 			l.WithField("session", sess)
 		}
-		l.Error("Selenium error received")
+		l.Debug("Selenium error received")
 	}
 
 	status := http.StatusInternalServerError

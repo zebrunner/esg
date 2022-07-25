@@ -327,12 +327,15 @@ out:
 				outputErr = err
 				continue
 			}
+
+			outputErr = nil
+			return outputErr
 		case <-req.ctx.Done():
 			outputErr = errors.New("failed to wait until task is running. context deadline")
+			RemoveTask(taskArn)
+			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("failed to wait until task is running")
 			// TODO: log error + Negative branch
 		}
-
-		return nil
 	}
 
 	return outputErr
