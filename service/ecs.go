@@ -299,7 +299,7 @@ out:
 		env.TaskId = taskId
 		l = l.WithField("taskId", taskId)
 
-		req := taskWaiter.waitFor(ctx, taskId)
+		req := taskWaiter.waitFor(ctx, taskArn)
 		select {
 		case task := <-req.responseChan:
 			err = setEnvironmentNetwork(env, task)
@@ -333,8 +333,8 @@ out:
 		case <-req.ctx.Done():
 			outputErr = errors.New("failed to wait until task is running. context deadline")
 			RemoveTask(taskArn)
+			taskWaiter.stopWait(taskArn)
 			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("failed to wait until task is running")
-			// TODO: log error + Negative branch
 		}
 	}
 

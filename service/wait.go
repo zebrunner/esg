@@ -2,10 +2,10 @@ package service
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/service/ecs"
+	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 )
 
@@ -22,10 +22,6 @@ type waitRequest struct {
 	ctx          context.Context
 	responseChan chan *ecs.Task
 	taskId       string
-}
-
-func (r *waitRequest) finish() {
-	close(r.responseChan)
 }
 
 type waitWorker struct {
@@ -69,17 +65,17 @@ func (w *waitWorker) start() {
 			}
 			output, err := svc.DescribeTasks(&describeTasksInput)
 			if err != nil {
-				// TODO: write to logs
+				log.WithError(err).Error("RunningTaskWaiter: failed to describe tasks")
 				continue
 			}
 
 			if len(output.Failures) != 0 {
-				// TODO: write to logs
+				log.WithField("failures", output.Failures).Error("RunningTaskWaiter: failed to describe tasks")
 				continue
 			}
 
 			if len(output.Tasks) == 0 {
-				// TODO: write to logs
+				log.Error("RunningTaskWaiter: failed to describe tasks. No tasks in response")
 				continue
 			}
 
@@ -89,13 +85,15 @@ func (w *waitWorker) start() {
 		// Send responses for running tasks
 		for _, task := range tasks {
 			if *task.LastStatus == "RUNNING" {
-				taskId := strings.Split(*task.TaskArn, "/")[2]
-				req := w.requests[taskId]
+				req, ok := w.requests[*task.TaskArn]
+				if !ok {
+					continue
+				}
 
 				taskCopy := task
 				req.responseChan <- taskCopy
-				req.finish()
-				delete(w.requests, taskId)
+				close(req.responseChan)
+				delete(w.requests, *task.TaskArn)
 			}
 		}
 	}
@@ -111,4 +109,10 @@ func (w *waitWorker) waitFor(ctx context.Context, taskId string) *waitRequest {
 	w.requests[taskId] = &req
 
 	return &req
+}
+
+func (w *waitWorker) stopWait(taskId string) {
+	req := w.requests[taskId]
+	close(req.responseChan)
+	delete(w.requests, taskId)
 }
