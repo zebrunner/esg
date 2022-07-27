@@ -29,6 +29,14 @@ var (
 	AwsSess *awsSession.Session
 )
 
+func init() {
+	sess, err := InitAws()
+	if err != nil {
+		log.Fatal("failed to init aws session")
+	}
+	AwsSess = sess
+}
+
 func InitAws() (*awsSession.Session, error) {
 	sess, err := awsSession.NewSession(&aws.Config{
 		Region:     &config.Conf.AwsRegion,
@@ -221,42 +229,28 @@ func searchHostPort(task *ecs.Task, containerPort int64) (port int64, ok bool) {
 }
 
 func getTaskIp(task *ecs.Task) (string, error) {
-	svc := ecs.New(AwsSess)
 	containerInstanceArn := *task.ContainerInstanceArn
-
-	containerInstanceId := strings.Split(containerInstanceArn, "/")[2]
-	log.WithFields(log.Fields{"ContainerInstanceArn": containerInstanceArn}).Debug()
-
-	containerInstanceInput := &ecs.DescribeContainerInstancesInput{
-		Cluster: &config.Conf.AwsCluster,
-		ContainerInstances: []*string{
-			aws.String(containerInstanceId),
-		},
-	}
-	resultContainerInstance, err := svc.DescribeContainerInstances(containerInstanceInput)
-	if err != nil {
-		return "", fmt.Errorf("failed to get container instance details. err=%v", err)
+	// TODO: use better wait mechanism
+	var ec2Instance *ec2.Instance
+	for i := 0; i < 3; i++ {
+		instance, ok := instanceWorker.getInstanceByContainerInstance(containerInstanceArn)
+		if ok {
+			ec2Instance = instance
+			break
+		}
+		time.Sleep(5 * time.Second)
 	}
 
-	//TODO: verify that returned number of instances is 1!
-	instanceId := *resultContainerInstance.ContainerInstances[0].Ec2InstanceId
-	log.WithField("instanceID", instanceId).Debug()
-
-	instanceInput := &ec2.DescribeInstancesInput{
-		InstanceIds: []*string{
-			aws.String(instanceId),
-		},
+	if ec2Instance == nil {
+		return "", fmt.Errorf("instance with id: %s not found", containerInstanceArn)
 	}
+	// if !ok {
+	// 	return "", fmt.Errorf("instance with id: %s not found", containerInstanceArn)
+	// }
 
-	svcEc2 := ec2.New(AwsSess)
-	resultInstance, err := svcEc2.DescribeInstances(instanceInput)
-	if err != nil {
-		return "", fmt.Errorf("failed to get instance details. error=%v", err)
-	}
-
-	ipAddress := *resultInstance.Reservations[0].Instances[0].PrivateIpAddress
+	ipAddress := *ec2Instance.PrivateIpAddress
 	if config.Conf.UsePublicIp {
-		ipAddress = *resultInstance.Reservations[0].Instances[0].PublicIpAddress
+		ipAddress = *ec2Instance.PublicIpAddress
 	}
 	log.WithFields(log.Fields{"instanceIP": ipAddress}).Debug()
 	return ipAddress, nil
@@ -280,8 +274,6 @@ func setEnvironmentNetwork(env *environment.ExecutionEnvironment, task *ecs.Task
 }
 
 func StartDriver(ctx context.Context, env *environment.ExecutionEnvironment) error {
-	svc := ecs.New(AwsSess)
-
 	var outputErr error
 	startTime := time.Now()
 out:
@@ -306,87 +298,47 @@ out:
 		taskId := strings.Split(taskArn, "/")[2]
 		env.TaskId = taskId
 		l = l.WithField("taskId", taskId)
-		task, err := waitUntilTaskIsRunning(ctx, svc, taskId, ConstDelay(6*time.Second), 10)
-		l.WithField("attempt", i).WithField("latency", time.Since(startTime)).Info("WaitUntilTasksRunning delay")
-		if err != nil {
-			RemoveTask(taskArn)
-			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to wait task RUNNING state")
-			outputErr = fmt.Errorf("failed to wait for task RUNNING state: %v", err)
-			continue
-		}
 
-		err = setEnvironmentNetwork(env, task)
-		l.WithField("attempt", i).WithField("latency", time.Since(startTime)).Info("setEnvironmentNetwork delay")
-		if err != nil {
-			RemoveTask(taskArn)
-			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to get service info.")
-			outputErr = fmt.Errorf("failed to get service info: %v", err)
-			continue
-		}
+		req := taskWaiter.waitFor(ctx, taskArn)
+		select {
+		case task := <-req.responseChan:
+			err = setEnvironmentNetwork(env, task)
+			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).Info("setEnvironmentNetwork delay")
+			if err != nil {
+				RemoveTask(taskArn)
+				l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to get service info.")
+				outputErr = fmt.Errorf("failed to get service info: %v", err)
+				continue
+			}
 
-		url, ok := env.Network.GetUrl("healthcheck")
-		if !ok {
-			//TODO: [VD] if no healthcheck do we really want to retry? Maybe force abort?
-			RemoveTask(taskArn)
-			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).Error("Driver healthcheck missed.")
-			outputErr = fmt.Errorf("driver healthcheck missed")
-			continue
-		}
+			url, ok := env.Network.GetUrl("healthcheck")
+			if !ok {
+				//TODO: [VD] if no healthcheck do we really want to retry? Maybe force abort?
+				RemoveTask(taskArn)
+				l.WithField("attempt", i).WithField("latency", time.Since(startTime)).Error("Driver healthcheck missed.")
+				outputErr = fmt.Errorf("driver healthcheck missed")
+				continue
+			}
 
-		err = wait(ctx, url.String(), config.Conf.SessionStartupTimeout)
-		if err != nil {
-			RemoveTask(taskArn)
-			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to wait driver healthcheck response")
-			outputErr = err
-			continue
-		}
+			err = wait(ctx, url.String(), config.Conf.SessionStartupTimeout)
+			if err != nil {
+				RemoveTask(taskArn)
+				l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to wait driver healthcheck response")
+				outputErr = err
+				continue
+			}
 
-		return nil
+			outputErr = nil
+			return outputErr
+		case <-req.ctx.Done():
+			outputErr = errors.New("failed to wait until task is running. context deadline")
+			RemoveTask(taskArn)
+			taskWaiter.stopWait(taskArn)
+			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("failed to wait until task is running")
+		}
 	}
 
 	return outputErr
-}
-
-func waitUntilTaskIsRunning(ctx context.Context, svc *ecs.ECS, taskId string, sleepFn func(int) time.Duration, maxAttempts int) (*ecs.Task, error) {
-	for i := 0; i < maxAttempts; i++ {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-		}
-		log := log.WithFields(log.Fields{
-			"attempt": i,
-			"taskId":  taskId,
-		})
-
-		describeTaskInput := &ecs.DescribeTasksInput{
-			Cluster: &config.Conf.AwsCluster,
-			Tasks:   []*string{&taskId},
-		}
-		describeTaskResult, err := svc.DescribeTasks(describeTaskInput)
-		if err != nil {
-			time.Sleep(sleepFn(i))
-			continue
-		}
-		if len(describeTaskResult.Tasks) == 0 {
-			log.Debug("Wait until task running. Got 0 tasks in result")
-			time.Sleep(sleepFn(i))
-			continue
-		}
-		if len(describeTaskResult.Failures) != 0 {
-			log.WithField("failures", describeTaskResult.Failures).Debug("Wait until task running. For failures in response")
-			time.Sleep(sleepFn(i))
-			continue
-		}
-
-		if *describeTaskResult.Tasks[0].LastStatus == "RUNNING" {
-			return describeTaskResult.Tasks[0], nil
-		}
-
-		time.Sleep(sleepFn(i))
-	}
-
-	return nil, errors.New("failed to wait successfull task status.")
 }
 
 func GeneratePreSignedURL(key string) (string, error) {
