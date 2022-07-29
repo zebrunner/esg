@@ -1,10 +1,10 @@
+
 package service
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand"
 	"strings"
 	"time"
 
@@ -143,8 +143,8 @@ func RunTask(ctx context.Context, env *environment.ExecutionEnvironment) (taskAr
 		default:
 		}
 		// Trying to minimize random sleep this needs performance test. If it doesn't works return old sleep.
-		sleep := time.Duration(rand.Intn(30)) * time.Second
-		time.Sleep(sleep)
+		// sleep := time.Duration(rand.Intn(30)) * time.Second
+		// time.Sleep(sleep)
 		var resultRunTask *ecs.RunTaskOutput
 		resultRunTask, err := svc.RunTask(runTaskInput)
 		// Not good solution but aws doesn't give a choice
