@@ -1,0 +1,118 @@
+package service
+
+import (
+	"context"
+	"time"
+
+	"github.com/aws/aws-sdk-go/service/ecs"
+	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/config"
+)
+
+var taskWaiter *waitWorker
+
+func init() {
+	taskWaiter = &waitWorker{
+		requests: make(map[string]*waitRequest, 1000),
+	}
+	go taskWaiter.start()
+}
+
+type waitRequest struct {
+	ctx          context.Context
+	responseChan chan *ecs.Task
+	taskId       string
+}
+
+type waitWorker struct {
+	requests map[string]*waitRequest
+}
+
+func (w *waitWorker) start() {
+	svc := ecs.New(AwsSess)
+
+	for {
+		time.Sleep(5 * time.Second)
+
+		if len(w.requests) == 0 {
+			continue
+		}
+
+		for k, v := range w.requests {
+			select {
+			case <-v.ctx.Done():
+				delete(w.requests, k)
+			default:
+				continue
+			}
+		}
+
+		// Construct pages with 100 or fewer elements for requests. 100 is an AWS limitation for Describe* requests
+		var taskIdsPtrs []*string
+		for k := range w.requests {
+			taskId := k
+			taskIdsPtrs = append(taskIdsPtrs, &taskId)
+		}
+
+		pages := paginate(taskIdsPtrs, 100)
+
+		// Send DescribeTasks requests and process errors
+		var tasks []*ecs.Task
+		for _, page := range pages {
+			describeTasksInput := ecs.DescribeTasksInput{
+				Cluster: &config.Conf.AwsCluster,
+				Tasks:   page,
+			}
+			output, err := svc.DescribeTasks(&describeTasksInput)
+			if err != nil {
+				log.WithError(err).Error("RunningTaskWaiter: failed to describe tasks")
+				continue
+			}
+
+			if len(output.Failures) != 0 {
+				log.WithField("failures", output.Failures).Error("RunningTaskWaiter: failed to describe tasks")
+				continue
+			}
+
+			if len(output.Tasks) == 0 {
+				log.Error("RunningTaskWaiter: failed to describe tasks. No tasks in response")
+				continue
+			}
+
+			tasks = append(tasks, output.Tasks...)
+		}
+
+		// Send responses for running tasks
+		for _, task := range tasks {
+			if *task.LastStatus == "RUNNING" {
+				req, ok := w.requests[*task.TaskArn]
+				if !ok {
+					continue
+				}
+
+				taskCopy := task
+				req.responseChan <- taskCopy
+				close(req.responseChan)
+				delete(w.requests, *task.TaskArn)
+			}
+		}
+	}
+}
+
+func (w *waitWorker) waitFor(ctx context.Context, taskId string) *waitRequest {
+	req := waitRequest{
+		ctx:          ctx,
+		responseChan: make(chan *ecs.Task),
+		taskId:       taskId,
+	}
+
+	w.requests[taskId] = &req
+
+	return &req
+}
+
+func (w *waitWorker) stopWait(taskId string) {
+	req := w.requests[taskId]
+	close(req.responseChan)
+	delete(w.requests, taskId)
+}
