@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/aws/aws-sdk-go/service/ecs"
@@ -21,6 +22,7 @@ func init() {
 type waitRequest struct {
 	ctx          context.Context
 	responseChan chan *ecs.Task
+	errorChan    chan error
 	taskId       string
 }
 
@@ -84,15 +86,25 @@ func (w *waitWorker) start() {
 
 		// Send responses for running tasks
 		for _, task := range tasks {
-			if *task.LastStatus == "RUNNING" {
-				req, ok := w.requests[*task.TaskArn]
-				if !ok {
-					continue
-				}
+			if *task.LastStatus != "RUNNING" {
+				continue
+			}
 
-				taskCopy := task
-				req.responseChan <- taskCopy
+			req, ok := w.requests[*task.TaskArn]
+			if !ok {
+				continue
+			}
+
+			switch *task.HealthStatus {
+			case "UNHEALTHY":
+				req.errorChan <- errors.New("failed to start driver. HealthStatus - UNHEALTHY")
 				close(req.responseChan)
+				close(req.errorChan)
+				delete(w.requests, *task.TaskArn)
+			case "HEALTHY":
+				req.responseChan <- task
+				close(req.responseChan)
+				close(req.errorChan)
 				delete(w.requests, *task.TaskArn)
 			}
 		}
@@ -103,6 +115,7 @@ func (w *waitWorker) waitFor(ctx context.Context, taskId string) *waitRequest {
 	req := waitRequest{
 		ctx:          ctx,
 		responseChan: make(chan *ecs.Task),
+		errorChan:    make(chan error),
 		taskId:       taskId,
 	}
 

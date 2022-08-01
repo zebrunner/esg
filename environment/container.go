@@ -1,6 +1,9 @@
 package environment
 
-import "github.com/zebrunner/esg/config"
+import (
+	"github.com/aws/aws-sdk-go/service/ecs"
+	"github.com/zebrunner/esg/config"
+)
 
 type envVariables = map[string]string
 
@@ -25,10 +28,11 @@ type Container struct {
 	Essential  bool
 	Privileged bool
 
-	Ports  map[string]portMapping
-	Mounts []string // List of names of volumes
-        Links []string // List of linked containers
-	Env    envVariables
+	Ports       map[string]portMapping
+	Mounts      []string // List of names of volumes
+	Links       []string // List of linked containers
+	Env         envVariables
+	HealthCheck *ecs.HealthCheck
 }
 
 func (c *Container) Cpu() int64 {
