@@ -1,6 +1,8 @@
 package environment
 
 import (
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
 )
@@ -62,6 +64,11 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities, conf 
 		},
 		Mounts: []string{sharedVolume},
 		Links:  []string{"device"},
+		HealthCheck: &ecs.HealthCheck{
+			Command:  []*string{aws.String("CMD-SHELL"), aws.String("healthcheck")},
+			Retries:  aws.Int64(3),
+			Interval: aws.Int64(10),
+		},
 	}
 
 	environment := ExecutionEnvironment{
