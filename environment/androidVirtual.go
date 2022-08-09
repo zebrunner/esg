@@ -37,7 +37,7 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities, conf 
 	deviceContainer.SetMemory(caps.Memory)
 	deviceContainer.SetMemoryReservation(caps.MemoryReservation)
 
-	appiumImage := imageRepo + "appium:1.4.5"
+	appiumImage := imageRepo + "appium:1.4.6-beta9"
 	appiumContainer := Container{
 		Name:              "appium",
 		Image:             appiumImage,
@@ -65,9 +65,10 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities, conf 
 		Mounts: []string{sharedVolume},
 		Links:  []string{"device"},
 		HealthCheck: &ecs.HealthCheck{
-			Command:  []*string{aws.String("CMD-SHELL"), aws.String("healthcheck")},
-			Retries:  aws.Int64(3),
-			Interval: aws.Int64(10),
+			Command:     []*string{aws.String("CMD-SHELL"), aws.String("healthcheck")},
+			Retries:     aws.Int64(4),
+			Interval:    aws.Int64(10),
+			StartPeriod: aws.Int64(60),
 		},
 	}
 
