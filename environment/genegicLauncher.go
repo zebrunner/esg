@@ -82,7 +82,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 	executorContainer.SetMemoryReservation(caps.MemoryReservation)
 
 
-        postImage := "public.ecr.aws/zebrunner/alpine:latest"
+        postImage := imageRepo + "alpine:latest"
         postContainer := Container{
                 Name:              "post-executor",
                 Image:             postImage,

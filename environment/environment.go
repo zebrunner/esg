@@ -112,9 +112,6 @@ func (e *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefinition
                 }
                 definition.Command = command
 
-		//TODO: organize container dependency declaration
-		//DependsOn []*ContainerDependency `locationName:"dependsOn" type:"list"`
-
 		definitions = append(definitions, &definition)
 	}
 

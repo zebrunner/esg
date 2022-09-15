@@ -32,7 +32,7 @@ type Container struct {
 	Ports       map[string]portMapping
 	Mounts      []string // List of names of volumes
 	Links       []string // List of linked containers
-	Command     []string //Comma separate container startup command
+	Command     []string // Comma separated container startup command
 	Env         envVariables
 	EntryPoint []string
 	WorkingDirectory string
