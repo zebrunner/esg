@@ -37,9 +37,11 @@ type Capabilities struct {
 	MemoryReservation int64
 
 	// generic launcher caps
+	RepositoryUrl    string
 	Branch           string
 	Image            string
 	LaunchCommand    string
+	EnvVariables     map[string]string
 }
 
 func (c *Capabilities) GetTimeZone() (*time.Location, error) {

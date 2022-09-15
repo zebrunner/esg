@@ -25,7 +25,11 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 		branchArg = "--branch=" + caps.Branch
 	}
 
-	cloneCommand := fmt.Sprintf("clone -v --depth=1 %s https://github.com/zebrunner/carina-demo.git %s", branchArg, sharedFolder)
+        if caps.RepositoryUrl == "" {
+                return nil, fmt.Errorf("Executor repository is not specified! RepositoryUrl='%s'", caps.RepositoryUrl)
+        }
+
+	cloneCommand := fmt.Sprintf("clone -v --depth=1 %s %s %s", branchArg, caps.RepositoryUrl, sharedFolder)
 	fmt.Printf("cloneCommand: %s\n", cloneCommand)
 
         cloneImage := imageRepo + "git:latest"
@@ -63,9 +67,6 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 		Image:      executorImage,
 		Privileged: false,
 		Essential:  false,
-		Env: map[string]string{
-			"VERBOSE": "1",
-		},
 		Mounts: []string{sharedVolume},
                 Command: strings.Fields(launchCommand),
 		WorkingDirectory: sharedFolder,
@@ -77,6 +78,12 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 		},
 
 	}
+
+        if caps.EnvVariables != nil {
+                fmt.Printf("EnvVariables: %v\n", caps.EnvVariables)
+		executorContainer.Env = caps.EnvVariables
+        }
+
 	executorContainer.SetCpu(caps.Cpu)
 	executorContainer.SetMemory(caps.Memory)
 	executorContainer.SetMemoryReservation(caps.MemoryReservation)
