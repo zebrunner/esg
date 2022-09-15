@@ -77,7 +77,7 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities, conf 
 		Containers:           []*Container{&deviceContainer, &appiumContainer},
 		Capabilities:         caps,
 		Volumes: map[string]volume{
-			sharedVolume: {ContainerPath: sharedFolder, HostPath: sharedFolder, ReadOnly: false},
+                        sharedVolume: {ContainerPath: sharedFolder, Driver: "local", Scope: "task", ReadOnly: false},
 		},
 		Network: &NetworkConfiguration{
 			IP: "",

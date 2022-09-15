@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/ecs"
+        "github.com/aws/aws-sdk-go/aws"
+        "github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
 )
@@ -17,7 +17,9 @@ const (
 	androidPlatform = "android"
 	redroidDevice   = "redroid"
 	anyPlatform     = "any"
-	imageRepo       = "public.ecr.aws/zebrunner/" //public zebrunner ECR docker registry
+	genericPlatform = "generic"
+	//TODO: return public ECR url
+	imageRepo       = "659932254483.dkr.ecr.us-east-1.amazonaws.com/ecr-public/zebrunner/" //"public.ecr.aws/zebrunner/" //public zebrunner ECR docker registry
 )
 
 type NetworkConfiguration struct {
@@ -57,6 +59,11 @@ func (e *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefinition
 			Essential:         &c.Essential,
 			Privileged:        &c.Privileged,
 			HealthCheck:       c.HealthCheck,
+			DependsOn:         c.DependsOn,
+		}
+
+		if c.WorkingDirectory != "" {
+			definition.WorkingDirectory = &c.WorkingDirectory
 		}
 
 		links := []*string{}
@@ -65,6 +72,14 @@ func (e *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefinition
 			links = append(links, &linkName)
 		}
 		definition.Links = links
+
+                entrypoints := []*string{}
+                for _, entrypoint := range c.EntryPoint {
+                        entrypointName := entrypoint //local declaration required to append all values
+                        entrypoints = append(entrypoints, &entrypointName)
+                }
+                definition.EntryPoint = entrypoints
+
 
 		volumes := []*ecs.MountPoint{}
 		for _, volumeName := range c.Mounts {
@@ -90,6 +105,16 @@ func (e *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefinition
 			portMappings = append(portMappings, &m)
 		}
 		definition.PortMappings = portMappings
+
+                command := []*string{}
+                for _, cmd := range c.Command {
+                        cmdName := cmd //local declaration required to append all values
+                        command = append(command, &cmdName)
+                }
+                definition.Command = command
+
+		//TODO: organize container dependency declaration
+		//DependsOn []*ContainerDependency `locationName:"dependsOn" type:"list"`
 
 		definitions = append(definitions, &definition)
 	}
@@ -117,6 +142,7 @@ func (e *ExecutionEnvironment) ContainerOverrides() []*ecs.ContainerOverride {
 			value := v
 			env = append(env, &ecs.KeyValuePair{Name: &key, Value: &value})
 		}
+
 		override.Environment = env
 		overrides = append(overrides, &override)
 	}
@@ -131,6 +157,8 @@ func Build(workspace string, caps *capabilities.Capabilities, conf *config.Confi
 			return buildAppiumRedroid(workspace, caps, conf)
 		}
 		return nil, fmt.Errorf("device is not supported. deviceName=%s", caps.DeviceName)
+	} else if platform == genericPlatform {
+		return buildGeneric(workspace, caps, conf)
 	} else if platform == linuxPlatform || platform == "" || platform == anyPlatform {
 		return buildBrowser(workspace, caps, conf)
 	}
@@ -217,6 +245,8 @@ func buildTaskDefinitionFamily(caps *capabilities.Capabilities) string {
 		browserVersion = strings.Replace(browserVersion, ".", "-", -1)
 		familyParts = append(familyParts, browserVersion)
 	}
+        //fmt.Printf("caps -> %v\n", caps)
+	//fmt.Printf("familyParts -> %v\n", familyParts)
 
 	return strings.Join(familyParts, "-")
 }

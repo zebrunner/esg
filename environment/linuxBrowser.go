@@ -103,8 +103,8 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities, conf *confi
 		Containers:           []*Container{&browserContainer, &videoRecorderContainer},
 		Capabilities:         caps,
 		Volumes: map[string]volume{
-			"shm":        {ContainerPath: "/dev/shm", HostPath: "/dev/shm", ReadOnly: false},
-			sharedVolume: {ContainerPath: sharedFolder, HostPath: sharedFolder, ReadOnly: false},
+                        "shn":        {ContainerPath: "/dev/shm", Driver: "local", Scope: "task", ReadOnly: false},
+                        sharedVolume: {ContainerPath: sharedFolder, Driver: "local", Scope: "task", ReadOnly: false},
 		},
 		Network: &NetworkConfiguration{
 			IP: "",

@@ -116,6 +116,16 @@ func Create(c *gin.Context) {
 		return
 	}
 
+	//l.WithField("env", env).Info("Execution env")
+
+        if env.TaskDefinitionFamily == "generic" {
+	        _, err = service.CreateGenericTaskDefinition(env)
+        	if err != nil {
+                	log.WithError(err).Error("Failed to create task definition")
+	                return
+        	}
+        }
+
 	err = service.StartDriver(ctx, env)
 	if err == context.DeadlineExceeded {
 		err = errors.New("Driver startup timed out")

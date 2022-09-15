@@ -26,9 +26,7 @@ type Capabilities struct {
 	EnableLog        bool
 	ScreenResolution string
 	DeviceName       string
-	Skin             string
 	IdleTimeout      int64
-	VideoCodec       string
 	TimeZone         string
 	Env              []string
 	HostsEntries     []string
@@ -37,6 +35,11 @@ type Capabilities struct {
 	Cpu               int64
 	Memory            int64
 	MemoryReservation int64
+
+	// generic launcher caps
+	Branch           string
+	Image            string
+	LaunchCommand    string
 }
 
 func (c *Capabilities) GetTimeZone() (*time.Location, error) {
