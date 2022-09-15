@@ -18,8 +18,7 @@ const (
 	redroidDevice   = "redroid"
 	anyPlatform     = "any"
 	genericPlatform = "generic"
-	//TODO: return public ECR url
-	imageRepo       = "659932254483.dkr.ecr.us-east-1.amazonaws.com/ecr-public/zebrunner/" //"public.ecr.aws/zebrunner/" //public zebrunner ECR docker registry
+	imageRepo       = "public.ecr.aws/zebrunner/" //public zebrunner ECR docker registry
 )
 
 type NetworkConfiguration struct {
