@@ -29,7 +29,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 return nil, fmt.Errorf("Executor repository is not specified! RepositoryUrl='%s'", caps.RepositoryUrl)
         }
 
-	cloneCommand := fmt.Sprintf("clone -v --depth=1 %s %s %s", branchArg, caps.RepositoryUrl, sharedFolder)
+	cloneCommand := fmt.Sprintf("clone --verbose --depth=1 %s %s %s", branchArg, caps.RepositoryUrl, sharedFolder)
 	fmt.Printf("cloneCommand: %s\n", cloneCommand)
 
         cloneImage := imageRepo + "git:latest"
