@@ -8,6 +8,7 @@ import (
 type envVariables = map[string]string
 
 type volume struct {
+	HostPath      string
 	ContainerPath string
 	Driver        string
 	Scope         string
@@ -30,7 +31,7 @@ type Container struct {
 	Privileged bool
 
 	Ports       map[string]portMapping
-	TaskMounts  []string // List of names of volumes
+	Mounts  []string // List of volume names
 	Links       []string // List of linked containers
 	Command     []string // Comma separated container startup command
 	Env         envVariables

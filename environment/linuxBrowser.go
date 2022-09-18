@@ -57,7 +57,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities, conf *confi
 			"HOSTS_ENTRIES": strings.Join(caps.HostsEntries, " "),
 			"TZ":            tz.String(),
 		},
-		TaskMounts: []string{"shm", taskVolume},
+		Mounts: []string{"shm", taskVolume},
 		HealthCheck: &ecs.HealthCheck{
 			Command:     []*string{aws.String("CMD-SHELL"), aws.String("curl -f localhost:4444/status || exit 1")},
 			Interval:    aws.Int64(10),
@@ -93,7 +93,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities, conf *confi
 			"AWS_SECRET_ACCESS_KEY":  conf.AwsSecretAccessKey,
 			"AWS_DEFAULT_REGION":     conf.AwsRegion,
 		},
-		TaskMounts:      []string{taskVolume},
+		Mounts:      []string{taskVolume},
 		Links:       []string{"browser"},
 		HealthCheck: nil,
 	}
@@ -103,8 +103,11 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities, conf *confi
 		Containers:           []*Container{&browserContainer, &videoRecorderContainer},
 		Capabilities:         caps,
 		Volumes: map[string]volume{
-                        "shn":        {ContainerPath: "/dev/shm", Driver: "local", Scope: "task", ReadOnly: false},
-                        taskVolume: {ContainerPath: sharedFolder, Driver: "local", Scope: "task", ReadOnly: false},
+			//TODO: replace by local task volume after reconfiguration of all chrome drivers
+                        //taskVolume: {ContainerPath: sharedFolder, Driver: "local", Scope: "task", ReadOnly: false},
+			taskVolume: {ContainerPath: sharedFolder, HostPath: sharedFolder, ReadOnly: false},
+                        "shm": {ContainerPath: "/dev/shm", HostPath: "/dev/shm", ReadOnly: false},
+                        //"shm": {ContainerPath: "/dev/shm", Driver: "local", Scope: "task", ReadOnly: false},
 		},
 		Network: &NetworkConfiguration{
 			IP: "",

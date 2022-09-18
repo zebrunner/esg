@@ -99,13 +99,22 @@ func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDe
 
 	volumes := []*ecs.Volume{}
         for n, v := range environment.Volumes {
-                volumes = append(volumes, &ecs.Volume{
-                        DockerVolumeConfiguration: &ecs.DockerVolumeConfiguration {
-				Driver: aws.String(v.Driver),
-				Scope: aws.String(v.Scope),
-                        },
-                        Name: aws.String(n),
-                })
+                if v.HostPath != "" {
+                        volumes = append(volumes, &ecs.Volume{
+                                Host: &ecs.HostVolumeProperties{
+                                        SourcePath: aws.String(v.HostPath),
+                                },
+                                Name: aws.String(n),
+                        })
+                } else {
+                        volumes = append(volumes, &ecs.Volume{
+                                DockerVolumeConfiguration: &ecs.DockerVolumeConfiguration {
+                                        Driver: aws.String(v.Driver),
+                                        Scope: aws.String(v.Scope),
+                                },
+                                Name: aws.String(n),
+                        })
+                }
         }
 
 	input.Volumes = volumes
@@ -130,13 +139,22 @@ func CreateGenericTaskDefinition(environment *environment.ExecutionEnvironment) 
 
         volumes := []*ecs.Volume{}
         for n, v := range environment.Volumes {
-                volumes = append(volumes, &ecs.Volume{
-                        DockerVolumeConfiguration: &ecs.DockerVolumeConfiguration {
-                                Driver: aws.String(v.Driver),
-                                Scope: aws.String(v.Scope),
-                        },
-                        Name: aws.String(n),
-                })
+                if v.HostPath != "" {
+                        volumes = append(volumes, &ecs.Volume{
+                                Host: &ecs.HostVolumeProperties{
+                                        SourcePath: aws.String(v.HostPath),
+                                },
+                                Name: aws.String(n),
+                        })
+                } else {
+                        volumes = append(volumes, &ecs.Volume{
+                                DockerVolumeConfiguration: &ecs.DockerVolumeConfiguration {
+                                        Driver: aws.String(v.Driver),
+                                        Scope: aws.String(v.Scope),
+                                },
+                                Name: aws.String(n),
+                        })
+                }
         }
         input.Volumes = volumes
 

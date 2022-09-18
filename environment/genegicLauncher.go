@@ -19,6 +19,7 @@ const (
 func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {
 	sharedFolder := "/opt/zebrunner"
 	taskVolume := "data"
+	dockerSocketVolume := "docker-socket"
 
 	branchArg := ""
 	if caps.Branch != "" {
@@ -44,7 +45,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 Env: map[string]string{
                         "VERBOSE":      "0",
                 },
-                TaskMounts: []string{taskVolume},
+                Mounts: []string{taskVolume},
 		Command: strings.Fields(cloneCommand),
         }
 
@@ -67,7 +68,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 		Image:      executorImage,
 		Privileged: false,
 		Essential:  false,
-		TaskMounts: []string{taskVolume},
+		Mounts: []string{taskVolume},
                 Command: strings.Fields(launchCommand),
 		WorkingDirectory: sharedFolder,
                 DependsOn: []*ecs.ContainerDependency{
@@ -99,10 +100,14 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 Privileged: false,
                 Essential:  true,
                 Env: map[string]string{
-                        "VERBOSE": "1",
-			"CONTAINER": "executor", //explicitly declare container to be able to rename only in this project
+                        "UUID":                   caps.LaunchId,
+                        "BUCKET":                 conf.S3Bucket,
+                        "TENANT":                 workspace,
+                        "AWS_ACCESS_KEY_ID":      conf.AwsAccessKeyID,
+                        "AWS_SECRET_ACCESS_KEY":  conf.AwsSecretAccessKey,
+                        "AWS_DEFAULT_REGION":     conf.AwsRegion,
                 },
-                TaskMounts: []string{taskVolume},
+                Mounts: []string{taskVolume, dockerSocketVolume},
                 Links:       []string{"executor"},
                 DependsOn: []*ecs.ContainerDependency{
 			&ecs.ContainerDependency{
@@ -119,6 +124,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 		Capabilities:         caps,
 		Volumes: map[string]volume{
 			taskVolume: {ContainerPath: sharedFolder, Driver: "local", Scope: "task", ReadOnly: false},
+                        dockerSocketVolume: {ContainerPath: "/var/run/docker.sock", HostPath: "/var/run/docker.sock", ReadOnly: false},
 		},
 	}
 

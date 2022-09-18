@@ -31,7 +31,7 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities, conf 
 		Env: map[string]string{
 			"VERBOSE": "1",
 		},
-		TaskMounts: []string{taskVolume},
+		Mounts: []string{taskVolume},
 	}
 	deviceContainer.SetCpu(caps.Cpu)
 	deviceContainer.SetMemory(caps.Memory)
@@ -62,7 +62,7 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities, conf 
 			"AWS_SECRET_ACCESS_KEY": conf.AwsSecretAccessKey,
 			"AWS_DEFAULT_REGION":    conf.AwsRegion,
 		},
-		TaskMounts: []string{taskVolume},
+		Mounts: []string{taskVolume},
 		Links:  []string{"device"},
 		HealthCheck: &ecs.HealthCheck{
 			Command:     []*string{aws.String("CMD-SHELL"), aws.String("healthcheck")},
