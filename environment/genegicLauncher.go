@@ -108,6 +108,13 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                         "AWS_DEFAULT_REGION":     conf.AwsRegion,
                 },
                 Mounts: []string{taskVolume, dockerSocketVolume},
+                HealthCheck: &ecs.HealthCheck{
+                        Command:     []*string{aws.String("CMD-SHELL"), aws.String("ps -ef | grep docker | grep logs || exit 1")},
+                        Interval:    aws.Int64(10),
+                        Retries:     aws.Int64(3),
+                        Timeout:     aws.Int64(10),
+                        StartPeriod: aws.Int64(5),
+                },
                 Links:       []string{"executor"},
                 DependsOn: []*ecs.ContainerDependency{
 			&ecs.ContainerDependency{
