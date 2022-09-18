@@ -12,6 +12,8 @@ import (
 )
 
 const (
+        genericPort   int64 = 22
+
 	minCpu    = 128
 	minMemory = 128
 )
@@ -99,6 +101,10 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 memoryReservation: minMemory,
                 Privileged: false,
                 Essential:  true,
+                Ports: map[string]portMapping{
+                        "driver":         {genericPort, 0},
+                },
+
                 Env: map[string]string{
                         "UUID":                   caps.LaunchId,
                         "BUCKET":                 conf.S3Bucket,
@@ -133,6 +139,13 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 			taskVolume: {ContainerPath: sharedFolder, Driver: "local", Scope: "task", ReadOnly: false},
                         dockerSocketVolume: {ContainerPath: "/var/run/docker.sock", HostPath: "/var/run/docker.sock", ReadOnly: false},
 		},
+                Network: &NetworkConfiguration{
+                        IP: "",
+                        Endpoints: map[string]*Endpoint{
+                                "driver":      {ContainerPort: genericPort, HostPort: 0, Path: "/"},
+                        },
+                },
+
 	}
 
 	return &environment, nil

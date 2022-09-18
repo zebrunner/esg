@@ -152,30 +152,36 @@ func Create(c *gin.Context) {
 	}
 
 	sessionId := ""
-	c.Request.URL.Host, c.Request.URL.Path = u.Host, path.Join(u.Path, c.Request.URL.Path)
-	c.Request.URL.Scheme = "http"
-	l.WithFields(log.Fields{
-		"serviceUrl": u,
-	}).Info("Starting session")
-	resp, err := selenium.StartSession(c.Request.Context(), c.Request.URL, c.Request.Header, requestBody)
-	if err != nil {
-		l.WithError(err).WithField("response", resp).Error("Session startup failed")
-		c.JSON(http.StatusInternalServerError, resp)
-		service.RemoveTask(env.TaskId)
-		return
-	}
+	//TODO: implement reponse for generic task
+	var resp map[string]interface{}
+        if env.TaskDefinitionFamily == "generic" {
+		sessionId = env.TaskId
+		respArray := "[{\"sessionId\":\"" + env.TaskId + "\"}}]"
+		json.Unmarshal([]byte(respArray), &resp)
+	} else {
+		c.Request.URL.Host, c.Request.URL.Path = u.Host, path.Join(u.Path, c.Request.URL.Path)
+		c.Request.URL.Scheme = "http"
+		l.WithFields(log.Fields{"serviceUrl": u,}).Info("Starting session")
+		resp, err = selenium.StartSession(c.Request.Context(), c.Request.URL, c.Request.Header, requestBody)
+		if err != nil {
+			l.WithError(err).WithField("response", resp).Error("Session startup failed")
+			c.JSON(http.StatusInternalServerError, resp)
+			service.RemoveTask(env.TaskId)
+			return
+		}
 
-	sessionId, err = getSessionId(resp)
-	if err != nil {
-		l.WithError(err).Error("Failed to get sessionId from driver response")
-		_ = c.Error(creationError("failed to create session", err)).SetType(gin.ErrorTypePublic)
-		return
-	}
+		sessionId, err = getSessionId(resp)
+		if err != nil {
+			l.WithError(err).Error("Failed to get sessionId from driver response")
+			_ = c.Error(creationError("failed to create session", err)).SetType(gin.ErrorTypePublic)
+			return
+		}
 
-	if sessionId == "" {
-		l.WithError(err).Error("Failed to get sessionId from driver response. sessionId is empty")
-		_ = c.Error(creationError("failed to create session", err)).SetType(gin.ErrorTypePublic)
-		return
+		if sessionId == "" {
+			l.WithError(err).Error("Failed to get sessionId from driver response. sessionId is empty")
+			_ = c.Error(creationError("failed to create session", err)).SetType(gin.ErrorTypePublic)
+			return
+		}
 	}
 
 	sess := sessionmap.Session{
@@ -198,6 +204,7 @@ func Create(c *gin.Context) {
 		"sessionID": sessionId,
 		"latency":   util.SecondsSince(sessionStartTime),
 	}).Info("Session created")
+
 	c.JSON(http.StatusOK, resp)
 }
 
