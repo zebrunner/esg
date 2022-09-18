@@ -18,7 +18,7 @@ const (
 
 func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {
 	sharedFolder := "/opt/zebrunner"
-	sharedVolume := "data"
+	taskVolume := "data"
 
 	branchArg := ""
 	if caps.Branch != "" {
@@ -44,7 +44,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 Env: map[string]string{
                         "VERBOSE":      "0",
                 },
-                Mounts: []string{sharedVolume},
+                TaskMounts: []string{taskVolume},
 		Command: strings.Fields(cloneCommand),
         }
 
@@ -67,7 +67,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 		Image:      executorImage,
 		Privileged: false,
 		Essential:  false,
-		Mounts: []string{sharedVolume},
+		TaskMounts: []string{taskVolume},
                 Command: strings.Fields(launchCommand),
 		WorkingDirectory: sharedFolder,
                 DependsOn: []*ecs.ContainerDependency{
@@ -102,7 +102,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                         "VERBOSE": "1",
 			"CONTAINER": "executor", //explicitly declare container to be able to rename only in this project
                 },
-                Mounts: []string{sharedVolume},
+                TaskMounts: []string{taskVolume},
                 Links:       []string{"executor"},
                 DependsOn: []*ecs.ContainerDependency{
 			&ecs.ContainerDependency{
@@ -118,7 +118,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 		Containers:           []*Container{&cloneContainer, &executorContainer, &postContainer},
 		Capabilities:         caps,
 		Volumes: map[string]volume{
-			sharedVolume: {ContainerPath: sharedFolder, Driver: "local", Scope: "task", ReadOnly: false},
+			taskVolume: {ContainerPath: sharedFolder, Driver: "local", Scope: "task", ReadOnly: false},
 		},
 	}
 

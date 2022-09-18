@@ -81,7 +81,7 @@ func (e *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefinition
 
 
 		volumes := []*ecs.MountPoint{}
-		for _, volumeName := range c.Mounts {
+		for _, volumeName := range c.TaskMounts {
 			// local declarations required to append all values
 			volume := e.Volumes[volumeName]
 			name := volumeName

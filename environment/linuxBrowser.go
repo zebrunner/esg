@@ -33,7 +33,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities, conf *confi
 
 	// TODO: Find better way to specify this
 	sharedFolder := "/opt/zebrunner"
-	sharedVolume := "data"
+	taskVolume := "data"
 
 	tz, err := caps.GetTimeZone()
 	// In future maybe there will be need to disable vnc
@@ -57,7 +57,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities, conf *confi
 			"HOSTS_ENTRIES": strings.Join(caps.HostsEntries, " "),
 			"TZ":            tz.String(),
 		},
-		Mounts: []string{"shm", sharedVolume},
+		TaskMounts: []string{"shm", taskVolume},
 		HealthCheck: &ecs.HealthCheck{
 			Command:     []*string{aws.String("CMD-SHELL"), aws.String("curl -f localhost:4444/status || exit 1")},
 			Interval:    aws.Int64(10),
@@ -93,7 +93,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities, conf *confi
 			"AWS_SECRET_ACCESS_KEY":  conf.AwsSecretAccessKey,
 			"AWS_DEFAULT_REGION":     conf.AwsRegion,
 		},
-		Mounts:      []string{sharedVolume},
+		TaskMounts:      []string{taskVolume},
 		Links:       []string{"browser"},
 		HealthCheck: nil,
 	}
@@ -104,7 +104,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities, conf *confi
 		Capabilities:         caps,
 		Volumes: map[string]volume{
                         "shn":        {ContainerPath: "/dev/shm", Driver: "local", Scope: "task", ReadOnly: false},
-                        sharedVolume: {ContainerPath: sharedFolder, Driver: "local", Scope: "task", ReadOnly: false},
+                        taskVolume: {ContainerPath: sharedFolder, Driver: "local", Scope: "task", ReadOnly: false},
 		},
 		Network: &NetworkConfiguration{
 			IP: "",

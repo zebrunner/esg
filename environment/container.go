@@ -30,7 +30,7 @@ type Container struct {
 	Privileged bool
 
 	Ports       map[string]portMapping
-	Mounts      []string // List of names of volumes
+	TaskMounts  []string // List of names of volumes
 	Links       []string // List of linked containers
 	Command     []string // Comma separated container startup command
 	Env         envVariables
