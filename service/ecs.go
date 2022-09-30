@@ -1,4 +1,3 @@
-
 package service
 
 import (
@@ -301,6 +300,11 @@ out:
 
 		req := taskWaiter.waitFor(ctx, taskArn)
 		select {
+		case err := <-req.errorChan:
+			RemoveTask(taskArn)
+			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to wait until Task is running and healthy")
+			outputErr = err
+			continue
 		case task := <-req.responseChan:
 			err = setEnvironmentNetwork(env, task)
 			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).Info("setEnvironmentNetwork delay")
@@ -308,23 +312,6 @@ out:
 				RemoveTask(taskArn)
 				l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to get service info.")
 				outputErr = fmt.Errorf("failed to get service info: %v", err)
-				continue
-			}
-
-			url, ok := env.Network.GetUrl("healthcheck")
-			if !ok {
-				//TODO: [VD] if no healthcheck do we really want to retry? Maybe force abort?
-				RemoveTask(taskArn)
-				l.WithField("attempt", i).WithField("latency", time.Since(startTime)).Error("Driver healthcheck missed.")
-				outputErr = fmt.Errorf("driver healthcheck missed")
-				continue
-			}
-
-			err = wait(ctx, url.String(), config.Conf.SessionStartupTimeout)
-			if err != nil {
-				RemoveTask(taskArn)
-				l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to wait driver healthcheck response")
-				outputErr = err
 				continue
 			}
 

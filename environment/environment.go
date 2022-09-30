@@ -56,6 +56,7 @@ func (e *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefinition
 			MemoryReservation: &memoryReservation,
 			Essential:         &c.Essential,
 			Privileged:        &c.Privileged,
+			HealthCheck:       c.HealthCheck,
 		}
 
 		links := []*string{}

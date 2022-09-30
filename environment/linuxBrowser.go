@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/google/uuid"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
@@ -56,6 +58,13 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities, conf *confi
 			"TZ":            tz.String(),
 		},
 		Mounts: []string{"shm", sharedVolume},
+		HealthCheck: &ecs.HealthCheck{
+			Command:     []*string{aws.String("CMD-SHELL"), aws.String("curl -f localhost:4444/status || exit 1")},
+			Interval:    aws.Int64(10),
+			Retries:     aws.Int64(3),
+			Timeout:     aws.Int64(10),
+			StartPeriod: aws.Int64(5),
+		},
 	}
 	browserContainer.SetCpu(caps.Cpu)
 	browserContainer.SetMemory(caps.Memory)
@@ -84,8 +93,9 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities, conf *confi
 			"AWS_SECRET_ACCESS_KEY":  conf.AwsSecretAccessKey,
 			"AWS_DEFAULT_REGION":     conf.AwsRegion,
 		},
-		Mounts: []string{sharedVolume},
-		Links:  []string{"browser"},
+		Mounts:      []string{sharedVolume},
+		Links:       []string{"browser"},
+		HealthCheck: nil,
 	}
 
 	environment := ExecutionEnvironment{
