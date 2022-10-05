@@ -62,6 +62,8 @@ func CloseSession(workspace string, sessionID string, conf *config.Config) {
 		return
 	}
 
+	sessionTime := time.Since(sess.StartedAt)
+
 	client := http.Client{}
 	sessionUrl, ok := sess.Network.GetUrl("driver")
 	if ok {
@@ -94,6 +96,6 @@ func CloseSession(workspace string, sessionID string, conf *config.Config) {
 	}
 
 	if conf.ZebrunnerIsIntegrated() {
-		go zebrunner.SendSessionDuration(workspace, time.Since(sess.StartedAt), conf)
+		go zebrunner.SendSessionDuration(workspace, sessionTime, conf)
 	}
 }
