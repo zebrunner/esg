@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"math"
 	"net/http"
 	"net/url"
 	"time"
@@ -30,7 +29,7 @@ func SendSessionDuration(workspace string, d time.Duration, conf *config.Config)
 	requestUrl.Path = resource
 	requestBody := map[string]interface{}{
 		"instant": time.Now().UTC().Format("2006-01-02T15:04:05Z"),
-		"minutes": math.Ceil(d.Seconds()/60*100)/100, //rounded to two decimals like 1.12 in minutes
+		"seconds": d.Seconds(),
 	}
 
 	body, err := json.Marshal(requestBody)
