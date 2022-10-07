@@ -156,7 +156,6 @@ func Create(c *gin.Context) {
 	var resp map[string]interface{}
         if env.TaskDefinitionFamily == "generic" {
 		sessionId = env.TaskId
-
 		data := "{\"taskId\": \"" + env.TaskId + "\", \"log\": \"qwe\"}"
 		json.Unmarshal([]byte(data), &resp)
 		l.WithFields(log.Fields{"resp": resp,}).Info("Response")
@@ -184,28 +183,33 @@ func Create(c *gin.Context) {
 			_ = c.Error(creationError("failed to create session", err)).SetType(gin.ErrorTypePublic)
 			return
 		}
-
-		sess := sessionmap.Session{
-			ID:              sessionId,
-			RawCapabilities: body.ToMap(),
-			Capabilities:    *caps,
-			Network:         *env.Network,
-			StartedAt:       time.Now(),
-			AccessedAt:      time.Now(),
-			Status:          sessionmap.SessionActive,
-			TaskID:          env.TaskId,
-			Workspace:       workspace,
-		}
-
-		err = sessionmap.Write(sess.ID, &sess, 0)
-		if err != nil {
-			l.WithError(err).Error("Session not cached")
-		}
-		l.WithFields(log.Fields{
-			"sessionID": sessionId,
-			"latency":   util.SecondsSince(sessionStartTime),
-		}).Info("Session created")
 	}
+
+	sess := sessionmap.Session{
+		ID:              sessionId,
+		RawCapabilities: body.ToMap(),
+		Capabilities:    *caps,
+		Network:         *env.Network,
+		StartedAt:       time.Now(),
+		AccessedAt:      time.Now(),
+		Status:          sessionmap.SessionActive,
+		TaskID:          env.TaskId,
+		Workspace:       workspace,
+	}
+	if env.TaskDefinitionFamily == "generic" {
+		// extra state for generic job to disable idleTimeout verification at all
+		sess.Status = sessionmap.SessionQueued
+	}
+
+	err = sessionmap.Write(sess.ID, &sess, 0)
+	if err != nil {
+		l.WithError(err).Error("Session not cached")
+	}
+	l.WithFields(log.Fields{
+		"sessionId": sess.ID,
+		"taskId": sess.TaskID,
+		"latency":   util.SecondsSince(sessionStartTime),
+	}).Info("Session created")
 
 	c.JSON(http.StatusOK, resp)
 }
