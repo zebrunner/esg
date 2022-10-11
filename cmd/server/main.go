@@ -54,6 +54,8 @@ func CreateRouter() *gin.Engine {
 		api.PUT("/users/:username/activation", handlers.UserActivation)
 		api.GET("/logs/:session", handlers.Logs)
 		api.GET("/video/:session", handlers.Video)
+
+                api.DELETE("/task/:task", handlers.AbortTask) // to be able to abort generic executor task by taskId
 	}
 
 	hub := r.Group("/")
@@ -63,8 +65,6 @@ func CreateRouter() *gin.Engine {
 		hub.GET("/status", handlers.Authentication, handlers.ClusterStatus)
 		hub.GET("/ping", handlers.Ping)
 		hub.GET("/browsers", handlers.ListDrivers)
-
-                hub.DELETE("/task/:task", handlers.AbortTask) // to be able to abort generic executor task by taskId
 
 		hub.Any("/wd/hub/*action", ReverseProxy())
 		hub.POST("/session", handlers.Create) // Auth logic moved to handler
