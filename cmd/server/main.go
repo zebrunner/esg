@@ -64,6 +64,8 @@ func CreateRouter() *gin.Engine {
 		hub.GET("/ping", handlers.Ping)
 		hub.GET("/browsers", handlers.ListDrivers)
 
+                hub.DELETE("/task/:task", handlers.AbortTask) // to be able to abort generic executor task by taskId
+
 		hub.Any("/wd/hub/*action", ReverseProxy())
 		hub.POST("/session", handlers.Create) // Auth logic moved to handler
 		hub.DELETE("/session/:session", handlers.CloseSession)

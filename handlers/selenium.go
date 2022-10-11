@@ -258,6 +258,26 @@ func CloseSession(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"value": nil})
 }
 
+func AbortTask(c *gin.Context) {
+        sessionId := c.Param("task")
+        sess, err := getSession(sessionId)
+        if err != nil {
+                log.WithError(err).WithField("sessionID", sessionId).Error("Cant find session")
+                _ = c.Error(err).SetType(gin.ErrorTypePublic)
+                return
+        }
+        service.RemoveTask(sess.TaskID)
+
+        err = sessionmap.Remove(sessionId)
+        if err != nil {
+                log.WithError(err).WithField("sessionID", sessionId).Error("Failed to remove session from session map")
+                _ = c.Error(err).SetType(gin.ErrorTypePublic)
+                return
+        }
+        log.WithField("sessionID", sessionId).Info("Session closed")
+        c.JSON(http.StatusOK, gin.H{"value": nil})
+}
+
 func Vnc(wsconn *websocket.Conn) {
 	defer wsconn.Close()
 	fragments := strings.Split(wsconn.Request().URL.Path, "/")
