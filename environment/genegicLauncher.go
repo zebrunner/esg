@@ -9,6 +9,7 @@ import (
 
 	"fmt"
 	"strings"
+        "github.com/google/uuid"
 )
 
 const (
@@ -92,6 +93,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 	executorContainer.SetMemoryReservation(caps.MemoryReservation)
 
 
+	id := uuid.New().String()
         postImage := imageRepo + "alpine:latest"
         postContainer := Container{
                 Name:              "post-executor",
@@ -106,7 +108,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 },
 
                 Env: map[string]string{
-                        "UUID":                   caps.LaunchId,
+                        "UUID":                   id,
                         "BUCKET":                 conf.S3Bucket,
                         "TENANT":                 workspace,
                         "AWS_ACCESS_KEY_ID":      conf.AwsAccessKeyID,
