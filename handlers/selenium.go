@@ -126,7 +126,7 @@ func Create(c *gin.Context) {
         	}
         }
 
-	err = service.StartDriver(ctx, env)
+	err = service.StartTask(ctx, env)
 	if err == context.DeadlineExceeded {
 		err = errors.New("Driver startup timed out")
 	}
@@ -137,29 +137,29 @@ func Create(c *gin.Context) {
 		return
 	}
 	// l.WithField("taskID", driver.TaskID).Info("Service started successfully")
-	u, ok := env.Network.GetUrl("driver")
-	if !ok {
-		l.Error("failed to get url for `driver` service")
-		_ = c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
-		return
-	}
 
-	requestBody, err := json.Marshal(body)
-	if err != nil {
-		l.WithError(err).Error("Failed to marshal request")
-		_ = c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
-		return
-	}
-
-	sessionId := ""
-	//TODO: implement reponse for generic task
-	var resp map[string]interface{}
+        sessionId := ""
+        var resp map[string]interface{}
         if env.TaskDefinitionFamily == "generic" {
-		sessionId = env.TaskId
-		data := "{\"taskId\": \"" + env.TaskId + "\", \"log\": \"qwe\"}"
-		json.Unmarshal([]byte(data), &resp)
-		l.WithFields(log.Fields{"resp": resp,}).Info("Response")
+                sessionId = env.TaskId
+                data := "{\"taskId\": \"" + env.TaskId + "\", \"log\": \"qwe\"}"
+                json.Unmarshal([]byte(data), &resp)
+                l.WithFields(log.Fields{"resp": resp,}).Info("Response")
 	} else {
+		u, ok := env.Network.GetUrl("driver")
+		if !ok {
+			l.Error("failed to get url for `driver` service")
+			_ = c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
+			return
+		}
+
+		requestBody, err := json.Marshal(body)
+		if err != nil {
+			l.WithError(err).Error("Failed to marshal request")
+			_ = c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
+			return
+		}
+
 		c.Request.URL.Host, c.Request.URL.Path = u.Host, path.Join(u.Path, c.Request.URL.Path)
 		c.Request.URL.Scheme = "http"
 		l.WithFields(log.Fields{"serviceUrl": u,}).Info("Starting session")

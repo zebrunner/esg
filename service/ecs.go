@@ -324,7 +324,7 @@ func setEnvironmentNetwork(env *environment.ExecutionEnvironment, task *ecs.Task
 	return nil
 }
 
-func StartDriver(ctx context.Context, env *environment.ExecutionEnvironment) error {
+func StartTask(ctx context.Context, env *environment.ExecutionEnvironment) error {
 	var outputErr error
 	startTime := time.Now()
 out:
@@ -349,6 +349,10 @@ out:
 		taskId := strings.Split(taskArn, "/")[2]
 		env.TaskId = taskId
 		l = l.WithField("taskId", taskId)
+	        if env.TaskDefinitionFamily == "generic" {
+			// do not wait for generic task startup.
+			return outputErr
+		}
 
 		req := taskWaiter.waitFor(ctx, taskArn)
 		select {
