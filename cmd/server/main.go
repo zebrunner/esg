@@ -54,8 +54,6 @@ func CreateRouter() *gin.Engine {
 		api.PUT("/users/:username/activation", handlers.UserActivation)
 		api.GET("/logs/:session", handlers.Logs)
 		api.GET("/video/:session", handlers.Video)
-
-                api.DELETE("/task/:task", handlers.AbortTask) // to be able to abort generic executor task by taskId
 	}
 
 	hub := r.Group("/")
@@ -94,6 +92,8 @@ func CreateRouter() *gin.Engine {
 		hub.POST("/clipboard/:session", handlers.Clipboard)
 
 		hub.GET("/devtools/:session", handlers.Devtools)
+
+                hub.DELETE("/tasks/:task", handlers.AbortTask) // to be able to abort generic executor task by taskId
 	}
 
 	hub.Use(handlers.APIError)

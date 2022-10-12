@@ -262,20 +262,21 @@ func AbortTask(c *gin.Context) {
         sessionId := c.Param("task")
         sess, err := getSession(sessionId)
         if err != nil {
-                log.WithError(err).WithField("sessionID", sessionId).Error("Cant find session")
+                log.WithError(err).WithField("taskID", sessionId).Error("Can not find task")
                 _ = c.Error(err).SetType(gin.ErrorTypePublic)
+	        c.JSON(http.StatusNotFound, gin.H{})
                 return
         }
         service.RemoveTask(sess.TaskID)
 
         err = sessionmap.Remove(sessionId)
         if err != nil {
-                log.WithError(err).WithField("sessionID", sessionId).Error("Failed to remove session from session map")
+                log.WithError(err).WithField("taskID", sessionId).Error("Failed to remove task from session map")
                 _ = c.Error(err).SetType(gin.ErrorTypePublic)
                 return
         }
-        log.WithField("sessionID", sessionId).Info("Session closed")
-        c.JSON(http.StatusOK, gin.H{"value": nil})
+        log.WithField("taskID", sessionId).Info("Task aborted")
+        c.JSON(http.StatusNoContent, gin.H{})
 }
 
 func Vnc(wsconn *websocket.Conn) {
