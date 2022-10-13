@@ -100,6 +100,7 @@ func CreateRouter() *gin.Engine {
 	{
 		hub.GET("/logs/:session", handlers.Logs)
 		hub.GET("/video/:session", handlers.Video)
+                hub.GET("/tasks/:task/log", handlers.TaskLog)
 	}
 
 	return r

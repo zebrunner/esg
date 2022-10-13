@@ -373,6 +373,31 @@ func Video(c *gin.Context) {
 	c.Redirect(http.StatusFound, presignedUrl)
 }
 
+func TaskLog(c *gin.Context) {
+        user, _, ok := c.Request.BasicAuth()
+        if config.Conf.TrustedMode {
+                user = "zebrunner"
+                ok = true
+        }
+
+        if !ok {
+                _ = c.Error(&utils.HTTPError{
+                        Status:  http.StatusBadRequest,
+                        Message: "Auth data not provided"},
+                ).SetType(gin.ErrorTypePublic)
+                return
+        }
+        taskID := c.Param("task")
+        logFile := strings.Join([]string{user, "artifacts", "launches", taskID, "console.log"}, "/")
+        presignedUrl, err := service.GeneratePreSignedURL(logFile)
+        if err != nil {
+                log.Printf("[URL GENERATION FAILED] %v", err)
+                return
+        }
+        c.Redirect(http.StatusFound, presignedUrl)
+}
+
+
 func Downloads(c *gin.Context) {
 	sessionID := c.Param("session")
 	filename := c.Param("file")
