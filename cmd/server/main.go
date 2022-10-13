@@ -54,6 +54,7 @@ func CreateRouter() *gin.Engine {
 		api.PUT("/users/:username/activation", handlers.UserActivation)
 		api.GET("/logs/:session", handlers.Logs)
 		api.GET("/video/:session", handlers.Video)
+                api.GET("/tasks/:task/log", handlers.TaskLog)
 	}
 
 	hub := r.Group("/")
