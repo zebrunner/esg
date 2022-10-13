@@ -142,7 +142,7 @@ func Create(c *gin.Context) {
         var resp map[string]interface{}
         if env.TaskDefinitionFamily == "generic" {
                 sessionId = env.TaskId
-                data := "{\"taskId\": \"" + env.TaskId + "\", \"log\": \"qwe\"}"
+                data := "{\"taskId\": \"" + env.TaskId + "\"}"
                 json.Unmarshal([]byte(data), &resp)
                 l.WithFields(log.Fields{"resp": resp,}).Info("Response")
 	} else {

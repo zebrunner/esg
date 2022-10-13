@@ -33,7 +33,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 return nil, fmt.Errorf("Executor repository is not specified! RepositoryUrl='%s'", caps.RepositoryUrl)
         }
 
-	cloneCommand := fmt.Sprintf("clone --verbose --depth=1 %s %s %s", branchArg, caps.RepositoryUrl, sharedFolder)
+	cloneCommand := fmt.Sprintf("clone --verbose --progress --depth=1 %s %s %s", branchArg, caps.RepositoryUrl, sharedFolder)
 	fmt.Printf("cloneCommand: %s\n", cloneCommand)
 
         cloneImage := imageRepo + "git:latest"
@@ -45,9 +45,6 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 memoryReservation: minMemory,
                 Privileged:        false,
                 Essential:         false,
-                Env: map[string]string{
-                        "VERBOSE":      "0",
-                },
                 Mounts: []string{taskVolume},
 		Command: strings.Fields(cloneCommand),
         }
@@ -72,8 +69,9 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 		Privileged: false,
 		Essential:  false,
 		Mounts: []string{taskVolume},
-                Command: strings.Fields(launchCommand),
+		Command: []string{"-c", launchCommand},
 		WorkingDirectory: sharedFolder,
+		EntryPoint: []string{"/bin/sh"},
                 DependsOn: []*ecs.ContainerDependency{
 			&ecs.ContainerDependency{
 				Condition:  aws.String("COMPLETE"),
@@ -94,7 +92,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 
 
 	id := uuid.New().String()
-        postImage := imageRepo + "alpine:latest"
+        postImage := imageRepo + "post-executor:1.0"
         postContainer := Container{
                 Name:              "post-executor",
                 Image:             postImage,
