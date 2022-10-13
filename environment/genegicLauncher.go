@@ -9,7 +9,6 @@ import (
 
 	"fmt"
 	"strings"
-        "github.com/google/uuid"
 )
 
 const (
@@ -69,7 +68,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 		Privileged: false,
 		Essential:  false,
 		Mounts: []string{taskVolume},
-		Command: []string{"-c", launchCommand},
+		Command: []string{"-c", launchCommand + " ; sleep 2"},
 		WorkingDirectory: sharedFolder,
 		EntryPoint: []string{"/bin/sh"},
                 DependsOn: []*ecs.ContainerDependency{
@@ -91,7 +90,6 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 	executorContainer.SetMemoryReservation(caps.MemoryReservation)
 
 
-	id := uuid.New().String()
         postImage := imageRepo + "post-executor:1.0"
         postContainer := Container{
                 Name:              "post-executor",
@@ -106,7 +104,6 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 },
 
                 Env: map[string]string{
-                        "UUID":                   id,
                         "BUCKET":                 conf.S3Bucket,
                         "TENANT":                 workspace,
                         "AWS_ACCESS_KEY_ID":      conf.AwsAccessKeyID,
@@ -124,8 +121,8 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 Links:       []string{"executor"},
                 DependsOn: []*ecs.ContainerDependency{
 			&ecs.ContainerDependency{
-                        	Condition:  aws.String("START"),
-	                        ContainerName: aws.String("executor"),
+                                Condition:  aws.String("START"),
+                                ContainerName: aws.String("executor"),
 	                },
 		},
         }
