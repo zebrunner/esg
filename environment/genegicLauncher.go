@@ -66,15 +66,15 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 		Name:       "executor",
 		Image:      executorImage,
 		Privileged: false,
-		Essential:  false,
+		Essential:  true,
 		Mounts: []string{taskVolume},
 		Command: []string{"-c", launchCommand + " ; sleep 2"},
 		WorkingDirectory: sharedFolder,
 		EntryPoint: []string{"/bin/sh"},
                 DependsOn: []*ecs.ContainerDependency{
 			&ecs.ContainerDependency{
-				Condition:  aws.String("COMPLETE"),
 				ContainerName: aws.String("clone"),
+				Condition:  aws.String("COMPLETE"),
         	        },
 		},
 
@@ -98,7 +98,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 memory:            minMemory,
                 memoryReservation: minMemory,
                 Privileged: false,
-                Essential:  true,
+                Essential:  false,
                 Ports: map[string]portMapping{
                         "driver":         {genericPort, 0},
                 },
@@ -121,8 +121,8 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 Links:       []string{"executor"},
                 DependsOn: []*ecs.ContainerDependency{
 			&ecs.ContainerDependency{
-                                Condition:  aws.String("START"),
                                 ContainerName: aws.String("executor"),
+                                Condition:  aws.String("START"),
 	                },
 		},
         }
