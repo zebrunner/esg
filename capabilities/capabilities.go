@@ -42,7 +42,6 @@ type Capabilities struct {
 	Image            string
 	LaunchCommand    string
 	EnvVariables     map[string]string
-	LaunchId         string
 }
 
 func (c *Capabilities) GetTimeZone() (*time.Location, error) {
