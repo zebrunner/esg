@@ -68,7 +68,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 		Privileged: false,
 		Essential:  true,
 		Mounts: []string{taskVolume},
-		Command: []string{"-c", launchCommand + " ; sleep 2"},
+		Command: []string{"-c", launchCommand},
 		WorkingDirectory: sharedFolder,
 		EntryPoint: []string{"/bin/sh"},
                 DependsOn: []*ecs.ContainerDependency{
