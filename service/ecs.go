@@ -386,6 +386,21 @@ out:
 
 func GeneratePreSignedURL(key string) (string, error) {
 	s3Svc := s3.New(AwsSess)
+
+	//ZEB-5145: ESG: return 404 when requested video/session or execution log is not available
+	res, err := s3Svc.ListObjectsV2(&s3.ListObjectsV2Input{
+		Bucket: &config.Conf.S3Bucket,
+		Prefix: &key,
+	})
+
+	if err != nil {
+		return "", err
+	}
+	if (*res.KeyCount == 0) {
+		err = errors.New("The specified key does not exist: " + key)
+		return "", err
+	}
+
 	req, _ := s3Svc.GetObjectRequest(&s3.GetObjectInput{
 		Bucket: &config.Conf.S3Bucket,
 		Key:    &key,
