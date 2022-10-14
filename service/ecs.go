@@ -98,14 +98,25 @@ func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDe
 	}
 
 	volumes := []*ecs.Volume{}
-	for n, v := range environment.Volumes {
-		volumes = append(volumes, &ecs.Volume{
-			Host: &ecs.HostVolumeProperties{
-				SourcePath: aws.String(v.HostPath),
-			},
-			Name: aws.String(n),
-		})
-	}
+        for n, v := range environment.Volumes {
+                if v.HostPath != "" {
+                        volumes = append(volumes, &ecs.Volume{
+                                Host: &ecs.HostVolumeProperties{
+                                        SourcePath: aws.String(v.HostPath),
+                                },
+                                Name: aws.String(n),
+                        })
+                } else {
+                        volumes = append(volumes, &ecs.Volume{
+                                DockerVolumeConfiguration: &ecs.DockerVolumeConfiguration {
+                                        Driver: aws.String(v.Driver),
+                                        Scope: aws.String(v.Scope),
+                                },
+                                Name: aws.String(n),
+                        })
+                }
+        }
+
 	input.Volumes = volumes
 
 	resultTaskDefinition, err := svc.RegisterTaskDefinition(&input)
@@ -115,6 +126,47 @@ func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDe
 
 	return resultTaskDefinition.TaskDefinition, nil
 }
+
+func CreateGenericTaskDefinition(environment *environment.ExecutionEnvironment) (taskDefinition *ecs.TaskDefinition, err error) {
+        svc := ecs.New(AwsSess)
+
+        networkMode := "bridge"
+        input := ecs.RegisterTaskDefinitionInput{
+                NetworkMode:          &networkMode,
+                ContainerDefinitions: environment.ContainerDefinitions(),
+                Family:               &environment.TaskDefinitionFamily,
+        }
+
+        volumes := []*ecs.Volume{}
+        for n, v := range environment.Volumes {
+                if v.HostPath != "" {
+                        volumes = append(volumes, &ecs.Volume{
+                                Host: &ecs.HostVolumeProperties{
+                                        SourcePath: aws.String(v.HostPath),
+                                },
+                                Name: aws.String(n),
+                        })
+                } else {
+                        volumes = append(volumes, &ecs.Volume{
+                                DockerVolumeConfiguration: &ecs.DockerVolumeConfiguration {
+                                        Driver: aws.String(v.Driver),
+                                        Scope: aws.String(v.Scope),
+                                },
+                                Name: aws.String(n),
+                        })
+                }
+        }
+        input.Volumes = volumes
+
+        resultTaskDefinition, err := svc.RegisterTaskDefinition(&input)
+        //log.WithField("resultTaskDefinition", resultTaskDefinition).Info("Res TaskDefinition")
+        if err != nil {
+                return nil, fmt.Errorf("failed to create task definition: %v", err)
+        }
+
+        return resultTaskDefinition.TaskDefinition, nil
+}
+
 
 func RunTask(ctx context.Context, env *environment.ExecutionEnvironment) (taskArn string, returnErr error) {
 	svc := ecs.New(AwsSess)
@@ -272,7 +324,7 @@ func setEnvironmentNetwork(env *environment.ExecutionEnvironment, task *ecs.Task
 	return nil
 }
 
-func StartDriver(ctx context.Context, env *environment.ExecutionEnvironment) error {
+func StartTask(ctx context.Context, env *environment.ExecutionEnvironment) error {
 	var outputErr error
 	startTime := time.Now()
 out:
@@ -297,6 +349,10 @@ out:
 		taskId := strings.Split(taskArn, "/")[2]
 		env.TaskId = taskId
 		l = l.WithField("taskId", taskId)
+	        if env.TaskDefinitionFamily == "generic" {
+			// do not wait for generic task startup.
+			return outputErr
+		}
 
 		req := taskWaiter.waitFor(ctx, taskArn)
 		select {
@@ -330,6 +386,21 @@ out:
 
 func GeneratePreSignedURL(key string) (string, error) {
 	s3Svc := s3.New(AwsSess)
+
+	//ZEB-5145: ESG: return 404 when requested video/session or execution log is not available
+	res, err := s3Svc.ListObjectsV2(&s3.ListObjectsV2Input{
+		Bucket: &config.Conf.S3Bucket,
+		Prefix: &key,
+	})
+
+	if err != nil {
+		return "", err
+	}
+	if (*res.KeyCount == 0) {
+		err = errors.New("The specified key does not exist: " + key)
+		return "", err
+	}
+
 	req, _ := s3Svc.GetObjectRequest(&s3.GetObjectInput{
 		Bucket: &config.Conf.S3Bucket,
 		Key:    &key,

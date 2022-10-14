@@ -16,7 +16,7 @@ const (
 
 func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {
 	sharedFolder := "/opt/zebrunner"
-	sharedVolume := "data"
+	taskVolume := "data"
 
 	deviceImage, err := buildImage(caps)
 	if err != nil {
@@ -31,7 +31,7 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities, conf 
 		Env: map[string]string{
 			"VERBOSE": "1",
 		},
-		Mounts: []string{sharedVolume},
+		Mounts: []string{taskVolume},
 	}
 	deviceContainer.SetCpu(caps.Cpu)
 	deviceContainer.SetMemory(caps.Memory)
@@ -62,7 +62,7 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities, conf 
 			"AWS_SECRET_ACCESS_KEY": conf.AwsSecretAccessKey,
 			"AWS_DEFAULT_REGION":    conf.AwsRegion,
 		},
-		Mounts: []string{sharedVolume},
+		Mounts: []string{taskVolume},
 		Links:  []string{"device"},
 		HealthCheck: &ecs.HealthCheck{
 			Command:     []*string{aws.String("CMD-SHELL"), aws.String("healthcheck")},
@@ -77,7 +77,7 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities, conf 
 		Containers:           []*Container{&deviceContainer, &appiumContainer},
 		Capabilities:         caps,
 		Volumes: map[string]volume{
-			sharedVolume: {ContainerPath: sharedFolder, HostPath: sharedFolder, ReadOnly: false},
+                        taskVolume: {ContainerPath: sharedFolder, Driver: "local", Scope: "task", ReadOnly: false},
 		},
 		Network: &NetworkConfiguration{
 			IP: "",

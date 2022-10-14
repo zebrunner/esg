@@ -102,7 +102,7 @@ func RefreshTaskDefinition(image string) error {
 
 	_, err = service.CreateTaskDefinition(env)
 	if err != nil {
-		log.WithError(err).WithField("image", image).Error("Failed to create task definitions")
+		log.WithError(err).WithField("image", image).Error("Failed to create task definition")
 		return err
 	}
 

@@ -33,7 +33,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities, conf *confi
 
 	// TODO: Find better way to specify this
 	sharedFolder := "/opt/zebrunner"
-	sharedVolume := "data"
+	taskVolume := "data"
 
 	tz, err := caps.GetTimeZone()
 	// In future maybe there will be need to disable vnc
@@ -57,7 +57,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities, conf *confi
 			"HOSTS_ENTRIES": strings.Join(caps.HostsEntries, " "),
 			"TZ":            tz.String(),
 		},
-		Mounts: []string{"shm", sharedVolume},
+		Mounts: []string{"shm", taskVolume},
 		HealthCheck: &ecs.HealthCheck{
 			Command:     []*string{aws.String("CMD-SHELL"), aws.String("curl -f localhost:4444/status || exit 1")},
 			Interval:    aws.Int64(10),
@@ -93,7 +93,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities, conf *confi
 			"AWS_SECRET_ACCESS_KEY":  conf.AwsSecretAccessKey,
 			"AWS_DEFAULT_REGION":     conf.AwsRegion,
 		},
-		Mounts:      []string{sharedVolume},
+		Mounts:      []string{taskVolume},
 		Links:       []string{"browser"},
 		HealthCheck: nil,
 	}
@@ -103,8 +103,11 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities, conf *confi
 		Containers:           []*Container{&browserContainer, &videoRecorderContainer},
 		Capabilities:         caps,
 		Volumes: map[string]volume{
-			"shm":        {ContainerPath: "/dev/shm", HostPath: "/dev/shm", ReadOnly: false},
-			sharedVolume: {ContainerPath: sharedFolder, HostPath: sharedFolder, ReadOnly: false},
+			//TODO: replace by local task volume after reconfiguration of all chrome drivers
+                        //taskVolume: {ContainerPath: sharedFolder, Driver: "local", Scope: "task", ReadOnly: false},
+			taskVolume: {ContainerPath: sharedFolder, HostPath: sharedFolder, ReadOnly: false},
+                        "shm": {ContainerPath: "/dev/shm", HostPath: "/dev/shm", ReadOnly: false},
+                        //"shm": {ContainerPath: "/dev/shm", Driver: "local", Scope: "task", ReadOnly: false},
 		},
 		Network: &NetworkConfiguration{
 			IP: "",
