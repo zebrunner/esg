@@ -340,6 +340,7 @@ func Logs(c *gin.Context) {
 	presignedUrl, err := service.GeneratePreSignedURL(logFile)
 	if err != nil {
 		log.Printf("[URL GENERATION FAILED] %v", err)
+                c.JSON(http.StatusNotFound, gin.H{"message":"Resource Not Found"})
 		return
 	}
 	c.Redirect(http.StatusFound, presignedUrl)
@@ -368,6 +369,7 @@ func Video(c *gin.Context) {
 			"sessionID": sessionID,
 		}).Error("Failed to create pre signed url to session video")
 		_ = c.Error(err)
+                c.JSON(http.StatusNotFound, gin.H{"message":"Resource Not Found"})
 		return
 	}
 	c.Redirect(http.StatusFound, presignedUrl)
@@ -392,6 +394,7 @@ func TaskLog(c *gin.Context) {
         presignedUrl, err := service.GeneratePreSignedURL(logFile)
         if err != nil {
                 log.Printf("[URL GENERATION FAILED] %v", err)
+                c.JSON(http.StatusNotFound, gin.H{"message":"Resource Not Found"})
                 return
         }
         c.Redirect(http.StatusFound, presignedUrl)
