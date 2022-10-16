@@ -34,6 +34,8 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities, conf *confi
 	// TODO: Find better way to specify this
 	sharedFolder := "/opt/zebrunner"
 	taskVolume := "data"
+        dockerSocketVolume := "docker-socket"
+
 
 	tz, err := caps.GetTimeZone()
 	// In future maybe there will be need to disable vnc
@@ -70,12 +72,12 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities, conf *confi
 	browserContainer.SetMemory(caps.Memory)
 	browserContainer.SetMemoryReservation(caps.MemoryReservation)
 
-	// Video recorder & uploader container building logic
+	// Video recorder & artifacts uploader logic
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse timezone. error=%s", err)
 	}
 
-	recorderImage := imageRepo + "artifacts-uploader" + ":" + "1.4"
+	recorderImage := imageRepo + "artifacts-uploader" + ":" + "1.5-beta3"
 	videoRecorderContainer := Container{
 		Name:              "artifacts-uploader",
 		Image:             recorderImage,
@@ -93,9 +95,15 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities, conf *confi
 			"AWS_SECRET_ACCESS_KEY":  conf.AwsSecretAccessKey,
 			"AWS_DEFAULT_REGION":     conf.AwsRegion,
 		},
-		Mounts:      []string{taskVolume},
+		Mounts:      []string{taskVolume, dockerSocketVolume},
 		Links:       []string{"browser"},
 		HealthCheck: nil,
+                DependsOn: []*ecs.ContainerDependency{
+                        &ecs.ContainerDependency{
+                                ContainerName: aws.String("browser"),
+                                Condition:  aws.String("START"),
+                        },
+                },
 	}
 
 	environment := ExecutionEnvironment{
@@ -103,11 +111,9 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities, conf *confi
 		Containers:           []*Container{&browserContainer, &videoRecorderContainer},
 		Capabilities:         caps,
 		Volumes: map[string]volume{
-			//TODO: replace by local task volume after reconfiguration of all chrome drivers
-                        //taskVolume: {ContainerPath: sharedFolder, Driver: "local", Scope: "task", ReadOnly: false},
-			taskVolume: {ContainerPath: sharedFolder, HostPath: sharedFolder, ReadOnly: false},
+                        taskVolume: {ContainerPath: sharedFolder, Driver: "local", Scope: "task", ReadOnly: false},
                         "shm": {ContainerPath: "/dev/shm", HostPath: "/dev/shm", ReadOnly: false},
-                        //"shm": {ContainerPath: "/dev/shm", Driver: "local", Scope: "task", ReadOnly: false},
+			dockerSocketVolume: {ContainerPath: "/var/run/docker.sock", HostPath: "/var/run/docker.sock", ReadOnly: false},
 		},
 		Network: &NetworkConfiguration{
 			IP: "",
