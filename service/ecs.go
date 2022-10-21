@@ -17,6 +17,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
+//	"math/rand"
 )
 
 const (
@@ -41,7 +42,7 @@ func InitAws() (*awsSession.Session, error) {
 		Region:     &config.Conf.AwsRegion,
 		MaxRetries: &config.Conf.AwsRetry,
 		Retryer: client.DefaultRetryer{
-			MaxThrottleDelay: 30 * time.Second,
+			MaxThrottleDelay: 60 * time.Second,
 			MinThrottleDelay: 5 * time.Second,
 		},
 	})
@@ -57,7 +58,7 @@ func ListBrowsers() ([]string, error) {
 		Region:     aws.String("us-east-1"), // Hardcoded because ecr-public has only this region
 		MaxRetries: &config.Conf.AwsRetry,
 		Retryer: client.DefaultRetryer{
-			MaxThrottleDelay: 30 * time.Second,
+			MaxThrottleDelay: 60 * time.Second,
 			MinThrottleDelay: 5 * time.Second,
 		},
 	})
@@ -203,6 +204,12 @@ func RunTask(ctx context.Context, env *environment.ExecutionEnvironment) (taskAr
 			return "", fmt.Errorf("image %s not found", env.TaskDefinitionFamily)
 		}
 
+		sleepRateLimit := time.Duration(30)
+                if err != nil &&
+		  (strings.Contains(err.Error(), "ThrottlingException: Rate exceeded") || err.Error() == "ClientException: Tasks provisioning capacity limit exceeded.") {
+                        time.Sleep(sleepRateLimit)
+                }
+
 		if err != nil {
 			log.WithError(err).WithField("retry", i).Debug("Run task failed.")
 			outputErr = err
@@ -247,13 +254,21 @@ func StopTask(taskArn string) (*ecs.StopTaskOutput, error) {
 		Task:    aws.String(taskArn),
 	}
 
-	result, err := svc.StopTask(stopTaskInput)
-	if err != nil {
-		log.WithError(err).WithField("taskARN", taskArn).Warn("Failed to stop task")
-		return nil, err
+	i := 0
+        result, err := svc.StopTask(stopTaskInput)
+	for i < 25 {
+        	if err == nil {      // the condition stops matching
+			log.WithField("taskARN", taskArn).WithField("result", result).Trace("Task stopped")
+                	break        // break out of the loop
+        	} else {
+			time.Sleep(30 * time.Second)
+			i = i + 1
+			log.WithError(err).WithField("taskARN", taskArn).WithField("retry", i).Debug("Failed to stop task")
+	                result, err = svc.StopTask(stopTaskInput)
+		}
 	}
 
-	return result, nil
+	return result, err
 }
 
 // RemoveTask Method stops task by ARN and remove task-definition after that
