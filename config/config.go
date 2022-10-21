@@ -76,7 +76,7 @@ func init() {
 	flag.Int64Var(&Conf.MaxMemory, "max-memory", 8192, "maximum memory limitation for session")
 	flag.Int64Var(&Conf.MaxMemoryReservation, "max-memory-reservation", 8192, "maximum memory reservation limitation for session")
 	flag.Int64Var(&Conf.MinCpu, "min-cpu", 1024, "minimum CPU limitation for session")
-	flag.Int64Var(&Conf.MaxCpu, "max-cpu", 4096, "maximum CPU limitation for session")
+	flag.Int64Var(&Conf.MaxCpu, "max-cpu", 7936, "maximum CPU limitation for session")
 
 	flag.DurationVar(&Conf.IdleTimeout, "idle-timeout", 60*time.Second, "Session idle timeout in time.Duration format")
 	flag.DurationVar(&Conf.SessionStartupTimeout, "session-startup-timeout", 90*time.Second, "Session healthcheck(s) startup timeout in time.Duration format")
