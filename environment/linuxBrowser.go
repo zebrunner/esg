@@ -77,7 +77,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities, conf *confi
 		return nil, fmt.Errorf("failed to parse timezone. error=%s", err)
 	}
 
-	recorderImage := imageRepo + "artifacts-uploader" + ":" + "1.5-beta3"
+	recorderImage := imageRepo + "artifacts-uploader" + ":" + "2.0"
 	videoRecorderContainer := Container{
 		Name:              "artifacts-uploader",
 		Image:             recorderImage,
