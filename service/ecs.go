@@ -17,6 +17,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
+//	"math/rand"
 )
 
 const (
@@ -41,7 +42,7 @@ func InitAws() (*awsSession.Session, error) {
 		Region:     &config.Conf.AwsRegion,
 		MaxRetries: &config.Conf.AwsRetry,
 		Retryer: client.DefaultRetryer{
-			MaxThrottleDelay: 30 * time.Second,
+			MaxThrottleDelay: 60 * time.Second,
 			MinThrottleDelay: 5 * time.Second,
 		},
 	})
@@ -57,7 +58,7 @@ func ListBrowsers() ([]string, error) {
 		Region:     aws.String("us-east-1"), // Hardcoded because ecr-public has only this region
 		MaxRetries: &config.Conf.AwsRetry,
 		Retryer: client.DefaultRetryer{
-			MaxThrottleDelay: 30 * time.Second,
+			MaxThrottleDelay: 60 * time.Second,
 			MinThrottleDelay: 5 * time.Second,
 		},
 	})
@@ -98,14 +99,25 @@ func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDe
 	}
 
 	volumes := []*ecs.Volume{}
-	for n, v := range environment.Volumes {
-		volumes = append(volumes, &ecs.Volume{
-			Host: &ecs.HostVolumeProperties{
-				SourcePath: aws.String(v.HostPath),
-			},
-			Name: aws.String(n),
-		})
-	}
+        for n, v := range environment.Volumes {
+                if v.HostPath != "" {
+                        volumes = append(volumes, &ecs.Volume{
+                                Host: &ecs.HostVolumeProperties{
+                                        SourcePath: aws.String(v.HostPath),
+                                },
+                                Name: aws.String(n),
+                        })
+                } else {
+                        volumes = append(volumes, &ecs.Volume{
+                                DockerVolumeConfiguration: &ecs.DockerVolumeConfiguration {
+                                        Driver: aws.String(v.Driver),
+                                        Scope: aws.String(v.Scope),
+                                },
+                                Name: aws.String(n),
+                        })
+                }
+        }
+
 	input.Volumes = volumes
 
 	resultTaskDefinition, err := svc.RegisterTaskDefinition(&input)
@@ -115,6 +127,47 @@ func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDe
 
 	return resultTaskDefinition.TaskDefinition, nil
 }
+
+func CreateGenericTaskDefinition(environment *environment.ExecutionEnvironment) (taskDefinition *ecs.TaskDefinition, err error) {
+        svc := ecs.New(AwsSess)
+
+        networkMode := "bridge"
+        input := ecs.RegisterTaskDefinitionInput{
+                NetworkMode:          &networkMode,
+                ContainerDefinitions: environment.ContainerDefinitions(),
+                Family:               &environment.TaskDefinitionFamily,
+        }
+
+        volumes := []*ecs.Volume{}
+        for n, v := range environment.Volumes {
+                if v.HostPath != "" {
+                        volumes = append(volumes, &ecs.Volume{
+                                Host: &ecs.HostVolumeProperties{
+                                        SourcePath: aws.String(v.HostPath),
+                                },
+                                Name: aws.String(n),
+                        })
+                } else {
+                        volumes = append(volumes, &ecs.Volume{
+                                DockerVolumeConfiguration: &ecs.DockerVolumeConfiguration {
+                                        Driver: aws.String(v.Driver),
+                                        Scope: aws.String(v.Scope),
+                                },
+                                Name: aws.String(n),
+                        })
+                }
+        }
+        input.Volumes = volumes
+
+        resultTaskDefinition, err := svc.RegisterTaskDefinition(&input)
+        //log.WithField("resultTaskDefinition", resultTaskDefinition).Info("Res TaskDefinition")
+        if err != nil {
+                return nil, fmt.Errorf("failed to create task definition: %v", err)
+        }
+
+        return resultTaskDefinition.TaskDefinition, nil
+}
+
 
 func RunTask(ctx context.Context, env *environment.ExecutionEnvironment) (taskArn string, returnErr error) {
 	svc := ecs.New(AwsSess)
@@ -150,6 +203,12 @@ func RunTask(ctx context.Context, env *environment.ExecutionEnvironment) (taskAr
 		if err != nil && err.Error() == "ClientException: TaskDefinition not found." {
 			return "", fmt.Errorf("image %s not found", env.TaskDefinitionFamily)
 		}
+
+		sleepRateLimit := time.Duration(30)
+                if err != nil &&
+		  (strings.Contains(err.Error(), "ThrottlingException: Rate exceeded") || err.Error() == "ClientException: Tasks provisioning capacity limit exceeded.") {
+                        time.Sleep(sleepRateLimit)
+                }
 
 		if err != nil {
 			log.WithError(err).WithField("retry", i).Debug("Run task failed.")
@@ -195,13 +254,21 @@ func StopTask(taskArn string) (*ecs.StopTaskOutput, error) {
 		Task:    aws.String(taskArn),
 	}
 
-	result, err := svc.StopTask(stopTaskInput)
-	if err != nil {
-		log.WithError(err).WithField("taskARN", taskArn).Warn("Failed to stop task")
-		return nil, err
+	i := 0
+        result, err := svc.StopTask(stopTaskInput)
+	for i < 25 {
+        	if err == nil {      // the condition stops matching
+			log.WithField("taskARN", taskArn).WithField("result", result).Trace("Task stopped")
+                	break        // break out of the loop
+        	} else {
+			time.Sleep(30 * time.Second)
+			i = i + 1
+			log.WithError(err).WithField("taskARN", taskArn).WithField("retry", i).Debug("Failed to stop task")
+	                result, err = svc.StopTask(stopTaskInput)
+		}
 	}
 
-	return result, nil
+	return result, err
 }
 
 // RemoveTask Method stops task by ARN and remove task-definition after that
@@ -272,7 +339,7 @@ func setEnvironmentNetwork(env *environment.ExecutionEnvironment, task *ecs.Task
 	return nil
 }
 
-func StartDriver(ctx context.Context, env *environment.ExecutionEnvironment) error {
+func StartTask(ctx context.Context, env *environment.ExecutionEnvironment) error {
 	var outputErr error
 	startTime := time.Now()
 out:
@@ -297,6 +364,10 @@ out:
 		taskId := strings.Split(taskArn, "/")[2]
 		env.TaskId = taskId
 		l = l.WithField("taskId", taskId)
+	        if env.TaskDefinitionFamily == "generic" {
+			// do not wait for generic task startup.
+			return outputErr
+		}
 
 		req := taskWaiter.waitFor(ctx, taskArn)
 		select {
@@ -330,6 +401,21 @@ out:
 
 func GeneratePreSignedURL(key string) (string, error) {
 	s3Svc := s3.New(AwsSess)
+
+	//ZEB-5145: ESG: return 404 when requested video/session or execution log is not available
+	res, err := s3Svc.ListObjectsV2(&s3.ListObjectsV2Input{
+		Bucket: &config.Conf.S3Bucket,
+		Prefix: &key,
+	})
+
+	if err != nil {
+		return "", err
+	}
+	if (*res.KeyCount == 0) {
+		err = errors.New("The specified key does not exist: " + key)
+		return "", err
+	}
+
 	req, _ := s3Svc.GetObjectRequest(&s3.GetObjectInput{
 		Bucket: &config.Conf.S3Bucket,
 		Key:    &key,

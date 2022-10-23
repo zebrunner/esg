@@ -8,8 +8,10 @@ import (
 type envVariables = map[string]string
 
 type volume struct {
-	ContainerPath string
 	HostPath      string
+	ContainerPath string
+	Driver        string
+	Scope         string
 	ReadOnly      bool
 }
 
@@ -29,10 +31,15 @@ type Container struct {
 	Privileged bool
 
 	Ports       map[string]portMapping
-	Mounts      []string // List of names of volumes
+	Mounts  []string // List of volume names
 	Links       []string // List of linked containers
+	Command     []string // Comma separated container startup command
 	Env         envVariables
-	HealthCheck *ecs.HealthCheck
+	EntryPoint []string
+	WorkingDirectory string
+
+        HealthCheck *ecs.HealthCheck
+	DependsOn []*ecs.ContainerDependency
 }
 
 func (c *Container) Cpu() int64 {

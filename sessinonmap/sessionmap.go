@@ -14,6 +14,7 @@ import (
 const (
 	SessionActive = iota
 	SessionStoppedIdle
+	SessionQueued
 )
 
 type Session struct {

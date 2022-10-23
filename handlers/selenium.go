@@ -116,7 +116,17 @@ func Create(c *gin.Context) {
 		return
 	}
 
-	err = service.StartDriver(ctx, env)
+	//l.WithField("env", env).Info("Execution env")
+
+        if env.TaskDefinitionFamily == "generic" {
+	        _, err = service.CreateGenericTaskDefinition(env)
+        	if err != nil {
+                	log.WithError(err).Error("Failed to create task definition")
+	                return
+        	}
+        }
+
+	err = service.StartTask(ctx, env)
 	if err == context.DeadlineExceeded {
 		err = errors.New("Driver startup timed out")
 	}
@@ -127,45 +137,52 @@ func Create(c *gin.Context) {
 		return
 	}
 	// l.WithField("taskID", driver.TaskID).Info("Service started successfully")
-	u, ok := env.Network.GetUrl("driver")
-	if !ok {
-		l.Error("failed to get url for `driver` service")
-		_ = c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
-		return
-	}
 
-	requestBody, err := json.Marshal(body)
-	if err != nil {
-		l.WithError(err).Error("Failed to marshal request")
-		_ = c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
-		return
-	}
+        sessionId := ""
+        var resp map[string]interface{}
+        if env.TaskDefinitionFamily == "generic" {
+                sessionId = env.TaskId
+                data := "{\"taskId\": \"" + env.TaskId + "\"}"
+                json.Unmarshal([]byte(data), &resp)
+                l.WithFields(log.Fields{"resp": resp,}).Info("Response")
+	} else {
+		u, ok := env.Network.GetUrl("driver")
+		if !ok {
+			l.Error("failed to get url for `driver` service")
+			_ = c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
+			return
+		}
 
-	sessionId := ""
-	c.Request.URL.Host, c.Request.URL.Path = u.Host, path.Join(u.Path, c.Request.URL.Path)
-	c.Request.URL.Scheme = "http"
-	l.WithFields(log.Fields{
-		"serviceUrl": u,
-	}).Info("Starting session")
-	resp, err := selenium.StartSession(c.Request.Context(), c.Request.URL, c.Request.Header, requestBody)
-	if err != nil {
-		l.WithError(err).WithField("response", resp).Error("Session startup failed")
-		c.JSON(http.StatusInternalServerError, resp)
-		service.RemoveTask(env.TaskId)
-		return
-	}
+		requestBody, err := json.Marshal(body)
+		if err != nil {
+			l.WithError(err).Error("Failed to marshal request")
+			_ = c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
+			return
+		}
 
-	sessionId, err = getSessionId(resp)
-	if err != nil {
-		l.WithError(err).Error("Failed to get sessionId from driver response")
-		_ = c.Error(creationError("failed to create session", err)).SetType(gin.ErrorTypePublic)
-		return
-	}
+		c.Request.URL.Host, c.Request.URL.Path = u.Host, path.Join(u.Path, c.Request.URL.Path)
+		c.Request.URL.Scheme = "http"
+		l.WithFields(log.Fields{"serviceUrl": u,}).Info("Starting session")
+		resp, err = selenium.StartSession(c.Request.Context(), c.Request.URL, c.Request.Header, requestBody)
+		if err != nil {
+			l.WithError(err).WithField("response", resp).Error("Session startup failed")
+			c.JSON(http.StatusInternalServerError, resp)
+			service.RemoveTask(env.TaskId)
+			return
+		}
 
-	if sessionId == "" {
-		l.WithError(err).Error("Failed to get sessionId from driver response. sessionId is empty")
-		_ = c.Error(creationError("failed to create session", err)).SetType(gin.ErrorTypePublic)
-		return
+		sessionId, err = getSessionId(resp)
+		if err != nil {
+			l.WithError(err).Error("Failed to get sessionId from driver response")
+			_ = c.Error(creationError("failed to create session", err)).SetType(gin.ErrorTypePublic)
+			return
+		}
+
+		if sessionId == "" {
+			l.WithError(err).Error("Failed to get sessionId from driver response. sessionId is empty")
+			_ = c.Error(creationError("failed to create session", err)).SetType(gin.ErrorTypePublic)
+			return
+		}
 	}
 
 	sess := sessionmap.Session{
@@ -179,15 +196,21 @@ func Create(c *gin.Context) {
 		TaskID:          env.TaskId,
 		Workspace:       workspace,
 	}
+	if env.TaskDefinitionFamily == "generic" {
+		// extra state for generic job to disable idleTimeout verification at all
+		sess.Status = sessionmap.SessionQueued
+	}
 
 	err = sessionmap.Write(sess.ID, &sess, 0)
 	if err != nil {
 		l.WithError(err).Error("Session not cached")
 	}
 	l.WithFields(log.Fields{
-		"sessionID": sessionId,
+		"sessionId": sess.ID,
+		"taskId": sess.TaskID,
 		"latency":   util.SecondsSince(sessionStartTime),
 	}).Info("Session created")
+
 	c.JSON(http.StatusOK, resp)
 }
 
@@ -233,6 +256,27 @@ func CloseSession(c *gin.Context) {
 	}
 	log.WithField("sessionID", sessionId).Info("Session closed")
 	c.JSON(http.StatusOK, gin.H{"value": nil})
+}
+
+func AbortTask(c *gin.Context) {
+        sessionId := c.Param("task")
+        sess, err := getSession(sessionId)
+        if err != nil {
+                log.WithError(err).WithField("taskID", sessionId).Error("Can not find task")
+                _ = c.Error(err).SetType(gin.ErrorTypePublic)
+	        c.JSON(http.StatusNotFound, gin.H{})
+                return
+        }
+        service.RemoveTask(sess.TaskID)
+
+        err = sessionmap.Remove(sessionId)
+        if err != nil {
+                log.WithError(err).WithField("taskID", sessionId).Error("Failed to remove task from session map")
+                _ = c.Error(err).SetType(gin.ErrorTypePublic)
+                return
+        }
+        log.WithField("taskID", sessionId).Info("Task aborted")
+        c.JSON(http.StatusNoContent, gin.H{})
 }
 
 func Vnc(wsconn *websocket.Conn) {
@@ -296,6 +340,7 @@ func Logs(c *gin.Context) {
 	presignedUrl, err := service.GeneratePreSignedURL(logFile)
 	if err != nil {
 		log.Printf("[URL GENERATION FAILED] %v", err)
+                c.JSON(http.StatusNotFound, gin.H{"message":"Resource Not Found"})
 		return
 	}
 	c.Redirect(http.StatusFound, presignedUrl)
@@ -324,10 +369,37 @@ func Video(c *gin.Context) {
 			"sessionID": sessionID,
 		}).Error("Failed to create pre signed url to session video")
 		_ = c.Error(err)
+                c.JSON(http.StatusNotFound, gin.H{"message":"Resource Not Found"})
 		return
 	}
 	c.Redirect(http.StatusFound, presignedUrl)
 }
+
+func TaskLog(c *gin.Context) {
+        user, _, ok := c.Request.BasicAuth()
+        if config.Conf.TrustedMode {
+                user = "zebrunner"
+                ok = true
+        }
+
+        if !ok {
+                _ = c.Error(&utils.HTTPError{
+                        Status:  http.StatusBadRequest,
+                        Message: "Auth data not provided"},
+                ).SetType(gin.ErrorTypePublic)
+                return
+        }
+        taskID := c.Param("task")
+        logFile := strings.Join([]string{user, "artifacts", "launches", taskID, "console.log"}, "/")
+        presignedUrl, err := service.GeneratePreSignedURL(logFile)
+        if err != nil {
+                log.Printf("[URL GENERATION FAILED] %v", err)
+                c.JSON(http.StatusNotFound, gin.H{"message":"Resource Not Found"})
+                return
+        }
+        c.Redirect(http.StatusFound, presignedUrl)
+}
+
 
 func Downloads(c *gin.Context) {
 	sessionID := c.Param("session")

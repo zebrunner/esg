@@ -33,7 +33,9 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities, conf *confi
 
 	// TODO: Find better way to specify this
 	sharedFolder := "/opt/zebrunner"
-	sharedVolume := "data"
+	taskVolume := "data"
+        dockerSocketVolume := "docker-socket"
+
 
 	tz, err := caps.GetTimeZone()
 	// In future maybe there will be need to disable vnc
@@ -57,7 +59,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities, conf *confi
 			"HOSTS_ENTRIES": strings.Join(caps.HostsEntries, " "),
 			"TZ":            tz.String(),
 		},
-		Mounts: []string{"shm", sharedVolume},
+		Mounts: []string{"shm", taskVolume},
 		HealthCheck: &ecs.HealthCheck{
 			Command:     []*string{aws.String("CMD-SHELL"), aws.String("curl -f localhost:4444/status || exit 1")},
 			Interval:    aws.Int64(10),
@@ -70,12 +72,12 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities, conf *confi
 	browserContainer.SetMemory(caps.Memory)
 	browserContainer.SetMemoryReservation(caps.MemoryReservation)
 
-	// Video recorder & uploader container building logic
+	// Video recorder & artifacts uploader logic
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse timezone. error=%s", err)
 	}
 
-	recorderImage := imageRepo + "artifacts-uploader" + ":" + "1.4"
+	recorderImage := imageRepo + "artifacts-uploader" + ":" + "2.0"
 	videoRecorderContainer := Container{
 		Name:              "artifacts-uploader",
 		Image:             recorderImage,
@@ -93,9 +95,15 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities, conf *confi
 			"AWS_SECRET_ACCESS_KEY":  conf.AwsSecretAccessKey,
 			"AWS_DEFAULT_REGION":     conf.AwsRegion,
 		},
-		Mounts:      []string{sharedVolume},
+		Mounts:      []string{taskVolume, dockerSocketVolume},
 		Links:       []string{"browser"},
 		HealthCheck: nil,
+                DependsOn: []*ecs.ContainerDependency{
+                        &ecs.ContainerDependency{
+                                ContainerName: aws.String("browser"),
+                                Condition:  aws.String("START"),
+                        },
+                },
 	}
 
 	environment := ExecutionEnvironment{
@@ -103,8 +111,9 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities, conf *confi
 		Containers:           []*Container{&browserContainer, &videoRecorderContainer},
 		Capabilities:         caps,
 		Volumes: map[string]volume{
-			"shm":        {ContainerPath: "/dev/shm", HostPath: "/dev/shm", ReadOnly: false},
-			sharedVolume: {ContainerPath: sharedFolder, HostPath: sharedFolder, ReadOnly: false},
+                        taskVolume: {ContainerPath: sharedFolder, Driver: "local", Scope: "task", ReadOnly: false},
+                        "shm": {ContainerPath: "/dev/shm", HostPath: "/dev/shm", ReadOnly: false},
+			dockerSocketVolume: {ContainerPath: "/var/run/docker.sock", HostPath: "/var/run/docker.sock", ReadOnly: false},
 		},
 		Network: &NetworkConfiguration{
 			IP: "",
