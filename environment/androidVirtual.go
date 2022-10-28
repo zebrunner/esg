@@ -17,6 +17,7 @@ const (
 func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {
 	sharedFolder := "/opt/zebrunner"
 	taskVolume := "data"
+        browserVolume := "browser"
 
 	deviceImage, err := buildImage(caps)
 	if err != nil {
@@ -37,7 +38,7 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities, conf 
 	deviceContainer.SetMemory(caps.Memory)
 	deviceContainer.SetMemoryReservation(caps.MemoryReservation)
 
-	appiumImage := imageRepo + "appium:1.4.6"
+	appiumImage := imageRepo + "appium:1.4.7"
 	appiumContainer := Container{
 		Name:              "appium",
 		Image:             appiumImage,
@@ -62,7 +63,7 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities, conf 
 			"AWS_SECRET_ACCESS_KEY": conf.AwsSecretAccessKey,
 			"AWS_DEFAULT_REGION":    conf.AwsRegion,
 		},
-		Mounts: []string{taskVolume},
+		Mounts: []string{taskVolume, browserVolume},
 		Links:  []string{"device"},
 		HealthCheck: &ecs.HealthCheck{
 			Command:     []*string{aws.String("CMD-SHELL"), aws.String("healthcheck")},
@@ -78,6 +79,7 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities, conf 
 		Capabilities:         caps,
 		Volumes: map[string]volume{
                         taskVolume: {ContainerPath: sharedFolder, Driver: "local", Scope: "task", ReadOnly: false},
+			browserVolume: {ContainerPath: "/tmp/zebrunner/chrome", HostPath: "/opt/zebrunner/chrome", ReadOnly: false}, //TODO: think about path unification on hos and inside container
 		},
 		Network: &NetworkConfiguration{
 			IP: "",
