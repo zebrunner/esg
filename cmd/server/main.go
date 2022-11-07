@@ -55,6 +55,7 @@ func CreateRouter() *gin.Engine {
 		api.GET("/logs/:session", handlers.Logs)
 		api.GET("/video/:session", handlers.Video)
                 api.GET("/tasks/:task/log", handlers.TaskLog)
+                api.GET("/tasks/:task/status", handlers.TaskDescribe)
 	}
 
 	hub := r.Group("/")
@@ -102,6 +103,7 @@ func CreateRouter() *gin.Engine {
 		hub.GET("/logs/:session", handlers.Logs)
 		hub.GET("/video/:session", handlers.Video)
                 hub.GET("/tasks/:task/log", handlers.TaskLog)
+                hub.GET("/tasks/:task/status", handlers.TaskDescribe)
 	}
 
 	return r

@@ -282,6 +282,20 @@ func RemoveTask(taskArn string) {
 	log.WithField("taskARN", taskArn).Info("Task stopped")
 }
 
+func DescribeTask(taskArn string) (*ecs.DescribeTasksOutput, error) {
+        svc := ecs.New(AwsSess)
+        log.WithField("taskARN", taskArn).Info("Status task")
+        input := &ecs.DescribeTasksInput{
+                Cluster: &config.Conf.AwsCluster,
+                Tasks: []*string{
+                        aws.String(taskArn),
+                },
+        }
+
+        result, err := svc.DescribeTasks(input)
+        return result, err
+}
+
 func searchHostPort(task *ecs.Task, containerPort int64) (port int64, ok bool) {
 	for _, container := range task.Containers {
 		for _, networkBinding := range container.NetworkBindings {
