@@ -400,6 +400,32 @@ func TaskLog(c *gin.Context) {
         c.Redirect(http.StatusFound, presignedUrl)
 }
 
+func TaskDescribe(c *gin.Context) {
+        user, _, ok := c.Request.BasicAuth()
+        if config.Conf.TrustedMode {
+                user = "zebrunner"
+                ok = true
+        }
+
+        if !ok {
+                _ = c.Error(&utils.HTTPError{
+                        Status:  http.StatusBadRequest,
+                        Message: "Auth data not provided"},
+                ).SetType(gin.ErrorTypePublic)
+                return
+        }
+        taskId := c.Param("task")
+        log.WithField("user", user).WithField("taskId", taskId).Info("Get task status")
+        result, err := service.DescribeTask(taskId)
+        if err != nil {
+                log.WithError(err).WithField("taskId", taskId).Error("Failed to get task status")
+                _ = c.Error(err).SetType(gin.ErrorTypePublic)
+                return
+        }
+        c.JSON(http.StatusOK, gin.H{"status": result.Tasks[0].LastStatus})
+
+}
+
 
 func Downloads(c *gin.Context) {
 	sessionID := c.Param("session")
