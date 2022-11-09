@@ -89,6 +89,12 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 	executorContainer.SetMemory(caps.Memory)
 	executorContainer.SetMemoryReservation(caps.MemoryReservation)
 
+	//TODO: remove hardcoded increased resources as only reporting allow to adjust it on UI
+        if executorImage == "amancevice/pandas:1.1.4" {
+                executorContainer.SetCpu(4096)
+                executorContainer.SetMemory(8192)
+                executorContainer.SetMemoryReservation(8192)
+        }
 
         postImage := imageRepo + "post-executor:1.0"
         postContainer := Container{
