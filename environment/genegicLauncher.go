@@ -32,7 +32,19 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 return nil, fmt.Errorf("Executor repository is not specified! RepositoryUrl='%s'", caps.RepositoryUrl)
         }
 
-	cloneCommand := fmt.Sprintf("clone --verbose --progress --depth=1 %s %s %s", branchArg, caps.RepositoryUrl, sharedFolder)
+        //executorImage := "maven:3.8-openjdk-11"
+        if caps.Image == "" {
+                return nil, fmt.Errorf("Executor container image is not specified! Image='%s'", caps.Image)
+        }
+        executorImage := caps.Image
+        fmt.Printf("executorImage: %s\n", executorImage)
+
+
+	cloneCommand := fmt.Sprintf("git clone --verbose --progress --depth=1 %s %s %s", branchArg, caps.RepositoryUrl, sharedFolder)
+	postCloneCommand := ""
+	if strings.HasPrefix(executorImage, "public.ecr.aws/zebrunner/cypress-") {
+		postCloneCommand = " && chown -R 4096:4096 " + sharedFolder + " ; ls -la " + sharedFolder
+	}
 	fmt.Printf("cloneCommand: %s\n", cloneCommand)
 
         cloneImage := imageRepo + "git:latest"
@@ -45,16 +57,10 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 Privileged:        false,
                 Essential:         false,
                 Mounts: []string{taskVolume},
-		Command: strings.Fields(cloneCommand),
+                Command: []string{"-c", cloneCommand + postCloneCommand},
+                EntryPoint: []string{"/bin/sh"},
         }
 
-
-        //executorImage := "maven:3.8-openjdk-11"
-        if caps.Image == "" {
-                return nil, fmt.Errorf("Executor container image is not specified! Image='%s'", caps.Image)
-        }
-        executorImage := caps.Image
-        fmt.Printf("executorImage: %s\n", executorImage)
 
         if caps.LaunchCommand == "" {
                 return nil, fmt.Errorf("Executor container launch command is not specified! LaunchCommand='%s'", caps.LaunchCommand)
@@ -62,12 +68,28 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 	launchCommand := caps.LaunchCommand
         fmt.Printf("launchCommand: %s\n", launchCommand)
 
+	// -v /opt/zebrunner/cypress/start-capture-artifacts.sh:/opt/start-capture-artifacts.sh
+	// -v /opt/zebrunner/cypress/stop-capture-artifacts.sh:/opt/stop-capture-artifacts.sh
+	// -v /opt/zebrunner/cypress/upload-artifacts.sh:/opt/upload-artifacts.sh
+	// -v /opt/zebrunner/aws:/opt/aws
+	startRecordingVolume := "start-capture-artifacts"
+        stopRecordingVolume := "stop-capture-artifacts"
+        uploadRecordingVolume := "upload-artifacts"
+        awsCliInstallerVolume := "awsCliInstaller"
+
 	executorContainer := Container{
 		Name:       "executor",
 		Image:      executorImage,
 		Privileged: false,
 		Essential:  true,
-		Mounts: []string{taskVolume},
+                Env: map[string]string{ // aws integration required by cypress images to upload recordings per spec/feature
+                        "BUCKET":                 conf.S3Bucket,
+                        "TENANT":                 workspace,
+                        "AWS_ACCESS_KEY_ID":      conf.AwsAccessKeyID,
+                        "AWS_SECRET_ACCESS_KEY":  conf.AwsSecretAccessKey,
+                        "AWS_DEFAULT_REGION":     conf.AwsRegion,
+                },
+		Mounts: []string{taskVolume, startRecordingVolume, stopRecordingVolume, uploadRecordingVolume, awsCliInstallerVolume},
 		Command: []string{"-c", launchCommand},
 		WorkingDirectory: sharedFolder,
 		EntryPoint: []string{"/bin/sh"},
@@ -81,8 +103,10 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 	}
 
         if caps.EnvVariables != nil {
-                fmt.Printf("EnvVariables: %v\n", caps.EnvVariables)
-		executorContainer.Env = caps.EnvVariables
+ 		for v, k := range caps.EnvVariables {
+			//fmt.Printf("var: %v; %v\n", v, k)
+			executorContainer.Env[v] = k
+		}
         }
 
 	executorContainer.SetCpu(caps.Cpu)
@@ -95,6 +119,13 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 executorContainer.SetMemory(8192)
                 executorContainer.SetMemoryReservation(8192)
         }
+
+        if strings.HasPrefix(executorImage, "public.ecr.aws/zebrunner/cypress-") {
+                executorContainer.SetCpu(2048)
+                executorContainer.SetMemory(4096)
+                executorContainer.SetMemoryReservation(4096)
+        }
+
 
         postImage := imageRepo + "post-executor:1.0"
         postContainer := Container{
@@ -141,6 +172,10 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 		Volumes: map[string]volume{
 			taskVolume: {ContainerPath: sharedFolder, Driver: "local", Scope: "task", ReadOnly: false},
                         dockerSocketVolume: {ContainerPath: "/var/run/docker.sock", HostPath: "/var/run/docker.sock", ReadOnly: false},
+                        startRecordingVolume: {ContainerPath: "/opt/start-capture-artifacts.sh", HostPath: "/opt/zebrunner/cypress/start-capture-artifacts.sh", ReadOnly: false},
+                        stopRecordingVolume: {ContainerPath: "/opt/stop-capture-artifacts.sh", HostPath: "/opt/zebrunner/cypress/stop-capture-artifacts.sh", ReadOnly: false},
+                        uploadRecordingVolume: {ContainerPath: "/opt/upload-artifacts.sh", HostPath: "/opt/zebrunner/cypress/upload-artifacts.sh", ReadOnly: false},
+                        awsCliInstallerVolume: {ContainerPath: "/opt/aws", HostPath: "/opt/zebrunner/aws", ReadOnly: false},
 		},
                 Network: &NetworkConfiguration{
                         IP: "",
