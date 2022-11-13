@@ -247,7 +247,6 @@ func ConstDelay(t time.Duration) func(int) time.Duration {
 func StopTask(taskArn string) (*ecs.StopTaskOutput, error) {
 	svc := ecs.New(AwsSess)
 
-	log.WithField("taskARN", taskArn).Info("Removing task")
 	stopTaskInput := &ecs.StopTaskInput{
 		Cluster: &config.Conf.AwsCluster,
 		Reason:  aws.String("Cancel"),
