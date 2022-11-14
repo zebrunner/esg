@@ -84,14 +84,18 @@ func ListDrivers(c *gin.Context) {
 	}
 
 	var browsersResponse []map[string]interface{}
+
 	imagesPlatforms := map[string]string{
 		"redroid": "android",
-		"cypress-chrome": "cypress",
+	}
+        cypressPlatforms := map[string]string{
+                "cypress-chrome": "cypress",
                 "cypress-chromium": "cypress",
                 "cypress-edge": "cypress",
                 "cypress-electron": "cypress",
                 "cypress-firefox": "cypress",
-	}
+        }
+
 	for _, image := range images {
 		name := strings.Split(image, ":")[0]
 		version := strings.Split(image, ":")[1]
@@ -110,11 +114,15 @@ func ListDrivers(c *gin.Context) {
 			"platform": "linux",
 		}
 
-		if _, ok := imagesPlatforms[name]; ok {
+                if _, ok := imagesPlatforms[name]; ok {
+                        browserData["platform"] = imagesPlatforms[name]
+                        browserData["browserName"] = "chrome"
+                        browserData["browserVersion"] = "107.0"
+                }
+
+		if _, ok := cypressPlatforms[name]; ok {
 			browserData["image"] = "public.ecr.aws/zebrunner/" + image
-			browserData["platform"] = imagesPlatforms[name]
-			browserData["browserName"] = name
-			browserData["browserVersion"] = version
+			browserData["platform"] = cypressPlatforms[name]
 		}
 
 		browsersResponse = append(browsersResponse, browserData)
