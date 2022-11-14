@@ -16,7 +16,6 @@ var (
 		"cypress-chrome",
 		"cypress-chromium",
 		"cypress-edge",
-		"cypress-electron",
 		"cypress-firefox",
 	}
 	VendorPrefix = "zebrunner"

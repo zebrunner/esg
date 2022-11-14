@@ -1,3 +1,4 @@
+
 package handlers
 
 import (
@@ -92,7 +93,6 @@ func ListDrivers(c *gin.Context) {
                 "cypress-chrome": "cypress",
                 "cypress-chromium": "cypress",
                 "cypress-edge": "cypress",
-                "cypress-electron": "cypress",
                 "cypress-firefox": "cypress",
         }
 
