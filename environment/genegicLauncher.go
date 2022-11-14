@@ -14,8 +14,8 @@ import (
 const (
         genericPort   int64 = 22
 
-	minCpu    = 128
-	minMemory = 128
+	minCpu    = 256
+	minMemory = 256
 )
 
 func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {
@@ -43,7 +43,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 	cloneCommand := fmt.Sprintf("git clone --verbose --progress --depth=1 %s %s %s", branchArg, caps.RepositoryUrl, sharedFolder)
 	postCloneCommand := ""
 	if strings.HasPrefix(executorImage, "public.ecr.aws/zebrunner/cypress-") {
-		postCloneCommand = " && chown -R 4096:4096 " + sharedFolder + " ; ls -la " + sharedFolder
+		postCloneCommand = " ; chown -R 4096:4096 " + sharedFolder + " ; ls -la " + sharedFolder
 	}
 	fmt.Printf("cloneCommand: %s\n", cloneCommand)
 
@@ -158,8 +158,8 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 Links:       []string{"executor"},
                 DependsOn: []*ecs.ContainerDependency{
 			&ecs.ContainerDependency{
-                                ContainerName: aws.String("executor"),
-                                Condition:  aws.String("START"),
+                                ContainerName: aws.String("clone"),
+                                Condition:  aws.String("COMPLETE"),
 	                },
 		},
         }
