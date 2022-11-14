@@ -13,6 +13,11 @@ var (
 		"firefox",
 		"edge",
 		"redroid",
+		"cypress-chrome",
+		"cypress-chromium",
+		"cypress-edge",
+		"cypress-electron",
+		"cypress-firefox",
 	}
 	VendorPrefix = "zebrunner"
 	Conf         = Config{}

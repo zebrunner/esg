@@ -86,6 +86,11 @@ func ListDrivers(c *gin.Context) {
 	var browsersResponse []map[string]interface{}
 	imagesPlatforms := map[string]string{
 		"redroid": "android",
+		"cypress-chrome": "cypress",
+                "cypress-chromium": "cypress",
+                "cypress-edge": "cypress",
+                "cypress-electron": "cypress",
+                "cypress-firefox": "cypress",
 	}
 	for _, image := range images {
 		name := strings.Split(image, ":")[0]
@@ -106,9 +111,10 @@ func ListDrivers(c *gin.Context) {
 		}
 
 		if _, ok := imagesPlatforms[name]; ok {
+			browserData["image"] = image
 			browserData["platform"] = imagesPlatforms[name]
-			browserData["browserName"] = "chrome"
-			browserData["browserVersion"] = "99.0"
+			browserData["browserName"] = name
+			browserData["browserVersion"] = version
 		}
 
 		browsersResponse = append(browsersResponse, browserData)

@@ -116,6 +116,10 @@ func RefreshTaskDefinitions() {
 	}
 
 	for _, image := range images {
+		if strings.HasPrefix(image, "cypress-") {
+			// no need to generate task definition for cypress in advance
+			continue
+		}
 		time.Sleep(1000 * time.Millisecond)
 		err = RefreshTaskDefinition(image)
 		if err != nil {
