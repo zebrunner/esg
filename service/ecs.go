@@ -17,7 +17,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
-//	"math/rand"
+	"math/rand"
 )
 
 const (
@@ -195,8 +195,8 @@ func RunTask(ctx context.Context, env *environment.ExecutionEnvironment) (taskAr
 		default:
 		}
 		// Trying to minimize random sleep this needs performance test. If it doesn't works return old sleep.
-		// sleep := time.Duration(rand.Intn(30)) * time.Second
-		// time.Sleep(sleep)
+		sleep := time.Duration(rand.Intn(30)) * time.Second
+		time.Sleep(sleep)
 		var resultRunTask *ecs.RunTaskOutput
 		resultRunTask, err := svc.RunTask(runTaskInput)
 		// Not good solution but aws doesn't give a choice
