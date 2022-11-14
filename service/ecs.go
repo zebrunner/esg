@@ -79,8 +79,9 @@ func ListBrowsers() ([]string, error) {
 			return nil, err
 		}
 		for _, image := range result.ImageDetails {
+			log.Debug("image: ", image)
 			for _, tag := range image.ImageTags {
-				images = append(images, repository+":"+*tag)
+				images = append(images, repository + ":" +*tag)
 			}
 		}
 	}

@@ -111,7 +111,7 @@ func ListDrivers(c *gin.Context) {
 		}
 
 		if _, ok := imagesPlatforms[name]; ok {
-			browserData["image"] = image
+			browserData["image"] = "public.ecr.aws/zebrunner/" + image
 			browserData["platform"] = imagesPlatforms[name]
 			browserData["browserName"] = name
 			browserData["browserVersion"] = version
