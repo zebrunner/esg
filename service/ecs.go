@@ -372,7 +372,7 @@ out:
 
 		taskArn, err := RegisterTask(ctx, env)
 
-		l.Info("RegisterTask delay: " + time.Since(startTime))
+		l.WithField("latency", time.Since(startTime)).Info("RegisterTask delay")
 		if err != nil {
 			l.WithError(err).WithField("attempt", i).WithField("latency", time.Since(startTime)).Warn("Failed to run task")
 			outputErr = fmt.Errorf("failed to run task: %v", err)
