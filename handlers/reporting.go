@@ -115,6 +115,7 @@ func ListDrivers(c *gin.Context) {
 		}
 
                 if _, ok := imagesPlatforms[name]; ok {
+			// hardcoded browser name and verion for ReDroid emulator
                         browserData["platform"] = imagesPlatforms[name]
                         browserData["browserName"] = "chrome"
                         browserData["browserVersion"] = "107.0"

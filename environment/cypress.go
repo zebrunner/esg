@@ -8,10 +8,12 @@ import (
 	"github.com/zebrunner/esg/config"
 
 	"fmt"
-//	"strings"
+	"strings"
+
+        log "github.com/sirupsen/logrus"
 )
 
-func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {
+func buildCypress(workspace string, caps *capabilities.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {
 	sharedFolder := "/opt/zebrunner"
 	taskVolume := "data"
 	dockerSocketVolume := "docker-socket"
@@ -21,20 +23,18 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 		branchArg = "--branch=" + caps.Branch
 	}
 
-        if caps.RepositoryUrl == "" {
-                return nil, fmt.Errorf("Executor repository is not specified! RepositoryUrl='%s'", caps.RepositoryUrl)
+        browserImage, err := buildImage(caps)
+        if err != nil {
+                return nil, err
         }
+	log.Debug("browserImage: " + browserImage)
 
-        //executorImage := "maven:3.8-openjdk-11"
-        if caps.Image == "" {
-                return nil, fmt.Errorf("Executor container image is not specified! Image='%s'", caps.Image)
+	cloneCommand := "CHANGE_ME"
+        if caps.RepositoryUrl != "" {
+		cloneCommand = fmt.Sprintf("git clone --verbose --progress --depth=1 %s %s %s", branchArg, caps.RepositoryUrl, sharedFolder)
+		cloneCommand = cloneCommand + " ; chown -R 4096:4096 " + sharedFolder + " ; ls -la " + sharedFolder
+	        //fmt.Printf("cloneCommand: %s\n", cloneCommand)
         }
-        executorImage := caps.Image
-        //fmt.Printf("executorImage: %s\n", executorImage)
-
-
-	cloneCommand := fmt.Sprintf("git clone --verbose --progress --depth=1 %s %s %s", branchArg, caps.RepositoryUrl, sharedFolder)
-	//fmt.Printf("cloneCommand: %s\n", cloneCommand)
 
         cloneImage := imageRepo + "git:latest"
         cloneContainer := Container{
@@ -50,16 +50,24 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 EntryPoint: []string{"/bin/sh"},
         }
 
-
-        if caps.LaunchCommand == "" {
-                return nil, fmt.Errorf("Executor container launch command is not specified! LaunchCommand='%s'", caps.LaunchCommand)
+	launchCommand := "CHANGE_ME"
+        if caps.LaunchCommand != "" {
+                launchCommand = caps.LaunchCommand
+	        //fmt.Printf("launchCommand: %s\n", launchCommand)
         }
-	launchCommand := caps.LaunchCommand
-        //fmt.Printf("launchCommand: %s\n", launchCommand)
+
+	// -v /opt/zebrunner/cypress/start-capture-artifacts.sh:/opt/start-capture-artifacts.sh
+	// -v /opt/zebrunner/cypress/stop-capture-artifacts.sh:/opt/stop-capture-artifacts.sh
+	// -v /opt/zebrunner/cypress/upload-artifacts.sh:/opt/upload-artifacts.sh
+	// -v /opt/zebrunner/aws:/opt/aws
+	startRecordingVolume := "start-capture-artifacts"
+        stopRecordingVolume := "stop-capture-artifacts"
+        uploadRecordingVolume := "upload-artifacts"
+        awsCliInstallerVolume := "awsCliInstaller"
 
 	executorContainer := Container{
 		Name:       "executor",
-		Image:      executorImage,
+		Image:      browserImage,
 		Privileged: false,
 		Essential:  true,
                 Env: map[string]string{ // aws integration required by cypress images to upload recordings per spec/feature
@@ -69,7 +77,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                         "AWS_SECRET_ACCESS_KEY":  conf.AwsSecretAccessKey,
                         "AWS_DEFAULT_REGION":     conf.AwsRegion,
                 },
-		Mounts: []string{taskVolume},
+		Mounts: []string{taskVolume, startRecordingVolume, stopRecordingVolume, uploadRecordingVolume, awsCliInstallerVolume},
 		Command: []string{"-c", launchCommand},
 		WorkingDirectory: sharedFolder,
 		EntryPoint: []string{"/bin/sh"},
@@ -93,12 +101,12 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 	executorContainer.SetMemory(caps.Memory)
 	executorContainer.SetMemoryReservation(caps.MemoryReservation)
 
-	//TODO: remove hardcoded increased resources as only reporting allow to adjust it on UI
-        if executorImage == "amancevice/pandas:1.1.4" {
-                executorContainer.SetCpu(4096)
-                executorContainer.SetMemory(8192)
-                executorContainer.SetMemoryReservation(8192)
-        }
+
+	//TODO: remove hardcoded cpu/memory
+        executorContainer.SetCpu(2048)
+        executorContainer.SetMemory(4096)
+        executorContainer.SetMemoryReservation(4096)
+
 
         postImage := imageRepo + "post-executor:1.0"
         postContainer := Container{
@@ -137,14 +145,23 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 		},
         }
 
+        // convert image "public.ecr.aws/zebrunner/cypress-chrome:107.0" to task definition failiy: "cypress-cypress-chrome-107-0"
+        familyDefinition := strings.Replace(browserImage, imageRepo, "", -1)
+        familyDefinition = strings.Replace(familyDefinition, ":", "-", -1)
+        familyDefinition = strings.Replace(familyDefinition, ".", "-", -1)
+        log.Debug("Overidden TaskDefinitionFamily for cypress: " + familyDefinition)
 
 	environment := ExecutionEnvironment{
-		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
+		TaskDefinitionFamily: familyDefinition,
 		Containers:           []*Container{&cloneContainer, &executorContainer, &postContainer},
 		Capabilities:         caps,
 		Volumes: map[string]volume{
 			taskVolume: {ContainerPath: sharedFolder, Driver: "local", Scope: "task", ReadOnly: false},
                         dockerSocketVolume: {ContainerPath: "/var/run/docker.sock", HostPath: "/var/run/docker.sock", ReadOnly: false},
+                        startRecordingVolume: {ContainerPath: "/opt/start-capture-artifacts.sh", HostPath: "/opt/zebrunner/cypress/start-capture-artifacts.sh", ReadOnly: false},
+                        stopRecordingVolume: {ContainerPath: "/opt/stop-capture-artifacts.sh", HostPath: "/opt/zebrunner/cypress/stop-capture-artifacts.sh", ReadOnly: false},
+                        uploadRecordingVolume: {ContainerPath: "/opt/upload-artifacts.sh", HostPath: "/opt/zebrunner/cypress/upload-artifacts.sh", ReadOnly: false},
+                        awsCliInstallerVolume: {ContainerPath: "/opt/aws", HostPath: "/opt/zebrunner/aws", ReadOnly: false},
 		},
                 Network: &NetworkConfiguration{
                         IP: "",

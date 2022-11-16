@@ -129,6 +129,7 @@ func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDe
 	return resultTaskDefinition.TaskDefinition, nil
 }
 
+
 func CreateGenericTaskDefinition(environment *environment.ExecutionEnvironment) (taskDefinition *ecs.TaskDefinition, err error) {
         svc := ecs.New(AwsSess)
 
@@ -170,7 +171,7 @@ func CreateGenericTaskDefinition(environment *environment.ExecutionEnvironment) 
 }
 
 
-func RunTask(ctx context.Context, env *environment.ExecutionEnvironment) (taskArn string, returnErr error) {
+func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (taskArn string, returnErr error) {
 	svc := ecs.New(AwsSess)
 
 	runTaskInput := &ecs.RunTaskInput{
@@ -184,6 +185,7 @@ func RunTask(ctx context.Context, env *environment.ExecutionEnvironment) (taskAr
 			},
 		},
 	}
+        log.WithField("runTaskInput", runTaskInput).Debug("Res runTaskInput")
 
 	// TODO: explicitly minimize errors range to wait only by well-known reasons aka RESOURCE:CPU etc
 	// TODO: convert existing hard-coded 25 retries into the queue or provisioning timeout: https://github.com/zebrunner/esg/issues/72
@@ -195,14 +197,17 @@ func RunTask(ctx context.Context, env *environment.ExecutionEnvironment) (taskAr
 			return "", ctx.Err()
 		default:
 		}
-		// Trying to minimize random sleep this needs performance test. If it doesn't works return old sleep.
-		sleep := time.Duration(rand.Intn(30)) * time.Second
-		time.Sleep(sleep)
+		// Random sleep to fix problems with parallel 100+ threads startup. Not applicable got generic and cypress tasks!
+                if env.TaskDefinitionFamily != "generic" && !strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
+			sleep := time.Duration(rand.Intn(30)) * time.Second
+			time.Sleep(sleep)
+		}
+
 		var resultRunTask *ecs.RunTaskOutput
 		resultRunTask, err := svc.RunTask(runTaskInput)
 		// Not good solution but aws doesn't give a choice
 		if err != nil && err.Error() == "ClientException: TaskDefinition not found." {
-			return "", fmt.Errorf("image %s not found", env.TaskDefinitionFamily)
+			return "", fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily)
 		}
 
 		sleepRateLimit := time.Duration(30)
@@ -284,7 +289,6 @@ func RemoveTask(taskArn string) {
 
 func DescribeTask(taskArn string) (*ecs.DescribeTasksOutput, error) {
         svc := ecs.New(AwsSess)
-        log.WithField("taskARN", taskArn).Info("Status task")
         input := &ecs.DescribeTasksInput{
                 Cluster: &config.Conf.AwsCluster,
                 Tasks: []*string{
@@ -366,20 +370,24 @@ out:
 		default:
 		}
 
-		taskArn, err := RunTask(ctx, env)
+		taskArn, err := RegisterTask(ctx, env)
 
-		l.WithField("latency", time.Since(startTime)).Info("RunTask delay")
+		l.Info("RegisterTask delay: " + time.Since(startTime))
 		if err != nil {
 			l.WithError(err).WithField("attempt", i).WithField("latency", time.Since(startTime)).Warn("Failed to run task")
 			outputErr = fmt.Errorf("failed to run task: %v", err)
+			if strings.HasPrefix(err.Error(), "image not found: ") {
+				break out
+			}
 			continue
 		}
 
 		taskId := strings.Split(taskArn, "/")[2]
 		env.TaskId = taskId
 		l = l.WithField("taskId", taskId)
-	        if env.TaskDefinitionFamily == "generic" {
-			// do not wait for generic task startup.
+	        if env.TaskDefinitionFamily == "generic" || strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
+			l.Debug("do not wait for generic and cypress task startup.")
+			outputErr = nil
 			return outputErr
 		}
 

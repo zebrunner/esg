@@ -116,7 +116,7 @@ func Create(c *gin.Context) {
 		return
 	}
 
-	//l.WithField("env", env).Info("Execution env")
+	l.WithField("env", env).Debug("Execution env")
 
         if env.TaskDefinitionFamily == "generic" {
 	        _, err = service.CreateGenericTaskDefinition(env)
@@ -136,15 +136,15 @@ func Create(c *gin.Context) {
 		_ = c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
-	// l.WithField("taskID", driver.TaskID).Info("Service started successfully")
+	l.WithField("taskId", env.TaskId).WithField("TaskDefinitionFaily", env.TaskDefinitionFamily).Info("Task started")
 
         sessionId := ""
         var resp map[string]interface{}
-        if env.TaskDefinitionFamily == "generic" {
+        if env.TaskDefinitionFamily == "generic" || strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
                 sessionId = env.TaskId
                 data := "{\"taskId\": \"" + env.TaskId + "\"}"
                 json.Unmarshal([]byte(data), &resp)
-                l.WithFields(log.Fields{"resp": resp,}).Info("Response")
+                l.WithFields(log.Fields{"resp": resp,}).Debug("Response")
 	} else {
 		u, ok := env.Network.GetUrl("driver")
 		if !ok {
@@ -196,7 +196,7 @@ func Create(c *gin.Context) {
 		TaskID:          env.TaskId,
 		Workspace:       workspace,
 	}
-	if env.TaskDefinitionFamily == "generic" {
+	if env.TaskDefinitionFamily == "generic" || strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
 		// extra state for generic job to disable idleTimeout verification at all
 		sess.Status = sessionmap.SessionQueued
 	}
@@ -209,7 +209,7 @@ func Create(c *gin.Context) {
 		"sessionId": sess.ID,
 		"taskId": sess.TaskID,
 		"latency":   util.SecondsSince(sessionStartTime),
-	}).Info("Session created")
+	}).Info("Session cached")
 
 	c.JSON(http.StatusOK, resp)
 }
@@ -415,7 +415,7 @@ func TaskDescribe(c *gin.Context) {
                 return
         }
         taskId := c.Param("task")
-        log.WithField("user", user).WithField("taskId", taskId).Info("Get task status")
+        log.WithField("user", user).WithField("taskId", taskId).Debug("Get task status")
         result, err := service.DescribeTask(taskId)
         if err != nil {
                 log.WithError(err).WithField("taskId", taskId).Error("Failed to get task status")
