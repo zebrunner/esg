@@ -109,44 +109,6 @@ func buildCypress(workspace string, caps *capabilities.Capabilities, conf *confi
         executorContainer.SetMemory(4096)
         executorContainer.SetMemoryReservation(4096)
 
-
-        postImage := imageRepo + "post-executor:1.0"
-        postContainer := Container{
-                Name:              "post-executor",
-                Image:             postImage,
-                cpu:               minCpu,
-                memory:            minMemory,
-                memoryReservation: minMemory,
-                Privileged: false,
-                Essential:  false,
-                Ports: map[string]portMapping{
-                        "driver":         {genericPort, 0},
-                },
-
-                Env: map[string]string{
-                        "BUCKET":                 conf.S3Bucket,
-                        "TENANT":                 workspace,
-                        "AWS_ACCESS_KEY_ID":      conf.AwsAccessKeyID,
-                        "AWS_SECRET_ACCESS_KEY":  conf.AwsSecretAccessKey,
-                        "AWS_DEFAULT_REGION":     conf.AwsRegion,
-                },
-                Mounts: []string{taskVolume, dockerSocketVolume},
-                HealthCheck: &ecs.HealthCheck{
-                        Command:     []*string{aws.String("CMD-SHELL"), aws.String("ps -ef | grep docker | grep logs || exit 1")},
-                        Interval:    aws.Int64(10),
-                        Retries:     aws.Int64(3),
-                        Timeout:     aws.Int64(10),
-                        StartPeriod: aws.Int64(5),
-                },
-                Links:       []string{"executor"},
-                DependsOn: []*ecs.ContainerDependency{
-			&ecs.ContainerDependency{
-                                ContainerName: aws.String("clone"),
-                                Condition:  aws.String("COMPLETE"),
-	                },
-		},
-        }
-
         // convert image "public.ecr.aws/zebrunner/cypress-chrome:107.0" to task definition failiy: "cypress-cypress-chrome-107-0"
         familyDefinition := strings.Replace(browserImage, imageRepo, "", -1)
         familyDefinition = strings.Replace(familyDefinition, ":", "-", -1)
@@ -155,7 +117,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities, conf *confi
 
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: familyDefinition,
-		Containers:           []*Container{&cloneContainer, &executorContainer, &postContainer},
+		Containers:           []*Container{&cloneContainer, &executorContainer},
 		Capabilities:         caps,
 		Volumes: map[string]volume{
 			taskVolume: {ContainerPath: sharedFolder, Driver: "local", Scope: "task", ReadOnly: false},
