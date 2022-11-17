@@ -376,7 +376,8 @@ out:
 		if err != nil {
 			l.WithError(err).WithField("attempt", i).WithField("latency", time.Since(startTime)).Warn("Failed to run task")
 			outputErr = fmt.Errorf("failed to run task: %v", err)
-			if strings.HasPrefix(err.Error(), "image not found: ") {
+			if strings.HasPrefix(err.Error(), "image not found: ")
+				|| strings.HasPrefix(err.Error(), "InvalidParameterException") { //#366 disable retries for InvalidParameterException
 				break out
 			}
 			continue
