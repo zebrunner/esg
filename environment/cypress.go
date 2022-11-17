@@ -80,7 +80,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities, conf *confi
                         "AWS_DEFAULT_REGION":     conf.AwsRegion,
                 },
 		Mounts: []string{taskVolume, startRecordingVolume, stopRecordingVolume, uploadRecordingVolume, awsCliInstallerVolume},
-		Command: []string{"-c", preLaunchCommand + launchCommand},
+		Command: []string{"-c", preLaunchCommand + launchCommand + "> /tmp/cypress.log 2>&1"},
 		WorkingDirectory: sharedFolder,
 		EntryPoint: []string{"/bin/sh"},
                 DependsOn: []*ecs.ContainerDependency{
