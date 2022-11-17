@@ -104,11 +104,6 @@ func buildCypress(workspace string, caps *capabilities.Capabilities, conf *confi
 	executorContainer.SetMemoryReservation(caps.MemoryReservation)
 
 
-	//TODO: remove hardcoded cpu/memory
-        executorContainer.SetCpu(2048)
-        executorContainer.SetMemory(4096)
-        executorContainer.SetMemoryReservation(4096)
-
         // convert image "public.ecr.aws/zebrunner/cypress-chrome:107.0" to task definition failiy: "cypress-cypress-chrome-107-0"
         familyDefinition := strings.Replace(browserImage, imageRepo, "", -1)
         familyDefinition = strings.Replace(familyDefinition, ":", "-", -1)
