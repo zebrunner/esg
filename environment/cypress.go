@@ -55,6 +55,8 @@ func buildCypress(workspace string, caps *capabilities.Capabilities, conf *confi
                 launchCommand = caps.LaunchCommand
 	        //fmt.Printf("launchCommand: %s\n", launchCommand)
         }
+	// install as cli on executor container start
+	preLaunchCommand := "/opt/aws/install --update -i /tmp/aws-cli -b /tmp && "
 
 	// -v /opt/zebrunner/cypress/start-capture-artifacts.sh:/opt/start-capture-artifacts.sh
 	// -v /opt/zebrunner/cypress/stop-capture-artifacts.sh:/opt/stop-capture-artifacts.sh
@@ -78,7 +80,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities, conf *confi
                         "AWS_DEFAULT_REGION":     conf.AwsRegion,
                 },
 		Mounts: []string{taskVolume, startRecordingVolume, stopRecordingVolume, uploadRecordingVolume, awsCliInstallerVolume},
-		Command: []string{"-c", launchCommand},
+		Command: []string{"-c", preLaunchCommand + launchCommand},
 		WorkingDirectory: sharedFolder,
 		EntryPoint: []string{"/bin/sh"},
                 DependsOn: []*ecs.ContainerDependency{
