@@ -22,6 +22,8 @@ const (
 	genericPlatform = "generic"
 	cypressPlatform = "cypress"
 	imageRepo       = "public.ecr.aws/zebrunner/" //public zebrunner ECR docker registry
+
+	ZEBRUNNER_HOME  = "/opt/zebrunner"
 )
 
 const (

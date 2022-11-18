@@ -12,9 +12,14 @@ import (
 )
 
 func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {
-	sharedFolder := "/opt/zebrunner"
-	taskVolume := "data"
-	dockerSocketVolume := "docker-socket"
+	workingDir := "/tmp/zebrunner"
+	taskVolume := "work"
+
+	loggingDir := "/tmp/log"
+	logVolume := "log"
+
+        // -v /opt/zebrunner:/opt/zebrunner
+        zebrunnerVolume := "zebrunner"
 
 	branchArg := ""
 	if caps.Branch != "" {
@@ -33,8 +38,10 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
         //fmt.Printf("executorImage: %s\n", executorImage)
 
 
-	cloneCommand := fmt.Sprintf("git clone --verbose --progress --depth=1 %s %s %s", branchArg, caps.RepositoryUrl, sharedFolder)
+	cloneCommand := fmt.Sprintf("git clone --verbose --progress --depth=1 %s %s %s", branchArg, caps.RepositoryUrl, workingDir)
 	//fmt.Printf("cloneCommand: %s\n", cloneCommand)
+
+	taskLogRedirect :=  ">>" + loggingDir + "/task.log 2>&1"
 
         cloneImage := imageRepo + "git:latest"
         cloneContainer := Container{
@@ -45,8 +52,8 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 memoryReservation: minMemory,
                 Privileged:        false,
                 Essential:         false,
-                Mounts: []string{taskVolume},
-                Command: []string{"-c", cloneCommand},
+                Mounts: []string{taskVolume, logVolume},
+                Command: []string{"-c", cloneCommand + taskLogRedirect},
                 EntryPoint: []string{"/bin/sh"},
         }
 
@@ -55,7 +62,10 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 return nil, fmt.Errorf("Executor container launch command is not specified! LaunchCommand='%s'", caps.LaunchCommand)
         }
 	launchCommand := caps.LaunchCommand
-        //fmt.Printf("launchCommand: %s\n", launchCommand)
+
+        // install as cli on executor container start
+        preLaunchCommand := ZEBRUNNER_HOME + "/generic/pre-launch.sh" + " && "
+	postLaunchCommand := "; " + ZEBRUNNER_HOME + "/generic/post-launch.sh"
 
 	executorContainer := Container{
 		Name:       "executor",
@@ -69,9 +79,9 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                         "AWS_SECRET_ACCESS_KEY":  conf.AwsSecretAccessKey,
                         "AWS_DEFAULT_REGION":     conf.AwsRegion,
                 },
-		Mounts: []string{taskVolume},
-		Command: []string{"-c", launchCommand},
-		WorkingDirectory: sharedFolder,
+		Mounts: []string{taskVolume, logVolume, zebrunnerVolume},
+		Command: []string{"-c", preLaunchCommand + launchCommand + taskLogRedirect + postLaunchCommand},
+		WorkingDirectory: workingDir,
 		EntryPoint: []string{"/bin/sh"},
                 DependsOn: []*ecs.ContainerDependency{
 			&ecs.ContainerDependency{
@@ -100,51 +110,14 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 executorContainer.SetMemoryReservation(8192)
         }
 
-        postImage := imageRepo + "post-executor:1.0"
-        postContainer := Container{
-                Name:              "post-executor",
-                Image:             postImage,
-                cpu:               minCpu,
-                memory:            minMemory,
-                memoryReservation: minMemory,
-                Privileged: false,
-                Essential:  false,
-                Ports: map[string]portMapping{
-                        "driver":         {genericPort, 0},
-                },
-
-                Env: map[string]string{
-                        "BUCKET":                 conf.S3Bucket,
-                        "TENANT":                 workspace,
-                        "AWS_ACCESS_KEY_ID":      conf.AwsAccessKeyID,
-                        "AWS_SECRET_ACCESS_KEY":  conf.AwsSecretAccessKey,
-                        "AWS_DEFAULT_REGION":     conf.AwsRegion,
-                },
-                Mounts: []string{taskVolume, dockerSocketVolume},
-                HealthCheck: &ecs.HealthCheck{
-                        Command:     []*string{aws.String("CMD-SHELL"), aws.String("ps -ef | grep docker | grep logs || exit 1")},
-                        Interval:    aws.Int64(10),
-                        Retries:     aws.Int64(3),
-                        Timeout:     aws.Int64(10),
-                        StartPeriod: aws.Int64(5),
-                },
-                Links:       []string{"executor"},
-                DependsOn: []*ecs.ContainerDependency{
-			&ecs.ContainerDependency{
-                                ContainerName: aws.String("clone"),
-                                Condition:  aws.String("COMPLETE"),
-	                },
-		},
-        }
-
-
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
-		Containers:           []*Container{&cloneContainer, &executorContainer, &postContainer},
+		Containers:           []*Container{&cloneContainer, &executorContainer},
 		Capabilities:         caps,
 		Volumes: map[string]volume{
-			taskVolume: {ContainerPath: sharedFolder, Driver: "local", Scope: "task", ReadOnly: false},
-                        dockerSocketVolume: {ContainerPath: "/var/run/docker.sock", HostPath: "/var/run/docker.sock", ReadOnly: false},
+			taskVolume: {Driver: "local", Scope: "task", ContainerPath: workingDir, ReadOnly: false},
+                        logVolume: {Driver: "local", Scope: "task", ContainerPath: loggingDir, ReadOnly: false},
+			zebrunnerVolume: {HostPath: "/opt/zebrunner", ContainerPath: "/opt/zebrunner", ReadOnly: true},
 		},
                 Network: &NetworkConfiguration{
                         IP: "",
