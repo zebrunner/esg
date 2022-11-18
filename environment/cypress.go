@@ -65,6 +65,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities, conf *confi
 
         // install as cli on executor container start
         preLaunchCommand := ZEBRUNNER_HOME + "/generic/pre-launch.sh" + " && "
+	postLaunchCommand := "; " + ZEBRUNNER_HOME + "/generic/post-launch.sh"
 
 	executorContainer := Container{
 		Name:       "executor",
@@ -79,7 +80,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities, conf *confi
                         "AWS_DEFAULT_REGION":     conf.AwsRegion,
                 },
 		Mounts: []string{taskVolume, logVolume, zebrunnerVolume},
-		Command: []string{"-c", preLaunchCommand + launchCommand + taskLogRedirect},
+		Command: []string{"-c", preLaunchCommand + launchCommand + taskLogRedirect + postLaunchCommand},
 		WorkingDirectory: workingDir,
 		EntryPoint: []string{"/bin/sh"},
                 DependsOn: []*ecs.ContainerDependency{
