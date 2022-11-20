@@ -130,10 +130,6 @@ func DeleteUser(name string) error {
 }
 
 func GetWorkspace(name string) (string, error) {
-	if config.Conf.TrustedMode {
-		return "zebrunner", nil
-	}
-
 	if name == "" {
 		return "", errors.New("failed to get auth credentials")
 	}
@@ -144,10 +140,6 @@ func CheckAuth(name, password string) error {
 	authenticationError := utils.HTTPError{
 		Status:  http.StatusUnauthorized,
 		Message: "Invalid username or password",
-	}
-
-	if config.Conf.TrustedMode {
-		return nil
 	}
 
 	if name == "" || password == "" {

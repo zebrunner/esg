@@ -323,10 +323,6 @@ func Vnc(wsconn *websocket.Conn) {
 
 func Logs(c *gin.Context) {
 	user, _, ok := c.Request.BasicAuth()
-	if config.Conf.TrustedMode {
-		user = "zebrunner"
-		ok = true
-	}
 
 	if !ok {
 		_ = c.Error(&utils.HTTPError{
@@ -348,10 +344,6 @@ func Logs(c *gin.Context) {
 
 func Video(c *gin.Context) {
 	user, _, ok := c.Request.BasicAuth()
-	if config.Conf.TrustedMode {
-		user = "zebrunner"
-		ok = true
-	}
 	if !ok {
 		_ = c.Error(&utils.HTTPError{
 			Status:  http.StatusBadRequest,
@@ -377,10 +369,6 @@ func Video(c *gin.Context) {
 
 func TaskLog(c *gin.Context) {
         user, _, ok := c.Request.BasicAuth()
-        if config.Conf.TrustedMode {
-                user = "zebrunner"
-                ok = true
-        }
 
         if !ok {
                 _ = c.Error(&utils.HTTPError{
@@ -402,10 +390,6 @@ func TaskLog(c *gin.Context) {
 
 func TaskDescribe(c *gin.Context) {
         user, _, ok := c.Request.BasicAuth()
-        if config.Conf.TrustedMode {
-                user = "zebrunner"
-                ok = true
-        }
 
         if !ok {
                 _ = c.Error(&utils.HTTPError{
