@@ -35,13 +35,13 @@ func buildCypress(workspace string, caps *capabilities.Capabilities, conf *confi
 	log.Debug("browserImage: " + browserImage)
 
 	cloneCommand := "CHANGE_ME"
+        taskLogRedirect :=  ">>" + loggingDir + "/task.log 2>&1"
         if caps.RepositoryUrl != "" {
 		cloneCommand = fmt.Sprintf("git clone --verbose --progress --depth=1 %s %s %s", branchArg, caps.RepositoryUrl, workingDir)
-		cloneCommand = cloneCommand + " ; chown -R 4096:4096 " + workingDir + " ; ls -la " + workingDir
+		cloneCommand = cloneCommand + taskLogRedirect + " ; chown -R 4096:4096 " + workingDir + "; chown -R 4096:4096 " + loggingDir
 	        //fmt.Printf("cloneCommand: %s\n", cloneCommand)
         }
 
-	taskLogRedirect :=  ">>" + loggingDir + "/task.log 2>&1"
 
         cloneImage := imageRepo + "git:latest"
         cloneContainer := Container{
