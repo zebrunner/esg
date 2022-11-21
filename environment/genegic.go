@@ -21,7 +21,6 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 	entrypointDir := "/tmp/entrypoint"
 	entrypointVolume := "entrypoint"
 
-        // -v /opt/zebrunner:/opt/zebrunner
 	zebrunnerDir := "/opt/zebrunner"
         zebrunnerVolume := "zebrunner"
 
@@ -71,7 +70,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 Privileged:        false,
                 Essential:         false,
                 Mounts: []string{entrypointVolume},
-                EntryPoint: []string{"/tmp/entrypoint/entrypoint.sh"},
+                EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
         }
 
 
@@ -81,16 +80,12 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
         }
 	launchCommand := caps.LaunchCommand
 
-        // install as cli on executor container start
-//        preLaunchCommand := "trap 'echo 0123' 0 1 2 3 6 9 14 15; trap 'echo TERM' TERM ; trap 'echo SIGTERM' SIGTERM ; " + ZEBRUNNER_HOME + "/generic/pre-launch.sh" + " && "
-//	postLaunchCommand := "; " + ZEBRUNNER_HOME + "/generic/post-launch.sh"
-
 	executorContainer := Container{
 		Name:       "executor",
 		Image:      executorImage,
 		Privileged: false,
 		Essential:  true,
-                Env: map[string]string{ // aws integration required by cypress images to upload recordings per spec/feature
+                Env: map[string]string{
                         "BUCKET":                 conf.S3Bucket,
                         "TENANT":                 workspace,
                         "AWS_ACCESS_KEY_ID":      conf.AwsAccessKeyID,
@@ -100,9 +95,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 },
 		Mounts: []string{entrypointVolume, taskVolume, logVolume, zebrunnerVolume},
                 WorkingDirectory: workDir,
-//		Command: []string{"/bin/sh", "-c", launchCommand + taskLogRedirect},
-//		EntryPoint: []string{"/bin/sh"},
-                EntryPoint: []string{"/tmp/entrypoint/entrypoint.sh"},
+                EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
                 DependsOn: []*ecs.ContainerDependency{
                         &ecs.ContainerDependency{
                                 ContainerName: aws.String("entrypoint"),

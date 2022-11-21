@@ -93,7 +93,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities, conf *confi
                 },
 		Mounts: []string{entrypointVolume, taskVolume, logVolume, zebrunnerVolume},
 		WorkingDirectory: workDir,
-                EntryPoint: []string{"/tmp/entrypoint/entrypoint.sh"},
+                EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
                 DependsOn: []*ecs.ContainerDependency{
                         &ecs.ContainerDependency{
                                 ContainerName: aws.String("entrypoint"),
