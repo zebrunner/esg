@@ -12,13 +12,17 @@ import (
 )
 
 func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {
-	workingDir := "/tmp/zebrunner"
+	workDir := "/tmp/zebrunner"
 	taskVolume := "work"
 
-	loggingDir := "/tmp/log"
+	logDir := "/tmp/log"
 	logVolume := "log"
 
+	entrypointDir := "/tmp/entrypoint"
+	entrypointVolume := "entrypoint"
+
         // -v /opt/zebrunner:/opt/zebrunner
+	zebrunnerDir := "/opt/zebrunner"
         zebrunnerVolume := "zebrunner"
 
 	branchArg := ""
@@ -38,10 +42,10 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
         //fmt.Printf("executorImage: %s\n", executorImage)
 
 
-	cloneCommand := fmt.Sprintf("git clone --verbose --progress --depth=1 %s %s %s", branchArg, caps.RepositoryUrl, workingDir)
+	cloneCommand := fmt.Sprintf("git clone --verbose --progress --depth=1 %s %s %s", branchArg, caps.RepositoryUrl, workDir)
 	//fmt.Printf("cloneCommand: %s\n", cloneCommand)
 
-	taskLogRedirect :=  ">>" + loggingDir + "/task.log 2>&1"
+	taskLogRedirect :=  ">>" + logDir + "/task.log 2>&1"
 
         cloneImage := imageRepo + "git:latest"
         cloneContainer := Container{
@@ -57,6 +61,20 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 EntryPoint: []string{"/bin/sh"},
         }
 
+        entrypointImage := imageRepo + "entrypoint:1.0"
+        entrypointContainer := Container{
+                Name:              "entrypoint",
+                Image:             entrypointImage,
+                cpu:               minCpu,
+                memory:            minMemory,
+                memoryReservation: minMemory,
+                Privileged:        false,
+                Essential:         false,
+                Mounts: []string{entrypointVolume},
+                EntryPoint: []string{"/tmp/entrypoint/entrypoint.sh"},
+        }
+
+
 
         if caps.LaunchCommand == "" {
                 return nil, fmt.Errorf("Executor container launch command is not specified! LaunchCommand='%s'", caps.LaunchCommand)
@@ -64,8 +82,8 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 	launchCommand := caps.LaunchCommand
 
         // install as cli on executor container start
-        preLaunchCommand := ZEBRUNNER_HOME + "/generic/pre-launch.sh" + " && "
-	postLaunchCommand := "; " + ZEBRUNNER_HOME + "/generic/post-launch.sh"
+//        preLaunchCommand := "trap 'echo 0123' 0 1 2 3 6 9 14 15; trap 'echo TERM' TERM ; trap 'echo SIGTERM' SIGTERM ; " + ZEBRUNNER_HOME + "/generic/pre-launch.sh" + " && "
+//	postLaunchCommand := "; " + ZEBRUNNER_HOME + "/generic/post-launch.sh"
 
 	executorContainer := Container{
 		Name:       "executor",
@@ -78,12 +96,18 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                         "AWS_ACCESS_KEY_ID":      conf.AwsAccessKeyID,
                         "AWS_SECRET_ACCESS_KEY":  conf.AwsSecretAccessKey,
                         "AWS_DEFAULT_REGION":     conf.AwsRegion,
+			"COMMAND":		  launchCommand,
                 },
-		Mounts: []string{taskVolume, logVolume, zebrunnerVolume},
-		Command: []string{"-c", preLaunchCommand + launchCommand + taskLogRedirect + postLaunchCommand},
-		WorkingDirectory: workingDir,
-		EntryPoint: []string{"/bin/sh"},
+		Mounts: []string{entrypointVolume, taskVolume, logVolume, zebrunnerVolume},
+                WorkingDirectory: workDir,
+//		Command: []string{"/bin/sh", "-c", launchCommand + taskLogRedirect},
+//		EntryPoint: []string{"/bin/sh"},
+                EntryPoint: []string{"/tmp/entrypoint/entrypoint.sh"},
                 DependsOn: []*ecs.ContainerDependency{
+                        &ecs.ContainerDependency{
+                                ContainerName: aws.String("entrypoint"),
+                                Condition:  aws.String("COMPLETE"),
+                        },
 			&ecs.ContainerDependency{
 				ContainerName: aws.String("clone"),
 				Condition:  aws.String("COMPLETE"),
@@ -112,12 +136,13 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
-		Containers:           []*Container{&cloneContainer, &executorContainer},
+		Containers:           []*Container{&cloneContainer, &entrypointContainer, &executorContainer},
 		Capabilities:         caps,
 		Volumes: map[string]volume{
-			taskVolume: {Driver: "local", Scope: "task", ContainerPath: workingDir, ReadOnly: false},
-                        logVolume: {Driver: "local", Scope: "task", ContainerPath: loggingDir, ReadOnly: false},
-			zebrunnerVolume: {HostPath: "/opt/zebrunner", ContainerPath: "/opt/zebrunner", ReadOnly: true},
+			taskVolume: {Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false},
+                        logVolume: {Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false},
+                        entrypointVolume: {Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false},
+			zebrunnerVolume: {HostPath: zebrunnerDir, ContainerPath: zebrunnerDir, ReadOnly: true},
 		},
                 Network: &NetworkConfiguration{
                         IP: "",
