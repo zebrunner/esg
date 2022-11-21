@@ -14,13 +14,16 @@ import (
 )
 
 func buildCypress(workspace string, caps *capabilities.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {
-	workingDir := "/tmp/zebrunner"
+	workDir := "/tmp/zebrunner"
 	taskVolume := "work"
 
-	loggingDir := "/tmp/log"
+	logDir := "/tmp/log"
 	logVolume := "log"
 
-        // -v /opt/zebrunner:/opt/zebrunner
+	entrypointDir := "/tmp/entrypoint"
+	entrypointVolume := "entrypoint"
+
+	zebrunnerDir := "/opt/zebrunner"
         zebrunnerVolume := "zebrunner"
 
 	branchArg := ""
@@ -35,10 +38,10 @@ func buildCypress(workspace string, caps *capabilities.Capabilities, conf *confi
 	log.Debug("browserImage: " + browserImage)
 
 	cloneCommand := "CHANGE_ME"
-        taskLogRedirect :=  ">>" + loggingDir + "/task.log 2>&1"
+        taskLogRedirect :=  ">>" + logDir + "/task.log 2>&1"
         if caps.RepositoryUrl != "" {
-		cloneCommand = fmt.Sprintf("git clone --verbose --progress --depth=1 %s %s %s", branchArg, caps.RepositoryUrl, workingDir)
-		cloneCommand = cloneCommand + taskLogRedirect + " ; chown -R 4096:4096 " + workingDir + "; chown -R 4096:4096 " + loggingDir
+		cloneCommand = fmt.Sprintf("git clone --verbose --progress --depth=1 %s %s %s", branchArg, caps.RepositoryUrl, workDir)
+		cloneCommand = cloneCommand + taskLogRedirect + " ; chown -R 4096:4096 " + workDir + "; chown -R 4096:4096 " + logDir
 	        //fmt.Printf("cloneCommand: %s\n", cloneCommand)
         }
 
@@ -60,30 +63,42 @@ func buildCypress(workspace string, caps *capabilities.Capabilities, conf *confi
 	launchCommand := "CHANGE_ME"
         if caps.LaunchCommand != "" {
                 launchCommand = caps.LaunchCommand
-	        //fmt.Printf("launchCommand: %s\n", launchCommand)
         }
 
-        // install as cli on executor container start
-        preLaunchCommand := ZEBRUNNER_HOME + "/generic/pre-launch.sh" + " && "
-	postLaunchCommand := "; " + ZEBRUNNER_HOME + "/generic/post-launch.sh"
+        entrypointImage := imageRepo + "entrypoint:1.0"
+        entrypointContainer := Container{
+                Name:              "entrypoint",
+                Image:             entrypointImage,
+                cpu:               minCpu,
+                memory:            minMemory,
+                memoryReservation: minMemory,
+                Privileged:        false,
+                Essential:         false,
+                Mounts: []string{entrypointVolume},
+                EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
+        }
 
 	executorContainer := Container{
 		Name:       "executor",
 		Image:      browserImage,
 		Privileged: false,
 		Essential:  true,
-                Env: map[string]string{ // aws integration required by cypress images to upload recordings per spec/feature
+                Env: map[string]string{
                         "BUCKET":                 conf.S3Bucket,
                         "TENANT":                 workspace,
                         "AWS_ACCESS_KEY_ID":      conf.AwsAccessKeyID,
                         "AWS_SECRET_ACCESS_KEY":  conf.AwsSecretAccessKey,
                         "AWS_DEFAULT_REGION":     conf.AwsRegion,
+			"COMMAND":		  launchCommand,
                 },
-		Mounts: []string{taskVolume, logVolume, zebrunnerVolume},
-		Command: []string{"-c", preLaunchCommand + launchCommand + taskLogRedirect + postLaunchCommand},
-		WorkingDirectory: workingDir,
-		EntryPoint: []string{"/bin/sh"},
+		Mounts: []string{entrypointVolume, taskVolume, logVolume, zebrunnerVolume},
+		WorkingDirectory: workDir,
+                EntryPoint: []string{"/tmp/entrypoint/entrypoint.sh"},
                 DependsOn: []*ecs.ContainerDependency{
+                        &ecs.ContainerDependency{
+                                ContainerName: aws.String("entrypoint"),
+                                Condition:  aws.String("COMPLETE"),
+                        },
 			&ecs.ContainerDependency{
 				ContainerName: aws.String("clone"),
 				Condition:  aws.String("COMPLETE"),
@@ -116,12 +131,13 @@ func buildCypress(workspace string, caps *capabilities.Capabilities, conf *confi
 
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: familyDefinition,
-		Containers:           []*Container{&cloneContainer, &executorContainer},
+		Containers:           []*Container{&cloneContainer, &entrypointContainer, &executorContainer},
 		Capabilities:         caps,
 		Volumes: map[string]volume{
-			taskVolume: {Driver: "local", Scope: "task", ContainerPath: workingDir, ReadOnly: false},
-                        logVolume: {Driver: "local", Scope: "task", ContainerPath: loggingDir, ReadOnly: false},
-			zebrunnerVolume: {HostPath: "/opt/zebrunner", ContainerPath: "/opt/zebrunner", ReadOnly: true},
+			taskVolume: {Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false},
+                        logVolume: {Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false},
+			entrypointVolume: {Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false},
+			zebrunnerVolume: {HostPath: zebrunnerDir, ContainerPath: zebrunnerDir, ReadOnly: true},
 		},
                 Network: &NetworkConfiguration{
                         IP: "",
