@@ -23,6 +23,9 @@ func buildCypress(workspace string, caps *capabilities.Capabilities, conf *confi
 	entrypointDir := "/opt/entrypoint"
 	entrypointVolume := "entrypoint"
 
+        cypressDir := "/opt/cypress"
+	cypressVolume := "cypress"
+
 	zebrunnerDir := "/opt/zebrunner"
         zebrunnerVolume := "zebrunner"
 
@@ -74,7 +77,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities, conf *confi
                 memoryReservation: minMemory,
                 Privileged:        false,
                 Essential:         false,
-                Mounts: []string{entrypointVolume},
+                Mounts: []string{entrypointVolume, cypressVolume},
                 EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
         }
 
@@ -91,7 +94,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities, conf *confi
                         "AWS_DEFAULT_REGION":     conf.AwsRegion,
 			"COMMAND":		  launchCommand,
                 },
-		Mounts: []string{entrypointVolume, taskVolume, logVolume, zebrunnerVolume},
+		Mounts: []string{entrypointVolume, taskVolume, logVolume, zebrunnerVolume, cypressVolume},
 		WorkingDirectory: workDir,
                 EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
                 DependsOn: []*ecs.ContainerDependency{
@@ -137,6 +140,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities, conf *confi
 			taskVolume: {Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false},
                         logVolume: {Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false},
 			entrypointVolume: {Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false},
+                        cypressVolume: {Driver: "local", Scope: "task", ContainerPath: cypressDir, ReadOnly: false},
 			zebrunnerVolume: {HostPath: zebrunnerDir, ContainerPath: zebrunnerDir, ReadOnly: true},
 		},
                 Network: &NetworkConfiguration{
