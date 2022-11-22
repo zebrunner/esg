@@ -20,7 +20,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities, conf *confi
 	logDir := "/tmp/log"
 	logVolume := "log"
 
-	entrypointDir := "/tmp/entrypoint"
+	entrypointDir := "/opt/entrypoint"
 	entrypointVolume := "entrypoint"
 
 	zebrunnerDir := "/opt/zebrunner"

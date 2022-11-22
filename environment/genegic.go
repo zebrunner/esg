@@ -18,7 +18,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 	logDir := "/tmp/log"
 	logVolume := "log"
 
-	entrypointDir := "/tmp/entrypoint"
+	entrypointDir := "/opt/entrypoint"
 	entrypointVolume := "entrypoint"
 
 	zebrunnerDir := "/opt/zebrunner"
