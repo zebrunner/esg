@@ -86,18 +86,26 @@ func (w *waitWorker) start() {
 
 		// Send responses for running tasks
 		for _, task := range tasks {
-			if *task.LastStatus != "RUNNING" {
-				continue
-			}
+                        req, ok := w.requests[*task.TaskArn]
+                        if !ok {
+                                continue
+                        }
 
-			req, ok := w.requests[*task.TaskArn]
-			if !ok {
+                        if *task.LastStatus == "STOPPED" {
+                                log.Error("task: ", *task)
+                                req.errorChan <- errors.New("failed to start task: " + *task.StoppedReason)
+                                close(req.responseChan)
+                                close(req.errorChan)
+                                delete(w.requests, *task.TaskArn)
+                        }
+
+			if *task.LastStatus != "RUNNING" {
 				continue
 			}
 
 			switch *task.HealthStatus {
 			case "UNHEALTHY":
-				req.errorChan <- errors.New("failed to start driver. HealthStatus - UNHEALTHY")
+				req.errorChan <- errors.New("failed to start task. HealthStatus - UNHEALTHY")
 				close(req.responseChan)
 				close(req.errorChan)
 				delete(w.requests, *task.TaskArn)
