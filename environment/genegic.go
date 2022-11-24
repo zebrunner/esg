@@ -24,6 +24,9 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 	zebrunnerDir := "/opt/zebrunner"
         zebrunnerVolume := "zebrunner"
 
+	mavenDir := "/root/.m2/repository"
+	mavenVolume := "maven"
+
 	branchArg := ""
 	if caps.Branch != "" {
 		branchArg = "--branch=" + caps.Branch
@@ -74,6 +77,17 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
         }
 
 
+        mavenImage := imageRepo + "m2-repo-carina:1.0"
+        mavenContainer := Container{
+                Name:              "maven",
+                Image:             mavenImage,
+                cpu:               minCpu,
+                memory:            minMemory,
+                memoryReservation: minMemory,
+                Privileged:        false,
+                Essential:         false,
+                Mounts: []string{mavenVolume},
+        }
 
         if caps.LaunchCommand == "" {
                 return nil, fmt.Errorf("Executor container launch command is not specified! LaunchCommand='%s'", caps.LaunchCommand)
@@ -93,10 +107,14 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                         "AWS_DEFAULT_REGION":     conf.AwsRegion,
 			"COMMAND":		  launchCommand,
                 },
-		Mounts: []string{entrypointVolume, taskVolume, logVolume, zebrunnerVolume},
+		Mounts: []string{entrypointVolume, taskVolume, logVolume, zebrunnerVolume, mavenVolume},
                 WorkingDirectory: workDir,
                 EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
                 DependsOn: []*ecs.ContainerDependency{
+                        &ecs.ContainerDependency{
+                                ContainerName: aws.String("maven"),
+                                Condition:  aws.String("COMPLETE"),
+                        },
                         &ecs.ContainerDependency{
                                 ContainerName: aws.String("entrypoint"),
                                 Condition:  aws.String("COMPLETE"),
@@ -129,12 +147,13 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
-		Containers:           []*Container{&cloneContainer, &entrypointContainer, &executorContainer},
+		Containers:           []*Container{&cloneContainer, &entrypointContainer, &mavenContainer, &executorContainer},
 		Capabilities:         caps,
 		Volumes: map[string]volume{
 			taskVolume: {Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false},
                         logVolume: {Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false},
                         entrypointVolume: {Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false},
+                        mavenVolume: {Driver: "local", Scope: "task", ContainerPath: mavenDir, ReadOnly: false},
 			zebrunnerVolume: {HostPath: zebrunnerDir, ContainerPath: zebrunnerDir, ReadOnly: true},
 		},
                 Network: &NetworkConfiguration{
