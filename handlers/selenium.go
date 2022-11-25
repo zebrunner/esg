@@ -136,7 +136,7 @@ func Create(c *gin.Context) {
 		_ = c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
-	l.WithField("taskId", env.TaskId).WithField("TaskDefinitionFaily", env.TaskDefinitionFamily).Info("Task started")
+	l.WithField("TaskDefinitionFaily", env.TaskDefinitionFamily).Info("Task started: ", env.TaskId)
 
         sessionId := ""
         var resp map[string]interface{}
@@ -167,7 +167,7 @@ func Create(c *gin.Context) {
 		if err != nil {
 			l.WithError(err).WithField("response", resp).Error("Session startup failed")
 			c.JSON(http.StatusInternalServerError, resp)
-			service.RemoveTask(env.TaskId)
+			service.StopTask(env.TaskId)
 			return
 		}
 
@@ -205,11 +205,7 @@ func Create(c *gin.Context) {
 	if err != nil {
 		l.WithError(err).Error("Session not cached")
 	}
-	l.WithFields(log.Fields{
-		"sessionId": sess.ID,
-		"taskId": sess.TaskID,
-		"latency":   util.SecondsSince(sessionStartTime),
-	}).Info("Session cached")
+	l.WithField("latency", util.SecondsSince(sessionStartTime)).Info("Session started: ", sess.ID)
 
 	c.JSON(http.StatusOK, resp)
 }
@@ -246,7 +242,7 @@ func CloseSession(c *gin.Context) {
 		return
 	}
 	selenium.CloseSession(sess.Workspace, sess.ID, &config.Conf)
-	service.RemoveTask(sess.TaskID)
+	service.StopTask(sess.TaskID)
 
 	err = sessionmap.Remove(sessionId)
 	if err != nil {
@@ -254,7 +250,7 @@ func CloseSession(c *gin.Context) {
 		_ = c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
-	log.WithField("sessionID", sessionId).Info("Session closed")
+	log.Info("Session closed: ", sessionId)
 	c.JSON(http.StatusOK, gin.H{"value": nil})
 }
 
@@ -267,7 +263,7 @@ func AbortTask(c *gin.Context) {
 	        c.JSON(http.StatusNotFound, gin.H{})
                 return
         }
-        service.RemoveTask(sess.TaskID)
+        service.StopTask(sess.TaskID)
 
         err = sessionmap.Remove(sessionId)
         if err != nil {

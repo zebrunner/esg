@@ -116,7 +116,7 @@ func main() {
 	log.SetFormatter(&log.TextFormatter{
 		FullTimestamp:   true,
 		TimestampFormat: time.RFC3339Nano,
-		ForceColors:     true,
+		DisableColors:     true,
 	})
 
 	db, err := config.InitDBConnection(config.Conf.DbConnectionString)

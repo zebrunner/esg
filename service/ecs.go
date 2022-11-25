@@ -210,7 +210,7 @@ func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (t
 			return "", fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily)
 		}
 
-		sleepRateLimit := time.Duration(30)
+		sleepRateLimit := time.Duration(15 + rand.Intn(15))
                 if err != nil &&
 		  (strings.Contains(err.Error(), "ThrottlingException: Rate exceeded") || err.Error() == "ClientException: Tasks provisioning capacity limit exceeded.") {
                         time.Sleep(sleepRateLimit)
@@ -263,28 +263,22 @@ func StopTask(taskArn string) (*ecs.StopTaskOutput, error) {
         result, err := svc.StopTask(stopTaskInput)
 	for i < 25 {
         	if err == nil {      // the condition stops matching
-			log.WithField("taskARN", taskArn).WithField("result", result).Trace("Task stopped")
+			log.WithField("taskARN", taskArn).WithField("result", result).Debug("Task stopped")
+			log.Info("Task stopped: ", taskArn)
                 	break        // break out of the loop
         	} else {
-			time.Sleep(30 * time.Second)
+			time.Sleep(time.Duration(rand.Intn(30)) * time.Second)
 			i = i + 1
-			log.WithError(err).WithField("taskARN", taskArn).WithField("retry", i).Debug("Failed to stop task")
+			log.WithError(err).WithField("retry", i).Debug("Failed to stop task")
 	                result, err = svc.StopTask(stopTaskInput)
 		}
 	}
 
-	return result, err
-}
-
-// RemoveTask Method stops task by ARN and remove task-definition after that
-func RemoveTask(taskArn string) {
-
-	_, err := StopTask(taskArn)
-	if err != nil {
-		log.WithError(err).WithField("taskARN", taskArn).Warn("Failed to stop task")
-		return
+	if (err != nil) {
+		log.WithError(err).WithField("retry", i).Error("Failed to stop task")
 	}
-	log.WithField("taskARN", taskArn).Info("Task stopped")
+
+	return result, err
 }
 
 func DescribeTask(taskArn string) (*ecs.DescribeTasksOutput, error) {
@@ -372,7 +366,6 @@ out:
 
 		taskArn, err := RegisterTask(ctx, env)
 
-		l.WithField("latency", time.Since(startTime)).Info("RegisterTask delay")
 		if err != nil {
 			l.WithError(err).WithField("attempt", i).WithField("latency", time.Since(startTime)).Warn("Failed to run task")
 			outputErr = fmt.Errorf("failed to run task: %v", err)
@@ -394,15 +387,15 @@ out:
 		req := taskWaiter.waitFor(ctx, taskArn)
 		select {
 		case err := <-req.errorChan:
-			RemoveTask(taskArn)
+			StopTask(taskArn)
 			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to wait until Task is running and healthy")
 			outputErr = err
 			continue
 		case task := <-req.responseChan:
 			err = setEnvironmentNetwork(env, task)
-			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).Info("setEnvironmentNetwork delay")
+			l.WithField("attempt", i).Debug("setEnvironmentNetwork latency: ", time.Since(startTime))
 			if err != nil {
-				RemoveTask(taskArn)
+				StopTask(taskArn)
 				l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to get service info.")
 				outputErr = fmt.Errorf("failed to get service info: %v", err)
 				continue
@@ -412,7 +405,7 @@ out:
 			return outputErr
 		case <-req.ctx.Done():
 			outputErr = errors.New("failed to wait until task is running. context deadline")
-			RemoveTask(taskArn)
+			StopTask(taskArn)
 			taskWaiter.stopWait(taskArn)
 			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("failed to wait until task is running")
 		}
