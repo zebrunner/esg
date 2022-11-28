@@ -12,6 +12,7 @@ import (
 )
 
 var taskWaiter *waitWorker
+var mutex = &sync.RWMutex{}
 
 func init() {
 	taskWaiter = &waitWorker{
@@ -87,11 +88,6 @@ func (w *waitWorker) start() {
 
 		// Send responses for running tasks
 		for _, task := range tasks {
-                        if *task.LastStatus != "RUNNING" && *task.LastStatus != "STOPPED" {
-				// no sense to verify HEALTHY if task is not started yet or already stopped.
-                                continue
-                        }
-
                         req, ok := w.requests[*task.TaskArn]
                         if !ok {
                                 continue
@@ -103,6 +99,12 @@ func (w *waitWorker) start() {
                                 close(req.responseChan)
                                 close(req.errorChan)
                                 delete(w.requests, *task.TaskArn)
+                        }
+
+
+                        if *task.LastStatus != "RUNNING" {
+				// no sense to verify HEALTHY if task is not started yet or already stopped.
+                                continue
                         }
 
 			switch *task.HealthStatus {
@@ -130,8 +132,7 @@ func (w *waitWorker) waitFor(ctx context.Context, taskId string) *waitRequest {
 		taskId:       taskId,
 	}
 
-
-	var mutex = &sync.Mutex{}
+	// https://medium.com/@luanrubensf/concurrent-map-access-in-go-a6a733c5ffd1
 	mutex.Lock()
 	w.requests[taskId] = &req
 	mutex.Unlock()
