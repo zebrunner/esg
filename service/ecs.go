@@ -17,7 +17,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
-//	"math/rand"
+	"math/rand"
 )
 
 const (
@@ -79,8 +79,9 @@ func ListBrowsers() ([]string, error) {
 			return nil, err
 		}
 		for _, image := range result.ImageDetails {
+			log.Debug("image: ", image)
 			for _, tag := range image.ImageTags {
-				images = append(images, repository+":"+*tag)
+				images = append(images, repository + ":" +*tag)
 			}
 		}
 	}
@@ -128,6 +129,7 @@ func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDe
 	return resultTaskDefinition.TaskDefinition, nil
 }
 
+
 func CreateGenericTaskDefinition(environment *environment.ExecutionEnvironment) (taskDefinition *ecs.TaskDefinition, err error) {
         svc := ecs.New(AwsSess)
 
@@ -169,7 +171,7 @@ func CreateGenericTaskDefinition(environment *environment.ExecutionEnvironment) 
 }
 
 
-func RunTask(ctx context.Context, env *environment.ExecutionEnvironment) (taskArn string, returnErr error) {
+func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (taskArn string, returnErr error) {
 	svc := ecs.New(AwsSess)
 
 	runTaskInput := &ecs.RunTaskInput{
@@ -183,6 +185,7 @@ func RunTask(ctx context.Context, env *environment.ExecutionEnvironment) (taskAr
 			},
 		},
 	}
+        log.WithField("runTaskInput", runTaskInput).Debug("Res runTaskInput")
 
 	// TODO: explicitly minimize errors range to wait only by well-known reasons aka RESOURCE:CPU etc
 	// TODO: convert existing hard-coded 25 retries into the queue or provisioning timeout: https://github.com/zebrunner/esg/issues/72
@@ -194,17 +197,20 @@ func RunTask(ctx context.Context, env *environment.ExecutionEnvironment) (taskAr
 			return "", ctx.Err()
 		default:
 		}
-		// Trying to minimize random sleep this needs performance test. If it doesn't works return old sleep.
-		// sleep := time.Duration(rand.Intn(30)) * time.Second
-		// time.Sleep(sleep)
+		// Random sleep to fix problems with parallel 100+ threads startup. Not applicable got generic and cypress tasks!
+                if env.TaskDefinitionFamily != "generic" && !strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
+			sleep := time.Duration(rand.Intn(30)) * time.Second
+			time.Sleep(sleep)
+		}
+
 		var resultRunTask *ecs.RunTaskOutput
 		resultRunTask, err := svc.RunTask(runTaskInput)
 		// Not good solution but aws doesn't give a choice
 		if err != nil && err.Error() == "ClientException: TaskDefinition not found." {
-			return "", fmt.Errorf("image %s not found", env.TaskDefinitionFamily)
+			return "", fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily)
 		}
 
-		sleepRateLimit := time.Duration(30)
+		sleepRateLimit := time.Duration(15 + rand.Intn(15))
                 if err != nil &&
 		  (strings.Contains(err.Error(), "ThrottlingException: Rate exceeded") || err.Error() == "ClientException: Tasks provisioning capacity limit exceeded.") {
                         time.Sleep(sleepRateLimit)
@@ -247,7 +253,6 @@ func ConstDelay(t time.Duration) func(int) time.Duration {
 func StopTask(taskArn string) (*ecs.StopTaskOutput, error) {
 	svc := ecs.New(AwsSess)
 
-	log.WithField("taskARN", taskArn).Info("Removing task")
 	stopTaskInput := &ecs.StopTaskInput{
 		Cluster: &config.Conf.AwsCluster,
 		Reason:  aws.String("Cancel"),
@@ -258,28 +263,35 @@ func StopTask(taskArn string) (*ecs.StopTaskOutput, error) {
         result, err := svc.StopTask(stopTaskInput)
 	for i < 25 {
         	if err == nil {      // the condition stops matching
-			log.WithField("taskARN", taskArn).WithField("result", result).Trace("Task stopped")
+			log.WithField("taskARN", taskArn).WithField("result", result).Debug("Task stopped")
+			log.Info("Task stopped: ", taskArn)
                 	break        // break out of the loop
         	} else {
-			time.Sleep(30 * time.Second)
+			time.Sleep(time.Duration(rand.Intn(30)) * time.Second)
 			i = i + 1
-			log.WithError(err).WithField("taskARN", taskArn).WithField("retry", i).Debug("Failed to stop task")
+			log.WithError(err).WithField("retry", i).Debug("Failed to stop task")
 	                result, err = svc.StopTask(stopTaskInput)
 		}
+	}
+
+	if (err != nil) {
+		log.WithError(err).WithField("retry", i).Error("Failed to stop task")
 	}
 
 	return result, err
 }
 
-// RemoveTask Method stops task by ARN and remove task-definition after that
-func RemoveTask(taskArn string) {
+func DescribeTask(taskArn string) (*ecs.DescribeTasksOutput, error) {
+        svc := ecs.New(AwsSess)
+        input := &ecs.DescribeTasksInput{
+                Cluster: &config.Conf.AwsCluster,
+                Tasks: []*string{
+                        aws.String(taskArn),
+                },
+        }
 
-	_, err := StopTask(taskArn)
-	if err != nil {
-		log.WithError(err).WithField("taskARN", taskArn).Warn("Failed to stop task")
-		return
-	}
-	log.WithField("taskARN", taskArn).Info("Task stopped")
+        result, err := svc.DescribeTasks(input)
+        return result, err
 }
 
 func searchHostPort(task *ecs.Task, containerPort int64) (port int64, ok bool) {
@@ -352,35 +364,38 @@ out:
 		default:
 		}
 
-		taskArn, err := RunTask(ctx, env)
+		taskArn, err := RegisterTask(ctx, env)
 
-		l.WithField("latency", time.Since(startTime)).Info("RunTask delay")
 		if err != nil {
 			l.WithError(err).WithField("attempt", i).WithField("latency", time.Since(startTime)).Warn("Failed to run task")
-			outputErr = fmt.Errorf("failed to run task: %v", err)
+			outputErr = fmt.Errorf("failed to run task: ", err)
+			if strings.HasPrefix(err.Error(), "image not found: ") || strings.HasPrefix(err.Error(), "InvalidParameterException") { //#366 disable retries for InvalidParameterException
+				break out
+			}
 			continue
 		}
 
 		taskId := strings.Split(taskArn, "/")[2]
 		env.TaskId = taskId
 		l = l.WithField("taskId", taskId)
-	        if env.TaskDefinitionFamily == "generic" {
-			// do not wait for generic task startup.
+	        if env.TaskDefinitionFamily == "generic" || strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
+			l.Debug("do not wait for generic and cypress task startup.")
+			outputErr = nil
 			return outputErr
 		}
 
 		req := taskWaiter.waitFor(ctx, taskArn)
 		select {
 		case err := <-req.errorChan:
-			RemoveTask(taskArn)
+			StopTask(taskArn)
 			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to wait until Task is running and healthy")
 			outputErr = err
 			continue
 		case task := <-req.responseChan:
 			err = setEnvironmentNetwork(env, task)
-			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).Info("setEnvironmentNetwork delay")
+			l.WithField("attempt", i).Debug("setEnvironmentNetwork latency: ", time.Since(startTime))
 			if err != nil {
-				RemoveTask(taskArn)
+				StopTask(taskArn)
 				l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to get service info.")
 				outputErr = fmt.Errorf("failed to get service info: %v", err)
 				continue
@@ -390,7 +405,7 @@ out:
 			return outputErr
 		case <-req.ctx.Done():
 			outputErr = errors.New("failed to wait until task is running. context deadline")
-			RemoveTask(taskArn)
+			StopTask(taskArn)
 			taskWaiter.stopWait(taskArn)
 			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("failed to wait until task is running")
 		}

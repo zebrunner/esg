@@ -12,17 +12,6 @@ import (
 	"github.com/zebrunner/esg/config"
 )
 
-const (
-	seleniumPort   int64 = 4444
-	vncPort        int64 = 5900
-	devtoolsPort   int64 = 7070
-	fileserverPort int64 = 8080
-	clipboardPort  int64 = 9090
-
-	recorderCpu    int64 = 320
-	recorderMemory int64 = 1024
-)
-
 func buildBrowser(workspace string, caps *capabilities.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {
 	id := uuid.New().String()
 

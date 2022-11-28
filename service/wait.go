@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"time"
+	"sync"
 
 	"github.com/aws/aws-sdk-go/service/ecs"
 	log "github.com/sirupsen/logrus"
@@ -11,6 +12,7 @@ import (
 )
 
 var taskWaiter *waitWorker
+var mutex = &sync.RWMutex{}
 
 func init() {
 	taskWaiter = &waitWorker{
@@ -86,18 +88,29 @@ func (w *waitWorker) start() {
 
 		// Send responses for running tasks
 		for _, task := range tasks {
-			if *task.LastStatus != "RUNNING" {
-				continue
-			}
+                        req, ok := w.requests[*task.TaskArn]
+                        if !ok {
+                                continue
+                        }
 
-			req, ok := w.requests[*task.TaskArn]
-			if !ok {
-				continue
-			}
+                        if *task.LastStatus == "STOPPED" {
+                                log.Error("Task stopped: ", *task)
+                                req.errorChan <- errors.New("failed to start task: " + *task.StoppedReason)
+                                close(req.responseChan)
+                                close(req.errorChan)
+                                delete(w.requests, *task.TaskArn)
+                        }
+
+
+                        if *task.LastStatus != "RUNNING" {
+				// no sense to verify HEALTHY if task is not started yet or already stopped.
+                                continue
+                        }
 
 			switch *task.HealthStatus {
 			case "UNHEALTHY":
-				req.errorChan <- errors.New("failed to start driver. HealthStatus - UNHEALTHY")
+                                log.Error("Task unhealthy: ", *task)
+				req.errorChan <- errors.New("failed to start task. HealthStatus - UNHEALTHY")
 				close(req.responseChan)
 				close(req.errorChan)
 				delete(w.requests, *task.TaskArn)
@@ -119,7 +132,10 @@ func (w *waitWorker) waitFor(ctx context.Context, taskId string) *waitRequest {
 		taskId:       taskId,
 	}
 
+	// https://medium.com/@luanrubensf/concurrent-map-access-in-go-a6a733c5ffd1
+	mutex.Lock()
 	w.requests[taskId] = &req
+	mutex.Unlock()
 
 	return &req
 }

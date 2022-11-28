@@ -13,6 +13,10 @@ var (
 		"firefox",
 		"edge",
 		"redroid",
+		"cypress-chrome",
+		"cypress-chromium",
+		"cypress-edge",
+		"cypress-firefox",
 	}
 	VendorPrefix = "zebrunner"
 	Conf         = Config{}
@@ -55,7 +59,6 @@ type Config struct {
 
 	UsePublicIp             bool
 	S3Bucket                string // For static artifacts
-	TrustedMode             bool
 	Tenant                  string
 	LogLevel                string
 	ReserveInstancesPercent float64
@@ -93,7 +96,6 @@ func init() {
 	flag.BoolVar(&Conf.UsePublicIp, "use-public-ip", false, "Use or no public ip address for browser slave instances")
 	flag.StringVar(&Conf.S3Bucket, "s3-bucket", "", "S3 Bucket name for pushing artifacts")
 	flag.StringVar(&Conf.Tenant, "tenant", "", "Zebrunner tenant name")
-	flag.BoolVar(&Conf.TrustedMode, "trusted", false, "If trusted mode enabled hub does not require any auth")
 	flag.StringVar(&Conf.LogLevel, "log-level", "debug", "Desired log level. Valid levels: `panic`, `fatal`, `error`, `warning`, `info`, `debug`, `trace`")
 	flag.Float64Var(&Conf.ReserveInstancesPercent, "reserve-instances-percent", 0.25, "Reserved cluster capacity quota during scale up and down operations")
 
@@ -122,5 +124,5 @@ func (c *Config) ParseLogLevel() logrus.Level {
 }
 
 func (c *Config) ZebrunnerIsIntegrated() bool {
-	return c.ZebrunnerHost != "" && c.ZebrunnerIntegrationUser != "" && c.ZebrunnerIntegrationPassword != "" && !c.TrustedMode
+	return c.ZebrunnerHost != "" && c.ZebrunnerIntegrationUser != "" && c.ZebrunnerIntegrationPassword != ""
 }

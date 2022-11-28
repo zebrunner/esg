@@ -116,7 +116,7 @@ func Create(c *gin.Context) {
 		return
 	}
 
-	//l.WithField("env", env).Info("Execution env")
+	l.WithField("env", env).Debug("Execution env")
 
         if env.TaskDefinitionFamily == "generic" {
 	        _, err = service.CreateGenericTaskDefinition(env)
@@ -136,15 +136,15 @@ func Create(c *gin.Context) {
 		_ = c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
-	// l.WithField("taskID", driver.TaskID).Info("Service started successfully")
+	l.WithField("TaskDefinitionFaily", env.TaskDefinitionFamily).Info("Task started: ", env.TaskId)
 
         sessionId := ""
         var resp map[string]interface{}
-        if env.TaskDefinitionFamily == "generic" {
+        if env.TaskDefinitionFamily == "generic" || strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
                 sessionId = env.TaskId
                 data := "{\"taskId\": \"" + env.TaskId + "\"}"
                 json.Unmarshal([]byte(data), &resp)
-                l.WithFields(log.Fields{"resp": resp,}).Info("Response")
+                l.WithFields(log.Fields{"resp": resp,}).Debug("Response")
 	} else {
 		u, ok := env.Network.GetUrl("driver")
 		if !ok {
@@ -167,7 +167,7 @@ func Create(c *gin.Context) {
 		if err != nil {
 			l.WithError(err).WithField("response", resp).Error("Session startup failed")
 			c.JSON(http.StatusInternalServerError, resp)
-			service.RemoveTask(env.TaskId)
+			service.StopTask(env.TaskId)
 			return
 		}
 
@@ -196,7 +196,7 @@ func Create(c *gin.Context) {
 		TaskID:          env.TaskId,
 		Workspace:       workspace,
 	}
-	if env.TaskDefinitionFamily == "generic" {
+	if env.TaskDefinitionFamily == "generic" || strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
 		// extra state for generic job to disable idleTimeout verification at all
 		sess.Status = sessionmap.SessionQueued
 	}
@@ -205,11 +205,7 @@ func Create(c *gin.Context) {
 	if err != nil {
 		l.WithError(err).Error("Session not cached")
 	}
-	l.WithFields(log.Fields{
-		"sessionId": sess.ID,
-		"taskId": sess.TaskID,
-		"latency":   util.SecondsSince(sessionStartTime),
-	}).Info("Session created")
+	l.WithField("latency", util.SecondsSince(sessionStartTime)).Info("Session started: ", sess.ID)
 
 	c.JSON(http.StatusOK, resp)
 }
@@ -246,7 +242,7 @@ func CloseSession(c *gin.Context) {
 		return
 	}
 	selenium.CloseSession(sess.Workspace, sess.ID, &config.Conf)
-	service.RemoveTask(sess.TaskID)
+	service.StopTask(sess.TaskID)
 
 	err = sessionmap.Remove(sessionId)
 	if err != nil {
@@ -254,7 +250,7 @@ func CloseSession(c *gin.Context) {
 		_ = c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
-	log.WithField("sessionID", sessionId).Info("Session closed")
+	log.Info("Session closed: ", sessionId)
 	c.JSON(http.StatusOK, gin.H{"value": nil})
 }
 
@@ -267,7 +263,7 @@ func AbortTask(c *gin.Context) {
 	        c.JSON(http.StatusNotFound, gin.H{})
                 return
         }
-        service.RemoveTask(sess.TaskID)
+        service.StopTask(sess.TaskID)
 
         err = sessionmap.Remove(sessionId)
         if err != nil {
@@ -323,10 +319,6 @@ func Vnc(wsconn *websocket.Conn) {
 
 func Logs(c *gin.Context) {
 	user, _, ok := c.Request.BasicAuth()
-	if config.Conf.TrustedMode {
-		user = "zebrunner"
-		ok = true
-	}
 
 	if !ok {
 		_ = c.Error(&utils.HTTPError{
@@ -348,10 +340,6 @@ func Logs(c *gin.Context) {
 
 func Video(c *gin.Context) {
 	user, _, ok := c.Request.BasicAuth()
-	if config.Conf.TrustedMode {
-		user = "zebrunner"
-		ok = true
-	}
 	if !ok {
 		_ = c.Error(&utils.HTTPError{
 			Status:  http.StatusBadRequest,
@@ -377,10 +365,6 @@ func Video(c *gin.Context) {
 
 func TaskLog(c *gin.Context) {
         user, _, ok := c.Request.BasicAuth()
-        if config.Conf.TrustedMode {
-                user = "zebrunner"
-                ok = true
-        }
 
         if !ok {
                 _ = c.Error(&utils.HTTPError{
@@ -398,6 +382,28 @@ func TaskLog(c *gin.Context) {
                 return
         }
         c.Redirect(http.StatusFound, presignedUrl)
+}
+
+func TaskDescribe(c *gin.Context) {
+        user, _, ok := c.Request.BasicAuth()
+
+        if !ok {
+                _ = c.Error(&utils.HTTPError{
+                        Status:  http.StatusBadRequest,
+                        Message: "Auth data not provided"},
+                ).SetType(gin.ErrorTypePublic)
+                return
+        }
+        taskId := c.Param("task")
+        log.WithField("user", user).WithField("taskId", taskId).Debug("Get task status")
+        result, err := service.DescribeTask(taskId)
+        if err != nil {
+                log.WithError(err).WithField("taskId", taskId).Error("Failed to get task status")
+                _ = c.Error(err).SetType(gin.ErrorTypePublic)
+                return
+        }
+        c.JSON(http.StatusOK, gin.H{"status": result.Tasks[0].LastStatus})
+
 }
 
 

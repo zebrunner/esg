@@ -1,3 +1,4 @@
+
 package handlers
 
 import (
@@ -84,9 +85,17 @@ func ListDrivers(c *gin.Context) {
 	}
 
 	var browsersResponse []map[string]interface{}
+
 	imagesPlatforms := map[string]string{
 		"redroid": "android",
 	}
+        cypressPlatforms := map[string]string{
+                "cypress-chrome": "cypress",
+                "cypress-chromium": "cypress",
+                "cypress-edge": "cypress",
+                "cypress-firefox": "cypress",
+        }
+
 	for _, image := range images {
 		name := strings.Split(image, ":")[0]
 		version := strings.Split(image, ":")[1]
@@ -105,10 +114,16 @@ func ListDrivers(c *gin.Context) {
 			"platform": "linux",
 		}
 
-		if _, ok := imagesPlatforms[name]; ok {
-			browserData["platform"] = imagesPlatforms[name]
-			browserData["browserName"] = "chrome"
-			browserData["browserVersion"] = "99.0"
+                if _, ok := imagesPlatforms[name]; ok {
+			// hardcoded browser name and verion for ReDroid emulator
+                        browserData["platform"] = imagesPlatforms[name]
+                        browserData["browserName"] = "chrome"
+                        browserData["browserVersion"] = "107.0"
+                }
+
+		if _, ok := cypressPlatforms[name]; ok {
+			browserData["image"] = "public.ecr.aws/zebrunner/" + image
+			browserData["platform"] = cypressPlatforms[name]
 		}
 
 		browsersResponse = append(browsersResponse, browserData)

@@ -164,7 +164,7 @@ func CleanDeadTasks() {
 
 		for _, task := range tasks {
 			if time.Since(*task.CreatedAt) > 24*time.Hour {
-				service.RemoveTask(*task.TaskArn)
+				service.StopTask(*task.TaskArn)
 			}
 		}
 

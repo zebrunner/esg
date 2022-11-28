@@ -10,6 +10,8 @@ import (
         "github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
+
+        log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -18,8 +20,27 @@ const (
 	redroidDevice   = "redroid"
 	anyPlatform     = "any"
 	genericPlatform = "generic"
+	cypressPlatform = "cypress"
 	imageRepo       = "public.ecr.aws/zebrunner/" //public zebrunner ECR docker registry
+
+	ZEBRUNNER_HOME  = "/opt/zebrunner"
 )
+
+const (
+        seleniumPort   int64 = 4444
+        vncPort        int64 = 5900
+        devtoolsPort   int64 = 7070
+        fileserverPort int64 = 8080
+        clipboardPort  int64 = 9090
+
+        recorderCpu    int64 = 320
+        recorderMemory int64 = 1024
+
+        genericPort   int64 = 22
+        minCpu    = 256
+        minMemory = 256
+)
+
 
 type NetworkConfiguration struct {
 	IP        string
@@ -111,7 +132,6 @@ func (e *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefinition
                         command = append(command, &cmdName)
                 }
                 definition.Command = command
-
 		definitions = append(definitions, &definition)
 	}
 
@@ -138,9 +158,17 @@ func (e *ExecutionEnvironment) ContainerOverrides() []*ecs.ContainerOverride {
 			value := v
 			env = append(env, &ecs.KeyValuePair{Name: &key, Value: &value})
 		}
-
 		override.Environment = env
+
+                command := []*string{}
+                for _, cmd := range container.Command {
+                        cmdName := cmd //local declaration required to append all values
+                        command = append(command, &cmdName)
+                }
+                override.Command = command
+
 		overrides = append(overrides, &override)
+
 	}
 
 	return overrides
@@ -155,11 +183,13 @@ func Build(workspace string, caps *capabilities.Capabilities, conf *config.Confi
 		return nil, fmt.Errorf("device is not supported. deviceName=%s", caps.DeviceName)
 	} else if platform == genericPlatform {
 		return buildGeneric(workspace, caps, conf)
+        } else if platform == cypressPlatform {
+		return buildCypress(workspace, caps, conf)
 	} else if platform == linuxPlatform || platform == "" || platform == anyPlatform {
 		return buildBrowser(workspace, caps, conf)
 	}
 
-	return nil, fmt.Errorf("unsupported platform name. platformName=%s", caps.PlatformName)
+	return nil, fmt.Errorf("platform is not supported. platformName=%s", caps.PlatformName)
 }
 
 func (e *ExecutionEnvironment) GetPorts() map[string]portMapping {
@@ -208,10 +238,19 @@ func buildImage(caps *capabilities.Capabilities) (string, error) {
 		name = remapName(name)
 		version := strings.ToLower(caps.BrowserVersion)
 		version = remapVersion(version)
-
 		return imageRepo + name + ":" + version, nil
+        } else if platformName == cypressPlatform {
+                if caps.Image != "" {
+                        return caps.Image, nil
+                }
+		//use-case for task definition generation
+                name := strings.ToLower(caps.BrowserName)
+       	        name = remapName(name)
+               	version := strings.ToLower(caps.BrowserVersion)
+                version = remapVersion(version)
+                return imageRepo + name + ":" + version, nil
 	} else {
-		return "", fmt.Errorf("filed to build container image name. unsupported platform specified. platformName=%s", caps.PlatformName)
+		return "", fmt.Errorf("filed to build container image. unsupported platform specified. platformName=%s", caps.PlatformName)
 	}
 }
 
@@ -241,9 +280,9 @@ func buildTaskDefinitionFamily(caps *capabilities.Capabilities) string {
 		browserVersion = strings.Replace(browserVersion, ".", "-", -1)
 		familyParts = append(familyParts, browserVersion)
 	}
-        //fmt.Printf("caps -> %v\n", caps)
-	//fmt.Printf("familyParts -> %v\n", familyParts)
 
+        log.Debug("caps: ", caps)
+        log.Debug("familyParts: ", familyParts)
 	return strings.Join(familyParts, "-")
 }
 

@@ -72,6 +72,7 @@ func FromImage(image string) (*Capabilities, error) {
 	platforms := map[string][]string{
 		"android": {"redroid"},
 		"linux":   {"chrome", "firefox", "edge"},
+                "cypress": {"cypress-chrome", "cypress-chromium", "cypress-edge", "cypress-firefox"},
 	}
 
 	parts := strings.Split(image, ":")
@@ -81,6 +82,7 @@ func FromImage(image string) (*Capabilities, error) {
 
 	executor := parts[0]
 	version := parts[1]
+
 	if executor == "redroid" {
 		return &Capabilities{
 			PlatformName:    "android",
@@ -93,6 +95,12 @@ func FromImage(image string) (*Capabilities, error) {
 			BrowserName:    executor,
 			BrowserVersion: version,
 		}, nil
+        } else if in(executor, platforms["cypress"]) {
+                return &Capabilities{
+                        PlatformName:   "cypress",
+                        BrowserName:    executor,
+                        BrowserVersion: version,
+                }, nil
 	} else {
 		return nil, fmt.Errorf("failed to build capabilities from unknown image. image=%s", image)
 	}
