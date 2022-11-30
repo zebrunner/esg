@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/utils"
@@ -15,6 +16,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
 )
+
+var mutexDB = &sync.RWMutex{}
 
 type User struct {
 	ID        int `db:"id"`
@@ -68,7 +71,9 @@ func CreateUser(name string, password *string) (string, error) {
 func GetUser(name string) (*User, error) {
 	getQuery := `SELECT id, name, password, is_active FROM users WHERE is_deleted = false AND name = $1`
 	user := User{}
+	mutexDB.Lock()
 	err := config.DbConnection.Get(&user, getQuery, name)
+	mutexDB.Unlock()
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, &utils.HTTPError{
@@ -79,6 +84,7 @@ func GetUser(name string) (*User, error) {
 			return nil, err
 		}
 	}
+
 	return &user, nil
 }
 
