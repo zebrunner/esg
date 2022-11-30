@@ -43,7 +43,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities, conf *confi
 	cloneCommand := "CHANGE_ME"
         taskLogRedirect :=  ">>" + logDir + "/task.log 2>&1"
         if caps.RepositoryUrl != "" {
-		cloneCommand = fmt.Sprintf("git clone --verbose --progress --depth=1 %s %s %s", branchArg, caps.RepositoryUrl, workDir)
+		cloneCommand = fmt.Sprintf("git clone --depth=1 --single-branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
 		cloneCommand = cloneCommand + taskLogRedirect + " ; chown -R 4096:4096 " + workDir + "; chown -R 4096:4096 " + logDir
 	        //fmt.Printf("cloneCommand: %s\n", cloneCommand)
         }
@@ -54,8 +54,8 @@ func buildCypress(workspace string, caps *capabilities.Capabilities, conf *confi
                 Name:              "clone",
                 Image:             cloneImage,
                 cpu:               minCpu,
-                memory:            minMemory,
-                memoryReservation: minMemory,
+                memory:            512,
+                memoryReservation: 512,
                 Privileged:        false,
                 Essential:         false,
                 Mounts: []string{taskVolume, logVolume},
@@ -122,9 +122,9 @@ func buildCypress(workspace string, caps *capabilities.Capabilities, conf *confi
 	executorContainer.SetMemoryReservation(caps.MemoryReservation)
 
 	//TODO: remove hardcoded cpu/memory
-        executorContainer.SetCpu(2048)
-        executorContainer.SetMemory(4096)
-        executorContainer.SetMemoryReservation(4096)
+//        executorContainer.SetCpu(2048)
+//        executorContainer.SetMemory(4096)
+//        executorContainer.SetMemoryReservation(4096)
 
         // convert image "public.ecr.aws/zebrunner/cypress-chrome:107.0" to task definition failiy: "cypress-cypress-chrome-107-0"
         familyDefinition := strings.Replace(browserImage, imageRepo, "", -1)
