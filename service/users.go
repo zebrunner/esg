@@ -101,16 +101,22 @@ func ActivationUser(name string, isActive bool) error {
 	return nil
 }
 
-func RefreshToken(name string) (string, error) {
+func RefreshToken(name string, pwd *string) (string, error) {
 	user, err := GetUser(name)
 	if err != nil {
 		return "", err
 	}
-	pwd, err := generatePassword()
-	if err != nil {
-		return "", err
+	password := ""
+	if pwd == nil {
+		password, err = generatePassword()
+		if err != nil {
+			return "", err
+		}
+	} else {
+		password = *pwd
 	}
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(pwd), bcrypt.DefaultCost)
+
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return "", err
 	}
@@ -119,7 +125,7 @@ func RefreshToken(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return pwd, nil
+	return password, nil
 }
 
 func DeleteUser(name string) error {
