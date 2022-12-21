@@ -104,6 +104,7 @@ func Create(c *gin.Context) {
 		_ = c.Error(&processingError).SetType(gin.ErrorTypePublic)
 		return
 	}
+        log.Trace("caps: ", caps)
 
 	sessionStartTime := time.Now()
 	ctx, ctxCancel := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout)
@@ -167,7 +168,7 @@ func Create(c *gin.Context) {
 		if err != nil {
 			l.WithError(err).WithField("response", resp).Error("Session startup failed")
 			c.JSON(http.StatusInternalServerError, resp)
-			service.StopTask(env.TaskId)
+			service.StopTask(env.TaskId, nil)
 			return
 		}
 
@@ -241,8 +242,8 @@ func CloseSession(c *gin.Context) {
 		_ = c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
-	selenium.CloseSession(sess.Workspace, sess.ID, &config.Conf)
-	service.StopTask(sess.TaskID)
+	selenium.CloseSession(sess, &config.Conf)
+	service.StopTask(sess.TaskID, sess)
 
 	err = sessionmap.Remove(sessionId)
 	if err != nil {
@@ -263,7 +264,7 @@ func AbortTask(c *gin.Context) {
 	        c.JSON(http.StatusNotFound, gin.H{})
                 return
         }
-        service.StopTask(sess.TaskID)
+        service.StopTask(sess.TaskID, sess)
 
         err = sessionmap.Remove(sessionId)
         if err != nil {
