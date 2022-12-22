@@ -163,7 +163,7 @@ func Create(c *gin.Context) {
 
 		c.Request.URL.Host, c.Request.URL.Path = u.Host, path.Join(u.Path, c.Request.URL.Path)
 		c.Request.URL.Scheme = "http"
-		l.WithFields(log.Fields{"serviceUrl": u,}).Info("Starting session")
+		l.WithField("id", env.TaskId).WithField("serviceUrl", u).Info("session starting")
 		resp, err = selenium.StartSession(c.Request.Context(), c.Request.URL, c.Request.Header, requestBody)
 		if err != nil {
 			l.WithError(err).WithField("response", resp).Error("Session startup failed")
