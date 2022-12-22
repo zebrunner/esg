@@ -265,13 +265,20 @@ func StopTask(taskArn string, session *sessionmap.Session) (*ecs.StopTaskOutput,
         result, err := svc.StopTask(stopTaskInput)
 	for i < 25 {
         	if err == nil {      // the condition stops matching
-			log.WithField("taskARN", taskArn).WithField("result", result).Debug("Task stopped")
-			log.Info("Task stopped: ", taskArn)
+			log.WithField("id", taskArn).WithField("result", result).Debug("Task stopped")
+			log.WithField("id", taskArn).Info("    task stopped") //spaces in the beginning for #390
+
 
                         if session != nil {
-                          // register usage resources only for valid sessions
-                          sessionTime := time.Since(session.StartedAt)
-                          zebrunner.TrackResourcesUsage(session, sessionTime, &config.Conf)
+
+                        	err = sessionmap.Remove(session.ID)
+                        	if err != nil {
+                                	log.WithError(err).WithField("taskId", session.ID).Error("Failed to remove task from session map")
+                        	}
+
+                        	// register usage resources only for valid sessions
+                        	sessionTime := time.Since(session.StartedAt)
+                        	zebrunner.TrackResourcesUsage(session, sessionTime, &config.Conf)
                         }
                         // break out of the loop
                 	break

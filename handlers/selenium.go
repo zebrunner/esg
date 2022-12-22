@@ -137,7 +137,7 @@ func Create(c *gin.Context) {
 		_ = c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
-	l.WithField("TaskDefinitionFaily", env.TaskDefinitionFamily).Info("Task started: ", env.TaskId)
+	l.WithField("task_definition_family", env.TaskDefinitionFamily).WithField("id", env.TaskId).Info("    task started") //spaces in the beginning for #390
 
         sessionId := ""
         var resp map[string]interface{}
@@ -206,7 +206,7 @@ func Create(c *gin.Context) {
 	if err != nil {
 		l.WithError(err).Error("Session not cached")
 	}
-	l.WithField("latency", util.SecondsSince(sessionStartTime)).Info("Session started: ", sess.ID)
+	l.WithField("id", sess.ID).WithField("latency", util.SecondsSince(sessionStartTime)).Info("session recorded")
 
 	c.JSON(http.StatusOK, resp)
 }
@@ -245,34 +245,22 @@ func CloseSession(c *gin.Context) {
 	selenium.CloseSession(sess, &config.Conf)
 	service.StopTask(sess.TaskID, sess)
 
-	err = sessionmap.Remove(sessionId)
-	if err != nil {
-		log.WithError(err).WithField("sessionID", sessionId).Error("Failed to remove session from session map")
-		_ = c.Error(err).SetType(gin.ErrorTypePublic)
-		return
-	}
-	log.Info("Session closed: ", sessionId)
+	log.WithField("id", sessionId).Info("  session closed") //spaces in the beginning for #390
 	c.JSON(http.StatusOK, gin.H{"value": nil})
 }
 
-func AbortTask(c *gin.Context) {
+func FinishTask(c *gin.Context) {
+        log.Debug("Starting FinishTask...")
         sessionId := c.Param("task")
         sess, err := getSession(sessionId)
         if err != nil {
-                log.WithError(err).WithField("taskID", sessionId).Error("Can not find task")
-                _ = c.Error(err).SetType(gin.ErrorTypePublic)
-	        c.JSON(http.StatusNotFound, gin.H{})
+                log.WithField("id", sessionId).WithError(err).Warn("task not found")
+		//there is no sense to proceed as task is already finished/removed and not present in the sessionmap
                 return
         }
         service.StopTask(sess.TaskID, sess)
 
-        err = sessionmap.Remove(sessionId)
-        if err != nil {
-                log.WithError(err).WithField("taskID", sessionId).Error("Failed to remove task from session map")
-                _ = c.Error(err).SetType(gin.ErrorTypePublic)
-                return
-        }
-        log.WithField("taskID", sessionId).Info("Task aborted")
+        log.WithField("id", sessionId).Info("   task finished") //spaces in the beginning for #390
         c.JSON(http.StatusNoContent, gin.H{})
 }
 
