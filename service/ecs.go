@@ -273,7 +273,7 @@ func StopTask(taskArn string, session *sessionmap.Session) (*ecs.StopTaskOutput,
 
                         	err = sessionmap.Remove(session.ID)
                         	if err != nil {
-                                	log.WithError(err).WithField("taskId", session.ID).Error("Failed to remove task from session map")
+                                	log.WithError(err).WithField("id", session.ID).Error("failed to remove task from sessions map")
                         	}
 
                         	// register usage resources only for valid sessions
@@ -393,7 +393,7 @@ out:
 
 		taskId := strings.Split(taskArn, "/")[2]
 		env.TaskId = taskId
-		l = l.WithField("taskId", taskId)
+		l = l.WithField("id", taskId)
 	        if env.TaskDefinitionFamily == "generic" || strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
 			l.Debug("do not wait for generic and cypress task startup.")
 			outputErr = nil
