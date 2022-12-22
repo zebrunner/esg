@@ -74,12 +74,12 @@ func init() {
 	flag.StringVar(&Conf.AwsAccessKeyID, "aws-access-key-id", "", "Access key for S3 bucket")
 	flag.StringVar(&Conf.AwsSecretAccessKey, "aws-secret-access-key", "", "Secret key for S3 bucket")
 
-	flag.Int64Var(&Conf.MinMemory, "min-memory", 1536, "minimum memory limitation for session")
-	flag.Int64Var(&Conf.MinMemoryReservation, "min-memory-reservation", 1536, "minimum memory reservation limitation for session")
-	flag.Int64Var(&Conf.MaxMemory, "max-memory", 8192, "maximum memory limitation for session")
-	flag.Int64Var(&Conf.MaxMemoryReservation, "max-memory-reservation", 8192, "maximum memory reservation limitation for session")
+	flag.Int64Var(&Conf.MinMemory, "min-memory", 2048, "minimum memory limitation for session")
+	flag.Int64Var(&Conf.MinMemoryReservation, "min-memory-reservation", 2048, "minimum memory reservation limitation for session")
+	flag.Int64Var(&Conf.MaxMemory, "max-memory", 28675, "maximum memory limitation for session") // max memory for c5a.4xlarge
+	flag.Int64Var(&Conf.MaxMemoryReservation, "max-memory-reservation", 28675, "maximum memory reservation limitation for session")
 	flag.Int64Var(&Conf.MinCpu, "min-cpu", 1024, "minimum CPU limitation for session")
-	flag.Int64Var(&Conf.MaxCpu, "max-cpu", 7936, "maximum CPU limitation for session")
+	flag.Int64Var(&Conf.MaxCpu, "max-cpu", 16384, "maximum CPU limitation for session") //max cpu for c5a.4xlarge
 
 	flag.DurationVar(&Conf.IdleTimeout, "idle-timeout", 60*time.Second, "Session idle timeout in time.Duration format")
 	flag.DurationVar(&Conf.SessionStartupTimeout, "session-startup-timeout", 90*time.Second, "Session healthcheck(s) startup timeout in time.Duration format")

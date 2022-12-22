@@ -17,6 +17,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
+        "github.com/zebrunner/esg/zebrunner"
+        sessionmap "github.com/zebrunner/esg/sessinonmap"
 	"math/rand"
 )
 
@@ -250,7 +252,7 @@ func ConstDelay(t time.Duration) func(int) time.Duration {
 	}
 }
 
-func StopTask(taskArn string) (*ecs.StopTaskOutput, error) {
+func StopTask(taskArn string, session *sessionmap.Session) (*ecs.StopTaskOutput, error) {
 	svc := ecs.New(AwsSess)
 
 	stopTaskInput := &ecs.StopTaskInput{
@@ -263,9 +265,23 @@ func StopTask(taskArn string) (*ecs.StopTaskOutput, error) {
         result, err := svc.StopTask(stopTaskInput)
 	for i < 25 {
         	if err == nil {      // the condition stops matching
-			log.WithField("taskARN", taskArn).WithField("result", result).Debug("Task stopped")
-			log.Info("Task stopped: ", taskArn)
-                	break        // break out of the loop
+			log.WithField("id", taskArn).WithField("result", result).Debug("    task stopped")
+			log.WithField("id", taskArn).Info("    task stopped") //spaces in the beginning for #390
+
+
+                        if session != nil {
+
+                        	err = sessionmap.Remove(session.ID)
+                        	if err != nil {
+                                	log.WithError(err).WithField("id", session.ID).Error("failed to remove task from sessions map")
+                        	}
+
+                        	// register usage resources only for valid sessions
+                        	sessionTime := time.Since(session.StartedAt)
+                        	zebrunner.TrackResourcesUsage(session, sessionTime, &config.Conf)
+                        }
+                        // break out of the loop
+                	break
         	} else {
 			time.Sleep(time.Duration(rand.Intn(30)) * time.Second)
 			i = i + 1
@@ -377,7 +393,7 @@ out:
 
 		taskId := strings.Split(taskArn, "/")[2]
 		env.TaskId = taskId
-		l = l.WithField("taskId", taskId)
+		l = l.WithField("id", taskId)
 	        if env.TaskDefinitionFamily == "generic" || strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
 			l.Debug("do not wait for generic and cypress task startup.")
 			outputErr = nil
@@ -387,7 +403,7 @@ out:
 		req := taskWaiter.waitFor(ctx, taskArn)
 		select {
 		case err := <-req.errorChan:
-			StopTask(taskArn)
+			StopTask(taskArn, nil)
 			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to wait until Task is running and healthy")
 			outputErr = err
 			continue
@@ -395,7 +411,7 @@ out:
 			err = setEnvironmentNetwork(env, task)
 			l.WithField("attempt", i).Debug("setEnvironmentNetwork latency: ", time.Since(startTime))
 			if err != nil {
-				StopTask(taskArn)
+				StopTask(taskArn, nil)
 				l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to get service info.")
 				outputErr = fmt.Errorf("failed to get service info: %v", err)
 				continue
@@ -405,7 +421,7 @@ out:
 			return outputErr
 		case <-req.ctx.Done():
 			outputErr = errors.New("failed to wait until task is running. context deadline")
-			StopTask(taskArn)
+			StopTask(taskArn, nil)
 			taskWaiter.stopWait(taskArn)
 			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("failed to wait until task is running")
 		}

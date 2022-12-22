@@ -63,8 +63,8 @@ func ClearSessions() {
 				err = sessionmap.Write(key, session, 10*time.Minute)
 
 				log.WithField("task", session.TaskID).Info("Deleting task. Reason: idle timeout")
-				selenium.CloseSession(session.Workspace, key, &config.Conf)
-				_, err = service.StopTask(session.TaskID)
+				selenium.CloseSession(session, &config.Conf)
+				_, err = service.StopTask(session.TaskID, session)
 				if err != nil {
 					log.WithError(err).Error("Failed to stop task")
 				}
@@ -148,7 +148,7 @@ func RefreshTaskDefinitionsFromFile(path string) {
 	}
 }
 
-func CleanDeadTasks() {
+func CleanZombieTasks() {
 	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
 	if err != nil {
 		log.WithError(err).Error("Failed to create AWS session")
@@ -164,7 +164,8 @@ func CleanDeadTasks() {
 
 		for _, task := range tasks {
 			if time.Since(*task.CreatedAt) > 24*time.Hour {
-				service.StopTask(*task.TaskArn)
+                                //TODO: calculate zombie session resources and track them
+				service.StopTask(*task.TaskArn, nil)
 			}
 		}
 
@@ -206,7 +207,7 @@ func main() {
 	go ClearSessions()
 
 	wg.Add(1)
-	go CleanDeadTasks()
+	go CleanZombieTasks()
 
 	wg.Wait()
 	log.Fatal("Background worker stopped!")
