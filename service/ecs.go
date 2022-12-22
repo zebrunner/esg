@@ -265,7 +265,7 @@ func StopTask(taskArn string, session *sessionmap.Session) (*ecs.StopTaskOutput,
         result, err := svc.StopTask(stopTaskInput)
 	for i < 25 {
         	if err == nil {      // the condition stops matching
-			log.WithField("id", taskArn).WithField("result", result).Debug("Task stopped")
+			log.WithField("id", taskArn).WithField("result", result).Debug("    task stopped")
 			log.WithField("id", taskArn).Info("    task stopped") //spaces in the beginning for #390
 
 
