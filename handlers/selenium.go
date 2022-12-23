@@ -250,7 +250,6 @@ func CloseSession(c *gin.Context) {
 }
 
 func FinishTask(c *gin.Context) {
-        log.Debug("Starting FinishTask...")
         sessionId := c.Param("task")
         sess, err := getSession(sessionId)
         if err != nil {
