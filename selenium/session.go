@@ -7,12 +7,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"time"
+//	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
-	sessionmap "github.com/zebrunner/esg/sessinonmap"
-	"github.com/zebrunner/esg/zebrunner"
+
+        sessionmap "github.com/zebrunner/esg/sessinonmap"
+//	"github.com/zebrunner/esg/zebrunner"
 )
 
 var (
@@ -55,19 +56,11 @@ func StartSession(ctx context.Context, driverUrl *url.URL, header http.Header, b
 	return reply, nil
 }
 
-func CloseSession(workspace string, sessionID string, conf *config.Config) {
-	sess, err := sessionmap.Find(sessionID, false)
-	if err != nil {
-		log.WithError(err).Error("Failed to get session from cache")
-		return
-	}
-
-	sessionTime := time.Since(sess.StartedAt)
-
+func CloseSession(session *sessionmap.Session, conf *config.Config) {
 	client := http.Client{}
-	sessionUrl, ok := sess.Network.GetUrl("driver")
+	sessionUrl, ok := session.Network.GetUrl("driver")
 	if ok {
-		sessionUrl.Path = sessionUrl.Path + fmt.Sprintf("session/%s", sessionID)
+		sessionUrl.Path = sessionUrl.Path + fmt.Sprintf("session/%s", session.ID)
 		timeoutCtx, cancel := context.WithTimeout(context.Background(), conf.SessionDeleteTimeout)
 		defer cancel()
 		req, err := http.NewRequestWithContext(timeoutCtx, http.MethodDelete, sessionUrl.String(), nil)
@@ -95,7 +88,4 @@ func CloseSession(workspace string, sessionID string, conf *config.Config) {
 		log.Warn("failed to get driver url")
 	}
 
-	if conf.ZebrunnerIsIntegrated() {
-		go zebrunner.SendSessionDuration(workspace, sessionTime, conf)
-	}
 }

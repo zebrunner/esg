@@ -3,6 +3,7 @@ package environment
 import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/zebrunner/esg/config"
+        "github.com/zebrunner/esg/capabilities"
 )
 
 type envVariables = map[string]string
@@ -46,24 +47,27 @@ func (c *Container) Cpu() int64 {
 	return c.cpu
 }
 
-func (c *Container) SetCpu(amount int64) {
-	c.cpu = calculateResource(amount, config.Conf.MinCpu, config.Conf.MaxCpu)
+func (c *Container) SetCpu(caps *capabilities.Capabilities) {
+	c.cpu = calculateResource(caps.Cpu, config.Conf.MinCpu, config.Conf.MaxCpu)
+        caps.Cpu = c.cpu //override default one as we have min/max limits
 }
 
 func (c *Container) Memory() int64 {
 	return c.memory
 }
 
-func (c *Container) SetMemory(amount int64) {
-	c.memory = calculateResource(amount, config.Conf.MinMemory, config.Conf.MaxMemory)
+func (c *Container) SetMemory(caps *capabilities.Capabilities) {
+	c.memory = calculateResource(caps.Memory, config.Conf.MinMemory, config.Conf.MaxMemory)
+        caps.Memory = c.memory //override default one as we have min/max limits
 }
 
 func (c *Container) MemoryReservation() int64 {
 	return c.memoryReservation
 }
 
-func (c *Container) SetMemoryReservation(amount int64) {
-	c.memoryReservation = calculateResource(amount, config.Conf.MinMemoryReservation, config.Conf.MaxMemoryReservation)
+func (c *Container) SetMemoryReservation(caps *capabilities.Capabilities) {
+	c.memoryReservation = calculateResource(caps.MemoryReservation, config.Conf.MinMemoryReservation, config.Conf.MaxMemoryReservation)
+        caps.MemoryReservation = c.memoryReservation //override default one as we have min/max limits
 }
 
 func calculateResource(amount int64, min int64, max int64) int64 {

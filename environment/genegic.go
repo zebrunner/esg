@@ -63,7 +63,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 EntryPoint: []string{"/bin/sh"},
         }
 
-        entrypointImage := imageRepo + "entrypoint:1.0"
+        entrypointImage := imageRepo + "entrypoint:1.2"
         entrypointContainer := Container{
                 Name:              "entrypoint",
                 Image:             entrypointImage,
@@ -134,15 +134,18 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 		}
         }
 
-	executorContainer.SetCpu(caps.Cpu)
-	executorContainer.SetMemory(caps.Memory)
-	executorContainer.SetMemoryReservation(caps.MemoryReservation)
+	executorContainer.SetCpu(caps)
+	executorContainer.SetMemory(caps)
+	executorContainer.SetMemoryReservation(caps)
 
 	//TODO: remove hardcoded increased resources as only reporting allow to adjust it on UI
         if executorImage == "amancevice/pandas:1.1.4" {
-                executorContainer.SetCpu(4096)
-                executorContainer.SetMemory(8192)
-                executorContainer.SetMemoryReservation(8192)
+                caps.Cpu = 4096
+                executorContainer.SetCpu(caps)
+                caps.Memory = 8192
+                executorContainer.SetMemory(caps)
+                caps.MemoryReservation = 8192
+                executorContainer.SetMemoryReservation(caps)
         }
 
 	environment := ExecutionEnvironment{
