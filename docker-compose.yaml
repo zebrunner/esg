@@ -1,16 +1,15 @@
 version: "3.8"
 services:
-  grid:
+  router:
     build:
       context: .
       dockerfile: ./build/Dockerfile.server
+    image: zebrunner/esg-router
     ports:
         - "4444-4445:4444"
     links:
       - redis
       - db
-    depends_on:
-      - management
     command: ./scripts/entrypoint.sh
     logging:
      options:
@@ -18,11 +17,12 @@ services:
     restart: always
     environment:
       - API_ACCESS_KEY=secure_password
-  management:
-    container_name: cluster-manager
+  scaler:
+    container_name: scaler
     build:
       context: .
       dockerfile: build/Dockerfile.management
+    image: zebrunner/esg-scaler
     links:
       - redis
     command:
@@ -30,7 +30,7 @@ services:
     restart: always
   db:
     image: postgres:13
-    container_name: esg-postgres
+    container_name: postgres
     volumes:
       - "pgdata-volume:/var/lib/postgresql/data"
     environment:
@@ -40,7 +40,7 @@ services:
     restart: always
   redis:
     image: redis:6
-    container_name: esg-redis
+    container_name: redis
     ports:
       - "6379:6379"
     restart: always
