@@ -54,8 +54,8 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 Name:              "clone",
                 Image:             cloneImage,
                 cpu:               minCpu,
-                memory:            minMemory,
-                memoryReservation: minMemory,
+                memory:            512, //increased memory to fix OOM for huge repositories (3K+ branches)
+                memoryReservation: 512,
                 Privileged:        false,
                 Essential:         false,
                 Mounts: []string{taskVolume, logVolume},
@@ -140,11 +140,11 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 
 	//TODO: remove hardcoded increased resources as only reporting allow to adjust it on UI
         if executorImage == "amancevice/pandas:1.1.4" {
-                caps.Cpu = 4096
+                caps.Cpu = 2048
                 executorContainer.SetCpu(caps)
-                caps.Memory = 8192
+                caps.Memory = 4096
                 executorContainer.SetMemory(caps)
-                caps.MemoryReservation = 8192
+                caps.MemoryReservation = 4096
                 executorContainer.SetMemoryReservation(caps)
         }
 
