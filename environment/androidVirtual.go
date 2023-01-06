@@ -38,7 +38,7 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities, conf 
 	deviceContainer.SetMemory(caps)
 	deviceContainer.SetMemoryReservation(caps)
 
-	appiumImage := imageRepo + "appium:1.4.8"
+	appiumImage := imageRepo + "appium:1.4.10"
 	appiumContainer := Container{
 		Name:              "appium",
 		Image:             appiumImage,
