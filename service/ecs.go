@@ -326,13 +326,13 @@ func getTaskIp(task *ecs.Task) (string, error) {
 	containerInstanceArn := *task.ContainerInstanceArn
 	// TODO: use better wait mechanism
 	var ec2Instance *ec2.Instance
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 6; i++ {
 		instance, ok := instanceWorker.getInstanceByContainerInstance(containerInstanceArn)
 		if ok {
 			ec2Instance = instance
 			break
 		}
-		time.Sleep(5 * time.Second)
+		time.Sleep(10 * time.Second)
 	}
 
 	if ec2Instance == nil {
