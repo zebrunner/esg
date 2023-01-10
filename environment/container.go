@@ -4,7 +4,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/zebrunner/esg/config"
         "github.com/zebrunner/esg/capabilities"
-        log "github.com/sirupsen/logrus"
 )
 
 type envVariables = map[string]string
