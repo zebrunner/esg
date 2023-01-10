@@ -4,6 +4,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/zebrunner/esg/config"
         "github.com/zebrunner/esg/capabilities"
+        log "github.com/sirupsen/logrus"
 )
 
 type envVariables = map[string]string
@@ -26,7 +27,6 @@ type Container struct {
 	Image             string
 	cpu               int64
 	memory            int64
-	memoryReservation int64
 
 	Essential  bool
 	Privileged bool
@@ -59,15 +59,6 @@ func (c *Container) Memory() int64 {
 func (c *Container) SetMemory(caps *capabilities.Capabilities) {
 	c.memory = calculateResource(caps.Memory, config.Conf.MinMemory, config.Conf.MaxMemory)
         caps.Memory = c.memory //override default one as we have min/max limits
-}
-
-func (c *Container) MemoryReservation() int64 {
-	return c.memoryReservation
-}
-
-func (c *Container) SetMemoryReservation(caps *capabilities.Capabilities) {
-	c.memoryReservation = calculateResource(caps.MemoryReservation, config.Conf.MinMemoryReservation, config.Conf.MaxMemoryReservation)
-        caps.MemoryReservation = c.memoryReservation //override default one as we have min/max limits
 }
 
 func calculateResource(amount int64, min int64, max int64) int64 {

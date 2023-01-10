@@ -36,7 +36,6 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities, conf 
 	}
 	deviceContainer.SetCpu(caps)
 	deviceContainer.SetMemory(caps)
-	deviceContainer.SetMemoryReservation(caps)
 
 	appiumImage := imageRepo + "appium:1.4.10"
 	appiumContainer := Container{
@@ -44,7 +43,6 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities, conf 
 		Image:             appiumImage,
 		cpu:               appiumCpu,
 		memory:            appiumMemory,
-		memoryReservation: appiumMemory,
 		Privileged:        false,
 		Essential:         true,
 		Ports: map[string]portMapping{
