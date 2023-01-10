@@ -26,14 +26,14 @@ type Capabilities struct {
 	EnableLog        bool
 	ScreenResolution string
 	DeviceName       string
-	IdleTimeout      int64 `json:"IdleTimeout,string,omitempty"`
+	IdleTimeout      int64 `json:"idleTimeout,string,omitempty"`
 	TimeZone         string
 	Env              []string
 	HostsEntries     []string
 	DNSServers       []string
 
-	Cpu               int64 `json:"Cpu,string,omitempty"`
-	Memory            int64 `json:"Memory,string,omitempty"`
+	Cpu               int64 `json:"cpu,string,omitempty"`
+	Memory            int64 `json:"memory,string,omitempty"`
 
 	// generic launcher caps
 	RepositoryUrl    string
