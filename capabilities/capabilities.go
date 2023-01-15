@@ -26,15 +26,14 @@ type Capabilities struct {
 	EnableLog        bool
 	ScreenResolution string
 	DeviceName       string
-	IdleTimeout      int64
+	IdleTimeout      int64 `json:"idleTimeout,string,omitempty"`
 	TimeZone         string
 	Env              []string
 	HostsEntries     []string
 	DNSServers       []string
 
-	Cpu               int64
-	Memory            int64
-	MemoryReservation int64
+	Cpu               int64 `json:"cpu,string,omitempty"`
+	Memory            int64 `json:"memory,string,omitempty"`
 
 	// generic launcher caps
 	RepositoryUrl    string
@@ -42,6 +41,7 @@ type Capabilities struct {
 	Image            string
 	LaunchCommand    string
 	EnvVariables     map[string]string
+
 }
 
 func (c *Capabilities) GetTimeZone() (*time.Location, error) {

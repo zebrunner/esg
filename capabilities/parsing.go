@@ -207,10 +207,8 @@ func processVendorCaps(caps map[string]interface{}) (map[string]interface{}, err
 		"idleTimeout",
 		"screenResolution",
 		"deviceName",
-		"skin",
-		"cpu",
-		"memory",
-		"videoCodec",
+		"cpu", "Cpu", //to support lower case and camel case
+		"memory", "Memory", //to support lower case and camel case
 		"timeZone",
 		"env",
 		"hostEntries",

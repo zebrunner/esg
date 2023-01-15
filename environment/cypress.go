@@ -55,7 +55,6 @@ func buildCypress(workspace string, caps *capabilities.Capabilities, conf *confi
                 Image:             cloneImage,
                 cpu:               minCpu,
                 memory:            512,
-                memoryReservation: 512,
                 Privileged:        false,
                 Essential:         false,
                 Mounts: []string{taskVolume, logVolume},
@@ -68,13 +67,12 @@ func buildCypress(workspace string, caps *capabilities.Capabilities, conf *confi
                 launchCommand = caps.LaunchCommand
         }
 
-        entrypointImage := imageRepo + "entrypoint:1.2"
+        entrypointImage := imageRepo + "entrypoint:1.3-beta1"
         entrypointContainer := Container{
                 Name:              "entrypoint",
                 Image:             entrypointImage,
                 cpu:               minCpu,
                 memory:            minMemory,
-                memoryReservation: minMemory,
                 Privileged:        false,
                 Essential:         false,
                 Mounts: []string{entrypointVolume, cypressVolume},
@@ -119,7 +117,6 @@ func buildCypress(workspace string, caps *capabilities.Capabilities, conf *confi
 
 	executorContainer.SetCpu(caps)
 	executorContainer.SetMemory(caps)
-	executorContainer.SetMemoryReservation(caps)
 
         // convert image "public.ecr.aws/zebrunner/cypress-chrome:107.0" to task definition failiy: "cypress-cypress-chrome-107-0"
         familyDefinition := strings.Replace(browserImage, imageRepo, "", -1)

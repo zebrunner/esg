@@ -55,7 +55,6 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 Image:             cloneImage,
                 cpu:               minCpu,
                 memory:            512, //increased memory to fix OOM for huge repositories (3K+ branches)
-                memoryReservation: 512,
                 Privileged:        false,
                 Essential:         false,
                 Mounts: []string{taskVolume, logVolume},
@@ -63,13 +62,12 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 EntryPoint: []string{"/bin/sh"},
         }
 
-        entrypointImage := imageRepo + "entrypoint:1.2"
+        entrypointImage := imageRepo + "entrypoint:1.3-beta1"
         entrypointContainer := Container{
                 Name:              "entrypoint",
                 Image:             entrypointImage,
                 cpu:               minCpu,
                 memory:            minMemory,
-                memoryReservation: minMemory,
                 Privileged:        false,
                 Essential:         false,
                 Mounts: []string{entrypointVolume},
@@ -83,7 +81,6 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 Image:             mavenImage,
                 cpu:               minCpu,
                 memory:            minMemory,
-                memoryReservation: minMemory,
                 Privileged:        false,
                 Essential:         false,
                 Mounts: []string{mavenVolume},
@@ -136,7 +133,6 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 
 	executorContainer.SetCpu(caps)
 	executorContainer.SetMemory(caps)
-	executorContainer.SetMemoryReservation(caps)
 
 	//TODO: remove hardcoded increased resources as only reporting allow to adjust it on UI
         if executorImage == "amancevice/pandas:1.1.4" {
@@ -144,8 +140,6 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 executorContainer.SetCpu(caps)
                 caps.Memory = 4096
                 executorContainer.SetMemory(caps)
-                caps.MemoryReservation = 4096
-                executorContainer.SetMemoryReservation(caps)
         }
 
 	environment := ExecutionEnvironment{

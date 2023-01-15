@@ -227,6 +227,13 @@ func Proxy(c *gin.Context) {
 				log.Error("failed to get `driver` url from session")
 				_ = c.Error(fmt.Errorf("internal error")).SetType(gin.ErrorTypePublic)
 			}
+
+			// fix for file upload using selenium 4
+			seUploadPath, uploadPath := "/se/file", "/file"
+			if strings.HasSuffix(r.URL.Path, seUploadPath) {
+				r.URL.Path = strings.TrimSuffix(r.URL.Path, seUploadPath)+uploadPath
+			}
+
 			r.URL.Host, r.URL.Path = url.Host, path.Clean(url.Path+r.URL.Path)
 			r.URL.Scheme = "http"
 		},

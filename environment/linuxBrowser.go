@@ -59,7 +59,6 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities, conf *confi
 	}
 	browserContainer.SetCpu(caps)
 	browserContainer.SetMemory(caps)
-	browserContainer.SetMemoryReservation(caps)
 
 	// Video recorder & artifacts uploader logic
 	if err != nil {
@@ -72,7 +71,6 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities, conf *confi
 		Image:             recorderImage,
 		cpu:               recorderCpu,
 		memory:            recorderMemory,
-		memoryReservation: recorderMemory,
 		Privileged:        false,
 		Essential:         false,
 		Env: map[string]string{

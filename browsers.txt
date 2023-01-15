@@ -55,7 +55,15 @@ edge:103.0
 edge:104.0
 edge:105.0
 edge:106.0
+edge:107.0
+edge:108.0
 edge:latest
+cypress-chrome:99.0
+cypress-chrome:100.0
+cypress-chrome:101.0
+cypress-chrome:102.0
+cypress-chrome:103.0
+cypress-chrome:104.0
 cypress-chrome:105.0
 cypress-chrome:106.0
 cypress-chrome:107.0

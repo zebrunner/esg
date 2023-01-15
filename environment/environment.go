@@ -69,13 +69,12 @@ func (e *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefinition
 	for _, c := range e.Containers {
 		cpu := c.Cpu()
 		memory := c.Memory()
-		memoryReservation := c.MemoryReservation()
 		definition := ecs.ContainerDefinition{
 			Name:              &c.Name,
 			Image:             &c.Image,
 			Cpu:               &cpu,
 			Memory:            &memory,
-			MemoryReservation: &memoryReservation,
+			MemoryReservation: &memory,
 			Essential:         &c.Essential,
 			Privileged:        &c.Privileged,
 			HealthCheck:       c.HealthCheck,
@@ -143,12 +142,11 @@ func (e *ExecutionEnvironment) ContainerOverrides() []*ecs.ContainerOverride {
 	for _, container := range e.Containers {
 		cpu := container.Cpu()
 		memory := container.Memory()
-		memoryReservation := container.MemoryReservation()
 		override := ecs.ContainerOverride{
 			Name:              &container.Name,
 			Cpu:               &cpu,
 			Memory:            &memory,
-			MemoryReservation: &memoryReservation,
+			MemoryReservation: &memory,
 		}
 
 		env := []*ecs.KeyValuePair{}
