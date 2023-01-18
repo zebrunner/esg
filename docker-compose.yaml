@@ -4,7 +4,7 @@ services:
     build:
       context: .
       dockerfile: ./build/Dockerfile.server
-    image: public.ecr.aws/zebrunner/router:2.1.3
+    image: public.ecr.aws/zebrunner/router:2.1.4-beta1
     ports:
         - "4444-4445:4444"
     links:
@@ -22,7 +22,7 @@ services:
     build:
       context: .
       dockerfile: build/Dockerfile.management
-    image: public.ecr.aws/zebrunner/scaler:2.1.3
+    image: public.ecr.aws/zebrunner/scaler:2.1.4-beta1
     links:
       - redis
     command:
