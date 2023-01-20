@@ -51,6 +51,7 @@ func ClearSessions() {
 				continue
 			}
 
+			log.WithField("session", session).Info("IdleTimeout verification") //TODO: don't update sessions in stoppedat state
 			idleTimeout := float64(session.Capabilities.IdleTimeout)
 			if idleTimeout == 0 {
 				idleTimeout = config.Conf.IdleTimeout.Seconds()
@@ -62,8 +63,8 @@ func ClearSessions() {
 				session.Status = sessionmap.SessionStoppedIdle
 				err = sessionmap.Write(key, session, 10*time.Minute)
 
-				log.WithField("task", session.TaskID).Info("Deleting task. Reason: idle timeout")
-				selenium.CloseSession(session, &config.Conf)
+				log.WithField("taskId", session.TaskID).Info("Deleting task. Reason: idle timeout")
+				selenium.CloseSession(session)
 				_, err = service.StopTask(session.TaskID)
 				if err != nil {
 					log.WithError(err).Error("Failed to stop task")

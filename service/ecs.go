@@ -382,17 +382,19 @@ out:
 
 		taskId := strings.Split(taskArn, "/")[2]
 		env.TaskId = taskId
-		l = l.WithField("TaskId", taskId)
+		l = l.WithField("taskId", taskId)
 
 	        if env.TaskDefinitionFamily == "generic" || strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
-	                //register runner taskId to track resources
-        	        taskWaiter.waitFor(ctxRunner, taskId, false)
+			//register runner taskId to track resources
+			log.Info("register waiter without healthcheck")
+			taskWaiter.waitFor(ctxRunner, taskId, false)
 
 			// do not wait for healtchcheck in generic and cypress tasks
 			outputErr = nil
 			return outputErr
 		}
 
+		log.Info("register waiter with healthcheck")
 		req := taskWaiter.waitFor(ctx, taskId, true) //for driver/browser sessions waitFor healthcheck state verification
 		select {
 		case err := <-req.errorChan:
@@ -409,8 +411,9 @@ out:
 				outputErr = fmt.Errorf("failed to get service info: %v", err)
 				continue
 			}
+			log.Info("commented secondary waiter for driver")
                         //re-register runner taskId to track browser resources till StoppedAt
-                        taskWaiter.waitFor(ctxRunner, taskId, false)
+                        //taskWaiter.waitFor(ctxRunner, taskId, false)
 
 			outputErr = nil
 			return outputErr

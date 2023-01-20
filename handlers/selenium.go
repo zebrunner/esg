@@ -117,7 +117,8 @@ func Create(c *gin.Context) {
 		return
 	}
 
-	l.WithField("env", env).Debug("Execution env")
+	//TODO: hide to debug
+	l.WithField("env", env).Info("Execution env")
 
         if env.TaskDefinitionFamily == "generic" {
 	        _, err = service.CreateGenericTaskDefinition(env)
@@ -214,7 +215,7 @@ func Create(c *gin.Context) {
 	                Workspace:       workspace,
         	}
 
-	        err = sessionmap.Write(sess.ID, &sess, 0)
+	        err = sessionmap.Write(sessionId, &sess, 0)
         	if err != nil {
                 	l.WithError(err).Error("Session not cached!")
 	        }
@@ -262,7 +263,7 @@ func CloseSession(c *gin.Context) {
 		_ = c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
-	selenium.CloseSession(sess, &config.Conf)
+	selenium.CloseSession(sess)
 	service.StopTask(sess.TaskID)
 
 	log.WithField("id", sessionId).Info("  session closed") //spaces in the beginning for #390

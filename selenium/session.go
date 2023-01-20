@@ -56,7 +56,17 @@ func StartSession(ctx context.Context, driverUrl *url.URL, header http.Header, b
 	return reply, nil
 }
 
-func CloseSession(session *sessionmap.Session, conf *config.Config) {
+func CloseSession(session *sessionmap.Session) {
+
+	err := sessionmap.Remove(session.ID)
+	if err != nil {
+		log.WithError(err).WithField("id", session.ID).Error("failed to remove driver session")
+	} else {
+		log.WithField("sessionId", session.ID).Info("driver session removed")
+	}
+
+
+	conf := &config.Conf
 	client := http.Client{}
 	sessionUrl, ok := session.Network.GetUrl("driver")
 	if ok {

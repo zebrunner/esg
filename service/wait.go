@@ -105,16 +105,16 @@ func (w *waitWorker) start() {
                                 continue
                         }
 
-                        log.WithField("TaskARN", *task.TaskArn).Info("status: ", *task.LastStatus)
+                        log.WithField("taskId", taskId).Trace("status: ", *task.LastStatus)
 
                         if *task.LastStatus == "STOPPED" {
-				log.WithField("TaskARN", *task.TaskArn).Info("Task STOPPED")
+				log.WithField("taskId", taskId).Info("STOPPED")
 				if (!req.healthcheck) {
 					// IMPORTANT! make sure to call actions before init of req.responseChain!
 					// task execution is finished, let's record resource usages
-                                        log.WithField("TaskARN", *task.TaskArn).Info("StartedAt: ", *task.StartedAt)
-                                        log.WithField("TaskARN", *task.TaskArn).Info("StoppedAt: ", *task.StoppedAt)
-                                        startedAt := *task.StartedAt
+                                        log.WithField("taskId", taskId).Trace("StartedAt: ", *task.StartedAt)
+                                        log.WithField("taskId", taskId).Trace("StoppedAt: ", *task.StoppedAt)
+                                        startedAt := *task.StartedAt //local var needed to calculate difference via Sub(..)
                                         stoppedAt := *task.StoppedAt
                                         trackTaskResources(taskId, stoppedAt.Sub(startedAt))
 
@@ -126,26 +126,31 @@ func (w *waitWorker) start() {
                                 close(req.responseChan)
                                 close(req.errorChan)
                                 delete(w.requests, taskId)
+				continue
                         }
 
 
                         if *task.LastStatus != "RUNNING" {
 				// no sense to verify HEALTHY if task is not started yet or already stopped.
+				log.WithField("taskId", taskId).Info("NOT RUNNING")
                                 continue
                         }
 
 			if (!req.healthcheck) {
+				log.WithField("taskId", taskId).Info("heaktchcheck is disabled")
 				// do not continue with analysis as current task does not require it
 				continue
 			}
 
 			switch *task.HealthStatus {
 			case "UNHEALTHY":
+				log.WithField("taskId", taskId).Info("UNHEALTHY")
 				req.errorChan <- errors.New("failed to start task. HealthStatus - UNHEALTHY")
 				close(req.responseChan)
 				close(req.errorChan)
 				delete(w.requests, taskId)
 			case "HEALTHY":
+				log.WithField("taskId", taskId).Info("HEALTHY")
 				req.responseChan <- task
 				close(req.responseChan)
 				close(req.errorChan)
