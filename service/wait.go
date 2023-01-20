@@ -48,7 +48,8 @@ func (w *waitWorker) start() {
 		}
 
 		for k, v := range w.requests {
-			//log.Trace("existing task request: ", k)
+			//TODO: hide to trace
+			log.Info("existing task request: ", k)
 			select {
 			case <-v.ctx.Done():
 				log.Error("TODO: implement Zombie task removal")
@@ -93,10 +94,14 @@ func (w *waitWorker) start() {
 			tasks = append(tasks, output.Tasks...)
 		}
 
-		//log.Trace("tasks: ", tasks)
+		//TODO: gide to trace
+		log.Info("tasks: ", tasks)
 		// Send responses for running tasks
 		for _, task := range tasks {
-                        req, ok := w.requests[*task.TaskArn]
+			// use taskId to find and analyze requests
+		        taskId := strings.Split(*task.TaskArn, "/")[2]
+
+                        req, ok := w.requests[taskId]
                         if !ok {
                                 continue
                         }
@@ -121,7 +126,7 @@ func (w *waitWorker) start() {
 				}
                                 close(req.responseChan)
                                 close(req.errorChan)
-                                delete(w.requests, *task.TaskArn)
+                                delete(w.requests, taskId)
                         }
 
 
@@ -140,12 +145,12 @@ func (w *waitWorker) start() {
 				req.errorChan <- errors.New("failed to start task. HealthStatus - UNHEALTHY")
 				close(req.responseChan)
 				close(req.errorChan)
-				delete(w.requests, *task.TaskArn)
+				delete(w.requests, taskId)
 			case "HEALTHY":
 				req.responseChan <- task
 				close(req.responseChan)
 				close(req.errorChan)
-				delete(w.requests, *task.TaskArn)
+				delete(w.requests, taskId)
 			}
 		}
 	}
@@ -174,10 +179,7 @@ func (w *waitWorker) stopWait(taskId string) {
 	delete(w.requests, taskId)
 }
 
-func trackTaskResources(taskArn string, duration time.Duration) {
-        log.Info("service/wait.go->trackResourceUsage taskArn: ", taskArn)
-
-        taskId := strings.Split(taskArn, "/")[2]
+func trackTaskResources(taskId string, duration time.Duration) {
 	log.Info("service/wait.go->trackResourceUsage taskId: ", taskId)
 
         session, err := getSession(taskId)

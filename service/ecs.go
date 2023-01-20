@@ -386,14 +386,14 @@ out:
 
 	        if env.TaskDefinitionFamily == "generic" || strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
 	                //register runner taskId to track resources
-        	        taskWaiter.waitFor(ctxRunner, taskArn, false)
+        	        taskWaiter.waitFor(ctxRunner, taskId, false)
 
 			// do not wait for healtchcheck in generic and cypress tasks
 			outputErr = nil
 			return outputErr
 		}
 
-		req := taskWaiter.waitFor(ctx, taskArn, true) //for driver/browser sessions waitFor healthcheck state verification
+		req := taskWaiter.waitFor(ctx, taskId, true) //for driver/browser sessions waitFor healthcheck state verification
 		select {
 		case err := <-req.errorChan:
 			StopTask(taskArn)
@@ -410,7 +410,7 @@ out:
 				continue
 			}
                         //re-register runner taskId to track browser resources till StoppedAt
-                        taskWaiter.waitFor(ctxRunner, taskArn, false)
+                        taskWaiter.waitFor(ctxRunner, taskId, false)
 
 			outputErr = nil
 			return outputErr
