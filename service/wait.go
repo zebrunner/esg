@@ -5,10 +5,14 @@ import (
 	"errors"
 	"time"
 	"sync"
+        "strings"
 
 	"github.com/aws/aws-sdk-go/service/ecs"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
+
+        sessionmap "github.com/zebrunner/esg/sessinonmap"
+        "github.com/zebrunner/esg/zebrunner"
 )
 
 var taskWaiter *waitWorker
@@ -26,6 +30,7 @@ type waitRequest struct {
 	responseChan chan *ecs.Task
 	errorChan    chan error
 	taskId       string
+	healthcheck  bool
 }
 
 type waitWorker struct {
@@ -43,8 +48,10 @@ func (w *waitWorker) start() {
 		}
 
 		for k, v := range w.requests {
+			//log.Trace("existing task request: ", k)
 			select {
 			case <-v.ctx.Done():
+				log.Error("TODO: implement Zombie task removal")
 				delete(w.requests, k)
 			default:
 				continue
@@ -86,6 +93,7 @@ func (w *waitWorker) start() {
 			tasks = append(tasks, output.Tasks...)
 		}
 
+		//log.Trace("tasks: ", tasks)
 		// Send responses for running tasks
 		for _, task := range tasks {
                         req, ok := w.requests[*task.TaskArn]
@@ -93,9 +101,24 @@ func (w *waitWorker) start() {
                                 continue
                         }
 
+                        log.WithField("TaskARN", *task.TaskArn).Info("status: ", *task.LastStatus)
+
                         if *task.LastStatus == "STOPPED" {
-                                log.Error("Task stopped: ", *task)
-                                req.errorChan <- errors.New("failed to start task: " + *task.StoppedReason)
+				log.WithField("TaskARN", *task.TaskArn).Info("Task STOPPED")
+				if (!req.healthcheck) {
+					// IMPORTANT! make sure to call actions before init of req.responseChain!
+					// task execution is finished, let's record resource usages
+                                        log.WithField("TaskARN", *task.TaskArn).Info("StartedAt: ", *task.StartedAt)
+                                        log.WithField("TaskARN", *task.TaskArn).Info("StoppedAt: ", *task.StoppedAt)
+                                        startedAt := *task.StartedAt
+                                        stoppedAt := *task.StoppedAt
+                                        trackTaskResources(*task.TaskArn, stoppedAt.Sub(startedAt))
+
+					req.responseChan <- task
+				} else {
+					// stopped state achieved before required healthy state!
+                                	req.errorChan <- errors.New("failed to start task: " + *task.StoppedReason)
+				}
                                 close(req.responseChan)
                                 close(req.errorChan)
                                 delete(w.requests, *task.TaskArn)
@@ -107,9 +130,13 @@ func (w *waitWorker) start() {
                                 continue
                         }
 
+			if (!req.healthcheck) {
+				// do not continue with analysis as current task does not require it
+				continue
+			}
+
 			switch *task.HealthStatus {
 			case "UNHEALTHY":
-                                log.Error("Task unhealthy: ", *task)
 				req.errorChan <- errors.New("failed to start task. HealthStatus - UNHEALTHY")
 				close(req.responseChan)
 				close(req.errorChan)
@@ -124,12 +151,13 @@ func (w *waitWorker) start() {
 	}
 }
 
-func (w *waitWorker) waitFor(ctx context.Context, taskId string) *waitRequest {
+func (w *waitWorker) waitFor(ctx context.Context, taskId string, healthcheck bool) *waitRequest {
 	req := waitRequest{
 		ctx:          ctx,
 		responseChan: make(chan *ecs.Task),
 		errorChan:    make(chan error),
 		taskId:       taskId,
+		healthcheck: healthcheck,
 	}
 
 	// https://medium.com/@luanrubensf/concurrent-map-access-in-go-a6a733c5ffd1
@@ -144,4 +172,34 @@ func (w *waitWorker) stopWait(taskId string) {
 	req := w.requests[taskId]
 	close(req.responseChan)
 	delete(w.requests, taskId)
+}
+
+func trackTaskResources(taskArn string, duration time.Duration) {
+        log.Info("service/wait.go->trackResourceUsage taskArn: ", taskArn)
+
+        taskId := strings.Split(taskArn, "/")[2]
+	log.Info("service/wait.go->trackResourceUsage taskId: ", taskId)
+
+        session, err := getSession(taskId)
+        if err != nil {
+		log.Error(err)
+                return
+        }
+
+        err = sessionmap.Remove(session.ID)
+        if err != nil {
+                log.WithError(err).WithField("id", session.ID).Error("failed to remove task from sessions map")
+        }
+
+        zebrunner.TrackResourcesUsage(session, duration)
+}
+
+
+func getSession(id string) (*sessionmap.Session, error) {
+        session, err := sessionmap.Find(id, false)
+        if err != nil {
+                return nil, err
+        }
+
+        return session, nil
 }

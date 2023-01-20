@@ -9,8 +9,8 @@ import (
         "strconv"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/zebrunner/esg/config"
 
+        "github.com/zebrunner/esg/config"
         sessionmap "github.com/zebrunner/esg/sessinonmap"
 )
 
@@ -18,7 +18,8 @@ const (
         USAGE_API_PATH = "/api/quota/v2/engine-usages"
 )
 
-func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration, conf *config.Config) {
+func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration) {
+	conf := &config.Conf
 	requestUrl, err := url.ParseRequestURI(conf.ZebrunnerHost)
 	if err != nil {
 		log.WithError(err).Error("Failed to parse zebrunner base url")
@@ -26,6 +27,8 @@ func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration, conf *config
 	}
 	requestUrl.Host = sess.Workspace + "." + requestUrl.Host
 	requestUrl.Path = USAGE_API_PATH
+
+	//TODO: test how custom cpu&memory caps are detected in new version
 	requestBody := map[string]interface{}{
                 "cpu": strconv.FormatInt(sess.Capabilities.Cpu, 10) + " millicores",
                 "memory": strconv.FormatInt(sess.Capabilities.Memory, 10) + " MiB",
@@ -45,7 +48,8 @@ func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration, conf *config
 	}
 	req.SetBasicAuth(conf.ZebrunnerIntegrationUser, conf.ZebrunnerIntegrationPassword)
 	req.Header.Add("Content-Type", "application/json")
-        log.Trace("req: ", req)
+	//TODO: hide to debug or trace
+        log.Info("TrackResourcesUsage request: ", req)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

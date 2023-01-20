@@ -17,8 +17,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
-        "github.com/zebrunner/esg/zebrunner"
-        sessionmap "github.com/zebrunner/esg/sessinonmap"
 	"math/rand"
 )
 
@@ -252,7 +250,7 @@ func ConstDelay(t time.Duration) func(int) time.Duration {
 	}
 }
 
-func StopTask(taskArn string, session *sessionmap.Session) (*ecs.StopTaskOutput, error) {
+func StopTask(taskArn string) (*ecs.StopTaskOutput, error) {
 	svc := ecs.New(AwsSess)
 
 	stopTaskInput := &ecs.StopTaskInput{
@@ -267,19 +265,6 @@ func StopTask(taskArn string, session *sessionmap.Session) (*ecs.StopTaskOutput,
         	if err == nil {      // the condition stops matching
 			log.WithField("id", taskArn).WithField("result", result).Debug("    task stopped")
 			log.WithField("id", taskArn).Info("    task stopped") //spaces in the beginning for #390
-
-
-                        if session != nil {
-
-                        	err = sessionmap.Remove(session.ID)
-                        	if err != nil {
-                                	log.WithError(err).WithField("id", session.ID).Error("failed to remove task from sessions map")
-                        	}
-
-                        	// register usage resources only for valid sessions
-                        	sessionTime := time.Since(session.StartedAt)
-                        	zebrunner.TrackResourcesUsage(session, sessionTime, &config.Conf)
-                        }
                         // break out of the loop
                 	break
         	} else {
@@ -370,6 +355,10 @@ func setEnvironmentNetwork(env *environment.ExecutionEnvironment, task *ecs.Task
 func StartTask(ctx context.Context, env *environment.ExecutionEnvironment) error {
 	var outputErr error
 	startTime := time.Now()
+
+        //TODO: register new execution timeout (24hrs?)
+        ctxRunner, _ := context.WithTimeout(context.Background(), 24*time.Hour)
+
 out:
 	for i := 0; i < 100; i++ { //TODO: 100 is almost unlimited but think about do while...
 		l := log.WithField("attempt", i)
@@ -393,17 +382,21 @@ out:
 
 		taskId := strings.Split(taskArn, "/")[2]
 		env.TaskId = taskId
-		l = l.WithField("id", taskId)
+		l = l.WithField("TaskId", taskId)
+
 	        if env.TaskDefinitionFamily == "generic" || strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
-			l.Debug("do not wait for generic and cypress task startup.")
+	                //register runner taskId to track resources
+        	        taskWaiter.waitFor(ctxRunner, taskArn, false)
+
+			// do not wait for healtchcheck in generic and cypress tasks
 			outputErr = nil
 			return outputErr
 		}
 
-		req := taskWaiter.waitFor(ctx, taskArn)
+		req := taskWaiter.waitFor(ctx, taskArn, true) //for driver/browser sessions waitFor healthcheck state verification
 		select {
 		case err := <-req.errorChan:
-			StopTask(taskArn, nil)
+			StopTask(taskArn)
 			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to wait until Task is running and healthy")
 			outputErr = err
 			continue
@@ -411,17 +404,20 @@ out:
 			err = setEnvironmentNetwork(env, task)
 			l.WithField("attempt", i).Debug("setEnvironmentNetwork latency: ", time.Since(startTime))
 			if err != nil {
-				StopTask(taskArn, nil)
+				StopTask(taskArn)
 				l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to get service info.")
 				outputErr = fmt.Errorf("failed to get service info: %v", err)
 				continue
 			}
+                        //re-register runner taskId to track browser resources till StoppedAt
+                        taskWaiter.waitFor(ctxRunner, taskArn, false)
 
 			outputErr = nil
 			return outputErr
 		case <-req.ctx.Done():
 			outputErr = errors.New("failed to wait until task is running. context deadline")
-			StopTask(taskArn, nil)
+			StopTask(taskArn)
+			l.Error("TODO: need stopWait here?")
 			taskWaiter.stopWait(taskArn)
 			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("failed to wait until task is running")
 		}

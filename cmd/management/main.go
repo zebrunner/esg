@@ -64,7 +64,7 @@ func ClearSessions() {
 
 				log.WithField("task", session.TaskID).Info("Deleting task. Reason: idle timeout")
 				selenium.CloseSession(session, &config.Conf)
-				_, err = service.StopTask(session.TaskID, session)
+				_, err = service.StopTask(session.TaskID)
 				if err != nil {
 					log.WithError(err).Error("Failed to stop task")
 				}
@@ -148,6 +148,8 @@ func RefreshTaskDefinitionsFromFile(path string) {
 	}
 }
 
+
+//TODO: move zombie tasks detection to service/wait.go and parametrize timeout
 func CleanZombieTasks() {
 	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
 	if err != nil {
@@ -164,8 +166,7 @@ func CleanZombieTasks() {
 
 		for _, task := range tasks {
 			if time.Since(*task.CreatedAt) > 24*time.Hour {
-                                //TODO: calculate zombie session resources and track them
-				service.StopTask(*task.TaskArn, nil)
+				service.StopTask(*task.TaskArn)
 			}
 		}
 
