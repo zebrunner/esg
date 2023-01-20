@@ -48,8 +48,7 @@ func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration) {
 	}
 	req.SetBasicAuth(conf.ZebrunnerIntegrationUser, conf.ZebrunnerIntegrationPassword)
 	req.Header.Add("Content-Type", "application/json")
-	//TODO: hide to debug or trace
-        log.Info("TrackResourcesUsage request: ", req)
+        log.Debug("TrackResourcesUsage request: ", req)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
