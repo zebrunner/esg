@@ -49,7 +49,7 @@ func (w *waitWorker) start() {
 
 		for k, v := range w.requests {
 			//TODO: hide to trace
-			log.Info("existing task request: ", k)
+			log.WithField("taskId", k).Info("existing task request")
 			select {
 			case <-v.ctx.Done():
 				log.Error("TODO: implement Zombie task removal")
@@ -94,8 +94,7 @@ func (w *waitWorker) start() {
 			tasks = append(tasks, output.Tasks...)
 		}
 
-		//TODO: gide to trace
-		log.Info("tasks: ", tasks)
+		log.Trace("tasks: ", tasks)
 		// Send responses for running tasks
 		for _, task := range tasks {
 			// use taskId to find and analyze requests
@@ -117,7 +116,7 @@ func (w *waitWorker) start() {
                                         log.WithField("TaskARN", *task.TaskArn).Info("StoppedAt: ", *task.StoppedAt)
                                         startedAt := *task.StartedAt
                                         stoppedAt := *task.StoppedAt
-                                        trackTaskResources(*task.TaskArn, stoppedAt.Sub(startedAt))
+                                        trackTaskResources(taskId, stoppedAt.Sub(startedAt))
 
 					req.responseChan <- task
 				} else {
@@ -180,8 +179,9 @@ func (w *waitWorker) stopWait(taskId string) {
 }
 
 func trackTaskResources(taskId string, duration time.Duration) {
-	log.Info("service/wait.go->trackResourceUsage taskId: ", taskId)
+	log.WithField("taskId", taskId).Trace("service/wait.go->trackResourceUsage")
 
+	//TODO: do we really need read and remove? Maybe we can port functionality from zebruner/zebrunner.go into this place and don't do redis call twice.
         session, err := getSession(taskId)
         if err != nil {
 		log.Error(err)
