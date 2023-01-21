@@ -117,8 +117,7 @@ func ClearTasks() {
 						if (session.Capabilities.MaxTimeout != 0) {
 							maxTimeout = time.Duration(session.Capabilities.MaxTimeout) * time.Second
 						}
-						//TODO: move to debug
-						l.Info("maxTimeout capabilities: ", maxTimeout)
+						l.Debug("maxTimeout: ", maxTimeout)
 						if task.CreatedAt != nil && time.Since(*task.CreatedAt) > maxTimeout {
 							// stop zombie task
 							service.StopTask(taskId)
