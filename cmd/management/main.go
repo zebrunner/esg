@@ -86,7 +86,7 @@ func ClearTasks() {
 			}
 */
 
-	                // analyze outut.Tasks response for existing tasks in sessionmap
+	                // analyze output.Tasks response for existing tasks in sessionmap
 			for _, task := range output.Tasks {
 				if *task.LastStatus == "STOPPED" {
 					taskId := strings.Split(*task.TaskArn, "/")[2]
@@ -307,7 +307,7 @@ func main() {
 	} else {
 		RefreshTaskDefinitions()
 	}
-	log.Info("Task definitions refreshed successfully")
+	log.Info("Task definitions refreshed finished")
 
 	wg.Add(1)
 	go ScaleCluster()
