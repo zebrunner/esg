@@ -280,7 +280,6 @@ func buildTaskDefinitionFamily(caps *capabilities.Capabilities) string {
 	}
 
         log.Debug("caps: ", caps)
-        log.Debug("familyParts: ", familyParts)
 	return strings.Join(familyParts, "-")
 }
 
