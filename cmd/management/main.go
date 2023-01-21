@@ -34,7 +34,7 @@ func init() {
 
 func ClearTasks() {
 
-        //TODO: calculate zombie session resources and track them in this place
+        //TODO: #427 move zombie tasks handler to new ClearTasks method
         session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
         if err != nil {
                 log.WithError(err).Error("Failed to create AWS session!")
@@ -243,6 +243,7 @@ func RefreshTaskDefinitionsFromFile(path string) {
 }
 
 func CleanZombieTasks() {
+        //TODO: #427 move zombie tasks handler to new ClearTasks method
 	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
 	if err != nil {
 		log.WithError(err).Error("Failed to create AWS session!")
