@@ -154,6 +154,7 @@ func ClearIdleSessions() {
 				session.Status = sessionmap.SessionStoppedIdle
 				err = sessionmap.Write(key, session, 10*time.Minute)
 
+				// [VD] do not execute CloseSession as it remove session from sessionmap and we can't return idle timeout errors to client
 				//selenium.CloseSession(session)
 				_, err = service.StopTask(session.TaskID)
 				if err != nil {
