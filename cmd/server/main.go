@@ -95,7 +95,7 @@ func CreateRouter() *gin.Engine {
 
 		hub.GET("/devtools/:session", handlers.Devtools)
 
-                hub.DELETE("/tasks/:task", handlers.FinishTask) // to be able to abort generic executor task by taskId
+                hub.DELETE("/tasks/:task", handlers.AbortTask) // to be able to abort generic tasks by taskId
 	}
 
 	hub.Use(handlers.APIError)

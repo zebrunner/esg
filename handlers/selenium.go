@@ -276,7 +276,7 @@ func CloseSession(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"value": nil})
 }
 
-func FinishTask(c *gin.Context) {
+func AbortTask(c *gin.Context) {
         sessionId := c.Param("task")
         sess, err := getSession(sessionId)
         if err != nil {
@@ -286,7 +286,7 @@ func FinishTask(c *gin.Context) {
         }
         service.StopTask(sess.TaskID)
 
-        log.WithField("_taskId", sess.TaskID).Info("task finished")
+        log.WithField("_taskId", sess.TaskID).WithField("workspace", sess.Workspace).Info("task aborted")
         c.JSON(http.StatusNoContent, gin.H{})
 }
 
