@@ -44,7 +44,7 @@ func ClearTasks() {
 
         rdb := config.RedisConnection
         for {
-                time.Sleep(1*time.Minute) //TODO: increased default pause for tasks cleaner to 5-10m
+                time.Sleep(5*time.Minute) //TODO: how about increaed default pause for tasks cleaner to 10-15m? (to minimize tasks describe operations)
 
                 keys, err := rdb.Keys(context.Background(), "*").Result()
                 if err != nil {
