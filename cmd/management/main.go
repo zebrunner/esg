@@ -34,7 +34,6 @@ func init() {
 
 func ClearTasks() {
 
-        //TODO: #427 move zombie tasks handler to new ClearTasks method
         session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
         if err != nil {
                 log.WithError(err).Error("Failed to create AWS session!")
@@ -88,23 +87,42 @@ func ClearTasks() {
 
 	                // analyze output.Tasks response for existing tasks in sessionmap
 			for _, task := range output.Tasks {
-				if *task.LastStatus == "STOPPED" {
+				if *task.LastStatus == "STOPPED" || *task.LastStatus == "RUNNING" {
 					taskId := strings.Split(*task.TaskArn, "/")[2]
+					l := log.WithFields(log.Fields{"_taskId": taskId})
 
 					session, err := sessionmap.Find(taskId, false)
 					if err != nil {
-						log.WithError(err).WithField("key", taskId).Error("Failed to get task session from sessionmap!")
+						l.WithError(err).Error("Failed to get task session from sessionmap!")
 						continue
 					}
 
-					log.WithField("taskId", taskId).Trace("StartedAt: ", *task.StartedAt)
-					log.WithField("taskId", taskId).Trace("StoppedAt: ", *task.StoppedAt)
-					startedAt := *task.StartedAt //local var needed to calculate difference via Sub(..)
-					stoppedAt := *task.StoppedAt
-					zebrunner.TrackResourcesUsage(session, stoppedAt.Sub(startedAt))
+					l = log.WithFields(log.Fields{"_taskId": taskId, "workspace": session.Workspace})
 
-					taskIds4Removal = append(taskIds4Removal, taskId)
+					if *task.LastStatus == "STOPPED" {
+						l.Trace("StartedAt: ", *task.StartedAt)
+						l.Trace("StoppedAt: ", *task.StoppedAt)
+						startedAt := *task.StartedAt //local var needed to calculate difference via Sub(..)
+						stoppedAt := *task.StoppedAt
+						zebrunner.TrackResourcesUsage(session, stoppedAt.Sub(startedAt))
+
+						taskIds4Removal = append(taskIds4Removal, taskId)
+					}
+
+					if *task.LastStatus == "RUNNING" {
+						maxTimeout := time.Duration(session.Capabilities.MaxTimeout) * time.Second
+						l.Debug("maxTimeout capabilities: ", maxTimeout)
+						if time.Since(*task.CreatedAt) > maxTimeout {
+							// stop zombie task
+							service.StopTask(taskId)
+							l.WithField("maxTimeout", maxTimeout).Warn("task aborted due to the max timeout")
+							// do not register resource usage and don't mark taskId for removal!
+						}
+					}
+
 				}
+
+
 			}
 
 			// cleanup tracked task sessions
@@ -242,33 +260,6 @@ func RefreshTaskDefinitionsFromFile(path string) {
 	}
 }
 
-func CleanZombieTasks() {
-        //TODO: #427 move zombie tasks handler to new ClearTasks method
-	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
-	if err != nil {
-		log.WithError(err).Error("Failed to create AWS session!")
-		return
-	}
-
-	for {
-		svc := ecs.New(session)
-		tasks, err := service.GetClusterTasks(svc)
-		if err != nil {
-			log.WithError(err).Warn("Failed to get cluster tasks!")
-		}
-
-		for _, task := range tasks {
-			//TODO: parametrize zombie timeout to be able to override via capabilities
-			if time.Since(*task.CreatedAt) > 24*time.Hour {
-				taskId := strings.Split(*task.TaskArn, "/")[2]
-				service.StopTask(taskId)
-			}
-		}
-
-		time.Sleep(1 * time.Hour)
-	}
-}
-
 func paginate[T interface{}](l []T, size int) [][]T {
         numPages := int(math.Ceil(float64(len(l)) / float64(size)))
         pages := make([][]T, numPages)
@@ -320,9 +311,6 @@ func main() {
 
 	wg.Add(1)
 	go ClearTasks()
-
-	wg.Add(1)
-	go CleanZombieTasks()
 
 	wg.Wait()
 	log.Fatal("Background worker stopped!")
