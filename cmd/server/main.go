@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"strings"
-	"time"
+//	"time"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/net/websocket"
@@ -115,7 +115,7 @@ func main() {
 	log.SetLevel(config.Conf.ParseLogLevel())
 	log.SetFormatter(&log.TextFormatter{
 		FullTimestamp:   true,
-		TimestampFormat: time.RFC3339Nano,
+		//TimestampFormat: time.RFC3339Nano,
 		DisableColors:     true,
 	})
 
