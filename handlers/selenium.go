@@ -139,7 +139,7 @@ func Create(c *gin.Context) {
 		_ = c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
-	l.WithField("task_definition_family", env.TaskDefinitionFamily).WithField("id", env.TaskId).Info("task started")
+	l.WithField("family", env.TaskDefinitionFamily).WithField("taskId", env.TaskId).Info("task started")
 
         sessionId := ""
 
@@ -183,7 +183,7 @@ func Create(c *gin.Context) {
 
 		c.Request.URL.Host, c.Request.URL.Path = u.Host, path.Join(u.Path, c.Request.URL.Path)
 		c.Request.URL.Scheme = "http"
-		l.WithField("id", env.TaskId).WithField("serviceUrl", u).Info("driver starting")
+		l.WithField("taskId", env.TaskId).WithField("serviceUrl", u).Info("driver starting")
 		resp, err = selenium.StartSession(c.Request.Context(), c.Request.URL, c.Request.Header, requestBody)
 		if err != nil {
 			l.WithError(err).WithField("response", resp).Error("driver startup failed")
@@ -221,7 +221,7 @@ func Create(c *gin.Context) {
 		if err != nil {
 			l.WithError(err).Error("driver session not cached!")
 		}
-		l.WithField("id", sess.ID).WithField("latency", util.SecondsSince(sessionStartTime)).Info("driver started")
+		l.WithField("sessionId", sess.ID).WithField("latency", util.SecondsSince(sessionStartTime)).Info("driver started")
 
 	}
 
@@ -262,14 +262,14 @@ func CloseSession(c *gin.Context) {
 	sessionId := c.Param("session")
 	sess, err := getSession(sessionId)
 	if err != nil {
-		log.WithError(err).WithField("sessionID", sessionId).Error("Cant find session")
+		log.WithError(err).WithField("sessionID", sessionId).Error("Can't find session!")
 		_ = c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
 	selenium.CloseSession(sess)
 	service.StopTask(sess.TaskID)
 
-	log.WithField("id", sessionId).Info("session closed")
+	log.WithField("id", sessionId).Info("driver session closed")
 	c.JSON(http.StatusOK, gin.H{"value": nil})
 }
 
@@ -283,7 +283,7 @@ func FinishTask(c *gin.Context) {
         }
         service.StopTask(sess.TaskID)
 
-        log.WithField("id", sessionId).Info("task finished")
+        log.WithField("taskId", sess.TaskID).Info("task finished")
         c.JSON(http.StatusNoContent, gin.H{})
 }
 
