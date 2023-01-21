@@ -33,42 +33,25 @@ func init() {
 }
 
 func ClearTasks() {
-	//TODO: uncomment and implement resource tracking based on below template
-/*
-                        if session != nil {
 
-                                err = sessionmap.Remove(session.ID)
-                                if err != nil {
-                                        log.WithError(err).WithField("id", session.ID).Error("failed to remove task from sessions map")
-                                }
-
-                                // register usage resources only for valid sessions
-                                sessionTime := time.Since(session.StartedAt)
-                                zebrunner.TrackResourcesUsage(session, sessionTime, &config.Conf)
-                        }
-*/
-
-
-	//TODO: Make sure to test valid resource usage for idled session because we keep session for 10 more minutes
-	//	As variant -> make taskId null as only resource usage track
-
-        //TODO: calculate zombie session resources and track them
+        //TODO: calculate zombie session resources and track them in this place
         session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
         if err != nil {
-                log.WithError(err).Error("Failed to create AWS session")
+                log.WithError(err).Error("Failed to create AWS session!")
                 return
         }
 	svc := ecs.New(session)
 
         rdb := config.RedisConnection
         for {
-                time.Sleep(15*time.Second) //TODO: increased default pause for tasks cleaner to 5-10m
+                time.Sleep(1*time.Minute) //TODO: increased default pause for tasks cleaner to 5-10m
+
                 keys, err := rdb.Keys(context.Background(), "*").Result()
                 if err != nil {
-                        log.WithError(err).Error("Failed to get list of keys")
+                        log.WithError(err).Error("Failed to get list of keys!")
                         continue
                 }
-                log.WithField("keys", keys).Trace("Cached session keys")
+                log.WithField("keys", keys).Trace("cached session keys")
 
                 // Construct pages of *string with 100 or fewer elements for requests. 100 is an AWS limitation for Describe* requests
                 var taskIdsPtrs []*string
@@ -78,7 +61,7 @@ func ClearTasks() {
                 }
                 pages := paginate(taskIdsPtrs, 100)
 
-                // Send DescribeTasks requests and process errors
+                // Send DescribeTasks requests and track resources usage for STOPPED tasks
                 for _, page := range pages {
                         describeTasksInput := ecs.DescribeTasksInput{
                                 Cluster: &config.Conf.AwsCluster,
@@ -88,7 +71,7 @@ func ClearTasks() {
 			log.Trace("describeTasksInput: ", describeTasksInput)
                         output, err := svc.DescribeTasks(&describeTasksInput)
                         if err != nil {
-                                log.WithError(err).Error("failed to describe tasks")
+                                log.WithError(err).Error("Failed to describe tasks!")
                         }
 
 			var taskIds4Removal []string
@@ -110,7 +93,7 @@ func ClearTasks() {
 
 					session, err := sessionmap.Find(taskId, false)
 					if err != nil {
-						log.WithError(err).WithField("key", taskId).Error("Failed to get session from session map")
+						log.WithError(err).WithField("key", taskId).Error("Failed to get task session from sessionmap!")
 						continue
 					}
 
@@ -124,12 +107,12 @@ func ClearTasks() {
 				}
 			}
 
-			// cleanup tracked and missing tasks
+			// cleanup tracked task sessions
 			for _, id := range taskIds4Removal {
-				log.Info("Removing session: ", id)
+				log.WithField("taskId", id).Trace("Removing task session")
 				err = sessionmap.Remove(id)
 				if err != nil {
-					log.WithError(err).WithField("id", id).Error("failed to remove task from sessions map")
+					log.WithError(err).WithField("id", id).Error("Failed to remove task session from sessionmap!")
 				}
 			}
 
@@ -143,14 +126,14 @@ func ClearIdleSessions() {
 		time.Sleep(config.Conf.IdleTimeout)
 		keys, err := rdb.Keys(context.Background(), "*").Result()
 		if err != nil {
-			log.WithError(err).Error("Failed to get list of keys")
+			log.WithError(err).Error("Failed to get list of keys!")
 			continue
 		}
 
 		for _, key := range keys {
 			session, err := sessionmap.Find(key, false)
 			if err != nil {
-				log.WithError(err).WithField("key", key).Error("Failed to get session from session map")
+				log.WithError(err).WithField("key", key).Error("Failed to get session from sessionmap!")
 				continue
 			}
 
@@ -158,7 +141,7 @@ func ClearIdleSessions() {
 				continue
 			}
 
-                        log.WithField("session", session).Debug("Analyzing session for idleTimeout")
+                        log.WithField("session", session).Debug("analyzing session for idleTimeout")
 
 			idleTimeout := float64(session.Capabilities.IdleTimeout)
 			if idleTimeout == 0 {
@@ -171,11 +154,11 @@ func ClearIdleSessions() {
 				session.Status = sessionmap.SessionStoppedIdle
 				err = sessionmap.Write(key, session, 10*time.Minute)
 
-				log.WithField("task", session.TaskID).Warn("Deleting task due to the idle timeout")
+				log.WithField("task", session.TaskID).Warn("Deleting driver task due to the idle timeout!")
 				//selenium.CloseSession(session)
 				_, err = service.StopTask(session.TaskID)
 				if err != nil {
-					log.WithError(err).Error("Failed to stop task!")
+					log.WithError(err).Error("Failed to stop driver task!")
 				}
 			}
 		}
@@ -199,19 +182,19 @@ func ScaleDownCluster() {
 func RefreshTaskDefinition(image string) error {
 	caps, err := capabilities.FromImage(image)
 	if err != nil {
-		log.WithError(err).WithField("image", image).Error("Failed to build capabilities for image")
+		log.WithError(err).WithField("image", image).Error("Failed to build capabilities for image!")
 		return err
 	}
 
 	env, err := environment.Build("", caps, &config.Conf)
 	if err != nil {
-		log.WithError(err).WithField("image", image).Error("Failed to build execution environment")
+		log.WithError(err).WithField("image", image).Error("Failed to build execution environment!")
 		return err
 	}
 
 	_, err = service.CreateTaskDefinition(env)
 	if err != nil {
-		log.WithError(err).WithField("image", image).Error("Failed to create task definition")
+		log.WithError(err).WithField("image", image).Error("Failed to create task definition!")
 		return err
 	}
 
@@ -221,7 +204,7 @@ func RefreshTaskDefinition(image string) error {
 func RefreshTaskDefinitions() {
 	images, err := service.ListBrowsers()
 	if err != nil {
-		log.WithError(err).Error("Failed to get image list")
+		log.WithError(err).Error("Failed to get image list!")
 	}
 
 	for _, image := range images {
@@ -236,7 +219,7 @@ func RefreshTaskDefinitions() {
 func RefreshTaskDefinitionsFromFile(path string) {
 	text, err := ioutil.ReadFile(path)
 	if err != nil {
-		log.WithError(err).Error("Failed to read file browsers.txt")
+		log.WithError(err).Error("Failed to read file browsers.txt!")
 	}
 	lines := strings.Split(string(text), "\n")
 
@@ -247,7 +230,7 @@ func RefreshTaskDefinitionsFromFile(path string) {
 		}
 	}
 
-	log.WithField("images", images).Trace("Refreshing task definition using file")
+	log.WithField("images", images).Trace("refreshing task definition using file")
 	for _, image := range images {
 		time.Sleep(1000 * time.Millisecond)
 		err = RefreshTaskDefinition(image)
@@ -260,7 +243,7 @@ func RefreshTaskDefinitionsFromFile(path string) {
 func CleanZombieTasks() {
 	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
 	if err != nil {
-		log.WithError(err).Error("Failed to create AWS session")
+		log.WithError(err).Error("Failed to create AWS session!")
 		return
 	}
 
@@ -268,7 +251,7 @@ func CleanZombieTasks() {
 		svc := ecs.New(session)
 		tasks, err := service.GetClusterTasks(svc)
 		if err != nil {
-			log.WithError(err).Warn("Failed to get cluster tasks")
+			log.WithError(err).Warn("Failed to get cluster tasks!")
 		}
 
 		for _, task := range tasks {

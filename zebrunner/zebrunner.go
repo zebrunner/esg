@@ -33,8 +33,7 @@ func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration) {
 		"instant": time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 		"seconds": d.Seconds(),
 	}
-	//TODO: move to trace
-        log.Info("requestBody: ", requestBody)
+        log.Trace("request body to track resources: ", requestBody)
 
 	body, err := json.Marshal(requestBody)
 	if err != nil {
