@@ -13,7 +13,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/environment"
-	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/service"
 	sessionmap "github.com/zebrunner/esg/sessinonmap"
 
@@ -86,14 +85,14 @@ func ClearTasks() {
                                 Tasks:   page,
                         }
 
-			log.Info("describeTasksInput: ", describeTasksInput)
+			log.Trace("describeTasksInput: ", describeTasksInput)
                         output, err := svc.DescribeTasks(&describeTasksInput)
                         if err != nil {
                                 log.WithError(err).Error("failed to describe tasks")
                         }
 
 			var taskIds4Removal []string
-			//TODO: commented so far as driver session returned as MISSING and we remove valid sessions :)
+			// Do not remove MISSING as any driver/browser sessionId we use can be removed from session map
 /*			for _, failure := range output.Failures {
 				//no sense to keep MISSING sessions as we can't detect resoutce usage anymore!
 				// failures="[{\n  Arn: \"arn:aws:ecs:us-east-1:659932254483:task/9fc25c3e9c1c865e94b68061f020d083\",\n  Reason: \"MISSING\"\n}]"
@@ -115,10 +114,8 @@ func ClearTasks() {
 						continue
 					}
 
-					//TODO: analyze session.TaskID != "" for idle sessions
-
-					log.WithField("taskId", taskId).Info("StartedAt: ", *task.StartedAt)
-					log.WithField("taskId", taskId).Info("StoppedAt: ", *task.StoppedAt)
+					log.WithField("taskId", taskId).Trace("StartedAt: ", *task.StartedAt)
+					log.WithField("taskId", taskId).Trace("StoppedAt: ", *task.StoppedAt)
 					startedAt := *task.StartedAt //local var needed to calculate difference via Sub(..)
 					stoppedAt := *task.StoppedAt
 					zebrunner.TrackResourcesUsage(session, stoppedAt.Sub(startedAt))

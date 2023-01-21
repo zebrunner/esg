@@ -263,8 +263,8 @@ func StopTask(taskId string) (*ecs.StopTaskOutput, error) {
         result, err := svc.StopTask(stopTaskInput)
 	for i < 25 {
         	if err == nil {      // the condition stops matching
-			log.WithField("taskId", taskId).WithField("result", result).Debug("task stopped")
-			log.WithField("taskId", taskId).Info("task stopped") //spaces in the beginning for #390
+			log.WithField("taskId", taskId).WithField("result", result).Trace("task stopped")
+			log.WithField("taskId", taskId).Info("task stopped")
                         // break out of the loop
                 	break
         	} else {

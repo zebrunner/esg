@@ -69,6 +69,6 @@ func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration) {
 		}).Error("Response got unsuccessfull code")
 		return
 	} else {
-		log.WithField("id", sess.ID).WithField("request body", requestBody).Info("  shape recorded") //spaces in the beginning for #390
+		log.WithField("id", sess.ID).WithField("request body", requestBody).Info("shape recorded")
 	}
 }

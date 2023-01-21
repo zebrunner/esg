@@ -118,8 +118,8 @@ func Create(c *gin.Context) {
 	}
 
 	//TODO: find valuable infor from env about task to keep on Info level. Full env hide to Debug
-	l.WithField("family", env.TaskDefinitionFamily).Info("Requesting task")
-	l.WithField("env", env).Debug("Requesting task details")
+	l.WithField("family", env.TaskDefinitionFamily).Info("new request")
+	l.WithField("env", env).Debug("Env details")
 
         if env.TaskDefinitionFamily == "generic" {
 	        _, err = service.CreateGenericTaskDefinition(env)
@@ -139,7 +139,7 @@ func Create(c *gin.Context) {
 		_ = c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
-	l.WithField("task_definition_family", env.TaskDefinitionFamily).WithField("id", env.TaskId).Info("    task started") //spaces in the beginning for #390
+	l.WithField("task_definition_family", env.TaskDefinitionFamily).WithField("id", env.TaskId).Info("task started")
 
         sessionId := ""
 
@@ -157,7 +157,7 @@ func Create(c *gin.Context) {
         }
         err = sessionmap.Write(sess.ID, &sess, 0)
         if err != nil {
-                l.WithError(err).Error("Task not cached!")
+                l.WithError(err).Error("task not cached!")
         }
 
         var resp map[string]interface{}
@@ -219,7 +219,7 @@ func Create(c *gin.Context) {
 
 	        err = sessionmap.Write(sess.ID, &sess, 0)
 		if err != nil {
-			l.WithError(err).Error("Driver session not cached!")
+			l.WithError(err).Error("driver session not cached!")
 		}
 		l.WithField("id", sess.ID).WithField("latency", util.SecondsSince(sessionStartTime)).Info("driver started")
 
@@ -269,7 +269,7 @@ func CloseSession(c *gin.Context) {
 	selenium.CloseSession(sess)
 	service.StopTask(sess.TaskID)
 
-	log.WithField("id", sessionId).Info("  session closed") //spaces in the beginning for #390
+	log.WithField("id", sessionId).Info("session closed")
 	c.JSON(http.StatusOK, gin.H{"value": nil})
 }
 
@@ -277,13 +277,13 @@ func FinishTask(c *gin.Context) {
         sessionId := c.Param("task")
         sess, err := getSession(sessionId)
         if err != nil {
-                log.WithField("id", sessionId).WithError(err).Warn("task not found")
+                log.WithField("id", sessionId).WithError(err).Warn("Task not found!")
 		//there is no sense to proceed as task is already finished/removed and not present in the sessionmap
                 return
         }
         service.StopTask(sess.TaskID)
 
-        log.WithField("id", sessionId).Info("   task finished") //spaces in the beginning for #390
+        log.WithField("id", sessionId).Info("task finished")
         c.JSON(http.StatusNoContent, gin.H{})
 }
 
