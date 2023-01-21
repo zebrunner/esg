@@ -86,7 +86,7 @@ func ClearTasks() {
 			}
 */
 
-	                // Send responses for running tasks
+	                // Send responses for existing tasks in sessionmap
 			for _, task := range output.Tasks {
 				if *task.LastStatus == "STOPPED" {
 					taskId := strings.Split(*task.TaskArn, "/")[2]
