@@ -56,7 +56,14 @@ func StartSession(ctx context.Context, driverUrl *url.URL, header http.Header, b
 	return reply, nil
 }
 
-func CloseSession(session *sessionmap.Session, conf *config.Config) {
+func CloseSession(session *sessionmap.Session) {
+        // remove driver session from map
+        err := sessionmap.Remove(session.ID)
+        if err != nil {
+                log.WithError(err).Error("Driver session not removed!")
+        }
+
+	conf := &config.Conf
 	client := http.Client{}
 	sessionUrl, ok := session.Network.GetUrl("driver")
 	if ok {
@@ -70,13 +77,10 @@ func CloseSession(session *sessionmap.Session, conf *config.Config) {
 		}
 		req.Host = "localhost"
 
-		log.WithFields(log.Fields{
-			"method": req.Method,
-			"url":    req.URL,
-		}).Debug("Closing session")
+		log.WithFields(log.Fields{"method": req.Method,	"url": req.URL,	}).Debug("closing driver")
 		resp, err := client.Do(req)
 		if err != nil {
-			log.WithError(err).Error("Failed to cancel driver session")
+			log.WithError(err).Error("Failed to close driver")
 			return
 		}
 		defer resp.Body.Close()
@@ -85,7 +89,9 @@ func CloseSession(session *sessionmap.Session, conf *config.Config) {
 			return
 		}
 	} else {
-		log.Warn("failed to get driver url")
+		log.Error("failed to get driver url")
 	}
+
+        log.WithField("sessionId", session.ID).Debug("driver closed")
 
 }

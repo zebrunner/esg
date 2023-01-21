@@ -17,8 +17,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
-        "github.com/zebrunner/esg/zebrunner"
-        sessionmap "github.com/zebrunner/esg/sessinonmap"
 	"math/rand"
 )
 
@@ -252,34 +250,21 @@ func ConstDelay(t time.Duration) func(int) time.Duration {
 	}
 }
 
-func StopTask(taskArn string, session *sessionmap.Session) (*ecs.StopTaskOutput, error) {
+func StopTask(taskId string) (*ecs.StopTaskOutput, error) {
 	svc := ecs.New(AwsSess)
 
 	stopTaskInput := &ecs.StopTaskInput{
 		Cluster: &config.Conf.AwsCluster,
 		Reason:  aws.String("Cancel"),
-		Task:    aws.String(taskArn),
+		Task:    aws.String(taskId),
 	}
 
 	i := 0
         result, err := svc.StopTask(stopTaskInput)
 	for i < 25 {
         	if err == nil {      // the condition stops matching
-			log.WithField("id", taskArn).WithField("result", result).Debug("    task stopped")
-			log.WithField("id", taskArn).Info("    task stopped") //spaces in the beginning for #390
-
-
-                        if session != nil {
-
-                        	err = sessionmap.Remove(session.ID)
-                        	if err != nil {
-                                	log.WithError(err).WithField("id", session.ID).Error("failed to remove task from sessions map")
-                        	}
-
-                        	// register usage resources only for valid sessions
-                        	sessionTime := time.Since(session.StartedAt)
-                        	zebrunner.TrackResourcesUsage(session, sessionTime, &config.Conf)
-                        }
+			log.WithField("taskId", taskId).WithField("result", result).Debug("    task stopped")
+			log.WithField("taskId", taskId).Info("    task stopped") //spaces in the beginning for #390
                         // break out of the loop
                 	break
         	} else {
@@ -403,7 +388,7 @@ out:
 		req := taskWaiter.waitFor(ctx, taskArn)
 		select {
 		case err := <-req.errorChan:
-			StopTask(taskArn, nil)
+			StopTask(taskId)
 			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to wait until Task is running and healthy")
 			outputErr = err
 			continue
@@ -411,7 +396,7 @@ out:
 			err = setEnvironmentNetwork(env, task)
 			l.WithField("attempt", i).Debug("setEnvironmentNetwork latency: ", time.Since(startTime))
 			if err != nil {
-				StopTask(taskArn, nil)
+				StopTask(taskId)
 				l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to get service info.")
 				outputErr = fmt.Errorf("failed to get service info: %v", err)
 				continue
@@ -421,7 +406,7 @@ out:
 			return outputErr
 		case <-req.ctx.Done():
 			outputErr = errors.New("failed to wait until task is running. context deadline")
-			StopTask(taskArn, nil)
+			StopTask(taskId)
 			taskWaiter.stopWait(taskArn)
 			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("failed to wait until task is running")
 		}

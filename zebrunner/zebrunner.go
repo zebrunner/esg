@@ -18,7 +18,8 @@ const (
         USAGE_API_PATH = "/api/quota/v2/engine-usages"
 )
 
-func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration, conf *config.Config) {
+func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration) {
+	conf := &config.Conf
 	requestUrl, err := url.ParseRequestURI(conf.ZebrunnerHost)
 	if err != nil {
 		log.WithError(err).Error("Failed to parse zebrunner base url")
@@ -32,7 +33,8 @@ func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration, conf *config
 		"instant": time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 		"seconds": d.Seconds(),
 	}
-        log.Trace("requestBody: ", requestBody)
+	//TODO: move to trace
+        log.Info("requestBody: ", requestBody)
 
 	body, err := json.Marshal(requestBody)
 	if err != nil {

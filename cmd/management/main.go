@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"math"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
@@ -19,6 +20,8 @@ import (
 	awsSession "github.com/aws/aws-sdk-go/aws/session"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
+
+        "github.com/zebrunner/esg/zebrunner"
 )
 
 var (
@@ -30,7 +33,114 @@ func init() {
 	flag.BoolVar(&enableFastScaleDown, "enable-fast-scale-down", true, "Enable ESG scale down option")
 }
 
-func ClearSessions() {
+func ClearTasks() {
+	//TODO: uncomment and implement resource tracking based on below template
+/*
+                        if session != nil {
+
+                                err = sessionmap.Remove(session.ID)
+                                if err != nil {
+                                        log.WithError(err).WithField("id", session.ID).Error("failed to remove task from sessions map")
+                                }
+
+                                // register usage resources only for valid sessions
+                                sessionTime := time.Since(session.StartedAt)
+                                zebrunner.TrackResourcesUsage(session, sessionTime, &config.Conf)
+                        }
+*/
+
+
+	//TODO: Make sure to test valid resource usage for idled session because we keep session for 10 more minutes
+	//	As variant -> make taskId null as only resource usage track
+
+        //TODO: calculate zombie session resources and track them
+        session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
+        if err != nil {
+                log.WithError(err).Error("Failed to create AWS session")
+                return
+        }
+	svc := ecs.New(session)
+
+        rdb := config.RedisConnection
+        for {
+                time.Sleep(15*time.Second) //TODO: increased default pause for tasks cleaner to 5-10m
+                keys, err := rdb.Keys(context.Background(), "*").Result()
+                if err != nil {
+                        log.WithError(err).Error("Failed to get list of keys")
+                        continue
+                }
+                log.WithField("keys", keys).Trace("Cached session keys")
+
+                // Construct pages of *string with 100 or fewer elements for requests. 100 is an AWS limitation for Describe* requests
+                var taskIdsPtrs []*string
+                for _, k := range keys {
+                        taskId := k //local env required to generate new reference address to mew value
+                        taskIdsPtrs = append(taskIdsPtrs, &taskId)
+                }
+                pages := paginate(taskIdsPtrs, 100)
+
+                // Send DescribeTasks requests and process errors
+                for _, page := range pages {
+                        describeTasksInput := ecs.DescribeTasksInput{
+                                Cluster: &config.Conf.AwsCluster,
+                                Tasks:   page,
+                        }
+
+			log.Info("describeTasksInput: ", describeTasksInput)
+                        output, err := svc.DescribeTasks(&describeTasksInput)
+                        if err != nil {
+                                log.WithError(err).Error("failed to describe tasks")
+                        }
+
+			var taskIds4Removal []string
+			//TODO: commented so far as driver session returned as MISSING and we remove valid sessions :)
+/*			for _, failure := range output.Failures {
+				//no sense to keep MISSING sessions as we can't detect resoutce usage anymore!
+				// failures="[{\n  Arn: \"arn:aws:ecs:us-east-1:659932254483:task/9fc25c3e9c1c865e94b68061f020d083\",\n  Reason: \"MISSING\"\n}]"
+				if *failure.Reason == "MISSING" {
+					taskId := strings.Split(*failure.Arn, "/")[1]
+					taskIds4Removal = append(taskIds4Removal, taskId)
+				}
+			}
+*/
+
+	                // Send responses for running tasks
+			for _, task := range output.Tasks {
+				if *task.LastStatus == "STOPPED" {
+					taskId := strings.Split(*task.TaskArn, "/")[2]
+
+					session, err := sessionmap.Find(taskId, false)
+					if err != nil {
+						log.WithError(err).WithField("key", taskId).Error("Failed to get session from session map")
+						continue
+					}
+
+					//TODO: analyze session.TaskID != "" for idle sessions
+
+					log.WithField("taskId", taskId).Info("StartedAt: ", *task.StartedAt)
+					log.WithField("taskId", taskId).Info("StoppedAt: ", *task.StoppedAt)
+					startedAt := *task.StartedAt //local var needed to calculate difference via Sub(..)
+					stoppedAt := *task.StoppedAt
+					zebrunner.TrackResourcesUsage(session, stoppedAt.Sub(startedAt))
+
+					taskIds4Removal = append(taskIds4Removal, taskId)
+				}
+			}
+
+			// cleanup tracked and missing tasks
+			for _, id := range taskIds4Removal {
+				log.Info("Removing session: ", id)
+				err = sessionmap.Remove(id)
+				if err != nil {
+					log.WithError(err).WithField("id", id).Error("failed to remove task from sessions map")
+				}
+			}
+
+                }
+        }
+}
+
+func ClearIdleSessions() {
 	rdb := config.RedisConnection
 	for {
 		time.Sleep(config.Conf.IdleTimeout)
@@ -43,13 +153,15 @@ func ClearSessions() {
 		for _, key := range keys {
 			session, err := sessionmap.Find(key, false)
 			if err != nil {
-				log.WithError(err).WithField("session", key).Error("Failed to get session from session map")
+				log.WithError(err).WithField("key", key).Error("Failed to get session from session map")
 				continue
 			}
 
 			if session.Status != sessionmap.SessionActive {
 				continue
 			}
+
+                        log.WithField("session", session).Debug("Analyzing session for idleTimeout")
 
 			idleTimeout := float64(session.Capabilities.IdleTimeout)
 			if idleTimeout == 0 {
@@ -58,15 +170,15 @@ func ClearSessions() {
 
 			idleTime := time.Since(session.AccessedAt).Seconds()
 			if idleTime > idleTimeout {
-				// Set stopped status and expiration time 10 minutes
+				// Set stopped status and expiration time 10 minutes to be able to return "invalid session id" for requests
 				session.Status = sessionmap.SessionStoppedIdle
 				err = sessionmap.Write(key, session, 10*time.Minute)
 
-				log.WithField("task", session.TaskID).Info("Deleting task. Reason: idle timeout")
-				selenium.CloseSession(session, &config.Conf)
-				_, err = service.StopTask(session.TaskID, session)
+				log.WithField("task", session.TaskID).Warn("Deleting task due to the idle timeout")
+				//selenium.CloseSession(session)
+				_, err = service.StopTask(session.TaskID)
 				if err != nil {
-					log.WithError(err).Error("Failed to stop task")
+					log.WithError(err).Error("Failed to stop task!")
 				}
 			}
 		}
@@ -163,15 +275,32 @@ func CleanZombieTasks() {
 		}
 
 		for _, task := range tasks {
+			//TODO: parametrize zombie timeout to be able to override via capabilities
 			if time.Since(*task.CreatedAt) > 24*time.Hour {
-                                //TODO: calculate zombie session resources and track them
-				service.StopTask(*task.TaskArn, nil)
+				taskId := strings.Split(*task.TaskArn, "/")[2]
+				service.StopTask(taskId)
 			}
 		}
 
 		time.Sleep(1 * time.Hour)
 	}
 }
+
+func paginate[T interface{}](l []T, size int) [][]T {
+        numPages := int(math.Ceil(float64(len(l)) / float64(size)))
+        pages := make([][]T, numPages)
+        for i := 0; i < numPages; i++ {
+                left := i * size
+                right := (i + 1) * size
+                if right > len(l) {
+                        right = len(l)
+                }
+                pages[i] = l[left:right]
+        }
+
+        return pages
+}
+
 
 func main() {
 	flag.Parse()
@@ -204,7 +333,10 @@ func main() {
 		go ScaleDownCluster()
 	}
 	wg.Add(1)
-	go ClearSessions()
+	go ClearIdleSessions()
+
+	wg.Add(1)
+	go ClearTasks()
 
 	wg.Add(1)
 	go CleanZombieTasks()
