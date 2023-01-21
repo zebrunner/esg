@@ -154,11 +154,12 @@ func ClearIdleSessions() {
 				session.Status = sessionmap.SessionStoppedIdle
 				err = sessionmap.Write(key, session, 10*time.Minute)
 
-				log.WithField("task", session.TaskID).Warn("Deleting driver task due to the idle timeout!")
 				//selenium.CloseSession(session)
 				_, err = service.StopTask(session.TaskID)
 				if err != nil {
-					log.WithError(err).Error("Failed to stop driver task!")
+					log.WithError(err).Error("Failed to stop idle driver task!")
+				} else {
+					log.WithField("_taskId", session.TaskID).WithField("workspace", session.Workspace).Warn("task aborted due to the idle timeout")
 				}
 			}
 		}
