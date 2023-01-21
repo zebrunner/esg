@@ -93,13 +93,16 @@ func ClearTasks() {
 
 					session, err := sessionmap.Find(taskId, false)
 					if err != nil {
-						l.WithError(err).Error("Failed to get task session from sessionmap!")
+						log.WithField("taskId", taskId).WithError(err).Error("Failed to get task session from sessionmap!")
 						continue
 					}
 
 					l = log.WithFields(log.Fields{"_taskId": taskId, "workspace": session.Workspace})
 
-					if *task.LastStatus == "STOPPED" {
+					if *task.LastStatus == "STOPPED" && task.StartedAt != nil && task.StoppedAt != nil {
+						// don't calculate timing for terminated tasks by AWS due to the missted StartedAt!
+						//	StopCode: \"TerminationNotice\"
+						//	StoppedReason: \"Host EC2 (instance i-03dba81187d65ce7e) terminated.\"
 						l.Trace("StartedAt: ", *task.StartedAt)
 						l.Trace("StoppedAt: ", *task.StoppedAt)
 						startedAt := *task.StartedAt //local var needed to calculate difference via Sub(..)
@@ -110,9 +113,13 @@ func ClearTasks() {
 					}
 
 					if *task.LastStatus == "RUNNING" {
-						maxTimeout := time.Duration(session.Capabilities.MaxTimeout) * time.Second
-						l.Debug("maxTimeout capabilities: ", maxTimeout)
-						if time.Since(*task.CreatedAt) > maxTimeout {
+						maxTimeout := config.Conf.MaxTimeout
+						if (session.Capabilities.MaxTimeout != 0) {
+							maxTimeout = time.Duration(session.Capabilities.MaxTimeout) * time.Second
+						}
+						//TODO: move to debug
+						l.Info("maxTimeout capabilities: ", maxTimeout)
+						if task.CreatedAt != nil && time.Since(*task.CreatedAt) > maxTimeout {
 							// stop zombie task
 							service.StopTask(taskId)
 							l.WithField("maxTimeout", maxTimeout).Warn("task aborted due to the max timeout")
