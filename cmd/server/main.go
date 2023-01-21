@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/net/websocket"
@@ -95,7 +94,7 @@ func CreateRouter() *gin.Engine {
 
 		hub.GET("/devtools/:session", handlers.Devtools)
 
-                hub.DELETE("/tasks/:task", handlers.FinishTask) // to be able to abort generic executor task by taskId
+                hub.DELETE("/tasks/:task", handlers.AbortTask) // to be able to abort generic tasks by taskId
 	}
 
 	hub.Use(handlers.APIError)
@@ -115,8 +114,7 @@ func main() {
 	log.SetLevel(config.Conf.ParseLogLevel())
 	log.SetFormatter(&log.TextFormatter{
 		FullTimestamp:   true,
-		TimestampFormat: time.RFC3339Nano,
-		DisableColors:     true,
+		DisableColors:   true,
 	})
 
 	db, err := config.InitDBConnection(config.Conf.DbConnectionString)
