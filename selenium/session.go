@@ -63,6 +63,8 @@ func CloseSession(session *sessionmap.Session) {
                 log.WithError(err).Error("Driver session not removed!")
         }
 
+        l := log.WithFields(log.Fields{"_taskId": session.TaskID, "sessionId": session.ID, "workspace": session.Workspace})
+
 	conf := &config.Conf
 	client := http.Client{}
 	sessionUrl, ok := session.Network.GetUrl("driver")
@@ -72,26 +74,26 @@ func CloseSession(session *sessionmap.Session) {
 		defer cancel()
 		req, err := http.NewRequestWithContext(timeoutCtx, http.MethodDelete, sessionUrl.String(), nil)
 		if err != nil {
-			log.WithError(err).Error("Failed to create request")
+			l.WithError(err).Error("Failed to create request")
 			return
 		}
 		req.Host = "localhost"
 
-		log.WithFields(log.Fields{"method": req.Method,	"url": req.URL,	}).Debug("closing driver")
+		l.WithFields(log.Fields{"method": req.Method, "url": req.URL}).Debug("closing driver")
 		resp, err := client.Do(req)
 		if err != nil {
-			log.WithError(err).Error("Failed to close driver")
+			l.WithError(err).Error("Failed to close driver")
 			return
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
-			log.WithField("statusCode", resp.Status).Error("Cancel request returned not success status code")
+			l.WithField("statusCode", resp.Status).Error("Cancel request returned not success status code")
 			return
 		}
 	} else {
-		log.Error("failed to get driver url")
+		l.Error("failed to get driver url")
 	}
 
-        log.WithField("sessionId", session.ID).Debug("driver closed")
+        l.Debug("driver closed")
 
 }

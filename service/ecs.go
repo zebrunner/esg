@@ -162,7 +162,7 @@ func CreateGenericTaskDefinition(environment *environment.ExecutionEnvironment) 
         input.Volumes = volumes
 
         resultTaskDefinition, err := svc.RegisterTaskDefinition(&input)
-        //log.WithField("resultTaskDefinition", resultTaskDefinition).Info("Res TaskDefinition")
+        log.WithField("resultTaskDefinition", resultTaskDefinition).Trace("Res TaskDefinition")
         if err != nil {
                 return nil, fmt.Errorf("failed to create task definition: %v", err)
         }
@@ -185,13 +185,16 @@ func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (t
 			},
 		},
 	}
-        log.WithField("runTaskInput", runTaskInput).Debug("Res runTaskInput")
+        log.WithField("runTaskInput", runTaskInput).Trace("Res runTaskInput")
 
 	// TODO: explicitly minimize errors range to wait only by well-known reasons aka RESOURCE:CPU etc
 	// TODO: convert existing hard-coded 25 retries into the queue or provisioning timeout: https://github.com/zebrunner/esg/issues/72
 	// [VD] "i" retry should be ~15 if instances can be started in 1 min and 25 if ~2 min
 	var outputErr error
 	for i := 0; i < 25; i++ {
+
+		l := log.WithFields(log.Fields{"retry": i})
+
 		select {
 		case <-ctx.Done():
 			return "", ctx.Err()
@@ -217,22 +220,19 @@ func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (t
                 }
 
 		if err != nil {
-			log.WithError(err).WithField("retry", i).Debug("Run task failed.")
+			l.WithError(err).Debug("Run task failed.")
 			outputErr = err
 			continue
 		}
 
 		if len(resultRunTask.Failures) != 0 {
-			log.WithFields(log.Fields{
-				"retry": i,
-				"error": *resultRunTask.Failures[0].Reason,
-			}).Debug("Run task failed. Response contains failures")
+			l.WithField("error", *resultRunTask.Failures[0].Reason).Debug("Run task failed. Response contains failures")
 			outputErr = errors.New("response contains failures")
 			continue
 		}
 
 		if len(resultRunTask.Tasks) == 0 {
-			log.WithField("retry", i).Debug("Run task failed. Response doesn't contains tasks")
+			l.Debug("Run task failed. Response doesn't contains tasks")
 			outputErr = errors.New("response doesn't contains tasks")
 			continue
 		}
@@ -259,24 +259,27 @@ func StopTask(taskId string) (*ecs.StopTaskOutput, error) {
 		Task:    aws.String(taskId),
 	}
 
+        l := log.WithFields(log.Fields{"_taskId": taskId})
+
 	i := 0
         result, err := svc.StopTask(stopTaskInput)
 	for i < 25 {
+	        l = log.WithFields(log.Fields{"_taskId": taskId, "retry": i})
         	if err == nil {      // the condition stops matching
-			log.WithField("taskId", taskId).WithField("result", result).Trace("task stopped")
-			log.WithField("taskId", taskId).Info("task stopped")
+			l.WithField("result", result).Trace("task stopped")
+                        l.Info("task stopped")
                         // break out of the loop
                 	break
         	} else {
 			time.Sleep(time.Duration(rand.Intn(30)) * time.Second)
 			i = i + 1
-			log.WithError(err).WithField("retry", i).Debug("Failed to stop task")
+			l.WithError(err).Debug("Failed to stop task")
 	                result, err = svc.StopTask(stopTaskInput)
 		}
 	}
 
 	if (err != nil) {
-		log.WithError(err).WithField("retry", i).Error("Failed to stop task")
+		l.WithError(err).Error("Failed to stop task")
 	}
 
 	return result, err

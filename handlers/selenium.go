@@ -117,8 +117,9 @@ func Create(c *gin.Context) {
 		return
 	}
 
-	//TODO: find valuable infor from env about task to keep on Info level. Full env hide to Debug
-	l.WithField("family", env.TaskDefinitionFamily).Info("new request")
+        l = log.WithFields(log.Fields{"workspace": workspace, "remote": remote, "family": env.TaskDefinitionFamily})
+
+	l.Info("new request")
 	l.WithField("env", env).Debug("Env details")
 
         if env.TaskDefinitionFamily == "generic" {
@@ -139,9 +140,10 @@ func Create(c *gin.Context) {
 		_ = c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
-	l.WithField("family", env.TaskDefinitionFamily).WithField("taskId", env.TaskId).Info("task started")
 
-        sessionId := ""
+        l = log.WithFields(log.Fields{"_taskId": env.TaskId, "workspace": workspace, "remote": remote, "family": env.TaskDefinitionFamily})
+
+	l.Info("task started")
 
 	// register session by TaskId to track resources
         sess := sessionmap.Session{
@@ -155,11 +157,12 @@ func Create(c *gin.Context) {
                 TaskID:          env.TaskId,
                 Workspace:       workspace,
         }
-        err = sessionmap.Write(sess.ID, &sess, 0)
+        err = sessionmap.Write(env.TaskId, &sess, 0)
         if err != nil {
-                l.WithError(err).Error("task not cached!")
+                l.WithError(err).Error("Task not cached!")
         }
 
+        sessionId := ""
         var resp map[string]interface{}
         if env.TaskDefinitionFamily == "generic" || strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
                 sessionId = env.TaskId
@@ -183,7 +186,7 @@ func Create(c *gin.Context) {
 
 		c.Request.URL.Host, c.Request.URL.Path = u.Host, path.Join(u.Path, c.Request.URL.Path)
 		c.Request.URL.Scheme = "http"
-		l.WithField("taskId", env.TaskId).WithField("serviceUrl", u).Info("driver starting")
+		l.WithField("serviceUrl", u).Debug("driver starting")
 		resp, err = selenium.StartSession(c.Request.Context(), c.Request.URL, c.Request.Header, requestBody)
 		if err != nil {
 			l.WithError(err).WithField("response", resp).Error("driver startup failed")
@@ -195,7 +198,7 @@ func Create(c *gin.Context) {
 		sessionId, err = getSessionId(resp)
 		if err != nil {
 			l.WithError(err).Error("Failed to get sessionId from driver response")
-			_ = c.Error(creationError("failed to create driver", err)).SetType(gin.ErrorTypePublic)
+			_ = c.Error(creationError("Failed to create driver", err)).SetType(gin.ErrorTypePublic)
 			return
 		}
 
@@ -219,7 +222,7 @@ func Create(c *gin.Context) {
 
 	        err = sessionmap.Write(sess.ID, &sess, 0)
 		if err != nil {
-			l.WithError(err).Error("driver session not cached!")
+			l.WithError(err).Error("Driver session not cached!")
 		}
 		l.WithField("sessionId", sess.ID).WithField("latency", util.SecondsSince(sessionStartTime)).Info("driver started")
 
@@ -283,7 +286,7 @@ func FinishTask(c *gin.Context) {
         }
         service.StopTask(sess.TaskID)
 
-        log.WithField("taskId", sess.TaskID).Info("task finished")
+        log.WithField("_taskId", sess.TaskID).Info("task finished")
         c.JSON(http.StatusNoContent, gin.H{})
 }
 
