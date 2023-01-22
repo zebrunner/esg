@@ -60,7 +60,6 @@ type Config struct {
 
 	UsePublicIp             bool
 	S3Bucket                string // For static artifacts
-	Tenant                  string
 	LogLevel                string
 	ReserveInstancesPercent float64
 
@@ -97,7 +96,6 @@ func init() {
 
 	flag.BoolVar(&Conf.UsePublicIp, "use-public-ip", false, "Use or no public ip address for browser slave instances")
 	flag.StringVar(&Conf.S3Bucket, "s3-bucket", "", "S3 Bucket name for pushing artifacts")
-	flag.StringVar(&Conf.Tenant, "tenant", "", "Zebrunner tenant name")
 	flag.StringVar(&Conf.LogLevel, "log-level", "debug", "Desired log level. Valid levels: `panic`, `fatal`, `error`, `warning`, `info`, `debug`, `trace`")
 	flag.Float64Var(&Conf.ReserveInstancesPercent, "reserve-instances-percent", 0.25, "Reserved cluster capacity quota during scale up and down operations")
 
