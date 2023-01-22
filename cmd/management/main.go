@@ -25,12 +25,7 @@ import (
 
 var (
 	wg                  sync.WaitGroup
-	enableFastScaleDown bool
 )
-
-func init() {
-	flag.BoolVar(&enableFastScaleDown, "enable-fast-scale-down", true, "Enable ESG scale down option")
-}
 
 func ClearTasks() {
 
@@ -308,10 +303,10 @@ func main() {
 
 	wg.Add(1)
 	go ScaleCluster()
-	if enableFastScaleDown {
-		wg.Add(1)
-		go ScaleDownCluster()
-	}
+
+	wg.Add(1)
+	go ScaleDownCluster()
+
 	wg.Add(1)
 	go ClearIdleSessions()
 
