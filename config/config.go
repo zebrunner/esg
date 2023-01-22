@@ -37,9 +37,7 @@ type Config struct {
 
 	// Session resource limitations
 	MinMemory            int64
-	MinMemoryReservation int64
 	MaxMemory            int64
-	MaxMemoryReservation int64
 	MinCpu               int64
 	MaxCpu               int64
 
@@ -75,9 +73,7 @@ func init() {
 	flag.StringVar(&Conf.AwsSecretAccessKey, "aws-secret-access-key", "", "Secret key for S3 bucket")
 
 	flag.Int64Var(&Conf.MinMemory, "min-memory", 2048, "minimum memory limitation for session")
-	flag.Int64Var(&Conf.MinMemoryReservation, "min-memory-reservation", 2048, "minimum memory reservation limitation for session")
 	flag.Int64Var(&Conf.MaxMemory, "max-memory", 28675, "maximum memory limitation for session") // max memory for c5a.4xlarge
-	flag.Int64Var(&Conf.MaxMemoryReservation, "max-memory-reservation", 28675, "maximum memory reservation limitation for session")
 	flag.Int64Var(&Conf.MinCpu, "min-cpu", 1024, "minimum CPU limitation for session")
 	flag.Int64Var(&Conf.MaxCpu, "max-cpu", 16384, "maximum CPU limitation for session") //max cpu for c5a.4xlarge
 
