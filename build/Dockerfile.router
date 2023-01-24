@@ -21,6 +21,44 @@ RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./cmd/server
 
 
 FROM alpine:latest
+
+#Common for router and scaler
+ENV AWS_REGION=us-east-1
+ENV AWS_RETRY=10
+
+ENV AWS_CLUSTER=
+ENV USE_PUBLIC_IP=false
+
+ENV AWS_ACESS_KEY_ID=
+ENV AWS_SECRET_ACCESS_KEY=
+
+ENV AWS_ELASTIC_CACHE=redis:6379
+ENV LOG_LEVEL=info
+ENV S3_BUCKET=
+
+
+#router only
+#postgres://postgres:postgres@db/postgres?sslmode=disable
+ENV DATABASE=
+
+ENV MIN_MEMORY=2048
+ENV MAX_MEMORY=28675
+
+ENV MIN_CPU=1024
+ENV MAX_CPU=16384
+
+#time.Duration format
+ENV IDLE_TIMEOUT=1m0s
+
+ENV SESSION_STARTUP_TIMEOUT=90s
+ENV SESSION_DELETE_TIMEOUT=30s
+
+ENV SERVICE_STARTUP_TIMEOUT=10m0s
+
+ENV INSTANCE_COOLDOWN_TIMEOUT=4m0s
+#TODO: test if needed for router
+#MAX MAX_TIMEOUT=24h0m0s
+
 RUN apk add -U git tzdata
 COPY ./.git /
 COPY ./migrations/ /migrations/

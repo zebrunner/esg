@@ -1,0 +1,19 @@
+#!/bin/sh
+
+export REVISION=$(git rev-parse HEAD)
+export BUILD_TIME=$(date -Iseconds)
+export VERSION=$(git describe --tags $(git rev-list --tags --max-count=1))
+
+# Apply all up migrations
+#DATABASE="postgres://postgres:postgres@db/postgres?sslmode=disable"
+migrate -path migrations -database $DATABASE up
+
+
+./server \
+  -aws-retry ${AWS_RETRY} \
+  -aws-cluster ${AWS_CLUSTER} \
+  -aws-elastic-cache ${AWS_ELASTIC_CACHE} \
+  -db-connection ${DATABASE} \
+  -listen :4444 \
+  -log-level ${LOG_LEVEL} \
+  -s3-bucket $S3_BUCKET}
