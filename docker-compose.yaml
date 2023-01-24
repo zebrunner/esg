@@ -3,7 +3,7 @@ services:
   router:
     build:
       context: .
-      dockerfile: ./build/Dockerfile.server
+      dockerfile: ./build/Dockerfile.router
     image: public.ecr.aws/zebrunner/router:2.1.4-beta1
     ports:
         - "4444-4445:4444"
@@ -16,6 +16,13 @@ services:
       max-size: "512m"
     restart: always
     environment:
+      - DATABASE=postgres://postgres:postgres@db/postgres?sslmode=disable
+      - ELASTIC_CACHE=redis:6379
+      - AWS_RETRY=10
+      - AWS_CLUSTER=esg
+      - LOG_LEVEL=info
+      - S3_BUCKET=zesg
+      - IDLE_TIMEOUT=1m0s
       - API_ACCESS_KEY=secure_password
   scaler:
     container_name: scaler
