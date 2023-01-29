@@ -42,7 +42,7 @@ if [ ! -z ${S3_BUCKET} ]; then
   CMD_ARGS="${CMD_ARGS} -s3-bucket ${S3_BUCKET}"
 fi
 if [ ! -z ${DATABASE} ]; then
-  CMD_ARGS="${CMD_ARGS} -db-connection \"${DATABASE}\""
+  CMD_ARGS="${CMD_ARGS} -db-connection ${DATABASE}"
 fi
 if [ ! -z ${MIN_MEMORY} ]; then
   CMD_ARGS="${CMD_ARGS} -min-memory ${MIN_MEMORY}"
@@ -75,10 +75,10 @@ if [ ! -z ${ZEBRUNNER_HOST} ]; then
   CMD_ARGS="${CMD_ARGS} -zebrunner-host ${ZEBRUNNER_HOST}"
 fi
 if [ ! -z ${ZEBRUNNER_INTEGRATION_USER} ]; then
-  CMD_ARGS="${CMD_ARGS} -zebrunner-integration-user \"${ZEBRUNNER_INTEGRATION_USER}\""
+  CMD_ARGS="${CMD_ARGS} -zebrunner-integration-user ${ZEBRUNNER_INTEGRATION_USER}"
 fi
 if [ ! -z ${ZEBRUNNER_INTEGRATION_PASSWORD} ]; then
-  CMD_ARGS="${CMD_ARGS} -zebrunner-integration-password \"${ZEBRUNNER_INTEGRATION_PASSWORD}\""
+  CMD_ARGS="${CMD_ARGS} -zebrunner-integration-password ${ZEBRUNNER_INTEGRATION_PASSWORD}"
 fi
 if [ ! -z ${BROWSERS_FILE} ]; then
   CMD_ARGS="${CMD_ARGS} -browsers-file ${BROWSERS_FILE}"
