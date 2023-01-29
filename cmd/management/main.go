@@ -299,7 +299,7 @@ func main() {
 	} else {
 		RefreshTaskDefinitions()
 	}
-	log.Info("Task definitions refreshed finished")
+	log.Info("Task definitions updates finished")
 
 	wg.Add(1)
 	go ScaleCluster()

@@ -1,15 +1,19 @@
 #!/bin/sh
 
-export REVISION=$(git rev-parse HEAD)
-export BUILD_TIME=$(date -Iseconds)
-export VERSION=$(git describe --tags $(git rev-list --tags --max-count=1))
-
-# Apply all up migrations
-#DATABASE="postgres://postgres:postgres@db/postgres?sslmode=disable"
-migrate -path migrations -database $DATABASE up
-
-
 CMD_ARGS=
+
+#scaler cli args:
+if [ ! -z ${AWS_ASG_NAME} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-auto-scaling-group ${AWS_ASG_NAME}"
+fi
+if [ ! -z ${RESERVE_INSTANCES_PERCENT} ]; then
+  CMD_ARGS="${CMD_ARGS} -reserve-instances-percent ${RESERVE_INSTANCES_PERCENT}"
+fi
+if [ ! -z ${INSTANCE_COOLDOWN_TIMEOUT} ]; then
+  CMD_ARGS="${CMD_ARGS} -instance-cooldown-timeout ${INSTANCE_COOLDOWN_TIMEOUT}"
+fi
+
+# common cli args:
 if [ ! -z ${AWS_REGION} ]; then
   CMD_ARGS="${CMD_ARGS} -aws-region ${AWS_REGION}"
 fi
@@ -82,4 +86,4 @@ fi
 
 echo "CMD_ARGS: $CMD_ARGS"
 
-./server -listen :$LISTEN_PORT $CMD_ARGS
+./management $CMD_ARGS
