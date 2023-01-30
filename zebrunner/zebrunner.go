@@ -58,14 +58,13 @@ func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration) {
 		data := map[string]interface{}{}
 		err = json.NewDecoder(resp.Body).Decode(&data)
 
-		//bodystr, _ := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			log.WithError(err).Error("Failed to track task resource usage")
 		}
 		log.WithFields(log.Fields{
 			"status":   resp.Status,
 			"response": data,
-		}).Error("Response got unsuccessfull code")
+		}).Error("Failed to track task resource usage!")
 		return
 	} else {
 		log.WithField("_taskId", sess.ID).WithField("workspace", sess.Workspace).WithField("request body", requestBody).Info("shape recorded")
