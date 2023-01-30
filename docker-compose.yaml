@@ -4,36 +4,28 @@ services:
     build:
       context: .
       dockerfile: ./build/Dockerfile.router
-    image: public.ecr.aws/zebrunner/router:2.1.4-beta1
+    image: public.ecr.aws/zebrunner/router:2.1.4
+    env_file:
+      - router.env
     ports:
         - "4444-4445:4444"
     links:
       - redis
       - db
-    command: ./scripts/entrypoint.sh
     logging:
      options:
       max-size: "512m"
     restart: always
-    environment:
-      - DATABASE=postgres://postgres:postgres@db/postgres?sslmode=disable
-      - ELASTIC_CACHE=redis:6379
-      - AWS_RETRY=10
-      - AWS_CLUSTER=esg
-      - LOG_LEVEL=info
-      - S3_BUCKET=zesg
-      - IDLE_TIMEOUT=1m0s
-      - API_ACCESS_KEY=secure_password
   scaler:
     container_name: scaler
     build:
       context: .
-      dockerfile: build/Dockerfile.management
-    image: public.ecr.aws/zebrunner/scaler:2.1.4-beta1
+      dockerfile: build/Dockerfile.scaler
+    image: public.ecr.aws/zebrunner/scaler:2.1.4
+    env_file:
+      - scaler.env
     links:
       - redis
-    command:
-      - ./scripts/management_entrypoint.sh
     restart: always
   db:
     image: postgres:13

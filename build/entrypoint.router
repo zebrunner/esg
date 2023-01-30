@@ -55,9 +55,6 @@ fi
 if [ ! -z ${IDLE_TIMEOUT} ]; then
   CMD_ARGS="${CMD_ARGS} -idle-timeout ${IDLE_TIMEOUT}"
 fi
-if [ ! -z ${SESSION_STARTUP_TIMEOUT} ]; then
-  CMD_ARGS="${CMD_ARGS} -session-startup-timeout ${SESSION_STARTUP_TIMEOUT}"
-fi
 if [ ! -z ${SESSION_DELETE_TIMEOUT} ]; then
   CMD_ARGS="${CMD_ARGS} -session-delete-timeout ${SESSION_DELETE_TIMEOUT}"
 fi
