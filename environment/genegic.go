@@ -8,7 +8,7 @@ import (
 	"github.com/zebrunner/esg/config"
 
 	"fmt"
-//	"strings"
+	b64 "encoding/base64"
 )
 
 func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {
@@ -44,7 +44,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
         //fmt.Printf("executorImage: %s\n", executorImage)
 
 
-	cloneCommand := fmt.Sprintf("git clone --verbose --progress --depth=1 %s %s %s", branchArg, caps.RepositoryUrl, workDir)
+	cloneCommand := fmt.Sprintf("git clone --depth=1 %s %s %s", branchArg, caps.RepositoryUrl, workDir)
 	//fmt.Printf("cloneCommand: %s\n", cloneCommand)
 
 	taskLogRedirect :=  ">>" + logDir + "/task.log 2>&1"
@@ -62,7 +62,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 EntryPoint: []string{"/bin/sh"},
         }
 
-        entrypointImage := imageRepo + "entrypoint:1.2"
+        entrypointImage := imageRepo + "entrypoint:1.3"
         entrypointContainer := Container{
                 Name:              "entrypoint",
                 Image:             entrypointImage,
@@ -91,6 +91,9 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
         }
 	launchCommand := caps.LaunchCommand
 
+	//basic auth header for executor-logs service
+	basicAuthHeader := "Authorization: Basic " + b64.StdEncoding.EncodeToString([]byte(conf.ZebrunnerIntegrationUser + ":" + conf.ZebrunnerIntegrationPassword))
+
 	executorContainer := Container{
 		Name:       "executor",
 		Image:      executorImage,
@@ -103,6 +106,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                         "AWS_SECRET_ACCESS_KEY":  conf.AwsSecretAccessKey,
                         "AWS_DEFAULT_REGION":     conf.AwsRegion,
 			"COMMAND":		  launchCommand,
+			"BASIC_AUTH":             basicAuthHeader,
                 },
 		Mounts: []string{entrypointVolume, taskVolume, logVolume, zebrunnerVolume, mavenVolume},
                 WorkingDirectory: workDir,

@@ -18,7 +18,8 @@ const (
         USAGE_API_PATH = "/api/quota/v2/engine-usages"
 )
 
-func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration, conf *config.Config) {
+func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration) {
+	conf := &config.Conf
 	requestUrl, err := url.ParseRequestURI(conf.ZebrunnerHost)
 	if err != nil {
 		log.WithError(err).Error("Failed to parse zebrunner base url")
@@ -32,7 +33,7 @@ func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration, conf *config
 		"instant": time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 		"seconds": d.Seconds(),
 	}
-        log.Trace("requestBody: ", requestBody)
+        log.Trace("request body to track resources: ", requestBody)
 
 	body, err := json.Marshal(requestBody)
 	if err != nil {
@@ -57,16 +58,15 @@ func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration, conf *config
 		data := map[string]interface{}{}
 		err = json.NewDecoder(resp.Body).Decode(&data)
 
-		//bodystr, _ := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			log.WithError(err).Error("Failed to track task resource usage")
 		}
 		log.WithFields(log.Fields{
 			"status":   resp.Status,
 			"response": data,
-		}).Error("Response got unsuccessfull code")
+		}).Error("Failed to track task resource usage!")
 		return
 	} else {
-		log.WithField("id", sess.ID).WithField("request body", requestBody).Info("  shape recorded") //spaces in the beginning for #390
+		log.WithField("_taskId", sess.ID).WithField("workspace", sess.Workspace).WithField("request body", requestBody).Info("shape recorded")
 	}
 }

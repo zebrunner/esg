@@ -1,0 +1,82 @@
+#!/bin/sh
+
+export REVISION=$(git rev-parse HEAD)
+export BUILD_TIME=$(date -Iseconds)
+export VERSION=$(git describe --tags $(git rev-list --tags --max-count=1))
+
+# Apply all up migrations
+#DATABASE="postgres://postgres:postgres@db/postgres?sslmode=disable"
+migrate -path migrations -database $DATABASE up
+
+
+CMD_ARGS=
+if [ ! -z ${AWS_REGION} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-region ${AWS_REGION}"
+fi
+if [ ! -z ${AWS_RETRY} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-retry ${AWS_RETRY}"
+fi
+if [ ! -z ${AWS_CLUSTER} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-cluster ${AWS_CLUSTER}"
+fi
+if [ "${USE_PUBLIC_IP}" == "true" ]; then
+  CMD_ARGS="${CMD_ARGS} -use-public-ip"
+fi
+if [ ! -z ${AWS_ACESS_KEY_ID} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-access-key-id ${AWS_ACESS_KEY_ID}"
+fi
+if [ ! -z ${AWS_SECRET_ACCESS_KEY} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-secret-access-key ${AWS_SECRET_ACCESS_KEY}"
+fi
+if [ ! -z ${AWS_ELASTIC_CACHE} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-elastic-cache ${AWS_ELASTIC_CACHE}"
+fi
+if [ ! -z ${LOG_LEVEL} ]; then
+  CMD_ARGS="${CMD_ARGS} -log-level ${LOG_LEVEL}"
+fi
+if [ ! -z ${S3_BUCKET} ]; then
+  CMD_ARGS="${CMD_ARGS} -s3-bucket ${S3_BUCKET}"
+fi
+if [ ! -z ${DATABASE} ]; then
+  CMD_ARGS="${CMD_ARGS} -db-connection ${DATABASE}"
+fi
+if [ ! -z ${MIN_MEMORY} ]; then
+  CMD_ARGS="${CMD_ARGS} -min-memory ${MIN_MEMORY}"
+fi
+if [ ! -z ${MAX_MEMORY} ]; then
+  CMD_ARGS="${CMD_ARGS} -max-memory ${MAX_MEMORY}"
+fi
+if [ ! -z ${MIN_CPU} ]; then
+  CMD_ARGS="${CMD_ARGS} -min-cpu ${MIN_CPU}"
+fi
+if [ ! -z ${MAX_CPU} ]; then
+  CMD_ARGS="${CMD_ARGS} -max-cpu ${MAX_CPU}"
+fi
+if [ ! -z ${IDLE_TIMEOUT} ]; then
+  CMD_ARGS="${CMD_ARGS} -idle-timeout ${IDLE_TIMEOUT}"
+fi
+if [ ! -z ${SESSION_DELETE_TIMEOUT} ]; then
+  CMD_ARGS="${CMD_ARGS} -session-delete-timeout ${SESSION_DELETE_TIMEOUT}"
+fi
+if [ ! -z ${SERVICE_STARTUP_TIMEOUT} ]; then
+  CMD_ARGS="${CMD_ARGS} -service-startup-timeout ${SERVICE_STARTUP_TIMEOUT}"
+fi
+if [ ! -z ${MAX_TIMEOUT} ]; then
+  CMD_ARGS="${CMD_ARGS} -max-timeout ${MAX_TIMEOUT}"
+fi
+if [ ! -z ${ZEBRUNNER_HOST} ]; then
+  CMD_ARGS="${CMD_ARGS} -zebrunner-host ${ZEBRUNNER_HOST}"
+fi
+if [ ! -z ${ZEBRUNNER_INTEGRATION_USER} ]; then
+  CMD_ARGS="${CMD_ARGS} -zebrunner-integration-user ${ZEBRUNNER_INTEGRATION_USER}"
+fi
+if [ ! -z ${ZEBRUNNER_INTEGRATION_PASSWORD} ]; then
+  CMD_ARGS="${CMD_ARGS} -zebrunner-integration-password ${ZEBRUNNER_INTEGRATION_PASSWORD}"
+fi
+if [ ! -z ${BROWSERS_FILE} ]; then
+  CMD_ARGS="${CMD_ARGS} -browsers-file ${BROWSERS_FILE}"
+fi
+
+echo "CMD_ARGS: $CMD_ARGS"
+
+./server -listen :$LISTEN_PORT $CMD_ARGS

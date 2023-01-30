@@ -27,6 +27,7 @@ type Capabilities struct {
 	ScreenResolution string
 	DeviceName       string
 	IdleTimeout      int64 `json:"idleTimeout,string,omitempty"`
+	MaxTimeout       int64 `json:"maxTimeout,string,omitempty"`
 	TimeZone         string
 	Env              []string
 	HostsEntries     []string

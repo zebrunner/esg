@@ -117,7 +117,10 @@ func Create(c *gin.Context) {
 		return
 	}
 
-	l.WithField("env", env).Debug("Execution env")
+        l = log.WithFields(log.Fields{"workspace": workspace, "remote": remote, "family": env.TaskDefinitionFamily})
+
+	l.Info("new request")
+	l.WithField("env", env).Debug("Env details")
 
         if env.TaskDefinitionFamily == "generic" {
 	        _, err = service.CreateGenericTaskDefinition(env)
@@ -137,7 +140,27 @@ func Create(c *gin.Context) {
 		_ = c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
-	l.WithField("task_definition_family", env.TaskDefinitionFamily).WithField("id", env.TaskId).Info("    task started") //spaces in the beginning for #390
+
+        l = log.WithFields(log.Fields{"_taskId": env.TaskId, "workspace": workspace, "remote": remote, "family": env.TaskDefinitionFamily})
+
+	l.Info("task started")
+
+	// register session by TaskId to track resources
+        sess := sessionmap.Session{
+                ID:              env.TaskId,
+                RawCapabilities: body.ToMap(),
+                Capabilities:    *caps,
+                Network:         *env.Network,
+                StartedAt:       time.Now(),
+                AccessedAt:      time.Now(),
+                Status:          sessionmap.SessionQueued,
+                TaskID:          env.TaskId,
+                Workspace:       workspace,
+        }
+        err = sessionmap.Write(env.TaskId, &sess, 0)
+        if err != nil {
+                l.WithError(err).Error("Task not cached!")
+        }
 
         sessionId := ""
         var resp map[string]interface{}
@@ -163,50 +186,47 @@ func Create(c *gin.Context) {
 
 		c.Request.URL.Host, c.Request.URL.Path = u.Host, path.Join(u.Path, c.Request.URL.Path)
 		c.Request.URL.Scheme = "http"
-		l.WithField("id", env.TaskId).WithField("serviceUrl", u).Info("session starting")
+		l.WithField("serviceUrl", u).Debug("driver starting")
 		resp, err = selenium.StartSession(c.Request.Context(), c.Request.URL, c.Request.Header, requestBody)
 		if err != nil {
-			l.WithError(err).WithField("response", resp).Error("Session startup failed")
+			l.WithError(err).WithField("response", resp).Error("driver startup failed")
 			c.JSON(http.StatusInternalServerError, resp)
-			service.StopTask(env.TaskId, nil)
+			service.StopTask(env.TaskId)
 			return
 		}
 
 		sessionId, err = getSessionId(resp)
 		if err != nil {
 			l.WithError(err).Error("Failed to get sessionId from driver response")
-			_ = c.Error(creationError("failed to create session", err)).SetType(gin.ErrorTypePublic)
+			_ = c.Error(creationError("Failed to create driver", err)).SetType(gin.ErrorTypePublic)
 			return
 		}
 
 		if sessionId == "" {
 			l.WithError(err).Error("Failed to get sessionId from driver response. sessionId is empty")
-			_ = c.Error(creationError("failed to create session", err)).SetType(gin.ErrorTypePublic)
+			_ = c.Error(creationError("failed to create driver", err)).SetType(gin.ErrorTypePublic)
 			return
 		}
-	}
 
-	sess := sessionmap.Session{
-		ID:              sessionId,
-		RawCapabilities: body.ToMap(),
-		Capabilities:    *caps,
-		Network:         *env.Network,
-		StartedAt:       time.Now(),
-		AccessedAt:      time.Now(),
-		Status:          sessionmap.SessionActive,
-		TaskID:          env.TaskId,
-		Workspace:       workspace,
-	}
-	if env.TaskDefinitionFamily == "generic" || strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
-		// extra state for generic job to disable idleTimeout verification at all
-		sess.Status = sessionmap.SessionQueued
-	}
+		sess := sessionmap.Session{
+			ID:              sessionId,
+			RawCapabilities: body.ToMap(),
+			Capabilities:    *caps,
+			Network:         *env.Network,
+			StartedAt:       time.Now(),
+			AccessedAt:      time.Now(),
+			Status:          sessionmap.SessionActive,
+			TaskID:          env.TaskId,
+			Workspace:       workspace,
+		}
 
-	err = sessionmap.Write(sess.ID, &sess, 0)
-	if err != nil {
-		l.WithError(err).Error("Session not cached")
+	        err = sessionmap.Write(sess.ID, &sess, 0)
+		if err != nil {
+			l.WithError(err).Error("Driver session not cached!")
+		}
+		l.WithField("sessionId", sess.ID).WithField("latency", util.SecondsSince(sessionStartTime)).Info("driver started")
+
 	}
-	l.WithField("id", sess.ID).WithField("latency", util.SecondsSince(sessionStartTime)).Info("session recorded")
 
 	c.JSON(http.StatusOK, resp)
 }
@@ -245,28 +265,28 @@ func CloseSession(c *gin.Context) {
 	sessionId := c.Param("session")
 	sess, err := getSession(sessionId)
 	if err != nil {
-		log.WithError(err).WithField("sessionID", sessionId).Error("Cant find session")
+		log.WithError(err).WithField("sessionID", sessionId).Error("Can't find session!")
 		_ = c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
-	selenium.CloseSession(sess, &config.Conf)
-	service.StopTask(sess.TaskID, sess)
+	selenium.CloseSession(sess)
+	service.StopTask(sess.TaskID)
 
-	log.WithField("id", sessionId).Info("  session closed") //spaces in the beginning for #390
+	log.WithField("sessionId", sessionId).Info("driver closed")
 	c.JSON(http.StatusOK, gin.H{"value": nil})
 }
 
-func FinishTask(c *gin.Context) {
+func AbortTask(c *gin.Context) {
         sessionId := c.Param("task")
         sess, err := getSession(sessionId)
         if err != nil {
-                log.WithField("id", sessionId).WithError(err).Warn("task not found")
+                log.WithField("id", sessionId).WithError(err).Warn("Task not found!")
 		//there is no sense to proceed as task is already finished/removed and not present in the sessionmap
                 return
         }
-        service.StopTask(sess.TaskID, sess)
+        service.StopTask(sess.TaskID)
 
-        log.WithField("id", sessionId).Info("   task finished") //spaces in the beginning for #390
+        log.WithField("_taskId", sess.TaskID).WithField("workspace", sess.Workspace).Info("task aborted")
         c.JSON(http.StatusNoContent, gin.H{})
 }
 

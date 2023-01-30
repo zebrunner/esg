@@ -17,8 +17,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
-        "github.com/zebrunner/esg/zebrunner"
-        sessionmap "github.com/zebrunner/esg/sessinonmap"
 	"math/rand"
 )
 
@@ -164,7 +162,7 @@ func CreateGenericTaskDefinition(environment *environment.ExecutionEnvironment) 
         input.Volumes = volumes
 
         resultTaskDefinition, err := svc.RegisterTaskDefinition(&input)
-        //log.WithField("resultTaskDefinition", resultTaskDefinition).Info("Res TaskDefinition")
+        log.WithField("resultTaskDefinition", resultTaskDefinition).Trace("Res TaskDefinition")
         if err != nil {
                 return nil, fmt.Errorf("failed to create task definition: %v", err)
         }
@@ -187,13 +185,16 @@ func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (t
 			},
 		},
 	}
-        log.WithField("runTaskInput", runTaskInput).Debug("Res runTaskInput")
+        log.WithField("runTaskInput", runTaskInput).Trace("Res runTaskInput")
 
 	// TODO: explicitly minimize errors range to wait only by well-known reasons aka RESOURCE:CPU etc
 	// TODO: convert existing hard-coded 25 retries into the queue or provisioning timeout: https://github.com/zebrunner/esg/issues/72
 	// [VD] "i" retry should be ~15 if instances can be started in 1 min and 25 if ~2 min
 	var outputErr error
 	for i := 0; i < 25; i++ {
+
+		l := log.WithFields(log.Fields{"retry": i})
+
 		select {
 		case <-ctx.Done():
 			return "", ctx.Err()
@@ -219,22 +220,19 @@ func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (t
                 }
 
 		if err != nil {
-			log.WithError(err).WithField("retry", i).Debug("Run task failed.")
+			l.WithError(err).Debug("Run task failed.")
 			outputErr = err
 			continue
 		}
 
 		if len(resultRunTask.Failures) != 0 {
-			log.WithFields(log.Fields{
-				"retry": i,
-				"error": *resultRunTask.Failures[0].Reason,
-			}).Debug("Run task failed. Response contains failures")
+			l.WithField("error", *resultRunTask.Failures[0].Reason).Debug("Run task failed. Response contains failures")
 			outputErr = errors.New("response contains failures")
 			continue
 		}
 
 		if len(resultRunTask.Tasks) == 0 {
-			log.WithField("retry", i).Debug("Run task failed. Response doesn't contains tasks")
+			l.Debug("Run task failed. Response doesn't contains tasks")
 			outputErr = errors.New("response doesn't contains tasks")
 			continue
 		}
@@ -252,46 +250,36 @@ func ConstDelay(t time.Duration) func(int) time.Duration {
 	}
 }
 
-func StopTask(taskArn string, session *sessionmap.Session) (*ecs.StopTaskOutput, error) {
+func StopTask(taskId string) (*ecs.StopTaskOutput, error) {
 	svc := ecs.New(AwsSess)
 
 	stopTaskInput := &ecs.StopTaskInput{
 		Cluster: &config.Conf.AwsCluster,
 		Reason:  aws.String("Cancel"),
-		Task:    aws.String(taskArn),
+		Task:    aws.String(taskId),
 	}
+
+        l := log.WithFields(log.Fields{"_taskId": taskId})
 
 	i := 0
         result, err := svc.StopTask(stopTaskInput)
 	for i < 25 {
+	        l = log.WithFields(log.Fields{"_taskId": taskId, "retry": i})
         	if err == nil {      // the condition stops matching
-			log.WithField("id", taskArn).WithField("result", result).Debug("    task stopped")
-			log.WithField("id", taskArn).Info("    task stopped") //spaces in the beginning for #390
-
-
-                        if session != nil {
-
-                        	err = sessionmap.Remove(session.ID)
-                        	if err != nil {
-                                	log.WithError(err).WithField("id", session.ID).Error("failed to remove task from sessions map")
-                        	}
-
-                        	// register usage resources only for valid sessions
-                        	sessionTime := time.Since(session.StartedAt)
-                        	zebrunner.TrackResourcesUsage(session, sessionTime, &config.Conf)
-                        }
+			l.WithField("result", result).Trace("task stopped")
+                        l.Info("task stopped")
                         // break out of the loop
                 	break
         	} else {
 			time.Sleep(time.Duration(rand.Intn(30)) * time.Second)
 			i = i + 1
-			log.WithError(err).WithField("retry", i).Debug("Failed to stop task")
+			l.WithError(err).Debug("Failed to stop task")
 	                result, err = svc.StopTask(stopTaskInput)
 		}
 	}
 
 	if (err != nil) {
-		log.WithError(err).WithField("retry", i).Error("Failed to stop task")
+		l.WithError(err).Error("Failed to stop task")
 	}
 
 	return result, err
@@ -403,7 +391,7 @@ out:
 		req := taskWaiter.waitFor(ctx, taskArn)
 		select {
 		case err := <-req.errorChan:
-			StopTask(taskArn, nil)
+			StopTask(taskId)
 			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to wait until Task is running and healthy")
 			outputErr = err
 			continue
@@ -411,7 +399,7 @@ out:
 			err = setEnvironmentNetwork(env, task)
 			l.WithField("attempt", i).Debug("setEnvironmentNetwork latency: ", time.Since(startTime))
 			if err != nil {
-				StopTask(taskArn, nil)
+				StopTask(taskId)
 				l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to get service info.")
 				outputErr = fmt.Errorf("failed to get service info: %v", err)
 				continue
@@ -421,7 +409,7 @@ out:
 			return outputErr
 		case <-req.ctx.Done():
 			outputErr = errors.New("failed to wait until task is running. context deadline")
-			StopTask(taskArn, nil)
+			StopTask(taskId)
 			taskWaiter.stopWait(taskArn)
 			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("failed to wait until task is running")
 		}

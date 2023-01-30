@@ -205,6 +205,7 @@ func processVendorCaps(caps map[string]interface{}) (map[string]interface{}, err
 		"enableVideo",
 		"enableLog",
 		"idleTimeout",
+		"maxTimeout",
 		"screenResolution",
 		"deviceName",
 		"cpu", "Cpu", //to support lower case and camel case
