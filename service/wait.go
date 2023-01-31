@@ -142,6 +142,8 @@ func (w *waitWorker) waitFor(ctx context.Context, taskId string) *waitRequest {
 
 func (w *waitWorker) stopWait(taskId string) {
 	req := w.requests[taskId]
-	close(req.responseChan)
-	delete(w.requests, taskId)
+	if (req != nil) {
+		close(req.responseChan)
+		delete(w.requests, taskId)
+	}
 }
