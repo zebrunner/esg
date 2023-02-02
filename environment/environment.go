@@ -9,7 +9,6 @@ import (
         "github.com/aws/aws-sdk-go/aws"
         "github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/zebrunner/esg/capabilities"
-	"github.com/zebrunner/esg/config"
 
         log "github.com/sirupsen/logrus"
 )
@@ -172,19 +171,19 @@ func (e *ExecutionEnvironment) ContainerOverrides() []*ecs.ContainerOverride {
 	return overrides
 }
 
-func Build(workspace string, caps *capabilities.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {
+func Build(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
 	platform := strings.ToLower(caps.PlatformName)
 	if platform == androidPlatform {
 		if strings.ToLower(caps.DeviceName) == redroidDevice {
-			return buildAppiumRedroid(workspace, caps, conf)
+			return buildAppiumRedroid(workspace, caps)
 		}
 		return nil, fmt.Errorf("device is not supported. deviceName=%s", caps.DeviceName)
 	} else if platform == genericPlatform {
-		return buildGeneric(workspace, caps, conf)
+		return buildGeneric(workspace, caps)
         } else if platform == cypressPlatform {
-		return buildCypress(workspace, caps, conf)
+		return buildCypress(workspace, caps)
 	} else if platform == linuxPlatform || platform == "" || platform == anyPlatform {
-		return buildBrowser(workspace, caps, conf)
+		return buildBrowser(workspace, caps)
 	}
 
 	return nil, fmt.Errorf("platform is not supported. platformName=%s", caps.PlatformName)

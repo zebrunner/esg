@@ -14,10 +14,12 @@ const (
 	appiumMemory = 1024
 )
 
-func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {
+func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
 	sharedFolder := "/opt/zebrunner"
 	taskVolume := "data"
         browserVolume := "browser"
+
+	conf := &config.Conf
 
 	deviceImage, err := buildImage(caps)
 	if err != nil {
@@ -57,9 +59,9 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities, conf 
 			"MCLOUD":                "true",
 			"BUCKET":                conf.S3Bucket,
 			"TENANT":                workspace,
-			"AWS_ACCESS_KEY_ID":     conf.AwsAccessKeyID,
-			"AWS_SECRET_ACCESS_KEY": conf.AwsSecretAccessKey,
-			"AWS_DEFAULT_REGION":    conf.AwsRegion,
+			"AWS_ACCESS_KEY_ID":     conf.S3AwsAccessKeyID,
+			"AWS_SECRET_ACCESS_KEY": conf.S3AwsSecretAccessKey,
+			"AWS_DEFAULT_REGION":    conf.S3Region,
 		},
 		Mounts: []string{taskVolume, browserVolume},
 		Links:  []string{"device"},
