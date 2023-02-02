@@ -30,7 +30,12 @@ import (
 func getSession(id string) (*sessionmap.Session, error) {
 	session, err := sessionmap.Find(id, true)
 	if err != nil {
-		return nil, err
+		return nil, &utils.SeleniumError{
+			ResponseStatus: http.StatusNotFound,
+			SeleniumCode:   "invalid session id",
+			Message:        fmt.Sprintf("Session not found"),
+			Err:            err,
+		}
 	}
 
 	if session.Status == sessionmap.SessionStoppedIdle {
@@ -104,7 +109,7 @@ func Create(c *gin.Context) {
 		_ = c.Error(&processingError).SetType(gin.ErrorTypePublic)
 		return
 	}
-        log.Trace("caps: ", caps)
+	log.Trace("caps: ", caps)
 
 	sessionStartTime := time.Now()
 	ctx, ctxCancel := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout)
@@ -117,18 +122,18 @@ func Create(c *gin.Context) {
 		return
 	}
 
-        l = log.WithFields(log.Fields{"workspace": workspace, "remote": remote, "family": env.TaskDefinitionFamily})
+	l = log.WithFields(log.Fields{"workspace": workspace, "remote": remote, "family": env.TaskDefinitionFamily})
 
 	l.Info("new request")
 	l.WithField("env", env).Debug("Env details")
 
-        if env.TaskDefinitionFamily == "generic" {
-	        _, err = service.CreateGenericTaskDefinition(env)
-        	if err != nil {
-                	log.WithError(err).Error("Failed to create task definition")
-	                return
-        	}
-        }
+	if env.TaskDefinitionFamily == "generic" {
+		_, err = service.CreateGenericTaskDefinition(env)
+		if err != nil {
+			log.WithError(err).Error("Failed to create task definition")
+			return
+		}
+	}
 
 	err = service.StartTask(ctx, env)
 	if err == context.DeadlineExceeded {
@@ -141,34 +146,34 @@ func Create(c *gin.Context) {
 		return
 	}
 
-        l = log.WithFields(log.Fields{"_taskId": env.TaskId, "workspace": workspace, "remote": remote, "family": env.TaskDefinitionFamily})
+	l = log.WithFields(log.Fields{"_taskId": env.TaskId, "workspace": workspace, "remote": remote, "family": env.TaskDefinitionFamily})
 
 	l.Info("task started")
 
 	// register session by TaskId to track resources
-        sess := sessionmap.Session{
-                ID:              env.TaskId,
-                RawCapabilities: body.ToMap(),
-                Capabilities:    *caps,
-                Network:         *env.Network,
-                StartedAt:       time.Now(),
-                AccessedAt:      time.Now(),
-                Status:          sessionmap.SessionQueued,
-                TaskID:          env.TaskId,
-                Workspace:       workspace,
-        }
-        err = sessionmap.Write(env.TaskId, &sess, 0)
-        if err != nil {
-                l.WithError(err).Error("Task not cached!")
-        }
+	sess := sessionmap.Session{
+		ID:              env.TaskId,
+		RawCapabilities: body.ToMap(),
+		Capabilities:    *caps,
+		Network:         *env.Network,
+		StartedAt:       time.Now(),
+		AccessedAt:      time.Now(),
+		Status:          sessionmap.SessionQueued,
+		TaskID:          env.TaskId,
+		Workspace:       workspace,
+	}
+	err = sessionmap.Write(env.TaskId, &sess, 0)
+	if err != nil {
+		l.WithError(err).Error("Task not cached!")
+	}
 
-        sessionId := ""
-        var resp map[string]interface{}
-        if env.TaskDefinitionFamily == "generic" || strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
-                sessionId = env.TaskId
-                data := "{\"taskId\": \"" + env.TaskId + "\"}"
-                json.Unmarshal([]byte(data), &resp)
-                l.WithFields(log.Fields{"resp": resp,}).Debug("Response")
+	sessionId := ""
+	var resp map[string]interface{}
+	if env.TaskDefinitionFamily == "generic" || strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
+		sessionId = env.TaskId
+		data := "{\"taskId\": \"" + env.TaskId + "\"}"
+		json.Unmarshal([]byte(data), &resp)
+		l.WithFields(log.Fields{"resp": resp}).Debug("Response")
 	} else {
 		u, ok := env.Network.GetUrl("driver")
 		if !ok {
@@ -220,7 +225,7 @@ func Create(c *gin.Context) {
 			Workspace:       workspace,
 		}
 
-	        err = sessionmap.Write(sess.ID, &sess, 0)
+		err = sessionmap.Write(sess.ID, &sess, 0)
 		if err != nil {
 			l.WithError(err).Error("Driver session not cached!")
 		}
@@ -251,7 +256,7 @@ func Proxy(c *gin.Context) {
 			// fix for file upload using selenium 4
 			seUploadPath, uploadPath := "/se/file", "/file"
 			if strings.HasSuffix(r.URL.Path, seUploadPath) {
-				r.URL.Path = strings.TrimSuffix(r.URL.Path, seUploadPath)+uploadPath
+				r.URL.Path = strings.TrimSuffix(r.URL.Path, seUploadPath) + uploadPath
 			}
 
 			r.URL.Host, r.URL.Path = url.Host, path.Clean(url.Path+r.URL.Path)
@@ -277,17 +282,17 @@ func CloseSession(c *gin.Context) {
 }
 
 func AbortTask(c *gin.Context) {
-        sessionId := c.Param("task")
-        sess, err := getSession(sessionId)
-        if err != nil {
-                log.WithField("id", sessionId).WithError(err).Warn("Task not found!")
+	sessionId := c.Param("task")
+	sess, err := getSession(sessionId)
+	if err != nil {
+		log.WithField("id", sessionId).WithError(err).Warn("Task not found!")
 		//there is no sense to proceed as task is already finished/removed and not present in the sessionmap
-                return
-        }
-        service.StopTask(sess.TaskID)
+		return
+	}
+	service.StopTask(sess.TaskID)
 
-        log.WithField("_taskId", sess.TaskID).WithField("workspace", sess.Workspace).Info("task aborted")
-        c.JSON(http.StatusNoContent, gin.H{})
+	log.WithField("_taskId", sess.TaskID).WithField("workspace", sess.Workspace).Info("task aborted")
+	c.JSON(http.StatusNoContent, gin.H{})
 }
 
 func Vnc(wsconn *websocket.Conn) {
@@ -347,7 +352,7 @@ func Logs(c *gin.Context) {
 	presignedUrl, err := service.GeneratePreSignedURL(logFile)
 	if err != nil {
 		log.Printf("[URL GENERATION FAILED] %v", err)
-                c.JSON(http.StatusNotFound, gin.H{"message":"Resource Not Found"})
+		c.JSON(http.StatusNotFound, gin.H{"message": "Resource Not Found"})
 		return
 	}
 	c.Redirect(http.StatusFound, presignedUrl)
@@ -372,55 +377,54 @@ func Video(c *gin.Context) {
 			"sessionID": sessionID,
 		}).Error("Failed to create pre signed url to session video")
 		_ = c.Error(err)
-                c.JSON(http.StatusNotFound, gin.H{"message":"Resource Not Found"})
+		c.JSON(http.StatusNotFound, gin.H{"message": "Resource Not Found"})
 		return
 	}
 	c.Redirect(http.StatusFound, presignedUrl)
 }
 
 func TaskLog(c *gin.Context) {
-        user, _, ok := c.Request.BasicAuth()
+	user, _, ok := c.Request.BasicAuth()
 
-        if !ok {
-                _ = c.Error(&utils.HTTPError{
-                        Status:  http.StatusBadRequest,
-                        Message: "Auth data not provided"},
-                ).SetType(gin.ErrorTypePublic)
-                return
-        }
-        taskID := c.Param("task")
-        logFile := strings.Join([]string{user, "artifacts", "launches", taskID, "console.log"}, "/")
-        presignedUrl, err := service.GeneratePreSignedURL(logFile)
-        if err != nil {
-                log.Printf("[URL GENERATION FAILED] %v", err)
-                c.JSON(http.StatusNotFound, gin.H{"message":"Resource Not Found"})
-                return
-        }
-        c.Redirect(http.StatusFound, presignedUrl)
+	if !ok {
+		_ = c.Error(&utils.HTTPError{
+			Status:  http.StatusBadRequest,
+			Message: "Auth data not provided"},
+		).SetType(gin.ErrorTypePublic)
+		return
+	}
+	taskID := c.Param("task")
+	logFile := strings.Join([]string{user, "artifacts", "launches", taskID, "console.log"}, "/")
+	presignedUrl, err := service.GeneratePreSignedURL(logFile)
+	if err != nil {
+		log.Printf("[URL GENERATION FAILED] %v", err)
+		c.JSON(http.StatusNotFound, gin.H{"message": "Resource Not Found"})
+		return
+	}
+	c.Redirect(http.StatusFound, presignedUrl)
 }
 
 func TaskDescribe(c *gin.Context) {
-        user, _, ok := c.Request.BasicAuth()
+	user, _, ok := c.Request.BasicAuth()
 
-        if !ok {
-                _ = c.Error(&utils.HTTPError{
-                        Status:  http.StatusBadRequest,
-                        Message: "Auth data not provided"},
-                ).SetType(gin.ErrorTypePublic)
-                return
-        }
-        taskId := c.Param("task")
-        log.WithField("user", user).WithField("taskId", taskId).Debug("Get task status")
-        result, err := service.DescribeTask(taskId)
-        if err != nil {
-                log.WithError(err).WithField("taskId", taskId).Error("Failed to get task status")
-                _ = c.Error(err).SetType(gin.ErrorTypePublic)
-                return
-        }
-        c.JSON(http.StatusOK, gin.H{"status": result.Tasks[0].LastStatus})
+	if !ok {
+		_ = c.Error(&utils.HTTPError{
+			Status:  http.StatusBadRequest,
+			Message: "Auth data not provided"},
+		).SetType(gin.ErrorTypePublic)
+		return
+	}
+	taskId := c.Param("task")
+	log.WithField("user", user).WithField("taskId", taskId).Debug("Get task status")
+	result, err := service.DescribeTask(taskId)
+	if err != nil {
+		log.WithError(err).WithField("taskId", taskId).Error("Failed to get task status")
+		_ = c.Error(err).SetType(gin.ErrorTypePublic)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": result.Tasks[0].LastStatus})
 
 }
-
 
 func Downloads(c *gin.Context) {
 	sessionID := c.Param("session")
@@ -433,10 +437,12 @@ func Downloads(c *gin.Context) {
 
 	director := func(req *http.Request) {
 		req.URL.Scheme = "http"
-		url, _ := sess.Network.GetUrl("fileserver")
-		req.URL.Host = url.Host
-		req.Host = url.Host
-		req.URL.Path = "/" + filename
+		if sess != nil {
+			url, _ := sess.Network.GetUrl("fileserver")
+			req.URL.Host = url.Host
+			req.Host = url.Host
+			req.URL.Path = "/" + filename
+		}
 	}
 	proxy := &httputil.ReverseProxy{Director: director}
 	fmt.Println(c.Request)

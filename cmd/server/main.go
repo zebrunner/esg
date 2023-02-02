@@ -53,8 +53,8 @@ func CreateRouter() *gin.Engine {
 		api.PUT("/users/:username/activation", handlers.UserActivation)
 		api.GET("/logs/:session", handlers.Logs)
 		api.GET("/video/:session", handlers.Video)
-                api.GET("/tasks/:task/log", handlers.TaskLog)
-                api.GET("/tasks/:task/status", handlers.TaskDescribe)
+		api.GET("/tasks/:task/log", handlers.TaskLog)
+		api.GET("/tasks/:task/status", handlers.TaskDescribe)
 	}
 
 	hub := r.Group("/")
@@ -94,15 +94,15 @@ func CreateRouter() *gin.Engine {
 
 		hub.GET("/devtools/:session", handlers.Devtools)
 
-                hub.DELETE("/tasks/:task", handlers.AbortTask) // to be able to abort generic tasks by taskId
+		hub.DELETE("/tasks/:task", handlers.AbortTask) // to be able to abort generic tasks by taskId
 	}
 
 	hub.Use(handlers.APIError)
 	{
 		hub.GET("/logs/:session", handlers.Logs)
 		hub.GET("/video/:session", handlers.Video)
-                hub.GET("/tasks/:task/log", handlers.TaskLog)
-                hub.GET("/tasks/:task/status", handlers.TaskDescribe)
+		hub.GET("/tasks/:task/log", handlers.TaskLog)
+		hub.GET("/tasks/:task/status", handlers.TaskDescribe)
 	}
 
 	return r
@@ -113,8 +113,8 @@ func main() {
 
 	log.SetLevel(config.Conf.ParseLogLevel())
 	log.SetFormatter(&log.TextFormatter{
-		FullTimestamp:   true,
-		DisableColors:   true,
+		FullTimestamp: true,
+		DisableColors: true,
 	})
 
 	db, err := config.InitDBConnection(config.Conf.DbConnectionString)
