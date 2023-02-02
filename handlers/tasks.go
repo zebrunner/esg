@@ -110,7 +110,7 @@ func Create(c *gin.Context) {
 	ctx, ctxCancel := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout)
 	defer ctxCancel()
 
-	env, err := environment.Build(user, caps, &config.Conf)
+	env, err := environment.Build(user, caps)
 	if err != nil {
 		log.WithError(err).Error("Failed to build execution environment")
 		_ = c.Error(creationError("failed to start executor", err)).SetType(gin.ErrorTypePublic)

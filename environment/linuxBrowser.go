@@ -12,7 +12,9 @@ import (
 	"github.com/zebrunner/esg/config"
 )
 
-func buildBrowser(workspace string, caps *capabilities.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {
+func buildBrowser(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
+        conf := &config.Conf
+
 	id := uuid.New().String()
 
 	browserImage, err := buildImage(caps)
@@ -78,9 +80,9 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities, conf *confi
 			"BROWSER_CONTAINER_NAME": "browser",
 			"BUCKET":                 conf.S3Bucket,
 			"TENANT":                 workspace,
-			"AWS_ACCESS_KEY_ID":      conf.AwsAccessKeyID,
-			"AWS_SECRET_ACCESS_KEY":  conf.AwsSecretAccessKey,
-			"AWS_DEFAULT_REGION":     conf.AwsRegion,
+                        "AWS_ACCESS_KEY_ID":      conf.S3AwsAccessKeyID,
+                        "AWS_SECRET_ACCESS_KEY":  conf.S3AwsSecretAccessKey,
+                        "AWS_DEFAULT_REGION":     conf.S3Region,
 		},
 		Mounts:      []string{taskVolume, dockerSocketVolume},
 		Links:       []string{"browser"},

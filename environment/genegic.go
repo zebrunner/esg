@@ -11,7 +11,9 @@ import (
 	b64 "encoding/base64"
 )
 
-func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {
+func buildGeneric(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
+        conf := &config.Conf
+
 	workDir := "/tmp/zebrunner"
 	taskVolume := "work"
 
@@ -102,9 +104,9 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 Env: map[string]string{
                         "BUCKET":                 conf.S3Bucket,
                         "TENANT":                 workspace,
-                        "AWS_ACCESS_KEY_ID":      conf.AwsAccessKeyID,
-                        "AWS_SECRET_ACCESS_KEY":  conf.AwsSecretAccessKey,
-                        "AWS_DEFAULT_REGION":     conf.AwsRegion,
+                        "AWS_ACCESS_KEY_ID":      conf.S3AwsAccessKeyID,
+                        "AWS_SECRET_ACCESS_KEY":  conf.S3AwsSecretAccessKey,
+                        "AWS_DEFAULT_REGION":     conf.S3Region,
 			"COMMAND":		  launchCommand,
 			"BASIC_AUTH":             basicAuthHeader,
                 },

@@ -13,7 +13,9 @@ import (
         log "github.com/sirupsen/logrus"
 )
 
-func buildCypress(workspace string, caps *capabilities.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {
+func buildCypress(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
+	conf := &config.Conf
+
 	workDir := "/tmp/zebrunner"
 	taskVolume := "work"
 

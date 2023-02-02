@@ -207,7 +207,7 @@ func RefreshTaskDefinition(image string) error {
 		return err
 	}
 
-	env, err := environment.Build("", caps, &config.Conf)
+	env, err := environment.Build("", caps)
 	if err != nil {
 		log.WithError(err).WithField("image", image).Error("Failed to build execution environment!")
 		return err
