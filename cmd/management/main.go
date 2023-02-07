@@ -63,7 +63,7 @@ func ClearTasks() {
                         idleTime := time.Since(session.AccessedAt).Seconds()
                         if idleTime > idleTimeout {
                                 // Set stopped status and expiration time 10 minutes to be able to return "invalid session id" for requests
-                                //session.Status = sessionmap.SessionStoppedIdle
+                                session.Status = sessionmap.SessionStoppedIdle
                                 err = sessionmap.Write(key, session, 10*time.Minute)
 
                                 // [VD] do not execute CloseSession as it remove session from sessionmap and we can't return idle timeout errors to client
