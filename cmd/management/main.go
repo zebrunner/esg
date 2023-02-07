@@ -47,6 +47,37 @@ func ClearTasks() {
                 }
                 log.WithField("keys", keys).Trace("cached session keys")
 
+                for _, key := range keys {
+                        session, err := sessionmap.Find(key, false)
+                        if session.Status != sessionmap.SessionActive {
+                                continue
+                        }
+
+                        log.WithField("session", session).Debug("analyzing session for idleTimeout")
+
+                        idleTimeout := float64(session.Capabilities.IdleTimeout)
+                        if idleTimeout == 0 {
+                                idleTimeout = config.Conf.IdleTimeout.Seconds()
+                        }
+
+                        idleTime := time.Since(session.AccessedAt).Seconds()
+                        if idleTime > idleTimeout {
+                                // Set stopped status and expiration time 10 minutes to be able to return "invalid session id" for requests
+                                //session.Status = sessionmap.SessionStoppedIdle
+                                err = sessionmap.Write(key, session, 10*time.Minute)
+
+                                // [VD] do not execute CloseSession as it remove session from sessionmap and we can't return idle timeout errors to client
+                                //selenium.CloseSession(session)
+                                _, err = service.StopTask(session.TaskID)
+                                if err != nil {
+                                        log.WithError(err).Error("Failed to stop idle driver task!")
+                                } else {
+                                        log.WithField("_taskId", session.TaskID).WithField("workspace", session.Workspace).Warn("task aborted due to the idle timeout")
+                                }
+                        }
+                }
+
+
                 // Construct pages of *string with 100 or fewer elements for requests. 100 is an AWS limitation for Describe* requests
                 var taskIdsPtrs []*string
                 for _, k := range keys {
@@ -137,42 +168,6 @@ func ClearTasks() {
 			}
 
                 }
-
-			keys, err := rdb.Keys(context.Background(), "*").Result()
-			if err != nil {
-				log.WithError(err).Error("Failed to get list of keys!")
-				continue
-			}
-
-			for _, key := range keys {
-				session, err := sessionmap.Find(key, false)
-				if session.Status != sessionmap.SessionActive {
-					continue
-				}
-
-				log.WithField("session", session).Debug("analyzing session for idleTimeout")
-
-				idleTimeout := float64(session.Capabilities.IdleTimeout)
-				if idleTimeout == 0 {
-					idleTimeout = config.Conf.IdleTimeout.Seconds()
-				}
-
-				idleTime := time.Since(session.AccessedAt).Seconds()
-				if idleTime > idleTimeout {
-					// Set stopped status and expiration time 10 minutes to be able to return "invalid session id" for requests
-					//session.Status = sessionmap.SessionStoppedIdle
-					err = sessionmap.Write(key, session, 10*time.Minute)
-
-					// [VD] do not execute CloseSession as it remove session from sessionmap and we can't return idle timeout errors to client
-					//selenium.CloseSession(session)
-					_, err = service.StopTask(session.TaskID)
-					if err != nil {
-						log.WithError(err).Error("Failed to stop idle driver task!")
-					} else {
-						log.WithField("_taskId", session.TaskID).WithField("workspace", session.Workspace).Warn("task aborted due to the idle timeout")
-					}
-				}
-			}
         }
 }
 
