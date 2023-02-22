@@ -96,7 +96,7 @@ func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
 
 	automationRunId := getAutomationRunId(*task)
 	if automationRunId ==""{
-		log.Error("Failed to obtain Automation Run Id")
+		log.Debug("Failed to obtain Automation Run Id")
 		return
 	}
 
@@ -130,12 +130,12 @@ func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
 		err = json.NewDecoder(resp.Body).Decode(&data)
 
 		if err != nil {
-			log.WithError(err).Error("Failed to track task abort")
+			log.WithError(err).Error("Failed to abort task. Problem decoding response. Body response: %s.", resp.Body)
 		}
 		log.WithFields(log.Fields{
 			"status":   resp.Status,
 			"response": data,
-		}).Error("Failed to track task abort!")
+		}).Error("Failed to abort task!")
 		return
 	} else {
 		log.WithField("_taskId", sess.ID).WithField("workspace", sess.Workspace).WithField("request body", requestBody).Info("task aborted")
