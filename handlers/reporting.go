@@ -16,6 +16,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const (
+	browsersRepository = "659932254483"
+)
+
 var (
 	startTime time.Time
 	Revision  = "undefined"
@@ -129,6 +133,26 @@ func ListDrivers(c *gin.Context) {
 		browsersResponse = append(browsersResponse, browserData)
 	}
 	c.JSON(http.StatusOK, browsersResponse)
+}
+
+
+func UpdateDrivers(c *gin.Context) {
+	if config.Conf.BrowsersFile != "" {
+		images, err := service.ListBrowsers()
+		if err != nil {
+			log.WithError(err).Error("Failed to get image list")
+		}
+
+		f, err := os.Create(config.Conf.BrowsersFile)
+
+		if err != nil {
+			log.WithError(err).Fatal("Failed to create file")
+		}
+		_, err = f.WriteString(strings.Join(images, "\n"))
+		if err != nil {
+			log.WithError(err).Fatal("Failed to write file")
+		}
+	}
 }
 
 func Welcome(c *gin.Context) {

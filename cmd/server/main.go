@@ -64,6 +64,7 @@ func CreateRouter() *gin.Engine {
 		hub.GET("/status", handlers.Authentication, handlers.ClusterStatus)
 		hub.GET("/ping", handlers.Ping)
 		hub.GET("/browsers", handlers.ListDrivers)
+		hub.PUT("/browsers", handlers.UpdateDrivers)
 
 		hub.Any("/wd/hub/*action", ReverseProxy())
 		hub.POST("/session", handlers.Create) // Auth logic moved to handler
