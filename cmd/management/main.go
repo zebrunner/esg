@@ -134,7 +134,7 @@ func ClearTasks() {
 						startedAt := *task.StartedAt //local var needed to calculate difference via Sub(..)
 						stoppedAt := *task.StoppedAt
 						zebrunner.TrackResourcesUsage(session, stoppedAt.Sub(startedAt))
-
+						zebrunner.AbortTask(session, task)
 						taskIds4Removal = append(taskIds4Removal, taskId)
 					}
 
