@@ -18,6 +18,7 @@ chrome:106.0
 chrome:107.0
 chrome:108.0
 chrome:109.0
+chrome:110.0
 chrome:latest
 firefox:90.0
 firefox:91.0
@@ -39,6 +40,7 @@ firefox:106.0
 firefox:107.0
 firefox:108.0
 firefox:109.0
+firefox:110.0
 firefox:latest
 edge:90.0
 edge:91.0
@@ -72,12 +74,14 @@ cypress-chrome:106.0
 cypress-chrome:107.0
 cypress-chrome:108.0
 cypress-chrome:109.0
+cypress-chrome:110.0
 cypress-chrome:latest
 cypress-firefox:105.0
 cypress-firefox:106.0
 cypress-firefox:107.0
 cypress-firefox:108.0
 cypress-firefox:109.0
+cypress-firefox:110.0
 cypress-firefox:latest
 cypress-edge:105.0
 cypress-edge:106.0
