@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"strconv"
+	"strings"
 	"time"
-        "strconv"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 
-        sessionmap "github.com/zebrunner/esg/sessinonmap"
+	sessionmap "github.com/zebrunner/esg/sessinonmap"
 )
 
 const (
@@ -25,6 +26,13 @@ func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration) {
 		log.WithError(err).Error("Failed to parse zebrunner base url")
 		return
 	}
+
+	platformName := strings.ToLower(sess.Capabilities.PlatformName)
+	if platformName==""{
+		platformName = "linux"
+	}
+
+
 	requestUrl.Host = sess.Workspace + "." + requestUrl.Host
 	requestUrl.Path = USAGE_API_PATH
 	requestBody := map[string]interface{}{
@@ -32,6 +40,7 @@ func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration) {
                 "memory": strconv.FormatInt(sess.Capabilities.Memory, 10) + " MiB",
 		"instant": time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 		"seconds": d.Seconds(),
+		"platform":  platformName,
 	}
         log.Trace("request body to track resources: ", requestBody)
 
