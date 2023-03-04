@@ -77,7 +77,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
         }
 
 
-        mavenImage := imageRepo + "m2-repo-carina:1.0"
+        mavenImage := imageRepo + "m2-repo-carina:1.1"
         mavenContainer := Container{
                 Name:              "maven",
                 Image:             mavenImage,
