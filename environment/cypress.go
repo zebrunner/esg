@@ -69,7 +69,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
                 launchCommand = caps.LaunchCommand
         }
 
-        entrypointImage := imageRepo + "entrypoint:1.4-beta1"
+        entrypointImage := imageRepo + "entrypoint:1.4"
         entrypointContainer := Container{
                 Name:              "entrypoint",
                 Image:             entrypointImage,
