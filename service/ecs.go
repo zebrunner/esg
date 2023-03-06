@@ -401,7 +401,7 @@ out:
 			l.WithField("attempt", i).Debug("setEnvironmentNetwork latency: ", time.Since(startTime))
 			if err != nil {
 				StopTask(taskId)
-				l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to get service info.")
+				l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Error("Failed to get service info.")
 				outputErr = fmt.Errorf("failed to get service info: %v", err)
 				continue
 			}
