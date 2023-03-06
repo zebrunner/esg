@@ -106,6 +106,21 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 		mounts = append(mounts, mavenVolume)
 	}
 
+	dependsOn := make([]*ecs.ContainerDependency, 0)
+	if (includeMaven) {
+		dependsOn = append(dependsOn, &ecs.ContainerDependency{
+			ContainerName: aws.String("maven"),
+			Condition:  aws.String("COMPLETE"),
+		})
+	}
+	dependsOn = append(dependsOn, &ecs.ContainerDependency{
+		ContainerName: aws.String("entrypoint"),
+		Condition:  aws.String("COMPLETE"),
+	})
+	dependsOn = append(dependsOn, &ecs.ContainerDependency{
+		ContainerName: aws.String("clone"),
+		Condition:  aws.String("COMPLETE"),
+	})
 	executorContainer := Container{
 		Name:       "executor",
 		Image:      executorImage,
@@ -123,21 +138,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 		Mounts: mounts,
                 WorkingDirectory: workDir,
                 EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
-                DependsOn: []*ecs.ContainerDependency{
-                        &ecs.ContainerDependency{
-                                ContainerName: aws.String("maven"),
-                                Condition:  aws.String("COMPLETE"),
-                        },
-                        &ecs.ContainerDependency{
-                                ContainerName: aws.String("entrypoint"),
-                                Condition:  aws.String("COMPLETE"),
-                        },
-			&ecs.ContainerDependency{
-				ContainerName: aws.String("clone"),
-				Condition:  aws.String("COMPLETE"),
-        	        },
-		},
-
+                DependsOn: dependsOn,
 	}
 
         if caps.EnvVariables != nil {
