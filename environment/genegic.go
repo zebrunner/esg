@@ -1,14 +1,15 @@
 package environment
 
 import (
-        "github.com/aws/aws-sdk-go/aws"
-        "github.com/aws/aws-sdk-go/service/ecs"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/ecs"
+	"strings"
 
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
 
-	"fmt"
 	b64 "encoding/base64"
+	"fmt"
 )
 
 func buildGeneric(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
@@ -77,16 +78,20 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
         }
 
 
-        mavenImage := imageRepo + "m2-repo-carina:1.1"
-        mavenContainer := Container{
-                Name:              "maven",
-                Image:             mavenImage,
-                cpu:               minCpu,
-                memory:            minMemory,
-                Privileged:        false,
-                Essential:         false,
-                Mounts: []string{mavenVolume},
-        }
+		includeMaven:= strings.Contains(caps.Image, "maven")
+		var mavenContainer *Container = nil
+		if includeMaven {
+			mavenImage := imageRepo + "m2-repo-carina:1.1"
+			mavenContainer = &Container{
+				Name:       "maven",
+				Image:      mavenImage,
+				cpu:        minCpu,
+				memory:     minMemory,
+				Privileged: false,
+				Essential:  false,
+				Mounts:     []string{mavenVolume},
+			}
+		}
 
         if caps.LaunchCommand == "" {
                 return nil, fmt.Errorf("Executor container launch command is not specified! LaunchCommand='%s'", caps.LaunchCommand)
@@ -148,24 +153,38 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
                 executorContainer.SetMemory(caps)
         }
 
+	containers := make([]*Container, 0)
+	volumes := make(map[string]volume,0)
+
+	if includeMaven{
+		containers = []*Container{&cloneContainer, &entrypointContainer, mavenContainer, &executorContainer}
+		volumes = map[string]volume{
+			taskVolume: {Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false},
+			logVolume: {Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false},
+			entrypointVolume: {Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false},
+			mavenVolume: {Driver: "local", Scope: "task", ContainerPath: mavenDir, ReadOnly: false},
+			zebrunnerVolume: {HostPath: zebrunnerDir, ContainerPath: zebrunnerDir, ReadOnly: true},
+		}
+	} else {
+		containers = []*Container{&cloneContainer, &entrypointContainer, &executorContainer}
+		volumes = map[string]volume{
+			taskVolume: {Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false},
+			logVolume: {Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false},
+			entrypointVolume: {Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false},
+			zebrunnerVolume: {HostPath: zebrunnerDir, ContainerPath: zebrunnerDir, ReadOnly: true},
+		}
+	}
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
 		Containers:           []*Container{&cloneContainer, &entrypointContainer, &mavenContainer, &executorContainer},
 		Capabilities:         caps,
-		Volumes: map[string]volume{
-			taskVolume: {Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false},
-                        logVolume: {Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false},
-                        entrypointVolume: {Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false},
-                        mavenVolume: {Driver: "local", Scope: "task", ContainerPath: mavenDir, ReadOnly: false},
-			zebrunnerVolume: {HostPath: zebrunnerDir, ContainerPath: zebrunnerDir, ReadOnly: true},
+		Volumes:              volumes,
+		Network: &NetworkConfiguration{
+			IP: "",
+			Endpoints: map[string]*Endpoint{
+				"driver": {ContainerPort: genericPort, HostPort: 0, Path: "/"},
+			},
 		},
-                Network: &NetworkConfiguration{
-                        IP: "",
-                        Endpoints: map[string]*Endpoint{
-                                "driver":      {ContainerPort: genericPort, HostPort: 0, Path: "/"},
-                        },
-                },
-
 	}
 
 	return &environment, nil
