@@ -101,6 +101,11 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 	//basic auth header for executor-logs service
 	basicAuthHeader := "Authorization: Basic " + b64.StdEncoding.EncodeToString([]byte(conf.ZebrunnerIntegrationUser + ":" + conf.ZebrunnerIntegrationPassword))
 
+	mounts := []string{entrypointVolume, taskVolume, logVolume, zebrunnerVolume}
+	if includeMaven {
+		mounts = append(mounts, mavenVolume)
+	}
+
 	executorContainer := Container{
 		Name:       "executor",
 		Image:      executorImage,
@@ -115,7 +120,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 			"COMMAND":		  launchCommand,
 			"BASIC_AUTH":             basicAuthHeader,
                 },
-		Mounts: []string{entrypointVolume, taskVolume, logVolume, zebrunnerVolume, mavenVolume},
+		Mounts: mounts,
                 WorkingDirectory: workDir,
                 EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
                 DependsOn: []*ecs.ContainerDependency{
@@ -156,27 +161,21 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 	containers := make([]*Container, 0)
 	volumes := make(map[string]volume,0)
 
+	volumes[taskVolume] = volume{Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false}
+	volumes[logVolume] = volume{Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false}
+	volumes[entrypointVolume] = volume{Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false}
+	volumes[zebrunnerVolume] = volume{HostPath: zebrunnerDir, ContainerPath: zebrunnerDir, ReadOnly: true}
+	containers = []*Container{&cloneContainer, &entrypointContainer}
+
 	if includeMaven{
-		containers = []*Container{&cloneContainer, &entrypointContainer, mavenContainer, &executorContainer}
-		volumes = map[string]volume{
-			taskVolume: {Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false},
-			logVolume: {Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false},
-			entrypointVolume: {Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false},
-			mavenVolume: {Driver: "local", Scope: "task", ContainerPath: mavenDir, ReadOnly: false},
-			zebrunnerVolume: {HostPath: zebrunnerDir, ContainerPath: zebrunnerDir, ReadOnly: true},
-		}
-	} else {
-		containers = []*Container{&cloneContainer, &entrypointContainer, &executorContainer}
-		volumes = map[string]volume{
-			taskVolume: {Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false},
-			logVolume: {Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false},
-			entrypointVolume: {Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false},
-			zebrunnerVolume: {HostPath: zebrunnerDir, ContainerPath: zebrunnerDir, ReadOnly: true},
-		}
+		containers = append(containers, mavenContainer)
+		volumes[mavenVolume] = volume{Driver: "local", Scope: "task", ContainerPath: mavenDir, ReadOnly: false}
 	}
+	containers = append(containers, &executorContainer)
+
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
-		Containers:           []*Container{&cloneContainer, &entrypointContainer, &mavenContainer, &executorContainer},
+		Containers:           containers,
 		Capabilities:         caps,
 		Volumes:              volumes,
 		Network: &NetworkConfiguration{
