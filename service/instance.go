@@ -56,7 +56,7 @@ func (w *instanceWatchWorker) start() {
 		for {
 			listResult, err := svc.ListContainerInstances(&listInput)
 			if err != nil {
-				log.WithField(err).Error("Failed to ListContainerInstances!")
+				log.WithField("error", err).Error("Failed to ListContainerInstances!")
 				break
 			}
 
@@ -79,17 +79,17 @@ func (w *instanceWatchWorker) start() {
 			}
 			describeResult, err := svc.DescribeContainerInstances(&input)
 			if err != nil {
-                                log.WithField(err).Error("Failed to DescribeContainerInstances!")
+                                log.WithField("error", err).Error("Failed to DescribeContainerInstances!")
 				continue
 			}
 
 			if len(describeResult.Failures) != 0 {
-                               log.WithField(describeResult).Error("DescribeContainerInstances Failures is not 0!")
+                               log.WithField("result", describeResult).Error("DescribeContainerInstances Failures is not 0!")
 				continue
 			}
 
 			if len(describeResult.ContainerInstances) == 0 {
-                                log.WithField(describeResult).Error("DescribeContainerInstances ContainerInstances is 0!")
+                                log.WithField("result", describeResult).Error("DescribeContainerInstances ContainerInstances is 0!")
 				continue
 			}
 
@@ -128,7 +128,7 @@ func (w *instanceWatchWorker) start() {
 
 			ec2Result, err := ec2Svc.DescribeInstances(&input)
 			if err != nil {
-                                log.WithField(err).Error("Failed to DescribeInstances!")
+                                log.WithField("error", err).Error("Failed to DescribeInstances!")
 				break
 			}
 
