@@ -7,6 +7,8 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/zebrunner/esg/config"
+
+        log "github.com/sirupsen/logrus"
 )
 
 var instanceWorker *instanceWatchWorker
@@ -54,7 +56,7 @@ func (w *instanceWatchWorker) start() {
 		for {
 			listResult, err := svc.ListContainerInstances(&listInput)
 			if err != nil {
-				// TODO: log error
+				log.WithField("error", err).Error("Failed to ListContainerInstances!")
 				break
 			}
 
@@ -77,17 +79,17 @@ func (w *instanceWatchWorker) start() {
 			}
 			describeResult, err := svc.DescribeContainerInstances(&input)
 			if err != nil {
-				// TODO: log error
+                                log.WithField("error", err).Error("Failed to DescribeContainerInstances!")
 				continue
 			}
 
 			if len(describeResult.Failures) != 0 {
-				// TODO: log error
+                               log.WithField("result", describeResult).Error("DescribeContainerInstances Failures is not 0!")
 				continue
 			}
 
 			if len(describeResult.ContainerInstances) == 0 {
-				// TODO: log error
+                                log.WithField("result", describeResult).Error("DescribeContainerInstances ContainerInstances is 0!")
 				continue
 			}
 
@@ -126,7 +128,7 @@ func (w *instanceWatchWorker) start() {
 
 			ec2Result, err := ec2Svc.DescribeInstances(&input)
 			if err != nil {
-				// TODO: log error
+                                log.WithField("error", err).Error("Failed to DescribeInstances!")
 				break
 			}
 

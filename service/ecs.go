@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/client"
 	awsSession "github.com/aws/aws-sdk-go/aws/session"
+        "github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ecrpublic"
 	"github.com/aws/aws-sdk-go/service/ecs"
@@ -400,7 +401,7 @@ out:
 			l.WithField("attempt", i).Debug("setEnvironmentNetwork latency: ", time.Since(startTime))
 			if err != nil {
 				StopTask(taskId)
-				l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to get service info.")
+				l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Error("Failed to get service info.")
 				outputErr = fmt.Errorf("failed to get service info: %v", err)
 				continue
 			}
@@ -419,7 +420,19 @@ out:
 }
 
 func GeneratePreSignedURL(key string) (string, error) {
+        //S3 connection information
 	s3Svc := s3.New(AwsSess)
+
+
+        conf := &config.Conf
+	if conf.S3AwsAccessKeyID != "" && conf.S3AwsSecretAccessKey != "" && conf.S3Region != "" {
+		creds := credentials.NewStaticCredentials(conf.S3AwsAccessKeyID, conf.S3AwsSecretAccessKey, "")
+		S3Sess := awsSession.Must(awsSession.NewSession(&aws.Config{
+			Credentials: creds,
+			Region:      &conf.S3Region,
+		}))
+	        s3Svc = s3.New(S3Sess)
+	}
 
 	//ZEB-5145: ESG: return 404 when requested video/session or execution log is not available
 	res, err := s3Svc.ListObjectsV2(&s3.ListObjectsV2Input{

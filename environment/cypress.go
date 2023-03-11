@@ -13,7 +13,9 @@ import (
         log "github.com/sirupsen/logrus"
 )
 
-func buildCypress(workspace string, caps *capabilities.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {
+func buildCypress(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
+	conf := &config.Conf
+
 	workDir := "/tmp/zebrunner"
 	taskVolume := "work"
 
@@ -67,7 +69,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities, conf *confi
                 launchCommand = caps.LaunchCommand
         }
 
-        entrypointImage := imageRepo + "entrypoint:1.3"
+        entrypointImage := imageRepo + "entrypoint:1.4"
         entrypointContainer := Container{
                 Name:              "entrypoint",
                 Image:             entrypointImage,

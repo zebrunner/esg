@@ -4,7 +4,7 @@ services:
     build:
       context: .
       dockerfile: ./build/Dockerfile.router
-    image: public.ecr.aws/zebrunner/router:2.1.4
+    image: public.ecr.aws/zebrunner/router:2.1.5
     env_file:
       - router.env
     ports:
@@ -12,6 +12,8 @@ services:
     links:
       - redis
       - db
+#    volumes:
+#      - "${HOME}/.aws:/root/.aws"
     logging:
      options:
       max-size: "512m"
@@ -21,11 +23,13 @@ services:
     build:
       context: .
       dockerfile: build/Dockerfile.scaler
-    image: public.ecr.aws/zebrunner/scaler:2.1.4
+    image: public.ecr.aws/zebrunner/scaler:2.1.5
     env_file:
       - scaler.env
     links:
       - redis
+#    volumes:
+#      - "${HOME}/.aws:/root/.aws"
     restart: always
   db:
     image: postgres:13

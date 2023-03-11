@@ -58,6 +58,10 @@ type Config struct {
 
 	UsePublicIp             bool
 	S3Bucket                string // For static artifacts
+	S3Region		string
+	S3AwsAccessKeyID	string
+	S3AwsSecretAccessKey	string
+
 	LogLevel                string
 	ReserveInstancesPercent float64
 
@@ -69,8 +73,8 @@ func init() {
 	flag.IntVar(&Conf.AwsRetry, "aws-retry", 10, "AWS client retry count")
 	flag.StringVar(&Conf.AwsCluster, "aws-cluster", "esg", "AWS ECS cluster name")
 	flag.StringVar(&Conf.AwsAutoScalingGroup, "aws-auto-scaling-group", "esg-asg", "AWS auto scaling group name")
-	flag.StringVar(&Conf.AwsAccessKeyID, "aws-access-key-id", "", "Access key for S3 bucket")
-	flag.StringVar(&Conf.AwsSecretAccessKey, "aws-secret-access-key", "", "Secret key for S3 bucket")
+	flag.StringVar(&Conf.AwsAccessKeyID, "aws-access-key-id", "", "Access key for AWS services")
+	flag.StringVar(&Conf.AwsSecretAccessKey, "aws-secret-access-key", "", "Secret key for AWS services")
 
 	flag.Int64Var(&Conf.MinMemory, "min-memory", 2048, "minimum memory limitation for session")
 	flag.Int64Var(&Conf.MaxMemory, "max-memory", 28675, "maximum memory limitation for session") // max memory for c5a.4xlarge
@@ -92,6 +96,10 @@ func init() {
 
 	flag.BoolVar(&Conf.UsePublicIp, "use-public-ip", false, "Use or no public ip address for browser slave instances")
 	flag.StringVar(&Conf.S3Bucket, "s3-bucket", "", "S3 Bucket name for pushing artifacts")
+	flag.StringVar(&Conf.S3Region, "s3-region", "", "S3 Bucket region for pushing artifacts")
+	flag.StringVar(&Conf.S3AwsAccessKeyID, "s3-aws-access-key-id", "", "Access key for S3 bucket")
+	flag.StringVar(&Conf.S3AwsSecretAccessKey, "s3-aws-secret-access-key", "", "Secret key for S3 bucket")
+
 	flag.StringVar(&Conf.LogLevel, "log-level", "debug", "Desired log level. Valid levels: `panic`, `fatal`, `error`, `warning`, `info`, `debug`, `trace`")
 	flag.Float64Var(&Conf.ReserveInstancesPercent, "reserve-instances-percent", 0.25, "Reserved cluster capacity quota during scale up and down operations")
 

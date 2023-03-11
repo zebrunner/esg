@@ -4,10 +4,10 @@ import (
 	"context"
 	"flag"
 	"io/ioutil"
+	"math"
 	"strings"
 	"sync"
 	"time"
-	"math"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
@@ -20,7 +20,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 
-        "github.com/zebrunner/esg/zebrunner"
+	"github.com/zebrunner/esg/zebrunner"
 )
 
 var (
@@ -38,7 +38,7 @@ func ClearTasks() {
 
         rdb := config.RedisConnection
         for {
-                time.Sleep(5*time.Minute) //TODO: how about increaed default pause for tasks cleaner to 10-15m? (to minimize tasks describe operations)
+                time.Sleep(1*time.Minute)
 
                 keys, err := rdb.Keys(context.Background(), "*").Result()
                 if err != nil {
@@ -46,6 +46,37 @@ func ClearTasks() {
                         continue
                 }
                 log.WithField("keys", keys).Trace("cached session keys")
+
+                for _, key := range keys {
+                        session, err := sessionmap.Find(key, false)
+                        if session.Status != sessionmap.SessionActive {
+                                continue
+                        }
+
+                        log.WithField("session", session).Debug("analyzing session for idleTimeout")
+
+                        idleTimeout := float64(session.Capabilities.IdleTimeout)
+                        if idleTimeout == 0 {
+                                idleTimeout = config.Conf.IdleTimeout.Seconds()
+                        }
+
+                        idleTime := time.Since(session.AccessedAt).Seconds()
+                        if idleTime > idleTimeout {
+                                // Set stopped status and expiration time 10 minutes to be able to return "invalid session id" for requests
+                                session.Status = sessionmap.SessionStoppedIdle
+                                err = sessionmap.Write(key, session, 10*time.Minute)
+
+                                // [VD] do not execute CloseSession as it remove session from sessionmap and we can't return idle timeout errors to client
+                                //selenium.CloseSession(session)
+                                _, err = service.StopTask(session.TaskID)
+                                if err != nil {
+                                        log.WithError(err).Error("Failed to stop idle driver task!")
+                                } else {
+                                        log.WithField("_taskId", session.TaskID).WithField("workspace", session.Workspace).Warn("task aborted due to the idle timeout")
+                                }
+                        }
+                }
+
 
                 // Construct pages of *string with 100 or fewer elements for requests. 100 is an AWS limitation for Describe* requests
                 var taskIdsPtrs []*string
@@ -103,7 +134,7 @@ func ClearTasks() {
 						startedAt := *task.StartedAt //local var needed to calculate difference via Sub(..)
 						stoppedAt := *task.StoppedAt
 						zebrunner.TrackResourcesUsage(session, stoppedAt.Sub(startedAt))
-
+						zebrunner.AbortTask(session, task)
 						taskIds4Removal = append(taskIds4Removal, taskId)
 					}
 
@@ -126,6 +157,7 @@ func ClearTasks() {
 
 			}
 
+
 			// cleanup tracked task sessions
 			for _, id := range taskIds4Removal {
 				log.WithField("taskId", id).Trace("Removing task session")
@@ -139,52 +171,6 @@ func ClearTasks() {
         }
 }
 
-func ClearIdleSessions() {
-	rdb := config.RedisConnection
-	for {
-		time.Sleep(config.Conf.IdleTimeout)
-		keys, err := rdb.Keys(context.Background(), "*").Result()
-		if err != nil {
-			log.WithError(err).Error("Failed to get list of keys!")
-			continue
-		}
-
-		for _, key := range keys {
-			session, err := sessionmap.Find(key, false)
-			if err != nil {
-				log.WithError(err).WithField("key", key).Error("Failed to get session from sessionmap!")
-				continue
-			}
-
-			if session.Status != sessionmap.SessionActive {
-				continue
-			}
-
-                        log.WithField("session", session).Debug("analyzing session for idleTimeout")
-
-			idleTimeout := float64(session.Capabilities.IdleTimeout)
-			if idleTimeout == 0 {
-				idleTimeout = config.Conf.IdleTimeout.Seconds()
-			}
-
-			idleTime := time.Since(session.AccessedAt).Seconds()
-			if idleTime > idleTimeout {
-				// Set stopped status and expiration time 10 minutes to be able to return "invalid session id" for requests
-				session.Status = sessionmap.SessionStoppedIdle
-				err = sessionmap.Write(key, session, 10*time.Minute)
-
-				// [VD] do not execute CloseSession as it remove session from sessionmap and we can't return idle timeout errors to client
-				//selenium.CloseSession(session)
-				_, err = service.StopTask(session.TaskID)
-				if err != nil {
-					log.WithError(err).Error("Failed to stop idle driver task!")
-				} else {
-					log.WithField("_taskId", session.TaskID).WithField("workspace", session.Workspace).Warn("task aborted due to the idle timeout")
-				}
-			}
-		}
-	}
-}
 
 func ScaleCluster() {
 	for {
@@ -207,7 +193,7 @@ func RefreshTaskDefinition(image string) error {
 		return err
 	}
 
-	env, err := environment.Build("", caps, &config.Conf)
+	env, err := environment.Build("", caps)
 	if err != nil {
 		log.WithError(err).WithField("image", image).Error("Failed to build execution environment!")
 		return err
@@ -306,9 +292,6 @@ func main() {
 
 	wg.Add(1)
 	go ScaleDownCluster()
-
-	wg.Add(1)
-	go ClearIdleSessions()
 
 	wg.Add(1)
 	go ClearTasks()

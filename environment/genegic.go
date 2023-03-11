@@ -1,17 +1,20 @@
 package environment
 
 import (
-        "github.com/aws/aws-sdk-go/aws"
-        "github.com/aws/aws-sdk-go/service/ecs"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/ecs"
+	"strings"
 
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
 
-	"fmt"
 	b64 "encoding/base64"
+	"fmt"
 )
 
-func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *config.Config) (*ExecutionEnvironment, error) {
+func buildGeneric(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
+        conf := &config.Conf
+
 	workDir := "/tmp/zebrunner"
 	taskVolume := "work"
 
@@ -62,7 +65,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 EntryPoint: []string{"/bin/sh"},
         }
 
-        entrypointImage := imageRepo + "entrypoint:1.3"
+        entrypointImage := imageRepo + "entrypoint:1.4"
         entrypointContainer := Container{
                 Name:              "entrypoint",
                 Image:             entrypointImage,
@@ -75,16 +78,20 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
         }
 
 
-        mavenImage := imageRepo + "m2-repo-carina:1.0"
-        mavenContainer := Container{
-                Name:              "maven",
-                Image:             mavenImage,
-                cpu:               minCpu,
-                memory:            minMemory,
-                Privileged:        false,
-                Essential:         false,
-                Mounts: []string{mavenVolume},
-        }
+		includeMaven:= strings.Contains(caps.Image, "maven")
+		var mavenContainer *Container = nil
+		if includeMaven {
+			mavenImage := imageRepo + "m2-repo-carina:1.1"
+			mavenContainer = &Container{
+				Name:       "maven",
+				Image:      mavenImage,
+				cpu:        minCpu,
+				memory:     minMemory,
+				Privileged: false,
+				Essential:  false,
+				Mounts:     []string{mavenVolume},
+			}
+		}
 
         if caps.LaunchCommand == "" {
                 return nil, fmt.Errorf("Executor container launch command is not specified! LaunchCommand='%s'", caps.LaunchCommand)
@@ -94,6 +101,26 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
 	//basic auth header for executor-logs service
 	basicAuthHeader := "Authorization: Basic " + b64.StdEncoding.EncodeToString([]byte(conf.ZebrunnerIntegrationUser + ":" + conf.ZebrunnerIntegrationPassword))
 
+	mounts := []string{entrypointVolume, taskVolume, logVolume, zebrunnerVolume}
+	if includeMaven {
+		mounts = append(mounts, mavenVolume)
+	}
+
+	dependsOn := make([]*ecs.ContainerDependency, 0)
+	if (includeMaven) {
+		dependsOn = append(dependsOn, &ecs.ContainerDependency{
+			ContainerName: aws.String("maven"),
+			Condition:  aws.String("COMPLETE"),
+		})
+	}
+	dependsOn = append(dependsOn, &ecs.ContainerDependency{
+		ContainerName: aws.String("entrypoint"),
+		Condition:  aws.String("COMPLETE"),
+	})
+	dependsOn = append(dependsOn, &ecs.ContainerDependency{
+		ContainerName: aws.String("clone"),
+		Condition:  aws.String("COMPLETE"),
+	})
 	executorContainer := Container{
 		Name:       "executor",
 		Image:      executorImage,
@@ -102,30 +129,16 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 Env: map[string]string{
                         "BUCKET":                 conf.S3Bucket,
                         "TENANT":                 workspace,
-                        "AWS_ACCESS_KEY_ID":      conf.AwsAccessKeyID,
-                        "AWS_SECRET_ACCESS_KEY":  conf.AwsSecretAccessKey,
-                        "AWS_DEFAULT_REGION":     conf.AwsRegion,
+                        "AWS_ACCESS_KEY_ID":      conf.S3AwsAccessKeyID,
+                        "AWS_SECRET_ACCESS_KEY":  conf.S3AwsSecretAccessKey,
+                        "AWS_DEFAULT_REGION":     conf.S3Region,
 			"COMMAND":		  launchCommand,
 			"BASIC_AUTH":             basicAuthHeader,
                 },
-		Mounts: []string{entrypointVolume, taskVolume, logVolume, zebrunnerVolume, mavenVolume},
+		Mounts: mounts,
                 WorkingDirectory: workDir,
                 EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
-                DependsOn: []*ecs.ContainerDependency{
-                        &ecs.ContainerDependency{
-                                ContainerName: aws.String("maven"),
-                                Condition:  aws.String("COMPLETE"),
-                        },
-                        &ecs.ContainerDependency{
-                                ContainerName: aws.String("entrypoint"),
-                                Condition:  aws.String("COMPLETE"),
-                        },
-			&ecs.ContainerDependency{
-				ContainerName: aws.String("clone"),
-				Condition:  aws.String("COMPLETE"),
-        	        },
-		},
-
+                DependsOn: dependsOn,
 	}
 
         if caps.EnvVariables != nil {
@@ -146,24 +159,32 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities, conf *confi
                 executorContainer.SetMemory(caps)
         }
 
+	containers := make([]*Container, 0)
+	volumes := make(map[string]volume,0)
+
+	volumes[taskVolume] = volume{Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false}
+	volumes[logVolume] = volume{Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false}
+	volumes[entrypointVolume] = volume{Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false}
+	volumes[zebrunnerVolume] = volume{HostPath: zebrunnerDir, ContainerPath: zebrunnerDir, ReadOnly: true}
+	containers = []*Container{&cloneContainer, &entrypointContainer}
+
+	if includeMaven{
+		containers = append(containers, mavenContainer)
+		volumes[mavenVolume] = volume{Driver: "local", Scope: "task", ContainerPath: mavenDir, ReadOnly: false}
+	}
+	containers = append(containers, &executorContainer)
+
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
-		Containers:           []*Container{&cloneContainer, &entrypointContainer, &mavenContainer, &executorContainer},
+		Containers:           containers,
 		Capabilities:         caps,
-		Volumes: map[string]volume{
-			taskVolume: {Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false},
-                        logVolume: {Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false},
-                        entrypointVolume: {Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false},
-                        mavenVolume: {Driver: "local", Scope: "task", ContainerPath: mavenDir, ReadOnly: false},
-			zebrunnerVolume: {HostPath: zebrunnerDir, ContainerPath: zebrunnerDir, ReadOnly: true},
+		Volumes:              volumes,
+		Network: &NetworkConfiguration{
+			IP: "",
+			Endpoints: map[string]*Endpoint{
+				"driver": {ContainerPort: genericPort, HostPort: 0, Path: "/"},
+			},
 		},
-                Network: &NetworkConfiguration{
-                        IP: "",
-                        Endpoints: map[string]*Endpoint{
-                                "driver":      {ContainerPort: genericPort, HostPort: 0, Path: "/"},
-                        },
-                },
-
 	}
 
 	return &environment, nil
