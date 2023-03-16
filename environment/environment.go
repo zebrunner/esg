@@ -255,7 +255,7 @@ func buildTaskDefinitionFamily(caps *capabilities.Capabilities) string {
 	familyParts := []string{}
 	platformName := strings.ToLower(caps.PlatformName)
 
-	if caps.PlatformName == "" || platformName == "any" || platformName == "generic" {
+	if caps.PlatformName == "" || platformName == "any" {
 		platformName = "linux"
 	}
 
