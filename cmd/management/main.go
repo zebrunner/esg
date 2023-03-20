@@ -49,6 +49,11 @@ func ClearTasks() {
 
                 for _, key := range keys {
                         session, err := sessionmap.Find(key, false)
+
+						if session==nil {
+							log.WithField("session key", key).Info("Not found")
+							continue
+						}
                         if session.Status != sessionmap.SessionActive {
                                 continue
                         }
