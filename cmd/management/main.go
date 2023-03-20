@@ -49,6 +49,12 @@ func ClearTasks() {
 
                 for _, key := range keys {
                         session, err := sessionmap.Find(key, false)
+
+						if session==nil {
+							log.WithField("session key", key).Error("Not found")
+							//TDDO: since this session map entry does not exist on aws, we should remove it from sessionMap.
+							continue
+						}
                         if session.Status != sessionmap.SessionActive {
                                 continue
                         }
