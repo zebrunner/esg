@@ -281,6 +281,7 @@ func ScaleDown() {
 			log.WithError(err).WithField("count", len(listInstancesResult.ContainerInstanceArns)).Error("Failed to list instances")
 			return
 		}
+		log.WithField("listInstancesResult", listInstancesResult)
 
 		containerInstances:=make([]*string, 0)
 		for _, containerInstanceAws:= range listInstancesResult.ContainerInstanceArns {
