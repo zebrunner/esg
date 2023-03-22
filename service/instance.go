@@ -120,32 +120,40 @@ func (w *instanceWatchWorker) start() {
 			ec2InstanceIdsPtrs = append(ec2InstanceIdsPtrs, &instanceId)
 		}
 
-		var ec2Instances []*ec2.Instance
-		for {
-			input := ec2.DescribeInstancesInput{
-				InstanceIds: ec2InstanceIdsPtrs,
+		if len(ec2InstanceIdsPtrs) > 0 {
+			var ec2Instances []*ec2.Instance
+			for {
+				input := ec2.DescribeInstancesInput{
+					InstanceIds: make([]*string, 0),
+				}
+
+				for _, instanceIdPtr := range ec2InstanceIdsPtrs {
+					if instanceIdPtr != nil {
+						input.InstanceIds = append(input.InstanceIds, instanceIdPtr)
+					}
+				}
+
+				ec2Result, err := ec2Svc.DescribeInstances(&input)
+				if err != nil {
+					log.WithField("error", err).Error("Failed to DescribeInstances!")
+					break
+				}
+
+				for _, reservation := range ec2Result.Reservations {
+					ec2Instances = append(ec2Instances, reservation.Instances...)
+				}
+
+				if ec2Result.NextToken != nil {
+					input.NextToken = ec2Result.NextToken
+				} else {
+					break
+				}
 			}
 
-			ec2Result, err := ec2Svc.DescribeInstances(&input)
-			if err != nil {
-                                log.WithField("error", err).Error("Failed to DescribeInstances!")
-				break
+			// save to map
+			for _, instance := range ec2Instances {
+				w.ec2Instances[*instance.InstanceId] = instance
 			}
-
-			for _, reservation := range ec2Result.Reservations {
-				ec2Instances = append(ec2Instances, reservation.Instances...)
-			}
-
-			if ec2Result.NextToken != nil {
-				input.NextToken = ec2Result.NextToken
-			} else {
-				break
-			}
-		}
-
-		// save to map
-		for _, instance := range ec2Instances {
-			w.ec2Instances[*instance.InstanceId] = instance
 		}
 	}
 }
