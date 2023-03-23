@@ -31,7 +31,7 @@ Suitable for personal usage and in big clusters:
 - `zebrunner:enableVnc` - Enable VNC for session. Type: Boolean
 - `zebrunner:enableVideo` - Enable video recording for session. Type: Boolean
 - `zebrunner:enableLog` - Saving session log for session. Type: Boolean
-- `zebrunner:deviceName` - Specify "redroid" for mobile and mobile web testing. Type: String (Default: "")
+- `zebrunner:deviceName` - Specify "redroid" for mobile and mobile web testing. Type: String
 
 - `zebrunner:idleTimeout` - Session idle timeout in seconds. Type: String (Default: "60")
 - `zebrunner:maxTimeout` - Maximum valid session timeout in seconds. Type: String (Default: "86400")
