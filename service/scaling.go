@@ -281,10 +281,20 @@ func ScaleDown() {
 			log.WithError(err).WithField("count", len(listInstancesResult.ContainerInstanceArns)).Error("Failed to list instances")
 			return
 		}
+		log.WithField("listInstancesResult", listInstancesResult)
+
+		containerInstances:=make([]*string, 0)
+		for _, containerInstanceAws:= range listInstancesResult.ContainerInstanceArns {
+			if containerInstanceAws != nil {
+				containerInstances = append(containerInstances, containerInstanceAws)
+			} else {
+				log.Debug("AWS returned an empty containerInsetanceArns??")
+			}
+		}
 
 		describeInstancesInput := ecs.DescribeContainerInstancesInput{
 			Cluster:            &config.Conf.AwsCluster,
-			ContainerInstances: listInstancesResult.ContainerInstanceArns,
+			ContainerInstances: containerInstances,
 		}
 		describeInstancesResult, err := svc.DescribeContainerInstances(&describeInstancesInput)
 		if err != nil {
