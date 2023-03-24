@@ -109,7 +109,7 @@ func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
 		return
 	}
 
-	requestUrl.Path = fmt.Sprintf("%s?id=%s", ABORT_API_PATH, automationRunId)
+	requestUrl.Path = fmt.Sprintf("%s?ciRunId=%s", ABORT_API_PATH, automationRunId)
 		requestBody := map[string]interface{}{
 		"comment": "Launch finished",
 	}
