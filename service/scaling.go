@@ -154,7 +154,6 @@ func ScaleUp() {
 	runningTasksResources := getTasksResources(tasks, "RUNNING")
 	// There is no task in provisioning state, no need to scale up
 	if len(provisioningTasksResources) == 0 {
-		log.Trace("There is no task in provisioning state, no need to scale up")
 		return
 	}
 
