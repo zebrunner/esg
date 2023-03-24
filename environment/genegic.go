@@ -162,7 +162,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
         if executorImage == "amancevice/pandas:1.1.4" {
                 caps.Cpu = 2048
                 executorContainer.SetCpu(caps)
-                caps.Memory = 4096
+                caps.Memory = 2048
                 executorContainer.SetMemory(caps)
         }
 
