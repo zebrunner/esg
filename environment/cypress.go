@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+        b64 "encoding/base64"
         log "github.com/sirupsen/logrus"
 )
 
