@@ -97,7 +97,6 @@ func getAutomationRunId(task ecs.Task) string {
 func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
         automationRunId := getAutomationRunId(*task)
         if automationRunId ==""{
-                log.Debug("Automation Launch Id is not available.")
                 return
         }
 
