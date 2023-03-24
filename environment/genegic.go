@@ -151,6 +151,13 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 	executorContainer.SetCpu(caps)
 	executorContainer.SetMemory(caps)
 
+        if strings.HasPrefix(executorImage, "public.ecr.aws/zebrunner/cyserver") {
+                caps.Cpu = 512
+                executorContainer.SetCpu(caps)
+                caps.Memory = 512
+                executorContainer.SetMemory(caps)
+        }
+
 	//TODO: remove hardcoded increased resources as only reporting allow to adjust it on UI
         if executorImage == "amancevice/pandas:1.1.4" {
                 caps.Cpu = 2048
