@@ -81,6 +81,9 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
                 EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
         }
 
+        //basic auth header for executor-logs service
+        basicAuthHeader := "Authorization: Basic " + b64.StdEncoding.EncodeToString([]byte(conf.ZebrunnerIntegrationUser + ":" + conf.ZebrunnerIntegrationPassword))
+
 	executorContainer := Container{
 		Name:       "executor",
 		Image:      browserImage,
