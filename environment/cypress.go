@@ -93,6 +93,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
                         "AWS_SECRET_ACCESS_KEY":  conf.AwsSecretAccessKey,
                         "AWS_DEFAULT_REGION":     conf.AwsRegion,
 			"COMMAND":		  launchCommand,
+                        "BASIC_AUTH":             basicAuthHeader,
                 },
 		Mounts: []string{entrypointVolume, taskVolume, logVolume, zebrunnerVolume, cypressVolume},
 		WorkingDirectory: workDir,
