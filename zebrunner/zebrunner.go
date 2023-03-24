@@ -114,7 +114,6 @@ func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
 	requestBody := map[string]interface{}{
 		"comment": "Launch finished",
 	}
-	log.Trace("request body to abort call: ", requestBody)
 
 	body, err := json.Marshal(requestBody)
 	if err != nil {
@@ -136,15 +135,14 @@ func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
 		return
 	}
 
-	if resp.StatusCode != http.StatusNoContent {
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
 		data := map[string]interface{}{}
                 log.WithFields(log.Fields{
                         "status":   resp.Status,
                         "response": data,
                 }).Error("Failed to abort task!")
-
 		return
 	} else {
-		log.WithField("_taskId", sess.ID).WithField("workspace", sess.Workspace).WithField("request body", requestBody).Info("task aborted")
+		log.WithField("_taskId", sess.ID).WithField("workspace", sess.Workspace).WithField("request body", requestBody).Trace("task aborted")
 	}
 }
