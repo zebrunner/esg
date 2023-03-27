@@ -153,6 +153,8 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 
         if strings.HasPrefix(executorImage, "public.ecr.aws/zebrunner/cyserver") {
 		// don't use setCpu and setMemory as it has smart verifiction about minimal and restore 1CPU 2Gb RAM!
+		caps.Cpu = 512
+		caps.Memory = 512
 		executorContainer.cpu = 512
                 executorContainer.memory = 512
         }
