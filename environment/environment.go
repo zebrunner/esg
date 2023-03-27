@@ -33,7 +33,7 @@ const (
         clipboardPort  int64 = 9090
 
         recorderCpu    int64 = 320
-        recorderMemory int64 = 512
+        recorderMemory int64 = 1024
 
         genericPort   int64 = 22
         minCpu    = 256
