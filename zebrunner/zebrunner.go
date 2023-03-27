@@ -31,7 +31,7 @@ func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration) {
 	}
 
 	platformName := strings.ToLower(sess.Capabilities.PlatformName)
-	if platformName==""|| platformName == "generic" {
+	if platformName=="" || platformName == "generic" || platformName == "any" {
 		platformName = "linux"
 	}
 
