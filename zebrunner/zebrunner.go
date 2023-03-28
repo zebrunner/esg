@@ -3,13 +3,13 @@ package zebrunner
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
-	"fmt"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
@@ -102,7 +102,6 @@ func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
 
 	conf := &config.Conf
 
-        // #479: register quesry arg to avoid encoding of "?" mark
 	requestUrl, err := url.ParseRequestURI(fmt.Sprintf("%s%s?ciRunId=%s", conf.ZebrunnerHost, ABORT_API_PATH, automationRunId))
 	if err != nil {
 		log.WithError(err).Error("Failed to parse zebrunner base url")
@@ -110,8 +109,11 @@ func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
 	}
 	requestUrl.Host = sess.Workspace + "." + requestUrl.Host
 
+	var msg string
+	msg = fmt.Sprintf("%s: %s", task.StopCode, task.StoppedReason)
+
 	requestBody := map[string]interface{}{
-		"comment": "Launch finished",
+		"comment": msg,
 	}
 
 	body, err := json.Marshal(requestBody)
