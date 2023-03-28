@@ -102,7 +102,6 @@ func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
 
 	conf := &config.Conf
 
-        // #479: register quesry arg to avoid encoding of "?" mark
 	requestUrl, err := url.ParseRequestURI(fmt.Sprintf("%s%s?ciRunId=%s", conf.ZebrunnerHost, ABORT_API_PATH, automationRunId))
 	if err != nil {
 		log.WithError(err).Error("Failed to parse zebrunner base url")
@@ -111,8 +110,7 @@ func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
 	requestUrl.Host = sess.Workspace + "." + requestUrl.Host
 
 	var msg string
-	msg = fmt.Sprintf("Status: %s, HealthStatusL %s, StopCode: %s, StoppedReason: %s",
-		task.LastStatus, task.HealthStatus, task.StopCode, task.StoppedReason)
+	msg = fmt.Sprintf("StopCode: %s, StoppedReason: %s", task.StopCode, task.StoppedReason)
 
 	requestBody := map[string]interface{}{
 		"comment": msg,
