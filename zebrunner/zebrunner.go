@@ -110,7 +110,7 @@ func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
 	requestUrl.Host = sess.Workspace + "." + requestUrl.Host
 
 	var msg string
-	msg = fmt.Sprintf("StopCode: %s, StoppedReason: %s", task.StopCode, task.StoppedReason)
+	msg = fmt.Sprintf("%s: %s", task.StopCode, task.StoppedReason)
 
 	requestBody := map[string]interface{}{
 		"comment": msg,
