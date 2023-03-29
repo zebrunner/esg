@@ -7,6 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -144,6 +145,21 @@ func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
                 }).Error("Failed to abort task!")
 		return
 	} else {
+		mapToString := ""
+		for k, v := range requestBody {
+			var value any
+			if reflect.ValueOf(v).Kind()==reflect.Ptr {
+				if v == nil {
+					value = "nil"
+				} else {
+					value = reflect.ValueOf(v).Elem()
+				}
+			} else {
+				value = v
+			}
+			mapToString += fmt.Sprintf("%s: %v", k, value)
+		}
 		log.WithField("_taskId", sess.ID).WithField("workspace", sess.Workspace).WithField("request body", requestBody).Trace("task aborted")
 	}
 }
+
