@@ -94,6 +94,18 @@ func getAutomationRunId(task ecs.Task) string {
 	return ""
 }
 
+func getStoppedReason(task ecs.Task) string {
+	// get reason from the executor container
+        for _, container:= range task.Containers {
+		log.Trace("container name: ", *container.Name)
+		if *container.Name == "executor" && container.Reason != nil {
+			return *container.Reason
+		}
+        }
+        return "Launch finished"
+}
+
+
 func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
         automationRunId := getAutomationRunId(*task)
         if automationRunId ==""{
@@ -109,11 +121,9 @@ func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
 	}
 	requestUrl.Host = sess.Workspace + "." + requestUrl.Host
 
-	var msg string
-	msg = fmt.Sprintf("%s: %s", task.StopCode, task.StoppedReason)
-
+	stopReason := getStoppedReason(*task)
 	requestBody := map[string]interface{}{
-		"comment": msg,
+		"comment": stopReason,
 	}
 
 	body, err := json.Marshal(requestBody)
@@ -144,6 +154,6 @@ func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
                 }).Error("Failed to abort task!")
 		return
 	} else {
-		log.WithField("_taskId", sess.ID).WithField("workspace", sess.Workspace).WithField("request body", requestBody).Trace("task aborted")
+		log.WithField("_taskId", sess.ID).WithField("workspace", sess.Workspace).WithField("comment", stopReason).Trace("task aborted")
 	}
 }
