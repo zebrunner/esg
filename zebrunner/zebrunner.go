@@ -144,6 +144,6 @@ func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
                 }).Error("Failed to abort task!")
 		return
 	} else {
-		log.WithField("_taskId", sess.ID).WithField("workspace", sess.Workspace).WithField("request body", requestBody).Trace("task aborted")
+		log.WithField("_taskId", sess.ID).WithField("workspace", sess.Workspace).WithField("comment", msg).Trace("Task aborted")
 	}
 }
