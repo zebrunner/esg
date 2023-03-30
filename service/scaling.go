@@ -276,10 +276,14 @@ func ScaleDown() {
 	}
 	for {
 		listInstancesResult, err := svc.ListContainerInstances(&listInstancesInput)
-		if err != nil || len(listInstancesResult.ContainerInstanceArns) == 0 {
-			log.WithError(err).WithField("count", len(listInstancesResult.ContainerInstanceArns)).Debug("Failed to list instances")
+		if err != nil && len(listInstancesResult.ContainerInstanceArns) != 0 {
+			log.WithError(err).Debug("Failed to list instances")
 			return
 		}
+		if len(listInstancesResult.ContainerInstanceArns) == 0 {
+			return
+		}
+
 		log.WithField("listInstancesResult", listInstancesResult)
 
 		containerInstances:=make([]*string, 0)
