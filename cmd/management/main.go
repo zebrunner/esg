@@ -142,7 +142,12 @@ func ClearTasks() {
 						startedAt := *task.StartedAt //local var needed to calculate difference via Sub(..)
 						stoppedAt := *task.StoppedAt
 						zebrunner.TrackResourcesUsage(session, stoppedAt.Sub(startedAt))
-						zebrunner.AbortTask(session, task)
+
+						if !strings.HasPrefix(session.Capabilities.Image, "public.ecr.aws/zebrunner/cypress-") {
+							// #503: суpress tests aborted automatically
+							// automatic abort of the public.ecr.aws/zebrunner/cypress-* should be prohibited as execution is control by parent cyserver process
+							zebrunner.AbortTask(session, task)
+						}
 						taskIds4Removal = append(taskIds4Removal, taskId)
 					}
 
@@ -159,10 +164,7 @@ func ClearTasks() {
 							// do not register resource usage and don't mark taskId for removal!
 						}
 					}
-
 				}
-
-
 			}
 
 
