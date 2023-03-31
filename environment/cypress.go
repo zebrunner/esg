@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+        b64 "encoding/base64"
         log "github.com/sirupsen/logrus"
 )
 
@@ -69,7 +70,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
                 launchCommand = caps.LaunchCommand
         }
 
-        entrypointImage := imageRepo + "entrypoint:1.4"
+        entrypointImage := imageRepo + "entrypoint:1.5"
         entrypointContainer := Container{
                 Name:              "entrypoint",
                 Image:             entrypointImage,
@@ -80,6 +81,9 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
                 Mounts: []string{entrypointVolume, cypressVolume},
                 EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
         }
+
+        //basic auth header for executor-logs service
+        basicAuthHeader := "Authorization: Basic " + b64.StdEncoding.EncodeToString([]byte(conf.ZebrunnerIntegrationUser + ":" + conf.ZebrunnerIntegrationPassword))
 
 	executorContainer := Container{
 		Name:       "executor",
@@ -93,6 +97,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
                         "AWS_SECRET_ACCESS_KEY":  conf.AwsSecretAccessKey,
                         "AWS_DEFAULT_REGION":     conf.AwsRegion,
 			"COMMAND":		  launchCommand,
+                        "BASIC_AUTH":             basicAuthHeader,
                 },
 		Mounts: []string{entrypointVolume, taskVolume, logVolume, zebrunnerVolume, cypressVolume},
 		WorkingDirectory: workDir,

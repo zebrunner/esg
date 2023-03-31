@@ -65,7 +65,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
                 EntryPoint: []string{"/bin/sh"},
         }
 
-        entrypointImage := imageRepo + "entrypoint:1.4"
+        entrypointImage := imageRepo + "entrypoint:1.5"
         entrypointContainer := Container{
                 Name:              "entrypoint",
                 Image:             entrypointImage,
@@ -81,7 +81,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 		includeMaven:= strings.Contains(caps.Image, "maven")
 		var mavenContainer *Container = nil
 		if includeMaven {
-			mavenImage := imageRepo + "m2-repo-carina:1.1"
+			mavenImage := imageRepo + "m2-repo-carina:1.2"
 			mavenContainer = &Container{
 				Name:       "maven",
 				Image:      mavenImage,
@@ -151,11 +151,19 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 	executorContainer.SetCpu(caps)
 	executorContainer.SetMemory(caps)
 
+        if strings.HasPrefix(executorImage, "public.ecr.aws/zebrunner/cyserver") {
+		// don't use setCpu and setMemory as it has smart verifiction about minimal and restore 1CPU 2Gb RAM!
+		caps.Cpu = 512
+		caps.Memory = 512
+		executorContainer.cpu = 512
+                executorContainer.memory = 512
+        }
+
 	//TODO: remove hardcoded increased resources as only reporting allow to adjust it on UI
         if executorImage == "amancevice/pandas:1.1.4" {
                 caps.Cpu = 2048
                 executorContainer.SetCpu(caps)
-                caps.Memory = 4096
+                caps.Memory = 2048
                 executorContainer.SetMemory(caps)
         }
 

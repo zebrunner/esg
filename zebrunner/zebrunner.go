@@ -19,7 +19,7 @@ import (
 
 const (
         USAGE_API_PATH = "/api/quota/v2/engine-usages"
-		ABORT_API_PATH = "/api/reporting/api/project-test-runs/abort"
+	ABORT_API_PATH = "/api/reporting/api/project-test-runs/abort"
 )
 
 func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration) {
@@ -31,7 +31,7 @@ func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration) {
 	}
 
 	platformName := strings.ToLower(sess.Capabilities.PlatformName)
-	if platformName==""|| platformName == "generic" {
+	if platformName=="" || platformName == "generic" || platformName == "any" {
 		platformName = "linux"
 	}
 
@@ -94,26 +94,37 @@ func getAutomationRunId(task ecs.Task) string {
 	return ""
 }
 
+func getStoppedReason(task ecs.Task) string {
+	// get reason from the executor container
+        for _, container:= range task.Containers {
+		log.Trace("container name: ", *container.Name)
+		if *container.Name == "executor" && container.Reason != nil {
+			return *container.Reason
+		}
+        }
+        return "Launch finished"
+}
+
+
 func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
+        automationRunId := getAutomationRunId(*task)
+        if automationRunId ==""{
+                return
+        }
+
 	conf := &config.Conf
-	requestUrl, err := url.ParseRequestURI(conf.ZebrunnerHost)
+
+	requestUrl, err := url.ParseRequestURI(fmt.Sprintf("%s%s?ciRunId=%s", conf.ZebrunnerHost, ABORT_API_PATH, automationRunId))
 	if err != nil {
 		log.WithError(err).Error("Failed to parse zebrunner base url")
 		return
 	}
 	requestUrl.Host = sess.Workspace + "." + requestUrl.Host
 
-	automationRunId := getAutomationRunId(*task)
-	if automationRunId ==""{
-		log.Debug("Failed to obtain Automation Run Id")
-		return
+	stopReason := getStoppedReason(*task)
+	requestBody := map[string]interface{}{
+		"comment": stopReason,
 	}
-
-	requestUrl.Path = fmt.Sprintf("%s?id=%s", ABORT_API_PATH, automationRunId)
-		requestBody := map[string]interface{}{
-		"comment": "Launch finished",
-	}
-	log.Trace("request body to abort call: ", requestBody)
 
 	body, err := json.Marshal(requestBody)
 	if err != nil {
@@ -126,6 +137,7 @@ func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
 	}
 	req.SetBasicAuth(conf.ZebrunnerIntegrationUser, conf.ZebrunnerIntegrationPassword)
 	req.Header.Add("Content-Type", "application/json")
+
 	log.Trace("req: ", req)
 
 	resp, err := http.DefaultClient.Do(req)
@@ -134,19 +146,14 @@ func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
 		return
 	}
 
-	if resp.StatusCode != http.StatusNoContent {
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
 		data := map[string]interface{}{}
-		err = json.NewDecoder(resp.Body).Decode(&data)
-
-		if err != nil {
-			log.WithError(err).Error("Failed to abort task. Problem decoding response. Body response: %s.", resp.Body)
-		}
-		log.WithFields(log.Fields{
-			"status":   resp.Status,
-			"response": data,
-		}).Error("Failed to abort task!")
+                log.WithFields(log.Fields{
+                        "status":   resp.Status,
+                        "response": data,
+                }).Error("Failed to abort task!")
 		return
 	} else {
-		log.WithField("_taskId", sess.ID).WithField("workspace", sess.Workspace).WithField("request body", requestBody).Info("task aborted")
+		log.WithField("_taskId", sess.ID).WithField("workspace", sess.Workspace).WithField("comment", stopReason).Trace("task aborted")
 	}
 }

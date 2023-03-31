@@ -36,7 +36,7 @@ const (
         recorderMemory int64 = 1024
 
         genericPort   int64 = 22
-        minCpu    = 256
+        minCpu    = 128
         minMemory = 256
 )
 

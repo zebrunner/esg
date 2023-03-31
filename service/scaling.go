@@ -154,7 +154,6 @@ func ScaleUp() {
 	runningTasksResources := getTasksResources(tasks, "RUNNING")
 	// There is no task in provisioning state, no need to scale up
 	if len(provisioningTasksResources) == 0 {
-		log.Trace("There is no task in provisioning state, no need to scale up")
 		return
 	}
 
@@ -277,14 +276,28 @@ func ScaleDown() {
 	}
 	for {
 		listInstancesResult, err := svc.ListContainerInstances(&listInstancesInput)
-		if err != nil || len(listInstancesResult.ContainerInstanceArns) == 0 {
-			log.WithError(err).WithField("count", len(listInstancesResult.ContainerInstanceArns)).Error("Failed to list instances")
+		if err != nil && len(listInstancesResult.ContainerInstanceArns) != 0 {
+			log.WithError(err).Debug("Failed to list instances")
 			return
+		}
+		if len(listInstancesResult.ContainerInstanceArns) == 0 {
+			return
+		}
+
+		log.WithField("listInstancesResult", listInstancesResult)
+
+		containerInstances:=make([]*string, 0)
+		for _, containerInstanceAws:= range listInstancesResult.ContainerInstanceArns {
+			if containerInstanceAws != nil {
+				containerInstances = append(containerInstances, containerInstanceAws)
+			} else {
+				log.Debug("AWS returned an empty containerInsetanceArns??")
+			}
 		}
 
 		describeInstancesInput := ecs.DescribeContainerInstancesInput{
 			Cluster:            &config.Conf.AwsCluster,
-			ContainerInstances: listInstancesResult.ContainerInstanceArns,
+			ContainerInstances: containerInstances,
 		}
 		describeInstancesResult, err := svc.DescribeContainerInstances(&describeInstancesInput)
 		if err != nil {
