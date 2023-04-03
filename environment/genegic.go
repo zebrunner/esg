@@ -148,7 +148,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 		}
         }
 
-	executorContainer.SetCpu(caps, conf.MinCpu, conf.MaxCpu)
+	executorContainer.SetCpu(caps, 1024, conf.MaxCpu)
 	executorContainer.SetMemory(caps, 2048, conf.MaxMemory)
 
         if strings.HasPrefix(executorImage, "public.ecr.aws/zebrunner/cyserver") {

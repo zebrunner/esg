@@ -194,7 +194,9 @@ func ScaleUp() {
 	// Remove all instances that couldn't run a tasks
 	freeInstanceResources := []*Resources{}
 	for _, i := range instanceResources {
-		if i.CPU >= int64(config.Conf.MinCpu) && i.Memory >= int64(config.Conf.MinMemory) {
+		//TODO: [VD] review below logic. It seems pretty strange.
+		// according to ZEB-6064 removed min cpu amd memory configuration and reused hardcoded values.
+		if i.CPU >= int64(1024) && i.Memory >= int64(1024) {
 			freeInstanceResources = append(freeInstanceResources, i)
 		}
 	}

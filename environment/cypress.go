@@ -122,7 +122,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		}
         }
 
-	executorContainer.SetCpu(caps, conf.MinCpu, conf.MaxCpu)
+	executorContainer.SetCpu(caps, 1024, conf.MaxCpu)
 	executorContainer.SetMemory(caps, 2048, conf.MaxMemory) // 2Gb RAM is minimal for cypress due to the potential memory leaks
 
         // convert image "public.ecr.aws/zebrunner/cypress-chrome:107.0" to task definition failiy: "cypress-cypress-chrome-107-0"
