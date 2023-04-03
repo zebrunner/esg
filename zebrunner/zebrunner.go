@@ -105,7 +105,6 @@ func getStoppedReason(task ecs.Task) string {
         return "Launch finished"
 }
 
-
 func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
         automationRunId := getAutomationRunId(*task)
         if automationRunId ==""{

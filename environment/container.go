@@ -2,7 +2,6 @@ package environment
 
 import (
 	"github.com/aws/aws-sdk-go/service/ecs"
-	"github.com/zebrunner/esg/config"
         "github.com/zebrunner/esg/capabilities"
 )
 
@@ -46,8 +45,8 @@ func (c *Container) Cpu() int64 {
 	return c.cpu
 }
 
-func (c *Container) SetCpu(caps *capabilities.Capabilities) {
-	c.cpu = calculateResource(caps.Cpu, config.Conf.MinCpu, config.Conf.MaxCpu)
+func (c *Container) SetCpu(caps *capabilities.Capabilities, minCpu int64, maxCpu int64) {
+	c.cpu = calculateResource(caps.Cpu, minCpu, maxCpu)
         caps.Cpu = c.cpu //override default one as we have min/max limits
 }
 
@@ -55,8 +54,8 @@ func (c *Container) Memory() int64 {
 	return c.memory
 }
 
-func (c *Container) SetMemory(caps *capabilities.Capabilities) {
-	c.memory = calculateResource(caps.Memory, config.Conf.MinMemory, config.Conf.MaxMemory)
+func (c *Container) SetMemory(caps *capabilities.Capabilities, minMemory int64, maxMemory int64) {
+	c.memory = calculateResource(caps.Memory, minMemory, maxMemory)
         caps.Memory = c.memory //override default one as we have min/max limits
 }
 
