@@ -35,14 +35,8 @@ fi
 if [ ! -z ${LOG_LEVEL} ]; then
   CMD_ARGS="${CMD_ARGS} -log-level ${LOG_LEVEL}"
 fi
-if [ ! -z ${MIN_MEMORY} ]; then
-  CMD_ARGS="${CMD_ARGS} -min-memory ${MIN_MEMORY}"
-fi
 if [ ! -z ${MAX_MEMORY} ]; then
   CMD_ARGS="${CMD_ARGS} -max-memory ${MAX_MEMORY}"
-fi
-if [ ! -z ${MIN_CPU} ]; then
-  CMD_ARGS="${CMD_ARGS} -min-cpu ${MIN_CPU}"
 fi
 if [ ! -z ${MAX_CPU} ]; then
   CMD_ARGS="${CMD_ARGS} -max-cpu ${MAX_CPU}"
