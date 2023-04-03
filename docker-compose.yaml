@@ -4,7 +4,7 @@ services:
     build:
       context: .
       dockerfile: ./build/Dockerfile.router
-    image: public.ecr.aws/zebrunner/router:2.1.7
+    image: public.ecr.aws/zebrunner/router:latest
     env_file:
       - router.env
     ports:
@@ -23,7 +23,7 @@ services:
     build:
       context: .
       dockerfile: build/Dockerfile.scaler
-    image: public.ecr.aws/zebrunner/scaler:2.1.7
+    image: public.ecr.aws/zebrunner/scaler:latest
     env_file:
       - scaler.env
     links:
