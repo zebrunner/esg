@@ -148,8 +148,8 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 		}
         }
 
-	executorContainer.SetCpu(caps)
-	executorContainer.SetMemory(caps)
+	executorContainer.SetCpu(caps, conf.MinCpu, conf.MaxCpu)
+	executorContainer.SetMemory(caps, 2048, conf.MaxMemory)
 
         if strings.HasPrefix(executorImage, "public.ecr.aws/zebrunner/cyserver") {
 		// don't use setCpu and setMemory as it has smart verifiction about minimal and restore 1CPU 2Gb RAM!
@@ -161,10 +161,8 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 
 	//TODO: remove hardcoded increased resources as only reporting allow to adjust it on UI
         if executorImage == "amancevice/pandas:1.1.4" {
-                caps.Cpu = 2048
-                executorContainer.SetCpu(caps)
-                caps.Memory = 2048
-                executorContainer.SetMemory(caps)
+		executorContainer.SetCpu(caps, 2048, conf.MaxCpu)
+                executorContainer.SetMemory(caps, 2048, conf.MaxMemory)
         }
 
 	containers := make([]*Container, 0)

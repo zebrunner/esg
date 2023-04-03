@@ -59,8 +59,8 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			StartPeriod: aws.Int64(5),
 		},
 	}
-	browserContainer.SetCpu(caps)
-	browserContainer.SetMemory(caps)
+	browserContainer.SetCpu(caps, conf.MinCpu, conf.MaxCpu)
+	browserContainer.SetMemory(caps, conf.MinMemory, conf.MaxMemory)
 
 	// Video recorder & artifacts uploader logic
 	if err != nil {
