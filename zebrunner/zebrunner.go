@@ -24,7 +24,7 @@ const (
 
 func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration) {
 	conf := &config.Conf
-	requestUrl, err := url.ParseRequestURI(conf.ZebrunnerHost)
+	requestUrl, err := url.ParseRequestURI(getZebrunnerReportingUrl(sess))
 	if err != nil {
 		log.WithError(err).Error("Failed to parse zebrunner base url")
 		return
@@ -105,6 +105,18 @@ func getStoppedReason(task ecs.Task) string {
         return "Launch finished"
 }
 
+func getZebrunnerReportingUrl(sess *sessionmap.Session)(string) {
+	conf := &config.Conf
+	url := conf.ZebrunnerHost
+        if strings.Contains(sess.Workspace, "zebrunner.org") {
+		url = "https://zebrunner.org"
+        } else if strings.Contains(sess.Workspace, "zebrunner.dev") {
+		url = "https://zebrunner.dev"
+        }
+
+	return url
+}
+
 
 func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
         automationRunId := getAutomationRunId(*task)
@@ -114,7 +126,7 @@ func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
 
 	conf := &config.Conf
 
-	requestUrl, err := url.ParseRequestURI(fmt.Sprintf("%s%s?ciRunId=%s", conf.ZebrunnerHost, ABORT_API_PATH, automationRunId))
+	requestUrl, err := url.ParseRequestURI(fmt.Sprintf("%s%s?ciRunId=%s", getZebrunnerReportingUrl(sess), ABORT_API_PATH, automationRunId))
 	if err != nil {
 		log.WithError(err).Error("Failed to parse zebrunner base url")
 		return
