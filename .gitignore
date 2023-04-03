@@ -163,3 +163,4 @@ esg
 
 entrypoint.sh
 management_entrypoint.sh
+*.bak
