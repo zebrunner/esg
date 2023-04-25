@@ -56,8 +56,8 @@ func (w *instanceWatchWorker) start() {
 		for {
 			listResult, err := svc.ListContainerInstances(&listInput)
 			if err != nil {
-				log.WithField("error", err).Error("Failed to ListContainerInstances!")
-				break
+				log.WithField("list", listInput).WithField("error", err).Error("Failed to ListContainerInstances!")
+				return // exit from method as cluster instances can't be detected
 			}
 
 			containerInstanceIds = append(containerInstanceIds, listResult.ContainerInstanceArns...)
@@ -79,7 +79,7 @@ func (w *instanceWatchWorker) start() {
 			}
 			describeResult, err := svc.DescribeContainerInstances(&input)
 			if err != nil {
-                                log.WithField("error", err).Error("Failed to DescribeContainerInstances!")
+                                log.WithField("list", input).WithField("error", err).Error("Failed to DescribeContainerInstances!")
 				continue
 			}
 
