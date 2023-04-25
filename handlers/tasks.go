@@ -277,7 +277,7 @@ func CloseSession(c *gin.Context) {
 	selenium.CloseSession(sess)
 	service.StopTask(sess.TaskID)
 
-	log.WithField("sessionId", sessionId).Info("driver closed")
+	log.WithField("_taskId", sess.TaskID).WithField("sessionId", sessionId).Info("driver closed")
 	c.JSON(http.StatusOK, gin.H{"value": nil})
 }
 
