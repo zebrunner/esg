@@ -69,8 +69,8 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
         entrypointContainer := Container{
                 Name:              "entrypoint",
                 Image:             entrypointImage,
-                cpu:               minCpu,
-                memory:            minMemory,
+                cpu:               8,
+                memory:            16,
                 Privileged:        false,
                 Essential:         false,
                 Mounts: []string{entrypointVolume},
@@ -85,8 +85,8 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 			mavenContainer = &Container{
 				Name:       "maven",
 				Image:      mavenImage,
-				cpu:        minCpu,
-				memory:     minMemory,
+				cpu:        64,
+				memory:     64,
 				Privileged: false,
 				Essential:  false,
 				Mounts:     []string{mavenVolume},
