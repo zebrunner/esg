@@ -99,10 +99,11 @@ func getAutomationRunId(task ecs.Task) string {
 }
 
 func getStoppedReason(task ecs.Task) string {
-	// get reason from the executor container
+	// get failed reason if any from any task container
         for _, container:= range task.Containers {
 		log.Trace("container name: ", *container.Name)
-		if *container.Name == "executor" && container.Reason != nil {
+		if container.Reason != nil {
+	                log.Trace("container reason: ", *container.Reason)
 			return *container.Reason
 		}
         }
