@@ -85,8 +85,8 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 			mavenContainer = &Container{
 				Name:       "maven",
 				Image:      mavenImage,
-				cpu:        64,
-				memory:     64,
+				cpu:        16,
+				memory:     16,
 				Privileged: false,
 				Essential:  false,
 				Mounts:     []string{mavenVolume},
