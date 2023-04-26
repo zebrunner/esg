@@ -86,6 +86,7 @@ func SeleniumError(c *gin.Context) {
 	log.WithFields(log.Fields{
 		"status":        status,
 		"seleniumError": seleniumCode,
+		"sessionId": c.Get("sessionID"),
 	}).Warn("Error sent to selenium")
 	c.JSON(status, gin.H{
 		"value": gin.H{
