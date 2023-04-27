@@ -43,7 +43,7 @@ func getSession(id string) (*sessionmap.Session, error) {
 			ResponseStatus: http.StatusNotFound,
 			SeleniumCode:   "invalid session id",
 			Message:        fmt.Sprintf("Session stopped due IDLE timeout"),
-			Err:            err,
+			Err:            nil,
 		}
 	}
 
