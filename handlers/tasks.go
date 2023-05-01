@@ -60,7 +60,7 @@ func Create(c *gin.Context) {
 		time.Sleep(500 * time.Millisecond)
 		_ = c.Error(&utils.SeleniumError{
 			SeleniumCode:   "session not created",
-			ResponseStatus: http.StatusUnauthorized,
+			ResponseStatus: http.StatusNotFound,
 			Message:        "Session not created; Reason: Failed to get auth credentials.",
 		}).SetType(gin.ErrorTypePublic)
 		return
@@ -508,7 +508,7 @@ func creationError(msg string, err error) *utils.SeleniumError {
 	}
 }
 
-func getSessionId(resp map[string]interface{}) (string, error) {
+func getSessionId(resp map[string]interface{}) (string, *utils.SeleniumError) {
 	// Get sessionId from root. For unknown reason opera returns sessionId in root of object
 	sessionId, ok := resp["sessionId"].(string)
 	if ok {
@@ -518,7 +518,10 @@ func getSessionId(resp map[string]interface{}) (string, error) {
 	// Get session from value
 	value, ok := resp["value"].(map[string]interface{})
 	if !ok {
-		return "", errors.New("`value` must be an object")
+		return "", &utils.SeleniumError{
+			SeleniumCode: "`value` must be an object",
+			ResponseStatus: http.StatusBadRequest,
+		}
 	}
 
 	sessionId, ok = value["sessionId"].(string)
@@ -526,5 +529,8 @@ func getSessionId(resp map[string]interface{}) (string, error) {
 		return sessionId, nil
 	}
 
-	return "", errors.New("failed to find sessionId field in response")
+	return "", &utils.SeleniumError{
+		SeleniumCode: "failed to find sessionId field in response",
+		ResponseStatus: http.StatusInternalServerError,
+	}
 }

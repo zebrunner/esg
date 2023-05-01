@@ -101,8 +101,11 @@ func SeleniumError(c *gin.Context) {
 func Authentication(c *gin.Context) {
 	username, password, ok := c.Request.BasicAuth()
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"message": "Auth credentials not found",
+
+		c.JSON(http.StatusUnauthorized, utils.SeleniumError{
+			ResponseStatus: http.StatusUnauthorized,
+			SeleniumCode   :"Auth credentials not found",
+			Message        :"Auth credentials not found",
 		})
 		log.WithField("client", c.ClientIP()).Warn("Auth credentials not found")
 		c.Abort()
@@ -116,8 +119,10 @@ func Authentication(c *gin.Context) {
 			"user":     username,
 			"password": password,
 		}).Warn("Failed to authenticate user")
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"message": "Provided credentials not valid",
+		c.JSON(http.StatusUnauthorized, utils.SeleniumError{
+			ResponseStatus: http.StatusUnauthorized,
+			SeleniumCode   :"Provided credentials not valid",
+			Message        :"Provided credentials not valid",
 		})
 		c.Abort()
 		return
@@ -127,8 +132,10 @@ func Authentication(c *gin.Context) {
 func APIAuthentication(c *gin.Context) {
 	username, password, ok := c.Request.BasicAuth()
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"message": "Auth credentials not found",
+		c.JSON(http.StatusUnauthorized,  utils.SeleniumError{
+			ResponseStatus: http.StatusUnauthorized,
+			SeleniumCode   :"Auth credentials not found",
+			Message        :"Auth credentials not found",
 		})
 		log.WithField("client", c.ClientIP()).Warn("Auth credentials not found")
 		c.Abort()
@@ -141,8 +148,10 @@ func APIAuthentication(c *gin.Context) {
 			"user":     username,
 			"password": password,
 		}).Warn("Failed to authenticate user")
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"message": "Provided credentials not valid",
+		c.JSON(http.StatusUnauthorized, utils.SeleniumError{
+			ResponseStatus: http.StatusUnauthorized,
+			SeleniumCode   : "Provided credentials not valid",
+			Message        : "Provided credentials not valid",
 		})
 		c.Abort()
 		return
