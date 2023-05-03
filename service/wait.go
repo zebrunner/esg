@@ -3,8 +3,8 @@ package service
 import (
 	"context"
 	"errors"
-	"time"
 	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go/service/ecs"
 	log "github.com/sirupsen/logrus"
@@ -45,7 +45,7 @@ func (w *waitWorker) start() {
 		for k, v := range w.requests {
 			select {
 			case <-v.ctx.Done():
-				delete(w.requests, k)
+				w.stopWait(k)
 			default:
 				continue
 			}
@@ -88,37 +88,27 @@ func (w *waitWorker) start() {
 
 		// Send responses for running tasks
 		for _, task := range tasks {
-                        req, ok := w.requests[*task.TaskArn]
-                        if !ok {
-                                continue
-                        }
+			_, ok := w.requests[*task.TaskArn]
+			if !ok {
+				continue
+			}
 
-                        if *task.LastStatus == "STOPPED" {
-                                log.Error("Task stopped: ", *task)
-                                req.errorChan <- errors.New("failed to start task: " + *task.StoppedReason)
-                                close(req.responseChan)
-                                close(req.errorChan)
-                                delete(w.requests, *task.TaskArn)
-                        }
+			if *task.LastStatus == "STOPPED" {
+				log.Error("Task stopped: ", *task)
+				w.stopWaitWithErr(errors.New("failed to start task: "+*task.StoppedReason), *task.TaskArn)
+			}
 
-
-                        if *task.LastStatus != "RUNNING" {
+			if *task.LastStatus != "RUNNING" {
 				// no sense to verify HEALTHY if task is not started yet or already stopped.
-                                continue
-                        }
+				continue
+			}
 
 			switch *task.HealthStatus {
 			case "UNHEALTHY":
-                                log.Error("Task unhealthy: ", *task)
-				req.errorChan <- errors.New("failed to start task. HealthStatus - UNHEALTHY")
-				close(req.responseChan)
-				close(req.errorChan)
-				delete(w.requests, *task.TaskArn)
+				log.Error("Task unhealthy: ", *task)
+				w.stopWaitWithErr(errors.New("failed to start task. HealthStatus - UNHEALTHY"), *task.TaskArn)
 			case "HEALTHY":
-				req.responseChan <- task
-				close(req.responseChan)
-				close(req.errorChan)
-				delete(w.requests, *task.TaskArn)
+				w.stopWaitWithTask(task)
 			}
 		}
 	}
@@ -141,9 +131,36 @@ func (w *waitWorker) waitFor(ctx context.Context, taskId string) *waitRequest {
 }
 
 func (w *waitWorker) stopWait(taskId string) {
+	mutex.RLock()
 	req := w.requests[taskId]
-	if (req != nil) {
+	if req != nil {
+		close(req.errorChan)
 		close(req.responseChan)
 		delete(w.requests, taskId)
 	}
+	mutex.RUnlock()
+}
+
+func (w *waitWorker) stopWaitWithErr(err error, taskId string) {
+	mutex.RLock()
+	req := w.requests[taskId]
+	if req != nil {
+		req.errorChan <- err
+		close(req.errorChan)
+		close(req.responseChan)
+		delete(w.requests, taskId)
+	}
+	mutex.RUnlock()
+}
+
+func (w *waitWorker) stopWaitWithTask(task *ecs.Task) {
+	mutex.RLock()
+	req := w.requests[*task.TaskArn]
+	if req != nil {
+		req.responseChan <- task
+		close(req.errorChan)
+		close(req.responseChan)
+		delete(w.requests, *task.TaskArn)
+	}
+	mutex.RUnlock()
 }
