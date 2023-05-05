@@ -9,8 +9,8 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/client"
+	"github.com/aws/aws-sdk-go/aws/credentials"
 	awsSession "github.com/aws/aws-sdk-go/aws/session"
-        "github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ecrpublic"
 	"github.com/aws/aws-sdk-go/service/ecs"
@@ -18,6 +18,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
+	"github.com/zebrunner/esg/utils"
 	"math/rand"
 )
 
@@ -162,15 +163,18 @@ func CreateGenericTaskDefinition(environment *environment.ExecutionEnvironment) 
         }
         input.Volumes = volumes
 
-        resultTaskDefinition, err := svc.RegisterTaskDefinition(&input)
-        log.WithField("resultTaskDefinition", resultTaskDefinition).Trace("Res TaskDefinition")
-        if err != nil {
-                return nil, fmt.Errorf("failed to create task definition: %v", err)
-        }
+	resultTaskDefinition, err := svc.RegisterTaskDefinition(&input)
+	log.WithField("resultTaskDefinition", resultTaskDefinition).Trace("Res TaskDefinition")
+	if err != nil {
+		if awsClientErr, ok := err.(*ecs.ClientException); ok {
+			return nil, utils.AwsClientErr(awsClientErr)
+		} else {
+			return nil, utils.UnknownErr(fmt.Errorf("failed to create task definition: %v", err))
+		}
+	}
 
-        return resultTaskDefinition.TaskDefinition, nil
+	return resultTaskDefinition.TaskDefinition, nil
 }
-
 
 func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (taskArn string, returnErr error) {
 	svc := ecs.New(AwsSess)
@@ -295,8 +299,16 @@ func DescribeTask(taskArn string) (*ecs.DescribeTasksOutput, error) {
                 },
         }
 
-        result, err := svc.DescribeTasks(input)
-        return result, err
+	result, err := svc.DescribeTasks(input)
+	if err != nil {
+		if awsClientErr, ok := err.(*ecs.ClientException); ok {
+			return nil, utils.AwsClientErr(awsClientErr)
+		} else {
+			return nil, utils.UnknownErr(err)
+		}
+	}
+
+	return result, nil
 }
 
 func searchHostPort(task *ecs.Task, containerPort int64) (port int64, ok bool) {
@@ -420,20 +432,21 @@ out:
 }
 
 func GeneratePreSignedURL(key string) (string, error) {
-        //S3 connection information
-	s3Svc := s3.New(AwsSess)
+	//S3 connection information
+	conf := &config.Conf
 
-
-        conf := &config.Conf
+	var session *awsSession.Session
 	if conf.S3AwsAccessKeyID != "" && conf.S3AwsSecretAccessKey != "" && conf.S3Region != "" {
 		creds := credentials.NewStaticCredentials(conf.S3AwsAccessKeyID, conf.S3AwsSecretAccessKey, "")
-		S3Sess := awsSession.Must(awsSession.NewSession(&aws.Config{
+
+		session = awsSession.Must(awsSession.NewSession(&aws.Config{
 			Credentials: creds,
 			Region:      &conf.S3Region,
 		}))
-	        s3Svc = s3.New(S3Sess)
+	} else {
+		session = AwsSess
 	}
-
+	s3Svc := s3.New(session)
 	//ZEB-5145: ESG: return 404 when requested video/session or execution log is not available
 	res, err := s3Svc.ListObjectsV2(&s3.ListObjectsV2Input{
 		Bucket: &config.Conf.S3Bucket,
@@ -441,11 +454,11 @@ func GeneratePreSignedURL(key string) (string, error) {
 	})
 
 	if err != nil {
-		return "", err
+		return "", utils.UnknownErr(err)
 	}
-	if (*res.KeyCount == 0) {
+	if *res.KeyCount == 0 {
 		err = errors.New("The specified key does not exist: " + key)
-		return "", err
+		return "", utils.ResourceNotFoundErr(err)
 	}
 
 	req, _ := s3Svc.GetObjectRequest(&s3.GetObjectInput{
@@ -454,7 +467,7 @@ func GeneratePreSignedURL(key string) (string, error) {
 	})
 	urlStr, err := req.Presign(presignUrlTimeout)
 	if err != nil {
-		return "", err
+		return "", utils.UnknownErr(err)
 	}
 
 	return urlStr, nil

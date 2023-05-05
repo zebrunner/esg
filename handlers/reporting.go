@@ -2,7 +2,7 @@
 package handlers
 
 import (
-	"io/ioutil"
+	"github.com/zebrunner/esg/utils"
 	"net/http"
 	"os"
 	"runtime"
@@ -61,10 +61,10 @@ func ListDrivers(c *gin.Context) {
 	var images []string
 
 	if config.Conf.BrowsersFile != "" {
-		text, err := ioutil.ReadFile(config.Conf.BrowsersFile)
+		text, err := os.ReadFile(config.Conf.BrowsersFile)
 		if err != nil {
 			log.WithError(err).Error("Failed to read file browsers.txt")
-			_ = c.Error(err)
+			_ = c.Error(utils.UnknownErr(err)).SetType(gin.ErrorTypePublic)
 			return
 		}
 		lines := strings.Split(string(text), "\n")
@@ -78,7 +78,7 @@ func ListDrivers(c *gin.Context) {
 		imgs, err := service.ListBrowsers()
 		if err != nil {
 			log.WithError(err).Warn("Failed to get browser list")
-			_ = c.Error(err).SetType(gin.ErrorTypePublic)
+			_ = c.Error(utils.UnknownErr(err)).SetType(gin.ErrorTypePublic)
 			return
 		}
 		images = imgs

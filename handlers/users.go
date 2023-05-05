@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"database/sql"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -26,10 +25,7 @@ func CreateUser(c *gin.Context) {
 	body := CreateUserModel{}
 	err := c.ShouldBindJSON(&body)
 	if err != nil {
-		_ = c.Error(&utils.HTTPError{
-			Status:  http.StatusBadRequest,
-			Message: "request body is invalid",
-		}).SetType(gin.ErrorTypePublic).SetMeta(err.Error())
+		_ = c.Error(utils.InvalidReqBodyErr()).SetType(gin.ErrorTypePublic).SetMeta(err.Error())
 		return
 	}
 
@@ -47,21 +43,11 @@ func CreateUser(c *gin.Context) {
 func DeleteUser(c *gin.Context) {
 	username := c.Param("username")
 	if username == "" {
-		_ = c.Error(&utils.HTTPError{
-			Status:  http.StatusBadRequest,
-			Message: "username parameter not found",
-		})
+		_ = c.Error(utils.ParamNotFoundErr("username")).SetType(gin.ErrorTypePublic)
 		return
 	}
 	err := service.DeleteUser(username)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			_ = c.Error(&utils.HTTPError{
-				Status:  http.StatusNotFound,
-				Message: "User not found",
-			}).SetType(gin.ErrorTypePublic)
-			return
-		}
 		_ = c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
@@ -71,31 +57,18 @@ func DeleteUser(c *gin.Context) {
 func RefreshToken(c *gin.Context) {
 	user := c.Param("username")
 	if user == "" {
-		_ = c.Error(&utils.HTTPError{
-			Status:  http.StatusBadRequest,
-			Message: "username parameter not found",
-		}).SetType(gin.ErrorTypePublic)
+		_ = c.Error(utils.ParamNotFoundErr("username")).SetType(gin.ErrorTypePublic)
 		return
 	}
-        body := RefreshTokenModel{}
-        err := c.ShouldBindJSON(&body)
-        if err != nil {
-                _ = c.Error(&utils.HTTPError{
-                        Status:  http.StatusBadRequest,
-                        Message: "request body is invalid",
-                }).SetType(gin.ErrorTypePublic).SetMeta(err.Error())
-                return
-        }
+	body := RefreshTokenModel{}
+	err := c.ShouldBindJSON(&body)
+	if err != nil {
+		_ = c.Error(utils.InvalidReqBodyErr()).SetType(gin.ErrorTypePublic).SetMeta(err.Error())
+		return
+	}
 
 	password, err := service.RefreshToken(user, body.Password)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			_ = c.Error(&utils.HTTPError{
-				Status:  http.StatusNotFound,
-				Message: "User not found",
-			}).SetType(gin.ErrorTypePublic)
-			return
-		}
 		_ = c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
@@ -107,32 +80,19 @@ func RefreshToken(c *gin.Context) {
 func UserActivation(c *gin.Context) {
 	user := c.Param("username")
 	if user == "" {
-		_ = c.Error(&utils.HTTPError{
-			Status:  http.StatusBadRequest,
-			Message: "username parameter not found",
-		}).SetType(gin.ErrorTypePublic)
+		_ = c.Error(utils.ParamNotFoundErr("username")).SetType(gin.ErrorTypePublic)
 		return
 	}
 
 	body := UserActivationModel{}
 	err := c.ShouldBindJSON(&body)
 	if err != nil {
-		_ = c.Error(&utils.HTTPError{
-			Status:  http.StatusBadRequest,
-			Message: "request body is invalid",
-		}).SetType(gin.ErrorTypePublic).SetMeta(err.Error())
+		_ = c.Error(utils.InvalidReqBodyErr()).SetType(gin.ErrorTypePublic).SetMeta(err.Error())
 		return
 	}
 
 	err = service.ActivationUser(user, body.IsActive)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			_ = c.Error(&utils.HTTPError{
-				Status:  http.StatusNotFound,
-				Message: "User not found",
-			}).SetType(gin.ErrorTypePublic)
-			return
-		}
 		_ = c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}

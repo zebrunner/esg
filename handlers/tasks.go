@@ -30,21 +30,11 @@ import (
 func getSession(id string) (*sessionmap.Session, error) {
 	session, err := sessionmap.Find(id, true)
 	if err != nil {
-		return nil, &utils.SeleniumError{
-			ResponseStatus: http.StatusNotFound,
-			SeleniumCode:   "invalid session id",
-			Message:        fmt.Sprintf("Session not found"),
-			Err:            err,
-		}
+		return nil, utils.SessNotFoundErr(err)
 	}
 
 	if session.Status == sessionmap.SessionStoppedIdle {
-		return nil, &utils.SeleniumError{
-			ResponseStatus: http.StatusNotFound,
-			SeleniumCode:   "invalid session id",
-			Message:        fmt.Sprintf("Session stopped due IDLE timeout"),
-			Err:            nil,
-		}
+		return nil, utils.SessNotFoundErr(errors.New(fmt.Sprintf("Session stopped due IDLE timeout")))
 	}
 
 	return session, nil
@@ -52,61 +42,29 @@ func getSession(id string) (*sessionmap.Session, error) {
 
 func Create(c *gin.Context) {
 	remote := c.ClientIP()
-	user, password, _ := c.Request.BasicAuth()
+	user, _, _ := c.Request.BasicAuth()
 	workspace, err := service.GetWorkspace(user)
-	if err != nil {
-		// Hotfix: Selenium java client don't send request with credentials without this sleep.
-		// Remove with full migration to Selenium 4.0
-		time.Sleep(500 * time.Millisecond)
-		_ = c.Error(&utils.SeleniumError{
-			SeleniumCode:   "session not created",
-			ResponseStatus: http.StatusNotFound,
-			Message:        "Session not created; Reason: Failed to get auth credentials.",
-		}).SetType(gin.ErrorTypePublic)
-		return
-	}
-
-	err = service.CheckAuth(user, password)
-	if err != nil {
-		log.WithError(err).WithFields(log.Fields{
-			"client":   c.ClientIP(),
-			"user":     user,
-			"password": password,
-		}).Warn("Failed to authenticate user on session creation")
-		_ = c.Error(&utils.SeleniumError{
-			SeleniumCode:   "session not created",
-			ResponseStatus: http.StatusUnauthorized,
-			Message:        "Session not created; Reason: Invalid username or password",
-		}).SetType(gin.ErrorTypePublic)
-		return
-	}
-
 	l := log.WithFields(log.Fields{"user": user, "remote": remote})
 
 	var body capabilities.RequestCaps
 	err = c.BindJSON(&body)
 	if err != nil {
 		l.WithError(err).Error("Failed to bind json to browser struct")
-		_ = c.Error(creationError("Bad JSON format", err)).SetType(gin.ErrorTypePublic)
+		_ = c.Error(utils.InvalidReqBodyErr()).SetType(gin.ErrorTypePublic)
 		return
 	}
 
-	processingError := utils.SeleniumError{
-		SeleniumCode:   "invalid argument",
-		ResponseStatus: http.StatusBadRequest,
-		Message:        "Failed to process capabilities. ",
-	}
 	err = body.ProcessLegacy()
 	if err != nil {
 		l.WithError(err).Error("Failed to process capabilities")
-		_ = c.Error(&processingError).SetType(gin.ErrorTypePublic)
+		_ = c.Error(utils.CapsProcessErr(err)).SetType(gin.ErrorTypePublic)
 		return
 	}
 
 	caps, err := body.GetContainerConfiguration()
 	if err != nil {
 		l.WithError(err).Error("Failed to get container config.Configuration")
-		_ = c.Error(&processingError).SetType(gin.ErrorTypePublic)
+		_ = c.Error(utils.CapsProcessErr(err)).SetType(gin.ErrorTypePublic)
 		return
 	}
 	log.Trace("caps: ", caps)
@@ -118,7 +76,7 @@ func Create(c *gin.Context) {
 	env, err := environment.Build(user, caps)
 	if err != nil {
 		log.WithError(err).Error("Failed to build execution environment")
-		_ = c.Error(creationError("failed to start executor", err)).SetType(gin.ErrorTypePublic)
+		_ = c.Error(utils.EnvBuildErr(err)).SetType(gin.ErrorTypePublic)
 		return
 	}
 
@@ -131,18 +89,19 @@ func Create(c *gin.Context) {
 		_, err = service.CreateGenericTaskDefinition(env)
 		if err != nil {
 			log.WithError(err).Error("Failed to create task definition")
+			_ = c.Error(err).SetType(gin.ErrorTypePublic)
 			return
 		}
 	}
 
 	err = service.StartTask(ctx, env)
-	if err == context.DeadlineExceeded {
-		err = errors.New("Driver startup timed out")
-	}
-
 	if err != nil {
+		if err == context.DeadlineExceeded {
+			err = errors.New("Driver startup timed out")
+		}
+
 		l.WithError(err).Error("Service startup failed")
-		_ = c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
+		_ = c.Error(utils.CreationErr("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
 
@@ -178,14 +137,14 @@ func Create(c *gin.Context) {
 		u, ok := env.Network.GetUrl("driver")
 		if !ok {
 			l.Error("failed to get url for `driver` service")
-			_ = c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
+			_ = c.Error(utils.CreationErr("Failed to get url for `driver` service", err)).SetType(gin.ErrorTypePublic)
 			return
 		}
 
 		requestBody, err := json.Marshal(body)
 		if err != nil {
 			l.WithError(err).Error("Failed to marshal request")
-			_ = c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
+			_ = c.Error(utils.CreationErr("Failed to marshal request", err)).SetType(gin.ErrorTypePublic)
 			return
 		}
 
@@ -195,7 +154,7 @@ func Create(c *gin.Context) {
 		resp, err = selenium.StartSession(c.Request.Context(), c.Request.URL, c.Request.Header, requestBody)
 		if err != nil {
 			l.WithError(err).WithField("response", resp).Error("driver startup failed")
-			c.JSON(http.StatusInternalServerError, resp)
+			_ = c.Error(utils.CreationErr(resp, err)).SetType(gin.ErrorTypePublic)
 			service.StopTask(env.TaskId)
 			return
 		}
@@ -203,13 +162,7 @@ func Create(c *gin.Context) {
 		sessionId, err = getSessionId(resp)
 		if err != nil {
 			l.WithError(err).Error("Failed to get sessionId from driver response")
-			_ = c.Error(creationError("Failed to create driver", err)).SetType(gin.ErrorTypePublic)
-			return
-		}
-
-		if sessionId == "" {
-			l.WithError(err).Error("Failed to get sessionId from driver response. sessionId is empty")
-			_ = c.Error(creationError("failed to create driver", err)).SetType(gin.ErrorTypePublic)
+			_ = c.Error(err).SetType(gin.ErrorTypePublic)
 			return
 		}
 
@@ -238,6 +191,10 @@ func Create(c *gin.Context) {
 
 func Proxy(c *gin.Context) {
 	sessionID := c.Param("session")
+	if sessionID == "" {
+		_ = c.Error(utils.ParamNotFoundErr("session")).SetType(gin.ErrorTypePublic)
+		return
+	}
 	sess, err := getSession(sessionID)
 	if err != nil {
 		log.WithError(err).WithField("sessionID", sessionID).Error("Cant find session")
@@ -268,6 +225,11 @@ func Proxy(c *gin.Context) {
 
 func CloseSession(c *gin.Context) {
 	sessionId := c.Param("session")
+	if sessionId == "" {
+		_ = c.Error(utils.ParamNotFoundErr("session")).SetType(gin.ErrorTypePublic)
+		return
+	}
+
 	sess, err := getSession(sessionId)
 	if err != nil {
 		log.WithError(err).WithField("sessionID", sessionId).Error("Can't find session!")
@@ -282,7 +244,12 @@ func CloseSession(c *gin.Context) {
 }
 
 func AbortTask(c *gin.Context) {
-	sessionId := c.Param("task")
+	sessionId := c.Param("session")
+	if sessionId == "" {
+		_ = c.Error(utils.ParamNotFoundErr("session")).SetType(gin.ErrorTypePublic)
+		return
+	}
+
 	sess, err := getSession(sessionId)
 	if err != nil {
 		log.WithField("id", sessionId).WithError(err).Warn("Task not found!")
@@ -339,20 +306,26 @@ func Vnc(wsconn *websocket.Conn) {
 
 func Logs(c *gin.Context) {
 	user, _, ok := c.Request.BasicAuth()
-
 	if !ok {
-		_ = c.Error(&utils.HTTPError{
-			Status:  http.StatusBadRequest,
-			Message: "Auth data not provided"},
-		).SetType(gin.ErrorTypePublic)
+		_ = c.Error(utils.AuthNotFoundErr()).SetType(gin.ErrorTypePublic)
 		return
 	}
+
 	sessionID := c.Param("session")
+	if sessionID == "" {
+		_ = c.Error(utils.ParamNotFoundErr("session")).SetType(gin.ErrorTypePublic)
+		return
+	}
+
 	logFile := strings.Join([]string{user, "artifacts", "test-sessions", sessionID, "session.log"}, "/")
 	presignedUrl, err := service.GeneratePreSignedURL(logFile)
 	if err != nil {
-		log.Printf("[URL GENERATION FAILED] %v", err)
-		c.JSON(http.StatusNotFound, gin.H{"message": "Resource Not Found"})
+		log.WithError(err).WithFields(log.Fields{
+			"user":      user,
+			"remote":    c.ClientIP(),
+			"sessionID": sessionID,
+		}).Error("Failed to create pre signed url to session logs")
+		_ = c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
 	c.Redirect(http.StatusFound, presignedUrl)
@@ -361,13 +334,15 @@ func Logs(c *gin.Context) {
 func Video(c *gin.Context) {
 	user, _, ok := c.Request.BasicAuth()
 	if !ok {
-		_ = c.Error(&utils.HTTPError{
-			Status:  http.StatusBadRequest,
-			Message: "Auth data not provided"},
-		).SetType(gin.ErrorTypePublic)
+		_ = c.Error(utils.AuthNotFoundErr()).SetType(gin.ErrorTypePublic)
 		return
 	}
+
 	sessionID := c.Param("session")
+	if sessionID == "" {
+		_ = c.Error(utils.ParamNotFoundErr("session")).SetType(gin.ErrorTypePublic)
+		return
+	}
 	videoFile := strings.Join([]string{user, "artifacts", "test-sessions", sessionID, "video.mp4"}, "/")
 	presignedUrl, err := service.GeneratePreSignedURL(videoFile)
 	if err != nil {
@@ -376,8 +351,7 @@ func Video(c *gin.Context) {
 			"remote":    c.ClientIP(),
 			"sessionID": sessionID,
 		}).Error("Failed to create pre signed url to session video")
-		_ = c.Error(err)
-		c.JSON(http.StatusNotFound, gin.H{"message": "Resource Not Found"})
+		_ = c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
 	c.Redirect(http.StatusFound, presignedUrl)
@@ -385,20 +359,26 @@ func Video(c *gin.Context) {
 
 func TaskLog(c *gin.Context) {
 	user, _, ok := c.Request.BasicAuth()
-
 	if !ok {
-		_ = c.Error(&utils.HTTPError{
-			Status:  http.StatusBadRequest,
-			Message: "Auth data not provided"},
-		).SetType(gin.ErrorTypePublic)
+		_ = c.Error(utils.AuthNotFoundErr()).SetType(gin.ErrorTypePublic)
 		return
 	}
+
 	taskID := c.Param("task")
+	if taskID == "" {
+		_ = c.Error(utils.ParamNotFoundErr("task")).SetType(gin.ErrorTypePublic)
+		return
+	}
+
 	logFile := strings.Join([]string{user, "artifacts", "launches", taskID, "console.log"}, "/")
 	presignedUrl, err := service.GeneratePreSignedURL(logFile)
 	if err != nil {
-		log.Printf("[URL GENERATION FAILED] %v", err)
-		c.JSON(http.StatusNotFound, gin.H{"message": "Resource Not Found"})
+		log.WithError(err).WithFields(log.Fields{
+			"user":   user,
+			"remote": c.ClientIP(),
+			"taskId": taskID,
+		}).Error("Failed to create pre signed url to session video")
+		_ = c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
 	c.Redirect(http.StatusFound, presignedUrl)
@@ -406,35 +386,42 @@ func TaskLog(c *gin.Context) {
 
 func TaskDescribe(c *gin.Context) {
 	user, _, ok := c.Request.BasicAuth()
-
 	if !ok {
-		_ = c.Error(&utils.HTTPError{
-			Status:  http.StatusBadRequest,
-			Message: "Auth data not provided"},
-		).SetType(gin.ErrorTypePublic)
+		_ = c.Error(utils.AuthNotFoundErr()).SetType(gin.ErrorTypePublic)
 		return
 	}
-	taskId := c.Param("task")
-	log.WithField("user", user).WithField("taskId", taskId).Debug("Get task status")
-	result, err := service.DescribeTask(taskId)
+
+	taskID := c.Param("task")
+	if taskID == "" {
+		_ = c.Error(utils.ParamNotFoundErr("task")).SetType(gin.ErrorTypePublic)
+		return
+	}
+
+	log.WithField("user", user).WithField("taskID", taskID).Debug("Get task status")
+	result, err := service.DescribeTask(taskID)
 	if err != nil {
-		log.WithError(err).WithField("taskId", taskId).Error("Failed to get task status")
+		log.WithError(err).WithField("taskID", taskID).Error("Failed to get task status")
 		_ = c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"status": result.Tasks[0].LastStatus})
 
+	c.JSON(http.StatusOK, gin.H{"status": result.Tasks[0].LastStatus})
 }
 
 func Downloads(c *gin.Context) {
 	sessionID := c.Param("session")
-	filename := c.Param("file")
-	sess, err := getSession(sessionID)
-	if err != nil {
-		_ = c.Error(err)
+	if sessionID == "" {
+		_ = c.Error(utils.ParamNotFoundErr("session")).SetType(gin.ErrorTypePublic)
 		return
 	}
 
+	sess, err := getSession(sessionID)
+	if err != nil {
+		_ = c.Error(err).SetType(gin.ErrorTypePublic)
+		return
+	}
+
+	filename := c.Param("file")
 	director := func(req *http.Request) {
 		req.URL.Scheme = "http"
 		if sess != nil {
@@ -451,9 +438,14 @@ func Downloads(c *gin.Context) {
 
 func Clipboard(c *gin.Context) {
 	sessionID := c.Param("session")
+	if sessionID == "" {
+		_ = c.Error(utils.ParamNotFoundErr("session")).SetType(gin.ErrorTypePublic)
+		return
+	}
+
 	sess, err := getSession(sessionID)
 	if err != nil {
-		_ = c.Error(err)
+		_ = c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
 
@@ -469,9 +461,13 @@ func Clipboard(c *gin.Context) {
 
 func Devtools(c *gin.Context) {
 	sessionID := c.Param("session")
+	if sessionID == "" {
+		_ = c.Error(utils.ParamNotFoundErr("session")).SetType(gin.ErrorTypePublic)
+		return
+	}
 	sess, err := getSession(sessionID)
 	if err != nil {
-		_ = c.Error(err)
+		_ = c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
 
@@ -500,37 +496,25 @@ func defaultErrorHandler(с *gin.Context) func(http.ResponseWriter, *http.Reques
 	}
 }
 
-func creationError(msg string, err error) *utils.SeleniumError {
-	return &utils.SeleniumError{
-		SeleniumCode:   "session not created",
-		ResponseStatus: http.StatusInternalServerError,
-		Message:        fmt.Sprintf("Session not created; Reason: %s; InternalError: %v", msg, err),
-	}
-}
-
 func getSessionId(resp map[string]interface{}) (string, *utils.SeleniumError) {
 	// Get sessionId from root. For unknown reason opera returns sessionId in root of object
 	sessionId, ok := resp["sessionId"].(string)
-	if ok {
+	if ok && sessionId != "" {
 		return sessionId, nil
 	}
 
 	// Get session from value
 	value, ok := resp["value"].(map[string]interface{})
 	if !ok {
-		return "", &utils.SeleniumError{
-			SeleniumCode: "`value` must be an object",
-			ResponseStatus: http.StatusBadRequest,
-		}
+		return "", utils.CreationErr("Failed to find sessionId field in driver response",
+			errors.New("driver's response filed `value` must be an object"))
 	}
 
 	sessionId, ok = value["sessionId"].(string)
-	if ok {
+	if ok && sessionId != "" {
 		return sessionId, nil
 	}
 
-	return "", &utils.SeleniumError{
-		SeleniumCode: "failed to find sessionId field in response",
-		ResponseStatus: http.StatusInternalServerError,
-	}
+	return "", utils.CreationErr("Failed to find sessionId field in driver response",
+		errors.New(fmt.Sprintf("sessionId : \"%s\"", sessionId)))
 }

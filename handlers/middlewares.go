@@ -11,42 +11,7 @@ import (
 	"github.com/zebrunner/esg/utils"
 )
 
-func APIError(c *gin.Context) {
-	c.Next()
-	if c.Errors.Last() == nil {
-		return
-	}
-
-	for _, err := range c.Errors {
-		log.WithFields(log.Fields{
-			"client": c.ClientIP(),
-		}).WithError(err).Warn("API error received")
-	}
-
-	status := http.StatusInternalServerError
-	message := "Internal server error happened. All error details collected in logs"
-	var meta interface{}
-	publicError := c.Errors.ByType(gin.ErrorTypePublic).Last()
-	if publicError != nil {
-		httpError, ok := publicError.Err.(*utils.HTTPError)
-		if ok {
-			status = httpError.Status
-			message = httpError.Message
-		}
-		meta = publicError.Meta
-	}
-	log.WithFields(log.Fields{
-		"client":   c.ClientIP(),
-		"status":   status,
-		"response": message,
-	}).Warn("Error response response")
-	c.JSON(status, utils.APIErrorResponse{
-		Error:   message,
-		Payload: meta,
-	})
-}
-
-func SeleniumError(c *gin.Context) {
+func ErrorHandler(c *gin.Context) {
 	// Add sessionID to gin context for logging purposes
 	path := c.Request.URL.Path
 	sessionID := ""
@@ -61,52 +26,52 @@ func SeleniumError(c *gin.Context) {
 	}
 
 	for _, err := range c.Errors {
-		l := log.WithError(err)
+		l := log.WithError(err).WithField("client", c.ClientIP())
 		if sess, ok := c.Get("sessionID"); ok {
 			l.WithField("session", sess)
 		}
-		l.Debug("Selenium error received")
+		l.Debug("Error received")
 	}
-
-	status := http.StatusInternalServerError
-	message := "Internal server error happened. All error details collected in logs"
-	seleniumCode := "unknown error"
-	var meta interface{}
 
 	publicError := c.Errors.ByType(gin.ErrorTypePublic).Last()
 	if publicError != nil {
-		seleniumErr, ok := publicError.Err.(*utils.SeleniumError)
-		if ok {
-			message = seleniumErr.Message
-			seleniumCode = seleniumErr.SeleniumCode
-			status = seleniumErr.ResponseStatus
-		}
-		meta = publicError.Meta
-	}
+		meta := publicError.Meta
+		log.WithFields(log.Fields{
+			"client":    c.ClientIP(),
+			"error":     publicError.Error(),
+			"sessionId": sessionID,
+			"meta":      meta,
+		}).Warn("Error response")
 
-	log.WithFields(log.Fields{
-		"status":        status,
-		"seleniumError": seleniumCode,
-		"sessionId": sessionID,
-	}).Warn("Error sent to selenium")
-	c.JSON(status, gin.H{
-		"value": gin.H{
-			"error":   seleniumCode,
-			"message": message,
-			"data":    meta,
-		},
-	})
+		if esgErr, ok := publicError.Err.(utils.EsgError); ok {
+			esgErr.Encode(c)
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"value": gin.H{
+					"message": publicError.Error(),
+					"name":    "Unknown error",
+				},
+			})
+		}
+	} else {
+		log.WithFields(log.Fields{
+			"client":    c.ClientIP(),
+			"error":     "Internal server error happened",
+			"sessionId": sessionID,
+		}).Warn("Error response")
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"value": gin.H{
+				"message": "Internal server error happened. All error details collected in logs",
+				"name":    "Unknown error",
+			},
+		})
+	}
 }
 
 func Authentication(c *gin.Context) {
 	username, password, ok := c.Request.BasicAuth()
 	if !ok {
-
-		c.JSON(http.StatusUnauthorized, utils.SeleniumError{
-			ResponseStatus: http.StatusUnauthorized,
-			SeleniumCode   :"Auth credentials not found",
-			Message        :"Auth credentials not found",
-		})
+		_ = c.Error(utils.AuthNotFoundErr()).SetType(gin.ErrorTypePublic)
 		log.WithField("client", c.ClientIP()).Warn("Auth credentials not found")
 		c.Abort()
 		return
@@ -119,11 +84,7 @@ func Authentication(c *gin.Context) {
 			"user":     username,
 			"password": password,
 		}).Warn("Failed to authenticate user")
-		c.JSON(http.StatusUnauthorized, utils.SeleniumError{
-			ResponseStatus: http.StatusUnauthorized,
-			SeleniumCode   :"Provided credentials not valid",
-			Message        :"Provided credentials not valid",
-		})
+		_ = c.Error(err).SetType(gin.ErrorTypePublic)
 		c.Abort()
 		return
 	}
@@ -132,12 +93,8 @@ func Authentication(c *gin.Context) {
 func APIAuthentication(c *gin.Context) {
 	username, password, ok := c.Request.BasicAuth()
 	if !ok {
-		c.JSON(http.StatusUnauthorized,  utils.SeleniumError{
-			ResponseStatus: http.StatusUnauthorized,
-			SeleniumCode   :"Auth credentials not found",
-			Message        :"Auth credentials not found",
-		})
 		log.WithField("client", c.ClientIP()).Warn("Auth credentials not found")
+		_ = c.Error(utils.AuthNotFoundErr()).SetType(gin.ErrorTypePublic)
 		c.Abort()
 		return
 	}
@@ -148,11 +105,7 @@ func APIAuthentication(c *gin.Context) {
 			"user":     username,
 			"password": password,
 		}).Warn("Failed to authenticate user")
-		c.JSON(http.StatusUnauthorized, utils.SeleniumError{
-			ResponseStatus: http.StatusUnauthorized,
-			SeleniumCode   : "Provided credentials not valid",
-			Message        : "Provided credentials not valid",
-		})
+		_ = c.Error(utils.AuthErr()).SetType(gin.ErrorTypePublic)
 		c.Abort()
 		return
 	}

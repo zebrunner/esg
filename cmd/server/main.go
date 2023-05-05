@@ -42,9 +42,9 @@ func ReverseProxy() gin.HandlerFunc {
 func CreateRouter() *gin.Engine {
 	r := gin.New()
 	r.Use(gin.LoggerWithFormatter(utils.TraceLogFromating), gin.Recovery())
+	r.Use(handlers.ErrorHandler)
 
 	api := r.Group("/api")
-	api.Use(handlers.APIError)
 	api.Use(handlers.APIAuthentication)
 	{
 		api.POST("/users", handlers.CreateUser)
@@ -58,7 +58,6 @@ func CreateRouter() *gin.Engine {
 	}
 
 	hub := r.Group("/")
-	hub.Use(handlers.SeleniumError)
 	{
 		hub.GET("/", handlers.Welcome)
 		hub.GET("/status", handlers.Authentication, handlers.ClusterStatus)
@@ -66,7 +65,7 @@ func CreateRouter() *gin.Engine {
 		hub.GET("/browsers", handlers.ListDrivers)
 
 		hub.Any("/wd/hub/*action", ReverseProxy())
-		hub.POST("/session", handlers.Create) // Auth logic moved to handler
+		hub.POST("/session", handlers.Authentication, handlers.Create)
 		hub.DELETE("/session/:session", handlers.CloseSession)
 		hub.Any("/session/:session/*action", handlers.Proxy)
 
@@ -94,11 +93,8 @@ func CreateRouter() *gin.Engine {
 
 		hub.GET("/devtools/:session", handlers.Devtools)
 
-		hub.DELETE("/tasks/:task", handlers.AbortTask) // to be able to abort generic tasks by taskId
-	}
+		hub.DELETE("/tasks/:session", handlers.AbortTask) // to be able to abort generic tasks by taskId
 
-	hub.Use(handlers.APIError)
-	{
 		hub.GET("/logs/:session", handlers.Logs)
 		hub.GET("/video/:session", handlers.Video)
 		hub.GET("/tasks/:task/log", handlers.TaskLog)

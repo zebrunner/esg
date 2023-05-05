@@ -2,8 +2,6 @@ package service
 
 import (
 	"errors"
-	"fmt"
-	"net/http"
 	"sync"
 
 	"github.com/zebrunner/esg/config"
@@ -41,12 +39,8 @@ func generatePassword() (string, error) {
 func CreateUser(name string, password *string) (string, error) {
 	dbUser, _ := GetUser(name)
 	if dbUser != nil {
-		return "", &utils.HTTPError{
-			Message: "User with this name already exists",
-			Status:  http.StatusBadRequest,
-		}
+		return "", utils.UserAlrExistsErr()
 	}
-
 	pwd, err := generatePassword()
 	if err != nil {
 		log.WithError(err).Error("Failed to generate password")
@@ -76,10 +70,7 @@ func GetUser(name string) (*User, error) {
 	mutexDB.Unlock()
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return nil, &utils.HTTPError{
-				Status:  http.StatusNotFound,
-				Message: fmt.Sprintf("User with name %s not found", name),
-			}
+			return nil, utils.UserNotFoundErr()
 		} else {
 			return nil, err
 		}
@@ -148,28 +139,25 @@ func GetWorkspace(name string) (string, error) {
 	return name, nil
 }
 
-func CheckAuth(name, password string) error {
-	authenticationError := utils.HTTPError{
-		Status:  http.StatusUnauthorized,
-		Message: "Invalid username or password",
-	}
-
+func CheckAuth(name, password string) utils.EsgError {
 	if name == "" || password == "" {
-		authenticationError.Message = "Failed to get auth credentials"
-		return &authenticationError
+		return utils.AuthNotFoundErr()
 	}
 
 	user, err := GetUser(name)
 	if err != nil {
-		return &authenticationError
+		if esgErr, ok := err.(utils.EsgError); ok {
+			return esgErr
+		} else {
+			return utils.AuthErr()
+		}
 	}
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	if err != nil {
-		return &authenticationError
+		return utils.AuthErr()
 	}
 	if !user.IsActive {
-		authenticationError.Message = "User deactivated, authorization not allowed."
-		return &authenticationError
+		return utils.DeactUserAccessErr()
 	}
 	return nil
 }
