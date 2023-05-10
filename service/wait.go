@@ -23,8 +23,7 @@ func init() {
 
 type waitRequest struct {
 	ctx          context.Context
-	responseChan chan *ecs.Task
-	errorChan    chan error
+	responseChan chan interface{}
 	taskId       string
 }
 
@@ -45,7 +44,7 @@ func (w *waitWorker) start() {
 		for k, v := range w.requests {
 			select {
 			case <-v.ctx.Done():
-				w.stopWait(k)
+				w.stopWait(k, nil)
 			default:
 				continue
 			}
@@ -95,7 +94,7 @@ func (w *waitWorker) start() {
 
 			if *task.LastStatus == "STOPPED" {
 				log.Error("Task stopped: ", *task)
-				w.stopWaitWithErr(errors.New("failed to start task: "+*task.StoppedReason), *task.TaskArn)
+				w.stopWait(*task.TaskArn, errors.New("failed to start task: "+*task.StoppedReason))
 			}
 
 			if *task.LastStatus != "RUNNING" {
@@ -106,9 +105,9 @@ func (w *waitWorker) start() {
 			switch *task.HealthStatus {
 			case "UNHEALTHY":
 				log.Error("Task unhealthy: ", *task)
-				w.stopWaitWithErr(errors.New("failed to start task. HealthStatus - UNHEALTHY"), *task.TaskArn)
+				w.stopWait(*task.TaskArn, errors.New("failed to start task. HealthStatus - UNHEALTHY"))
 			case "HEALTHY":
-				w.stopWaitWithTask(task)
+				w.stopWait(*task.TaskArn, task)
 			}
 		}
 	}
@@ -117,8 +116,7 @@ func (w *waitWorker) start() {
 func (w *waitWorker) waitFor(ctx context.Context, taskId string) *waitRequest {
 	req := waitRequest{
 		ctx:          ctx,
-		responseChan: make(chan *ecs.Task),
-		errorChan:    make(chan error),
+		responseChan: make(chan interface{}),
 		taskId:       taskId,
 	}
 
@@ -130,37 +128,15 @@ func (w *waitWorker) waitFor(ctx context.Context, taskId string) *waitRequest {
 	return &req
 }
 
-func (w *waitWorker) stopWait(taskId string) {
+func (w *waitWorker) stopWait(taskId string, resp interface{}) {
 	mutex.RLock()
 	req := w.requests[taskId]
 	if req != nil {
-		close(req.errorChan)
+		if resp != nil {
+			req.responseChan <- resp
+		}
 		close(req.responseChan)
 		delete(w.requests, taskId)
-	}
-	mutex.RUnlock()
-}
-
-func (w *waitWorker) stopWaitWithErr(err error, taskId string) {
-	mutex.RLock()
-	req := w.requests[taskId]
-	if req != nil {
-		req.errorChan <- err
-		close(req.errorChan)
-		close(req.responseChan)
-		delete(w.requests, taskId)
-	}
-	mutex.RUnlock()
-}
-
-func (w *waitWorker) stopWaitWithTask(task *ecs.Task) {
-	mutex.RLock()
-	req := w.requests[*task.TaskArn]
-	if req != nil {
-		req.responseChan <- task
-		close(req.errorChan)
-		close(req.responseChan)
-		delete(w.requests, *task.TaskArn)
 	}
 	mutex.RUnlock()
 }

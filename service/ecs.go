@@ -9,8 +9,8 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/client"
+	"github.com/aws/aws-sdk-go/aws/credentials"
 	awsSession "github.com/aws/aws-sdk-go/aws/session"
-        "github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ecrpublic"
 	"github.com/aws/aws-sdk-go/service/ecs"
@@ -391,27 +391,34 @@ out:
 
 		req := taskWaiter.waitFor(ctx, taskArn)
 		select {
-		case err := <-req.errorChan:
-			StopTask(taskId)
-			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to wait until Task is running and healthy")
-			outputErr = err
-			continue
-		case task := <-req.responseChan:
-			err = setEnvironmentNetwork(env, task)
-			l.WithField("attempt", i).Debug("setEnvironmentNetwork latency: ", time.Since(startTime))
-			if err != nil {
+		case resp := <-req.responseChan:
+			if err, ok := resp.(error); ok {
 				StopTask(taskId)
-				l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Error("Failed to get service info.")
-				outputErr = fmt.Errorf("failed to get service info: %v", err)
+				l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to wait until Task is running and healthy")
+				outputErr = err
+				continue
+			} else if task, ok := resp.(*ecs.Task); ok{
+				err = setEnvironmentNetwork(env, task)
+				l.WithField("attempt", i).Debug("setEnvironmentNetwork latency: ", time.Since(startTime))
+				if err != nil {
+					StopTask(taskId)
+					l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Error("Failed to get service info.")
+					outputErr = fmt.Errorf("failed to get service info: %v", err)
+					continue
+				}
+				outputErr = nil
+				return outputErr
+			} else {
+				StopTask(taskId)
+				err = errors.New("unexpected type in response chain")
+				l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to wait until Task is running and healthy")
+				outputErr = err
 				continue
 			}
-
-			outputErr = nil
-			return outputErr
 		case <-req.ctx.Done():
 			outputErr = errors.New("failed to wait until task is running. context deadline")
 			StopTask(taskId)
-			taskWaiter.stopWait(taskArn)
+			taskWaiter.stopWait(taskArn, nil)
 			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("failed to wait until task is running")
 		}
 	}
