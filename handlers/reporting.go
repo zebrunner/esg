@@ -2,7 +2,6 @@
 package handlers
 
 import (
-	"io/ioutil"
 	"net/http"
 	"os"
 	"runtime"
@@ -33,7 +32,7 @@ func init() {
 func Ping(c *gin.Context) {
 	c.JSON(http.StatusOK, map[string]interface{}{
 		"uptime":  time.Since(startTime),
-		"version": "1.0.0", // TODO: Get current version for project
+		"version": Version,
 	})
 }
 
@@ -57,15 +56,22 @@ func ClusterStatus(c *gin.Context) {
 }
 
 func ListDrivers(c *gin.Context) {
-	// TODO: Refactor code: code must be split in few different functions
-	var images []string
+	images, err := findImages()
+	if err != nil {
+		_ = c.Error(err).SetType(gin.ErrorTypePublic)
+		return
+	}
+	browsersResponse := formBrowsersResponse(images)
+	c.JSON(http.StatusOK, browsersResponse)
+}
 
+func findImages() (images []string, err error) {
 	if config.Conf.BrowsersFile != "" {
-		text, err := ioutil.ReadFile(config.Conf.BrowsersFile)
+		var text []byte
+		text, err = os.ReadFile(config.Conf.BrowsersFile)
 		if err != nil {
 			log.WithError(err).Error("Failed to read file browsers.txt")
-			_ = c.Error(err)
-			return
+			return nil, err
 		}
 		lines := strings.Split(string(text), "\n")
 
@@ -75,26 +81,25 @@ func ListDrivers(c *gin.Context) {
 			}
 		}
 	} else {
-		imgs, err := service.ListBrowsers()
+		images, err = service.ListBrowsers()
 		if err != nil {
 			log.WithError(err).Warn("Failed to get browser list")
-			_ = c.Error(err).SetType(gin.ErrorTypePublic)
-			return
+			return nil, err
 		}
-		images = imgs
 	}
+	return images, err
+}
 
-	var browsersResponse []map[string]interface{}
-
-	imagesPlatforms := map[string]string{
+func formBrowsersResponse(images []string) (browsersResponse []interface{})  {
+	redroidPlatforms := map[string]string{
 		"redroid": "android",
 	}
-        cypressPlatforms := map[string]string{
-                "cypress-chrome": "cypress",
-                "cypress-chromium": "cypress",
-                "cypress-edge": "cypress",
-                "cypress-firefox": "cypress",
-        }
+	cypressPlatforms := map[string]string{
+		"cypress-chrome":   "cypress",
+		"cypress-chromium": "cypress",
+		"cypress-edge":     "cypress",
+		"cypress-firefox":  "cypress",
+	}
 
 	for _, image := range images {
 		name := strings.Split(image, ":")[0]
@@ -114,21 +119,21 @@ func ListDrivers(c *gin.Context) {
 			"platform": "linux",
 		}
 
-                if _, ok := imagesPlatforms[name]; ok {
-			// hardcoded browser name and verion for ReDroid emulator
-                        browserData["platform"] = imagesPlatforms[name]
-                        browserData["browserName"] = "chrome"
-                        browserData["browserVersion"] = "107.0"
-                }
+		if platform, ok := redroidPlatforms[name]; ok {
+			// hardcoded browser name and version for ReDroid emulator
+			browserData["platform"] = platform
+			browserData["browserName"] = "chrome"
+			browserData["browserVersion"] = "107.0"
+		}
 
-		if _, ok := cypressPlatforms[name]; ok {
+		if platform, ok := cypressPlatforms[name]; ok {
 			browserData["image"] = "public.ecr.aws/zebrunner/" + image
-			browserData["platform"] = cypressPlatforms[name]
+			browserData["platform"] = platform
 		}
 
 		browsersResponse = append(browsersResponse, browserData)
 	}
-	c.JSON(http.StatusOK, browsersResponse)
+	return browsersResponse
 }
 
 func Welcome(c *gin.Context) {
