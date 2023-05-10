@@ -26,8 +26,5 @@ type SeleniumError struct {
 }
 
 func (err *SeleniumError) Error() string {
-	if err != nil {
-		return fmt.Sprintf("selenium error. Error: %s. Message: %s", err.Err, err.Message)
-	}
-	return "selenium error."
+	return fmt.Sprintf("selenium error. Error: %s. Message: %s", err.Err, err.Message)
 }
