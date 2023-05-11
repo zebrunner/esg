@@ -81,7 +81,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 		includeMaven:= strings.Contains(caps.Image, "maven")
 		var mavenContainer *Container = nil
 		if includeMaven {
-			mavenImage := imageRepo + "m2-repo-carina:1.3-beta1"
+			mavenImage := imageRepo + "m2-repo-carina:1.3"
 			mavenContainer = &Container{
 				Name:       "maven",
 				Image:      mavenImage,
