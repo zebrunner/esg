@@ -149,21 +149,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
         }
 
 	executorContainer.SetCpu(caps, 1024, conf.MaxCpu)
-	executorContainer.SetMemory(caps, 2048, conf.MaxMemory)
-
-	//TODO: remove as only shaping appears
-        if strings.HasPrefix(executorImage, "public.ecr.aws/zebrunner/cyserver") {
-		caps.Cpu = 512
-		caps.Memory = 1024
-		executorContainer.cpu = 512
-                executorContainer.memory = 1024
-        }
-
-	//TODO: remove as only shaping appears
-        if executorImage == "amancevice/pandas:1.1.4" {
-		executorContainer.SetCpu(caps, 2048, conf.MaxCpu)
-                executorContainer.SetMemory(caps, 2048, conf.MaxMemory)
-        }
+	executorContainer.SetMemory(caps, 1024, conf.MaxMemory)
 
 	containers := make([]*Container, 0)
 	volumes := make(map[string]volume,0)
