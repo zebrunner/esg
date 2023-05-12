@@ -24,6 +24,10 @@ const (
 
 func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration) {
 	conf := &config.Conf
+	if conf.ZebrunnerHost == "" {
+		// #527: don't write error message if zebrunner url is empty in the configuration
+		return
+	}
 	requestUrl, err := url.ParseRequestURI(conf.ZebrunnerHost)
 	if err != nil {
 		log.WithError(err).Error("Failed to parse zebrunner base url")
@@ -95,10 +99,10 @@ func getAutomationRunId(task ecs.Task) string {
 }
 
 func getStoppedReason(task ecs.Task) string {
-	// get reason from the executor container
+	// get failed reason if any from any task container
         for _, container:= range task.Containers {
-		log.Trace("container name: ", *container.Name)
-		if *container.Name == "executor" && container.Reason != nil {
+		if container.Reason != nil {
+                        log.Trace(fmt.Sprintf("Container: %s; Reason: %s", *container.Name, *container.Reason))
 			return *container.Reason
 		}
         }
@@ -107,11 +111,17 @@ func getStoppedReason(task ecs.Task) string {
 
 func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
         automationRunId := getAutomationRunId(*task)
-        if automationRunId ==""{
+        if automationRunId == "" {
                 return
         }
 
 	conf := &config.Conf
+
+        if conf.ZebrunnerHost == "" {
+                // #527: don't write error message if zebrunner url is empty in the configuration
+                return
+        }
+
 
 	requestUrl, err := url.ParseRequestURI(fmt.Sprintf("%s%s?ciRunId=%s", conf.ZebrunnerHost, ABORT_API_PATH, automationRunId))
 	if err != nil {
