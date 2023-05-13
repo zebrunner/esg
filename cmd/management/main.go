@@ -220,45 +220,60 @@ func RefreshTaskDefinition(image string) error {
 	return nil
 }
 
-func RefreshTaskDefinitions() map[string]bool {
+func RefreshTaskDefinitions() {
+	var images []string
+	if config.Conf.BrowsersFile != "" {
+		images = getImageListFromFile(config.Conf.BrowsersFile)
+	} else {
+		images = getImageList()
+	}
+
+	for _, image := range images {
+		time.Sleep(1000 * time.Millisecond)
+		err := RefreshTaskDefinition(image)
+		if err != nil {
+			continue
+		}
+	}
+}
+
+func getImageListFromFile(path string) []string{
+	images := make([]string, 0)
+
+	text, err := os.ReadFile(path)
+	if err != nil {
+		log.WithError(err).Error("Failed to read file browsers.txt!")
+	}
+	lines := strings.Split(string(text), "\n")
+
+	for _, line := range lines {
+		if line != "" {
+			images = append(images, line)
+		}
+	}
+	return images
+}
+
+func getImageList() []string  {
+	images, err := service.ListBrowsers()
+	if err != nil {
+		log.WithError(err).Error("Failed to get image list!")
+	}
+
+	return images
+}
+
+func getImageSet() map[string]bool {
 	images := getImageList()
 
 	imagesSet := make(map[string]bool, cap(images))
 	for _, image := range images {
-		time.Sleep(1000 * time.Millisecond)
-		err := RefreshTaskDefinition(image)
-		if err == nil {
-			imagesSet[image] = true
-		}
+		imagesSet[image]= true
 	}
 
 	return imagesSet
 }
 
-func getImageList() []string  {
-	images := []string{}
-	if config.Conf.BrowsersFile != "" {
-		text, err := os.ReadFile(config.Conf.BrowsersFile)
-		if err != nil {
-			log.WithError(err).Error("Failed to read file browsers.txt!")
-		}
-		lines := strings.Split(string(text), "\n")
-
-		for _, line := range lines {
-			if line != "" {
-				images = append(images, line)
-			}
-		}
-	} else {
-		var err error
-		images, err = service.ListBrowsers()
-		if err != nil {
-			log.WithError(err).Error("Failed to get image list!")
-		}
-	}
-
-	return images
-}
 
 func paginate[T interface{}](l []T, size int) [][]T {
         numPages := int(math.Ceil(float64(len(l)) / float64(size)))
@@ -275,7 +290,9 @@ func paginate[T interface{}](l []T, size int) [][]T {
         return pages
 }
 
-func AddTaskDefinitions(imagesSet map[string]bool) {
+func AddTaskDefinitions() {
+	imagesSet := getImageSet()
+
 	for {
 		time.Sleep(24 * time.Hour)
 
@@ -309,7 +326,7 @@ func main() {
 	}
 	config.RedisConnection = rdb
 
-	imagesSet := RefreshTaskDefinitions()
+	RefreshTaskDefinitions()
 	log.Info("Task definitions updates finished")
 
 	wg.Add(1)
@@ -322,7 +339,7 @@ func main() {
 	go ClearTasks()
 
 	wg.Add(1)
-	go AddTaskDefinitions(imagesSet)
+	go AddTaskDefinitions()
 
 	wg.Wait()
 	log.Fatal("Background worker stopped!")
