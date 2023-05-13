@@ -29,6 +29,44 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 
 
 	tz, err := caps.GetTimeZone()
+        // Video recorder & artifacts uploader logic
+        if err != nil {
+                return nil, fmt.Errorf("failed to parse timezone. error=%s", err)
+        }
+
+        // #367 add proxy support for web sessions
+        // docker run --rm -it
+        //      -v ~/.mitmproxy:/home/mitmproxy/.mitmproxy -p 8080:8080 mitmproxy/mitmproxy
+        //      echo "ZnJvbSBtaXRtcHJveHkgaW1wb3J0IGh0dHAKCmRlZiByZXNwb25zZShmbG93OiBodHRwLkhUVFBGbG93KSAtPiBOb25lOgogIGlmIGZsb3cucmVzcG9uc2UgYW5kIGZsb3cucmVzcG9uc2UuY29udGVudDoKICAgIGZsb3cucmVzcG9uc2UuY29udGVudCA9IGZsb3cucmVzcG9uc2UuY29udGVudC5yZXBsYWNlKAogICAgICBieXRlcygiUGhvbmUgZmluZGVyIiwgJ3V0Zi04KScpLAogICAgICBieXRlcygiTU9ESUZJRUQgUEhPTkUgRklOREVSIiwgJ3V0Zi04JykKICAgICk=" | base64 --decode > ./script.py
+        //      && echo "ZnJvbSBtaXRtcHJveHkgaW1wb3J0IGh0dHAKCmRlZiByZXNwb25zZShmbG93OiBodHRwLkhUVFBGbG93KSAtPiBOb25lOgogIGlmIGZsb3cucmVzcG9uc2UgYW5kIGZsb3cucmVzcG9uc2UuY29udGVudDoKICAgIGZsb3cucmVzcG9uc2UuY29udGVudCA9IGZsb3cucmVzcG9uc2UuY29udGVudC5yZXBsYWNlKAogICAgICBieXRlcygiQWxsIGJyYW5kcyIsICd1dGYtOCknKSwKICAgICAgYnl0ZXMoIkFsbCBicmFuZHMgTU9ESUZJRUQiLCAndXRmLTgnKQogICAgKQ==" | base64 --decode > ./script2.py
+        //      && mitmdump -s ./script.py -s ./script2.py
+        includeMitm:= true //TODO: analyze caps to define true or false
+        var mitmContainer *Container = nil
+        if includeMitm {
+                mitmImage := "mitmproxy/mitmproxy:9.0.1"
+                mitmContainer = &Container{
+                        Name:       "mitm",
+                        Image:      mitmImage,
+                        cpu:        256,
+                        memory:     256,
+                        Privileged: false,
+                        Essential:  false,
+                        Ports: map[string]portMapping{
+                                "fileserverPort": {fileserverPort, 0},
+                        },
+                        Mounts:     []string{taskVolume},
+                        Command: []string{"-c", "mitmdump --quiet"}, //TODO: insert args and scripts from capabilities
+                        EntryPoint: []string{"/bin/bash"},
+
+                }
+        }
+
+	links := []string{}
+        if (includeMitm) {
+		links = append(links, "mitm")
+	}
+
+
 	// In future maybe there will be need to disable vnc
 	enableVNC := true
 	browserContainer := Container{
@@ -51,6 +89,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			"TZ":            tz.String(),
 		},
 		Mounts: []string{"shm", taskVolume},
+                Links:       links,
 		HealthCheck: &ecs.HealthCheck{
 			Command:     []*string{aws.String("CMD-SHELL"), aws.String("curl -f localhost:4444/status || exit 1")},
 			Interval:    aws.Int64(10),
@@ -62,10 +101,13 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 	browserContainer.SetCpu(caps, 1024, conf.MaxCpu)
 	browserContainer.SetMemory(caps, 1024, conf.MaxMemory)
 
-	// Video recorder & artifacts uploader logic
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse timezone. error=%s", err)
-	}
+        dependsOn := make([]*ecs.ContainerDependency, 0)
+        if (includeMitm) {
+                dependsOn = append(dependsOn, &ecs.ContainerDependency{
+                        ContainerName: aws.String("mitm"),
+                        Condition:  aws.String("START"),
+                })
+        }
 
 	recorderImage := imageRepo + "artifacts-uploader:2.1"
 	videoRecorderContainer := Container{
@@ -95,9 +137,15 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
                 },
 	}
 
+        containers := make([]*Container, 0)
+        containers = []*Container{&browserContainer, &videoRecorderContainer}
+        if includeMitm{
+                containers = append(containers, mitmContainer)
+        }
+
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
-		Containers:           []*Container{&browserContainer, &videoRecorderContainer},
+		Containers:           containers,
 		Capabilities:         caps,
 		Volumes: map[string]volume{
                         taskVolume: {ContainerPath: sharedFolder, Driver: "local", Scope: "task", ReadOnly: false},
