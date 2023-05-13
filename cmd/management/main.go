@@ -224,6 +224,7 @@ func RefreshTaskDefinitions() {
 	var images []string
 	if config.Conf.BrowsersFile != "" {
 		images = getImageListFromFile(config.Conf.BrowsersFile)
+		log.WithField("images", images).Trace("refreshing task definition using file")
 	} else {
 		images = getImageList()
 	}
