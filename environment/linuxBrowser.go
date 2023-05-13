@@ -40,7 +40,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
         //      echo "ZnJvbSBtaXRtcHJveHkgaW1wb3J0IGh0dHAKCmRlZiByZXNwb25zZShmbG93OiBodHRwLkhUVFBGbG93KSAtPiBOb25lOgogIGlmIGZsb3cucmVzcG9uc2UgYW5kIGZsb3cucmVzcG9uc2UuY29udGVudDoKICAgIGZsb3cucmVzcG9uc2UuY29udGVudCA9IGZsb3cucmVzcG9uc2UuY29udGVudC5yZXBsYWNlKAogICAgICBieXRlcygiUGhvbmUgZmluZGVyIiwgJ3V0Zi04KScpLAogICAgICBieXRlcygiTU9ESUZJRUQgUEhPTkUgRklOREVSIiwgJ3V0Zi04JykKICAgICk=" | base64 --decode > ./script.py
         //      && echo "ZnJvbSBtaXRtcHJveHkgaW1wb3J0IGh0dHAKCmRlZiByZXNwb25zZShmbG93OiBodHRwLkhUVFBGbG93KSAtPiBOb25lOgogIGlmIGZsb3cucmVzcG9uc2UgYW5kIGZsb3cucmVzcG9uc2UuY29udGVudDoKICAgIGZsb3cucmVzcG9uc2UuY29udGVudCA9IGZsb3cucmVzcG9uc2UuY29udGVudC5yZXBsYWNlKAogICAgICBieXRlcygiQWxsIGJyYW5kcyIsICd1dGYtOCknKSwKICAgICAgYnl0ZXMoIkFsbCBicmFuZHMgTU9ESUZJRUQiLCAndXRmLTgnKQogICAgKQ==" | base64 --decode > ./script2.py
         //      && mitmdump -s ./script.py -s ./script2.py
-        includeMitm:= true //TODO: analyze caps to define true or false
+        includeMitm:= false //TODO: analyze caps to define true or false
         var mitmContainer *Container = nil
         if includeMitm {
                 mitmImage := "mitmproxy/mitmproxy:9.0.1"
