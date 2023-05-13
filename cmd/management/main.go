@@ -339,8 +339,11 @@ func main() {
 	wg.Add(1)
 	go ClearTasks()
 
-	wg.Add(1)
-	go AddTaskDefinitions()
+	if config.Conf.BrowsersFile == "" {
+		//check for new images once per day
+		wg.Add(1)
+		go AddTaskDefinitions()
+	}
 
 	wg.Wait()
 	log.Fatal("Background worker stopped!")
