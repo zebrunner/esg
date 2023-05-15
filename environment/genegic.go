@@ -69,7 +69,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
         entrypointContainer := Container{
                 Name:              "entrypoint",
                 Image:             entrypointImage,
-                cpu:               8,
+                cpu:               16,
                 memory:            16,
                 Privileged:        false,
                 Essential:         false,
