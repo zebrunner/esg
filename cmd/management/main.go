@@ -294,6 +294,7 @@ func paginate[T interface{}](l []T, size int) [][]T {
 }
 
 func AddTaskDefinitions() {
+	log.Debug("Saved list of images for task defenition refresh: ")
 	imagesSet := getImageSet()
 
 	for {
@@ -302,6 +303,7 @@ func AddTaskDefinitions() {
 		updatedImages := getImageList()
 		for _, image := range updatedImages {
 			if present := imagesSet[image]; !present {
+				log.Info("Found new image in ecr: " + image)
 				err := RefreshTaskDefinition(image)
 				if err == nil {
 					imagesSet[image] = true
