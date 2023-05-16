@@ -23,7 +23,7 @@ RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./cmd/server
 FROM alpine:latest
 
 ENV LISTEN_PORT=4444
-ENV BROWSERS_FILE=/browsers.txt
+ENV EXCLUDE_BROWSER=
 
 #Common for router and scaler
 ENV AWS_REGION=
@@ -65,7 +65,6 @@ COPY ./migrations/ /migrations/
 
 COPY --from=0 /esg/server /server
 COPY --from=0 /usr/bin/migrate /usr/bin/migrate
-COPY --from=0 /esg/browsers.txt /browsers.txt
 
 COPY ./build/entrypoint.router /entrypoint.sh
 

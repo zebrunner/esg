@@ -1,14 +1,12 @@
 package handlers
 
 import (
-	"io/ioutil"
 	"net/http"
 	"os"
 	"runtime"
 	"strings"
 	"time"
 
-	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/utils"
 
 	"github.com/gin-gonic/gin"
@@ -57,30 +55,11 @@ func ClusterStatus(c *gin.Context) {
 
 func ListDrivers(c *gin.Context) {
 	// TODO: Refactor code: code must be split in few different functions
-	var images []string
-
-	if config.Conf.BrowsersFile != "" {
-		text, err := ioutil.ReadFile(config.Conf.BrowsersFile)
-		if err != nil {
-			log.WithError(err).Error("Failed to read file browsers.txt")
-			_ = c.Error(err)
-			return
-		}
-		lines := strings.Split(string(text), "\n")
-
-		for _, line := range lines {
-			if line != "" {
-				images = append(images, line)
-			}
-		}
-	} else {
-		imgs, err := utils.ListBrowsers()
-		if err != nil {
-			log.WithError(err).Warn("Failed to get browser list")
-			_ = c.Error(err).SetType(gin.ErrorTypePublic)
-			return
-		}
-		images = imgs
+	images, err := utils.ListBrowsers()
+	if err != nil {
+		log.WithError(err).Warn("Failed to get browser list")
+		_ = c.Error(err).SetType(gin.ErrorTypePublic)
+		return
 	}
 
 	var browsersResponse []map[string]interface{}

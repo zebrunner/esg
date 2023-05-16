@@ -44,11 +44,9 @@ ENV ZEBRUNNER_HOST=
 ENV ZEBRUNNER_INTEGRATION_USER=
 ENV ZEBRUNNER_INTEGRATION_PASSWORD=
 
-ENV BROWSERS_FILE=/browsers.txt
-
+ENV EXCLUDE_BROWSER=
 
 COPY --from=0 /esg/management /management
-COPY --from=0 /esg/browsers.txt /browsers.txt
 
 COPY ./build/entrypoint.scaler /entrypoint.sh
 
