@@ -20,8 +20,7 @@ type imgVersions struct {
 func ListBrowsers() ([]string, error) {
 	imgRequestUrl := "https://api.us-east-1.gallery.ecr.aws/describeImageTags"
 	imgNames := []string{"chrome", "edge", "firefox", "cypress-chrome", "cypress-firefox", "cypress-edge", "cypress-chromium", "redroid"}
-	//105 - current number of tags in ecr
-	images := make([]string, 0, 105)
+	images := make([]string, 0)
 
 	for _, imgName := range imgNames {
 
