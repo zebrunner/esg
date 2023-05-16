@@ -2,16 +2,18 @@ package service
 
 import (
 	"math"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/zebrunner/esg/config"
 
-        log "github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 var instanceWorker *instanceWatchWorker
+var instMutex = &sync.RWMutex{}
 
 func init() {
 	instanceWorker = &instanceWatchWorker{
@@ -79,55 +81,46 @@ func (w *instanceWatchWorker) start() {
 			}
 			describeResult, err := svc.DescribeContainerInstances(&input)
 			if err != nil {
-                                log.WithField("list", input).WithField("error", err).Error("Failed to DescribeContainerInstances!")
+				log.WithField("list", input).WithField("error", err).Error("Failed to DescribeContainerInstances!")
 				continue
 			}
 
 			if len(describeResult.Failures) != 0 {
-                               log.WithField("result", describeResult).Error("DescribeContainerInstances Failures is not 0!")
+				log.WithField("result", describeResult).Error("DescribeContainerInstances Failures is not 0!")
 				continue
 			}
 
 			if len(describeResult.ContainerInstances) == 0 {
-                                log.WithField("result", describeResult).Error("DescribeContainerInstances ContainerInstances is 0!")
+				log.WithField("result", describeResult).Error("DescribeContainerInstances ContainerInstances is 0!")
 				continue
 			}
 
 			containerInstances = append(containerInstances, describeResult.ContainerInstances...)
 
 			// save to map
+			instMutex.Lock()
 			for _, ci := range containerInstances {
 				w.containerInstances[*ci.ContainerInstanceArn] = ci
 			}
+			instMutex.Unlock()
 		}
 
 		// Describe all ec2 instances
-		ec2InstanceMap := map[string]string{}
+		ec2InstanceMap := map[string]*string{}
 		for _, ci := range containerInstances {
 			if *ci.Ec2InstanceId != "" {
-				ec2InstanceMap[*ci.Ec2InstanceId] = *ci.Ec2InstanceId
+				ec2InstanceMap[*ci.Ec2InstanceId] = ci.Ec2InstanceId
 			}
 		}
 
-		ec2InstanceIds := []string{}
-		for id := range ec2InstanceMap {
-			ec2InstanceIds = append(ec2InstanceIds, id)
-		}
-
-		ec2InstanceIdsPtrs := []*string{}
-		for _, id := range ec2InstanceIds {
-			instanceId := id
-			ec2InstanceIdsPtrs = append(ec2InstanceIdsPtrs, &instanceId)
-		}
-
-		if len(ec2InstanceIdsPtrs) > 0 {
+		if len(ec2InstanceMap) > 0 {
 			var ec2Instances []*ec2.Instance
 			for {
 				input := ec2.DescribeInstancesInput{
 					InstanceIds: make([]*string, 0),
 				}
 
-				for _, instanceIdPtr := range ec2InstanceIdsPtrs {
+				for _, instanceIdPtr := range ec2InstanceMap {
 					if instanceIdPtr != nil {
 						input.InstanceIds = append(input.InstanceIds, instanceIdPtr)
 					}
@@ -151,24 +144,30 @@ func (w *instanceWatchWorker) start() {
 			}
 
 			// save to map
+			instMutex.Lock()
 			for _, instance := range ec2Instances {
 				w.ec2Instances[*instance.InstanceId] = instance
 			}
+			instMutex.Unlock()
 		}
 	}
 }
 
 func (w *instanceWatchWorker) getInstance(instanceId string) (*ec2.Instance, bool) {
+	instMutex.RLock()
 	instance, ok := w.ec2Instances[instanceId]
+	instMutex.RUnlock()
 	return instance, ok
 }
 
 func (w *instanceWatchWorker) getInstanceByContainerInstance(containerInstanceId string) (*ec2.Instance, bool) {
+	instMutex.RLock()
 	containerInstance, ok := w.containerInstances[containerInstanceId]
+	instMutex.RUnlock()
 	if !ok {
 		return nil, false
 	}
 
-	instance, ok := w.ec2Instances[*containerInstance.Ec2InstanceId]
+	instance, ok := w.getInstance(*containerInstance.Ec2InstanceId)
 	return instance, ok
 }

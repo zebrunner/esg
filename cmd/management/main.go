@@ -15,6 +15,7 @@ import (
 	"github.com/zebrunner/esg/environment"
 	"github.com/zebrunner/esg/service"
 	sessionmap "github.com/zebrunner/esg/sessinonmap"
+	"github.com/zebrunner/esg/utils"
 
 	awsSession "github.com/aws/aws-sdk-go/aws/session"
 	log "github.com/sirupsen/logrus"
@@ -256,7 +257,7 @@ func getImageListFromFile(path string) []string{
 }
 
 func getImageList() []string  {
-	images, err := service.ListBrowsers()
+	images, err := utils.ListBrowsers()
 	if err != nil {
 		log.WithError(err).Error("Failed to get image list!")
 	}
