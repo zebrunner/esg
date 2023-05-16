@@ -1,4 +1,3 @@
-
 package handlers
 
 import (
@@ -10,7 +9,7 @@ import (
 	"time"
 
 	"github.com/zebrunner/esg/config"
-	"github.com/zebrunner/esg/service"
+	"github.com/zebrunner/esg/utils"
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
@@ -75,7 +74,7 @@ func ListDrivers(c *gin.Context) {
 			}
 		}
 	} else {
-		imgs, err := service.ListBrowsers()
+		imgs, err := utils.ListBrowsers()
 		if err != nil {
 			log.WithError(err).Warn("Failed to get browser list")
 			_ = c.Error(err).SetType(gin.ErrorTypePublic)
