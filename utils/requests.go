@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"io"
 	"net/http"
 	"sort"
 	"strconv"
+
+	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/config"
 )
 
 type imgVersions struct {
@@ -19,10 +21,9 @@ type imgVersions struct {
 
 func ListBrowsers() ([]string, error) {
 	imgRequestUrl := "https://api.us-east-1.gallery.ecr.aws/describeImageTags"
-	imgNames := []string{"chrome", "edge", "firefox", "cypress-chrome", "cypress-firefox", "cypress-edge", "cypress-chromium", "redroid"}
 	images := make([]string, 0)
 
-	for _, imgName := range imgNames {
+	for _, imgName := range config.SupportedRepositories {
 
 		rqBody := map[string]string{
 			"registryAliasName": "zebrunner",
