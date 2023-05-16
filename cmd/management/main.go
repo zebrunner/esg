@@ -260,6 +260,7 @@ func getImageList() []string  {
 	images, err := utils.ListBrowsers()
 	if err != nil {
 		log.WithError(err).Error("Failed to get image list!")
+		os.Exit(1)
 	}
 
 	return images

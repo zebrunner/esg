@@ -12,6 +12,7 @@ func main() {
 	images, err := utils.ListBrowsers()
 	if err != nil {
 		log.WithError(err).Error("Failed to get image list")
+		return
 	}
 
 	f, err := os.Create("browsers.txt")
