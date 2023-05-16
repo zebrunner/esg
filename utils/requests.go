@@ -83,7 +83,9 @@ func ListBrowsers() ([]string, error) {
 		})
 
 		for _, tag := range versions.ImageTagDetails {
-			images = append(images, fmt.Sprintf("%s:%s", imgName, tag.ImageTag))
+			image := fmt.Sprintf("%s:%s", imgName, tag.ImageTag)
+			log.Debug("image: ", image)
+			images = append(images, image)
 		}
 	}
 
