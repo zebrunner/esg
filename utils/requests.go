@@ -8,10 +8,13 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 )
+
+var ExcludeRules = parseRules()
 
 type imgVersions struct {
 	ImageTagDetails []struct {
@@ -19,11 +22,99 @@ type imgVersions struct {
 	} `json:"imageTagDetails"`
 }
 
+type excludeRules struct {
+	//include rules like cypress*:10*
+	ImgRules []struct {
+		Rep string
+		Tag string
+	}
+	//include rules like: cypress*, cypress-chrome, cypress*:* or cypress-chromium:*
+	RepRules []struct {
+		Rep string
+	}
+}
+
+func parseRules() *excludeRules {
+	exclRules := excludeRules{}
+	if config.Conf.ExcludeBrowser == "" {
+		return &exclRules
+	}
+
+	rulesArr := strings.Split(config.Conf.ExcludeBrowser, ",")
+
+	for _, rule := range rulesArr {
+		partedRule := strings.Split(rule, ":")
+		if len(partedRule) == 1 || partedRule[1] == "*" {
+			exclRules.RepRules = append(exclRules.RepRules, struct {
+				Rep string
+			}{Rep: partedRule[0]})
+		} else {
+			exclRules.ImgRules = append(exclRules.ImgRules, struct {
+				Rep string
+				Tag string
+			}{Rep: partedRule[0], Tag: partedRule[1]})
+		}
+	}
+
+	return &exclRules
+}
+
+func (er *excludeRules) GetSupportedReps() []string {
+	if len(er.RepRules) == 0 {
+		return config.SupportedRepositories
+	}
+
+	supportedReps := make([]string, 0)
+	for _, repRule := range er.RepRules {
+		for _, repository := range config.SupportedRepositories {
+			if ok := getCheckFunction(repRule.Rep)(repository); ok {
+				log.Debug("Excluded " + repository + " repository")
+			} else {
+				supportedReps = append(supportedReps, repository)
+			}
+		}
+	}
+
+	return supportedReps
+}
+
+func (er *excludeRules) isAcceptableImage(imageName, imageTag string) bool {
+	if len(er.ImgRules) == 0 {
+		return true
+	}
+
+	for _, rule := range er.ImgRules {
+		if ok := getCheckFunction(rule.Rep)(imageName); ok {
+			if ok := getCheckFunction(rule.Tag)(imageTag); ok {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+func getCheckFunction(rule string) func(string) bool {
+	var checkFn func(string) bool
+	if strings.HasSuffix(rule, "*") {
+		checkFn = func(s string) bool {
+			rule = strings.TrimSuffix(rule, "*")
+			return strings.HasPrefix(s, rule)
+		}
+	} else {
+		checkFn = func(s string) bool {
+			return s == rule
+		}
+	}
+	return checkFn
+}
+
 func ListBrowsers() ([]string, error) {
 	imgRequestUrl := "https://api.us-east-1.gallery.ecr.aws/describeImageTags"
 	images := make([]string, 0)
+	supportedReps := ExcludeRules.GetSupportedReps()
 
-	for _, imgName := range config.SupportedRepositories {
+	for _, imgName := range supportedReps {
 
 		rqBody := map[string]string{
 			"registryAliasName": "zebrunner",
@@ -85,8 +176,12 @@ func ListBrowsers() ([]string, error) {
 
 		for _, tag := range versions.ImageTagDetails {
 			image := fmt.Sprintf("%s:%s", imgName, tag.ImageTag)
-			log.Debug("image: ", image)
-			images = append(images, image)
+			if ExcludeRules.isAcceptableImage(imgName, tag.ImageTag) {
+				log.Debug("image: ", image)
+				images = append(images, image)
+			} else {
+				log.Debug("Excluded " + image + " image")
+			}
 		}
 	}
 
