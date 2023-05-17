@@ -38,12 +38,13 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
         // docker run --rm -it
         //      -v ~/.mitmproxy:/home/mitmproxy/.mitmproxy -p 8080:8080 mitmproxy/mitmproxy
         //      echo "ZnJvbSBtaXRtcHJveHkgaW1wb3J0IGh0dHAKCmRlZiByZXNwb25zZShmbG93OiBodHRwLkhUVFBGbG93KSAtPiBOb25lOgogIGlmIGZsb3cucmVzcG9uc2UgYW5kIGZsb3cucmVzcG9uc2UuY29udGVudDoKICAgIGZsb3cucmVzcG9uc2UuY29udGVudCA9IGZsb3cucmVzcG9uc2UuY29udGVudC5yZXBsYWNlKAogICAgICBieXRlcygiUGhvbmUgZmluZGVyIiwgJ3V0Zi04KScpLAogICAgICBieXRlcygiTU9ESUZJRUQgUEhPTkUgRklOREVSIiwgJ3V0Zi04JykKICAgICk=" | base64 --decode > ./script.py
-        //      && echo "ZnJvbSBtaXRtcHJveHkgaW1wb3J0IGh0dHAKCmRlZiByZXNwb25zZShmbG93OiBodHRwLkhUVFBGbG93KSAtPiBOb25lOgogIGlmIGZsb3cucmVzcG9uc2UgYW5kIGZsb3cucmVzcG9uc2UuY29udGVudDoKICAgIGZsb3cucmVzcG9uc2UuY29udGVudCA9IGZsb3cucmVzcG9uc2UuY29udGVudC5yZXBsYWNlKAogICAgICBieXRlcygiQWxsIGJyYW5kcyIsICd1dGYtOCknKSwKICAgICAgYnl0ZXMoIkFsbCBicmFuZHMgTU9ESUZJRUQiLCAndXRmLTgnKQogICAgKQ==" | base64 --decode > ./script2.py
-        //      && mitmdump -s ./script.py -s ./script2.py
-        includeMitm:= false //TODO: analyze caps to define true or false
+        includeMitm:= true //TODO: analyze caps to define true or false
+        //script := "ZnJvbSBtaXRtcHJveHkgaW1wb3J0IGh0dHAKCmRlZiByZXNwb25zZShmbG93OiBodHRwLkhUVFBGbG93KSAtPiBOb25lOgogIGlmIGZsb3cucmVzcG9uc2UgYW5kIGZsb3cucmVzcG9uc2UuY29udGVudDoKICAgIGZsb3cucmVzcG9uc2UuY29udGVudCA9IGZsb3cucmVzcG9uc2UuY29udGVudC5yZXBsYWNlKAogICAgICBieXRlcygiUGhvbmUgZmluZGVyIiwgJ3V0Zi04KScpLAogICAgICBieXRlcygiTU9ESUZJRUQgUEhPTkUgRklOREVSIiwgJ3V0Zi04JykKICAgICk="
         var mitmContainer *Container = nil
+	mitmDumpCommand := "mitmdump --scripts /har_dump.py --set hardump=/dump.har --quiet --verbose" //TODO: update command based on capability
+
         if includeMitm {
-                mitmImage := "mitmproxy/mitmproxy:9.0.1"
+                mitmImage := imageRepo + "mitmproxy:1.0"
                 mitmContainer = &Container{
                         Name:       "mitm",
                         Image:      mitmImage,
@@ -55,7 +56,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
                                 "fileserverPort": {fileserverPort, 0},
                         },
                         Mounts:     []string{taskVolume},
-                        Command: []string{"-c", "mitmdump --quiet"}, //TODO: insert args and scripts from capabilities
+                        Command: []string{"-c", mitmDumpCommand},
                         EntryPoint: []string{"/bin/bash"},
 
                 }
