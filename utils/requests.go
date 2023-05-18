@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -14,7 +15,7 @@ import (
 	"github.com/zebrunner/esg/config"
 )
 
-var ExcludeRules = parseRules()
+var ExcludeRules excludeRules = excludeRules{isParsed: false}
 
 type imgVersions struct {
 	ImageTagDetails []struct {
@@ -23,40 +24,37 @@ type imgVersions struct {
 }
 
 type excludeRules struct {
-	//include rules like cypress*:10*
-	ImgRules []struct {
-		Rep string
-		Tag string
-	}
-	//include rules like: cypress*, cypress-chrome, cypress*:* or cypress-chromium:*
-	RepRules []struct {
-		Rep string
-	}
+	//ImgRules include rules like: cypress-chrome:90.0, cypress-chrome:90*, cypress*:90*, *:latest, *:9*
+	ImgRules []string
+	//RepRules include rules like: cypress-chrome, cypress*, *
+	RepRules []string
+	isParsed bool
 }
 
-func parseRules() *excludeRules {
-	exclRules := excludeRules{}
-	if config.Conf.ExcludeBrowser == "" {
-		return &exclRules
+func getRules() excludeRules {
+	if !ExcludeRules.isParsed {
+		ExcludeRules.parseRules()
+	}
+	return ExcludeRules
+}
+
+func (er *excludeRules) parseRules() {
+	er.isParsed = true
+	if config.Conf.ExcludeBrowsers == "" {
+		log.Debug("No exclude rules were found " + config.Conf.ExcludeBrowsers)
+		return
 	}
 
-	rulesArr := strings.Split(config.Conf.ExcludeBrowser, ",")
-
+	rulesArr := strings.Split(config.Conf.ExcludeBrowsers, ",")
+	regexForRep, _ := regexp.Compile(`^[a-z\-]*[^:]$`)
 	for _, rule := range rulesArr {
-		partedRule := strings.Split(rule, ":")
-		if len(partedRule) == 1 || partedRule[1] == "*" {
-			exclRules.RepRules = append(exclRules.RepRules, struct {
-				Rep string
-			}{Rep: partedRule[0]})
+		parsedRule := fmt.Sprintf("^%s$", strings.ReplaceAll(rule, "*", ".*"))
+		if regexForRep.MatchString(rule) {
+			er.RepRules = append(er.RepRules, parsedRule)
 		} else {
-			exclRules.ImgRules = append(exclRules.ImgRules, struct {
-				Rep string
-				Tag string
-			}{Rep: partedRule[0], Tag: partedRule[1]})
+			er.ImgRules = append(er.ImgRules, parsedRule)
 		}
 	}
-
-	return &exclRules
 }
 
 func (er *excludeRules) GetSupportedReps() []string {
@@ -65,53 +63,43 @@ func (er *excludeRules) GetSupportedReps() []string {
 	}
 
 	supportedReps := make([]string, 0)
-	for _, repRule := range er.RepRules {
-		for _, repository := range config.SupportedRepositories {
-			if ok := getCheckFunction(repRule.Rep)(repository); ok {
+	for _, repository := range config.SupportedRepositories {
+		exclude := false
+
+		for _, repRule := range er.RepRules {
+			if ok, _ := regexp.MatchString(repRule, repository); ok {
+				exclude = true
 				log.Debug("Excluded " + repository + " repository")
-			} else {
-				supportedReps = append(supportedReps, repository)
+				break
 			}
+		}
+
+		if !exclude {
+			supportedReps = append(supportedReps, repository)
 		}
 	}
 
 	return supportedReps
 }
 
-func (er *excludeRules) isAcceptableImage(imageName, imageTag string) bool {
+func (er *excludeRules) isAcceptableImage(image string) bool {
 	if len(er.ImgRules) == 0 {
 		return true
 	}
 
 	for _, rule := range er.ImgRules {
-		if ok := getCheckFunction(rule.Rep)(imageName); ok {
-			if ok := getCheckFunction(rule.Tag)(imageTag); ok {
-				return false
-			}
+		if ok, _ := regexp.MatchString(rule, image); ok {
+			return false
 		}
 	}
 
 	return true
 }
 
-func getCheckFunction(rule string) func(string) bool {
-	var checkFn func(string) bool
-	if strings.HasSuffix(rule, "*") {
-		checkFn = func(s string) bool {
-			rule = strings.TrimSuffix(rule, "*")
-			return strings.HasPrefix(s, rule)
-		}
-	} else {
-		checkFn = func(s string) bool {
-			return s == rule
-		}
-	}
-	return checkFn
-}
-
 func ListBrowsers() ([]string, error) {
 	imgRequestUrl := "https://api.us-east-1.gallery.ecr.aws/describeImageTags"
 	images := make([]string, 0)
+	var ExcludeRules = getRules()
 	supportedReps := ExcludeRules.GetSupportedReps()
 
 	for _, imgName := range supportedReps {
@@ -129,7 +117,6 @@ func ListBrowsers() ([]string, error) {
 
 		req, err := http.NewRequest(http.MethodPost, imgRequestUrl, bytes.NewBuffer(body))
 		if err != nil {
-			// log.WithError(err).Error("Failed to get image list")
 			log.WithError(err).Warn("Could not create request")
 			return nil, err
 		}
@@ -176,7 +163,7 @@ func ListBrowsers() ([]string, error) {
 
 		for _, tag := range versions.ImageTagDetails {
 			image := fmt.Sprintf("%s:%s", imgName, tag.ImageTag)
-			if ExcludeRules.isAcceptableImage(imgName, tag.ImageTag) {
+			if ExcludeRules.isAcceptableImage(image) {
 				log.Debug("image: ", image)
 				images = append(images, image)
 			} else {

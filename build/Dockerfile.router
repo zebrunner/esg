@@ -23,7 +23,6 @@ RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./cmd/server
 FROM alpine:latest
 
 ENV LISTEN_PORT=4444
-ENV EXCLUDE_BROWSER=
 
 #Common for router and scaler
 ENV AWS_REGION=
