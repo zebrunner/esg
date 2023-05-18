@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 	"flag"
-	"io/ioutil"
 	"math"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -15,6 +15,7 @@ import (
 	"github.com/zebrunner/esg/environment"
 	"github.com/zebrunner/esg/service"
 	sessionmap "github.com/zebrunner/esg/sessinonmap"
+	"github.com/zebrunner/esg/utils"
 
 	awsSession "github.com/aws/aws-sdk-go/aws/session"
 	log "github.com/sirupsen/logrus"
@@ -221,43 +222,38 @@ func RefreshTaskDefinition(image string) error {
 }
 
 func RefreshTaskDefinitions() {
-	images, err := service.ListBrowsers()
+	images := getImageList()
+
+	for _, image := range images {
+		time.Sleep(1000 * time.Millisecond)
+		err := RefreshTaskDefinition(image)
+		if err != nil {
+			continue
+		}
+	}
+}
+
+func getImageList() []string  {
+	images, err := utils.ListBrowsers()
 	if err != nil {
 		log.WithError(err).Error("Failed to get image list!")
+		os.Exit(1)
 	}
 
-	for _, image := range images {
-		time.Sleep(1000 * time.Millisecond)
-		err = RefreshTaskDefinition(image)
-		if err != nil {
-			continue
-		}
-	}
+	return images
 }
 
-func RefreshTaskDefinitionsFromFile(path string) {
-	text, err := ioutil.ReadFile(path)
-	if err != nil {
-		log.WithError(err).Error("Failed to read file browsers.txt!")
-	}
-	lines := strings.Split(string(text), "\n")
+func getImageSet() map[string]bool {
+	images := getImageList()
 
-	images := []string{}
-	for _, line := range lines {
-		if line != "" {
-			images = append(images, line)
-		}
-	}
-
-	log.WithField("images", images).Trace("refreshing task definition using file")
+	imagesSet := make(map[string]bool, cap(images))
 	for _, image := range images {
-		time.Sleep(1000 * time.Millisecond)
-		err = RefreshTaskDefinition(image)
-		if err != nil {
-			continue
-		}
+		imagesSet[image]= true
 	}
+
+	return imagesSet
 }
+
 
 func paginate[T interface{}](l []T, size int) [][]T {
         numPages := int(math.Ceil(float64(len(l)) / float64(size)))
@@ -274,6 +270,26 @@ func paginate[T interface{}](l []T, size int) [][]T {
         return pages
 }
 
+func AddTaskDefinitions() {
+	log.Debug("Saved list of images for task defenition refresh: ")
+	imagesSet := getImageSet()
+
+	for {
+		time.Sleep(24 * time.Hour)
+
+		updatedImages := getImageList()
+		for _, image := range updatedImages {
+			if present := imagesSet[image]; !present {
+				log.Info("Found new image in ecr: " + image)
+				err := RefreshTaskDefinition(image)
+				if err == nil {
+					imagesSet[image] = true
+				}
+			}
+		}
+
+	}
+}
 
 func main() {
 	flag.Parse()
@@ -292,11 +308,7 @@ func main() {
 	}
 	config.RedisConnection = rdb
 
-	if config.Conf.BrowsersFile != "" {
-		RefreshTaskDefinitionsFromFile(config.Conf.BrowsersFile)
-	} else {
-		RefreshTaskDefinitions()
-	}
+	RefreshTaskDefinitions()
 	log.Info("Task definitions updates finished")
 
 	wg.Add(1)
@@ -307,6 +319,9 @@ func main() {
 
 	wg.Add(1)
 	go ClearTasks()
+	
+	wg.Add(1)
+	go AddTaskDefinitions()	
 
 	wg.Wait()
 	log.Fatal("Background worker stopped!")
