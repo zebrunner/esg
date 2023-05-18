@@ -23,7 +23,6 @@ RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./cmd/server
 FROM alpine:latest
 
 ENV LISTEN_PORT=4444
-ENV BROWSERS_FILE=/browsers.txt
 
 #Common for router and scaler
 ENV AWS_REGION=
@@ -59,13 +58,14 @@ ENV ZEBRUNNER_HOST=
 ENV ZEBRUNNER_INTEGRATION_USER=
 ENV ZEBRUNNER_INTEGRATION_PASSWORD=
 
+ENV EXCLUDE_BROWSERS=
+
 RUN apk add -U git tzdata
 COPY ./.git /
 COPY ./migrations/ /migrations/
 
 COPY --from=0 /esg/server /server
 COPY --from=0 /usr/bin/migrate /usr/bin/migrate
-COPY --from=0 /esg/browsers.txt /browsers.txt
 
 COPY ./build/entrypoint.router /entrypoint.sh
 

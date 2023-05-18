@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
@@ -19,9 +21,45 @@ type imgVersions struct {
 	} `json:"imageTagDetails"`
 }
 
+type excludeRules []string
+
+func getRules() excludeRules {
+	if config.Conf.ExcludeBrowsers == "" {
+		log.Debug("No exclude rules were found " + config.Conf.ExcludeBrowsers)
+		return nil
+	}
+
+	var er excludeRules
+	er.parseRules()
+	return er
+}
+
+func (er *excludeRules) parseRules() {
+	rulesArr := strings.Split(config.Conf.ExcludeBrowsers, ",")
+	for _, rule := range rulesArr {
+		parsedRule := fmt.Sprintf("^%s$", rule)
+		*er = append(*er, parsedRule)
+	}
+}
+
+func (er excludeRules) isAcceptableImage(image string) bool {
+	if len(er) == 0 {
+		return true
+	}
+
+	for _, rule := range er {
+		if ok, _ := regexp.MatchString(rule, image); ok {
+			return false
+		}
+	}
+
+	return true
+}
+
 func ListBrowsers() ([]string, error) {
 	imgRequestUrl := "https://api.us-east-1.gallery.ecr.aws/describeImageTags"
 	images := make([]string, 0)
+	var excludeRules = getRules()
 
 	for _, imgName := range config.SupportedRepositories {
 
@@ -38,7 +76,6 @@ func ListBrowsers() ([]string, error) {
 
 		req, err := http.NewRequest(http.MethodPost, imgRequestUrl, bytes.NewBuffer(body))
 		if err != nil {
-			// log.WithError(err).Error("Failed to get image list")
 			log.WithError(err).Warn("Could not create request")
 			return nil, err
 		}
@@ -85,8 +122,12 @@ func ListBrowsers() ([]string, error) {
 
 		for _, tag := range versions.ImageTagDetails {
 			image := fmt.Sprintf("%s:%s", imgName, tag.ImageTag)
-			log.Debug("image: ", image)
-			images = append(images, image)
+			if excludeRules.isAcceptableImage(image) {
+				log.Debug("image: ", image)
+				images = append(images, image)
+			} else {
+				log.Debug("Excluded " + image + " image")
+			}
 		}
 	}
 

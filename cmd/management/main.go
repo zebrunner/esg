@@ -222,13 +222,7 @@ func RefreshTaskDefinition(image string) error {
 }
 
 func RefreshTaskDefinitions() {
-	var images []string
-	if config.Conf.BrowsersFile != "" {
-		images = getImageListFromFile(config.Conf.BrowsersFile)
-		log.WithField("images", images).Trace("refreshing task definition using file")
-	} else {
-		images = getImageList()
-	}
+	images := getImageList()
 
 	for _, image := range images {
 		time.Sleep(1000 * time.Millisecond)
@@ -237,23 +231,6 @@ func RefreshTaskDefinitions() {
 			continue
 		}
 	}
-}
-
-func getImageListFromFile(path string) []string{
-	images := make([]string, 0)
-
-	text, err := os.ReadFile(path)
-	if err != nil {
-		log.WithError(err).Error("Failed to read file browsers.txt!")
-	}
-	lines := strings.Split(string(text), "\n")
-
-	for _, line := range lines {
-		if line != "" {
-			images = append(images, line)
-		}
-	}
-	return images
 }
 
 func getImageList() []string  {
@@ -342,12 +319,9 @@ func main() {
 
 	wg.Add(1)
 	go ClearTasks()
-
-	if config.Conf.BrowsersFile == "" {
-		//check for new images once per day
-		wg.Add(1)
-		go AddTaskDefinitions()
-	}
+	
+	wg.Add(1)
+	go AddTaskDefinitions()	
 
 	wg.Wait()
 	log.Fatal("Background worker stopped!")
