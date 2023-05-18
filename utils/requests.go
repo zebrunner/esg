@@ -59,7 +59,7 @@ func (er excludeRules) isAcceptableImage(image string) bool {
 func ListBrowsers() ([]string, error) {
 	imgRequestUrl := "https://api.us-east-1.gallery.ecr.aws/describeImageTags"
 	images := make([]string, 0)
-	var ExcludeRules = getRules()
+	var excludeRules = getRules()
 
 	for _, imgName := range config.SupportedRepositories {
 
@@ -122,7 +122,7 @@ func ListBrowsers() ([]string, error) {
 
 		for _, tag := range versions.ImageTagDetails {
 			image := fmt.Sprintf("%s:%s", imgName, tag.ImageTag)
-			if ExcludeRules.isAcceptableImage(image) {
+			if excludeRules.isAcceptableImage(image) {
 				log.Debug("image: ", image)
 				images = append(images, image)
 			} else {
