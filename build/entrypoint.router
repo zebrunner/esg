@@ -76,6 +76,9 @@ fi
 if [ ! -z ${ZEBRUNNER_INTEGRATION_PASSWORD} ]; then
   CMD_ARGS="${CMD_ARGS} -zebrunner-integration-password ${ZEBRUNNER_INTEGRATION_PASSWORD}"
 fi
+if [ ! -z ${EXCLUDE_BROWSERS} ]; then
+  CMD_ARGS="${CMD_ARGS} -exclude-browsers ${EXCLUDE_BROWSERS}"
+fi
 
 echo "CMD_ARGS: $CMD_ARGS"
 
