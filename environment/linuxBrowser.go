@@ -10,6 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
+
+        log "github.com/sirupsen/logrus"
 )
 
 func buildBrowser(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
@@ -21,6 +23,8 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 	if err != nil {
 		return nil, err
 	}
+
+	log.Trace("caps: ", caps)
 
 	// TODO: Find better way to specify this
 	sharedFolder := "/opt/zebrunner"
@@ -34,32 +38,38 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
                 return nil, fmt.Errorf("failed to parse timezone. error=%s", err)
         }
 
-        // #367 add proxy support for web sessions
-        // docker run --rm -it
-        //      -v ~/.mitmproxy:/home/mitmproxy/.mitmproxy -p 8080:8080 mitmproxy/mitmproxy
-        //      echo "ZnJvbSBtaXRtcHJveHkgaW1wb3J0IGh0dHAKCmRlZiByZXNwb25zZShmbG93OiBodHRwLkhUVFBGbG93KSAtPiBOb25lOgogIGlmIGZsb3cucmVzcG9uc2UgYW5kIGZsb3cucmVzcG9uc2UuY29udGVudDoKICAgIGZsb3cucmVzcG9uc2UuY29udGVudCA9IGZsb3cucmVzcG9uc2UuY29udGVudC5yZXBsYWNlKAogICAgICBieXRlcygiUGhvbmUgZmluZGVyIiwgJ3V0Zi04KScpLAogICAgICBieXRlcygiTU9ESUZJRUQgUEhPTkUgRklOREVSIiwgJ3V0Zi04JykKICAgICk=" | base64 --decode > ./script.py
-        includeMitm:= true //TODO: analyze caps to define true or false
-        //script := "ZnJvbSBtaXRtcHJveHkgaW1wb3J0IGh0dHAKCmRlZiByZXNwb25zZShmbG93OiBodHRwLkhUVFBGbG93KSAtPiBOb25lOgogIGlmIGZsb3cucmVzcG9uc2UgYW5kIGZsb3cucmVzcG9uc2UuY29udGVudDoKICAgIGZsb3cucmVzcG9uc2UuY29udGVudCA9IGZsb3cucmVzcG9uc2UuY29udGVudC5yZXBsYWNlKAogICAgICBieXRlcygiUGhvbmUgZmluZGVyIiwgJ3V0Zi04KScpLAogICAgICBieXRlcygiTU9ESUZJRUQgUEhPTkUgRklOREVSIiwgJ3V0Zi04JykKICAgICk="
-        var mitmContainer *Container = nil
-	mitmDumpCommand := "mitmdump --scripts /har_dump.py --set hardump=/dump.har --quiet --verbose" //TODO: update command based on capability
+	//TODO: handle resolution and video screen size
+//        MitmScripts      string `json:"mitmscripts,string,omitempty"` //comma separated list of pre approved python scripts from https://github.com/mitmproxy/mitmproxy/tree/main/examples/contrib
+//        MitmArgs         string `json:"mitmargs,string,omitempty"` // list of arguments for mitmdump command. Important: --verbose and --quiet will be appended forcibly
+
+        includeMitm := caps.Mitm
+	mitmCommand := "mitmdump --help || sleep infinity"
+	var mitmCpu int64 = 32
+	var mitmMemory int64 = 64 // minimal memory to start container
 
         if includeMitm {
-                mitmImage := imageRepo + "mitmproxy:1.0"
-                mitmContainer = &Container{
-                        Name:       "mitm",
-                        Image:      mitmImage,
-                        cpu:        256,
-                        memory:     256,
-                        Privileged: false,
-                        Essential:  false,
-                        Ports: map[string]portMapping{
-                                "fileserverPort": {fileserverPort, 0},
-                        },
-                        Mounts:     []string{taskVolume},
-                        Command: []string{"-c", mitmDumpCommand},
-                        EntryPoint: []string{"/bin/bash"},
-
-                }
+		mitmCommand = "mitmdump  --quiet --verbose --scripts /har_dump.py --set hardump=/network.har"
+		mitmCpu = 256
+		mitmMemory = 256
+	}
+	if caps.MitmArgs != "" {
+		mitmCommand = mitmCommand + " " + caps.MitmArgs
+	}
+	//TODO: parse mitmScripts and update mitmCommand accordingly
+        mitmImage := imageRepo + "mitmproxy:1.0"
+        mitmContainer := Container{
+                Name:       "mitm",
+                Image:      mitmImage,
+                cpu:        mitmCpu,
+                memory:     mitmMemory,
+                Privileged: false,
+                Essential:  false,
+                Ports: map[string]portMapping{
+                        "fileserverPort": {fileserverPort, 0},
+                },
+                Mounts:     []string{taskVolume},
+                Command: []string{"-c", mitmCommand},
+                EntryPoint: []string{"/bin/bash"},
         }
 
 	links := []string{}
@@ -90,7 +100,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			"TZ":            tz.String(),
 		},
 		Mounts: []string{"shm", taskVolume},
-                Links:       links,
+		Links:  []string{"mitm"},
 		HealthCheck: &ecs.HealthCheck{
 			Command:     []*string{aws.String("CMD-SHELL"), aws.String("curl -f localhost:4444/status || exit 1")},
 			Interval:    aws.Int64(10),
@@ -98,17 +108,16 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			Timeout:     aws.Int64(10),
 			StartPeriod: aws.Int64(5),
 		},
+                DependsOn: []*ecs.ContainerDependency{
+                        &ecs.ContainerDependency{
+                                ContainerName: aws.String("mitm"),
+                                Condition:  aws.String("START"),
+                        },
+                },
+
 	}
 	browserContainer.SetCpu(caps, 1024, conf.MaxCpu)
 	browserContainer.SetMemory(caps, 1024, conf.MaxMemory)
-
-        dependsOn := make([]*ecs.ContainerDependency, 0)
-        if (includeMitm) {
-                dependsOn = append(dependsOn, &ecs.ContainerDependency{
-                        ContainerName: aws.String("mitm"),
-                        Condition:  aws.String("START"),
-                })
-        }
 
 	recorderImage := imageRepo + "artifacts-uploader:2.1"
 	videoRecorderContainer := Container{
@@ -138,15 +147,9 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
                 },
 	}
 
-        containers := make([]*Container, 0)
-        containers = []*Container{&browserContainer, &videoRecorderContainer}
-        if includeMitm{
-                containers = append(containers, mitmContainer)
-        }
-
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
-		Containers:           containers,
+		Containers:           []*Container{&browserContainer, &videoRecorderContainer, &mitmContainer},
 		Capabilities:         caps,
 		Volumes: map[string]volume{
                         taskVolume: {ContainerPath: sharedFolder, Driver: "local", Scope: "task", ReadOnly: false},
