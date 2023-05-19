@@ -45,7 +45,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 	var mitmMemory int64 = 64 // minimal memory to start container
 
         if includeMitm {
-		mitmCommand = "mitmdump  --quiet --verbose --scripts /har_dump.py --set hardump=/network.har"
+		mitmCommand = "mitmdump  --quiet --verbose --scripts /har_dump.py --set hardump=" + logDir + "/network.har"
 		mitmCpu = 256
 		mitmMemory = 256
 	}
@@ -116,7 +116,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 	browserContainer.SetCpu(caps, 1024, conf.MaxCpu)
 	browserContainer.SetMemory(caps, 1024, conf.MaxMemory)
 
-	recorderImage := imageRepo + "artifacts-uploader:2.2-beta1"
+	recorderImage := imageRepo + "artifacts-uploader:2.2"
 	videoRecorderContainer := Container{
 		Name:              "artifacts-uploader",
 		Image:             recorderImage,
