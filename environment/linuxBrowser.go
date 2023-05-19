@@ -26,11 +26,8 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 
 	log.Trace("caps: ", caps)
 
-	// TODO: Find better way to specify this
-	sharedFolder := "/opt/zebrunner"
-	taskVolume := "data"
-        dockerSocketVolume := "docker-socket"
-
+        logDir := "/tmp/log"
+        logVolume := "log"
 
 	tz, err := caps.GetTimeZone()
         // Video recorder & artifacts uploader logic
@@ -66,9 +63,9 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
                 Ports: map[string]portMapping{
                         "fileserverPort": {fileserverPort, 0},
                 },
-                Mounts:     []string{taskVolume},
-                Command: []string{"-c", mitmCommand},
-                EntryPoint: []string{"/bin/bash"},
+                Mounts:     []string{logVolume},
+                Command: []string{"-c", "chmod a+rwx /tmp/log && ls -la /tmp/ && " + mitmCommand  + " > " + logDir + "/mitm.log 2>&1"},
+                EntryPoint: []string{"/bin/sh"},
         }
 
 	links := []string{}
@@ -97,8 +94,10 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			"HOSTS_ENTRIES": strings.Join(caps.HostsEntries, " "),
 			"TZ":            tz.String(),
 		},
-		Mounts: []string{"shm", taskVolume},
+		Mounts: []string{"shm", logVolume},
 		Links:  []string{"mitm"},
+                Command: []string{"-c", "/entrypoint.sh" + " > " + logDir + "/session.log 2>&1"},
+                EntryPoint: []string{"/bin/sh"},
 		HealthCheck: &ecs.HealthCheck{
 			Command:     []*string{aws.String("CMD-SHELL"), aws.String("curl -f localhost:4444/status || exit 1")},
 			Interval:    aws.Int64(10),
@@ -117,7 +116,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 	browserContainer.SetCpu(caps, 1024, conf.MaxCpu)
 	browserContainer.SetMemory(caps, 1024, conf.MaxMemory)
 
-	recorderImage := imageRepo + "artifacts-uploader:2.1"
+	recorderImage := imageRepo + "artifacts-uploader:2.2-beta1"
 	videoRecorderContainer := Container{
 		Name:              "artifacts-uploader",
 		Image:             recorderImage,
@@ -134,8 +133,10 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
                         "AWS_SECRET_ACCESS_KEY":  conf.S3AwsSecretAccessKey,
                         "AWS_DEFAULT_REGION":     conf.S3Region,
 		},
-		Mounts:      []string{taskVolume, dockerSocketVolume},
+		Mounts:      []string{logVolume},
 		Links:       []string{"browser"},
+                Command: []string{"-c", "/entrypoint.sh" + " > " + logDir + "/video.log 2>&1"},
+                EntryPoint: []string{"/bin/sh"},
 		HealthCheck: nil,
                 DependsOn: []*ecs.ContainerDependency{
                         &ecs.ContainerDependency{
@@ -150,9 +151,8 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		Containers:           []*Container{&browserContainer, &videoRecorderContainer, &mitmContainer},
 		Capabilities:         caps,
 		Volumes: map[string]volume{
-                        taskVolume: {ContainerPath: sharedFolder, Driver: "local", Scope: "task", ReadOnly: false},
+                        logVolume: {ContainerPath: logDir, Driver: "local", Scope: "task", ReadOnly: false},
                         "shm": {ContainerPath: "/dev/shm", HostPath: "/dev/shm", ReadOnly: false},
-			dockerSocketVolume: {ContainerPath: "/var/run/docker.sock", HostPath: "/var/run/docker.sock", ReadOnly: false},
 		},
 		Network: &NetworkConfiguration{
 			IP: "",
