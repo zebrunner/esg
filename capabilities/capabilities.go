@@ -33,8 +33,12 @@ type Capabilities struct {
 	HostsEntries     []string
 	DNSServers       []string
 
+	//Vendor caps
 	Cpu               int64 `json:"cpu,string,omitempty"`
 	Memory            int64 `json:"memory,string,omitempty"`
+	//Mitm proxy caps
+	Mitm		 bool //enabl mitm with har dump and output generation for mitmweb
+	MitmArgs         string // list of arguments for mitmdump command. Important: --verbose and --quiet will be appended forcibly
 
 	// generic launcher caps
 	RepositoryUrl    string

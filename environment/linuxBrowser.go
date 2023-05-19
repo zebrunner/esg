@@ -10,6 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
+
+        log "github.com/sirupsen/logrus"
 )
 
 func buildBrowser(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
@@ -22,6 +24,8 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		return nil, err
 	}
 
+	log.Trace("caps: ", caps)
+
 	// TODO: Find better way to specify this
 	sharedFolder := "/opt/zebrunner"
 	taskVolume := "data"
@@ -29,6 +33,49 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 
 
 	tz, err := caps.GetTimeZone()
+        // Video recorder & artifacts uploader logic
+        if err != nil {
+                return nil, fmt.Errorf("failed to parse timezone. error=%s", err)
+        }
+
+	//TODO: handle resolution and video screen size
+	//TODO: handle mitmScripts and insert into the mitmCommand
+	// MitmScripts      string `json:"mitmscripts,string,omitempty"` //comma separated list of pre approved python scripts from https://github.com/mitmproxy/mitmproxy/tree/main/examples/contrib
+
+        includeMitm := caps.Mitm
+	mitmCommand := "mitmdump --help || sleep infinity"
+	var mitmCpu int64 = 32
+	var mitmMemory int64 = 64 // minimal memory to start container
+
+        if includeMitm {
+		mitmCommand = "mitmdump  --quiet --verbose --scripts /har_dump.py --set hardump=/network.har"
+		mitmCpu = 256
+		mitmMemory = 256
+	}
+	if caps.MitmArgs != "" {
+		mitmCommand = mitmCommand + " " + caps.MitmArgs
+	}
+        mitmImage := imageRepo + "mitmproxy:1.0"
+        mitmContainer := Container{
+                Name:       "mitm",
+                Image:      mitmImage,
+                cpu:        mitmCpu,
+                memory:     mitmMemory,
+                Privileged: false,
+                Essential:  false,
+                Ports: map[string]portMapping{
+                        "fileserverPort": {fileserverPort, 0},
+                },
+                Mounts:     []string{taskVolume},
+                Command: []string{"-c", mitmCommand},
+                EntryPoint: []string{"/bin/bash"},
+        }
+
+	links := []string{}
+        if (includeMitm) {
+		links = append(links, "mitm")
+	}
+
 	// In future maybe there will be need to disable vnc
 	enableVNC := true
 	browserContainer := Container{
@@ -51,6 +98,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			"TZ":            tz.String(),
 		},
 		Mounts: []string{"shm", taskVolume},
+		Links:  []string{"mitm"},
 		HealthCheck: &ecs.HealthCheck{
 			Command:     []*string{aws.String("CMD-SHELL"), aws.String("curl -f localhost:4444/status || exit 1")},
 			Interval:    aws.Int64(10),
@@ -58,14 +106,16 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			Timeout:     aws.Int64(10),
 			StartPeriod: aws.Int64(5),
 		},
+                DependsOn: []*ecs.ContainerDependency{
+                        &ecs.ContainerDependency{
+                                ContainerName: aws.String("mitm"),
+                                Condition:  aws.String("START"),
+                        },
+                },
+
 	}
 	browserContainer.SetCpu(caps, 1024, conf.MaxCpu)
 	browserContainer.SetMemory(caps, 1024, conf.MaxMemory)
-
-	// Video recorder & artifacts uploader logic
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse timezone. error=%s", err)
-	}
 
 	recorderImage := imageRepo + "artifacts-uploader:2.1"
 	videoRecorderContainer := Container{
@@ -97,7 +147,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
-		Containers:           []*Container{&browserContainer, &videoRecorderContainer},
+		Containers:           []*Container{&browserContainer, &videoRecorderContainer, &mitmContainer},
 		Capabilities:         caps,
 		Volumes: map[string]volume{
                         taskVolume: {ContainerPath: sharedFolder, Driver: "local", Scope: "task", ReadOnly: false},
