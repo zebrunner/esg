@@ -38,7 +38,6 @@ type Capabilities struct {
 	Memory            int64 `json:"memory,string,omitempty"`
 	//Mitm proxy caps
 	Mitm		 bool //enabl mitm with har dump and output generation for mitmweb
-	MitmScripts      string //comma separated list of pre approved python scripts from https://github.com/mitmproxy/mitmproxy/tree/main/examples/contrib
 	MitmArgs         string // list of arguments for mitmdump command. Important: --verbose and --quiet will be appended forcibly
 
 	// generic launcher caps

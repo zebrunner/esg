@@ -39,8 +39,8 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
         }
 
 	//TODO: handle resolution and video screen size
-//        MitmScripts      string `json:"mitmscripts,string,omitempty"` //comma separated list of pre approved python scripts from https://github.com/mitmproxy/mitmproxy/tree/main/examples/contrib
-//        MitmArgs         string `json:"mitmargs,string,omitempty"` // list of arguments for mitmdump command. Important: --verbose and --quiet will be appended forcibly
+	//TODO: handle mitmScripts and insert into the mitmCommand
+	// MitmScripts      string `json:"mitmscripts,string,omitempty"` //comma separated list of pre approved python scripts from https://github.com/mitmproxy/mitmproxy/tree/main/examples/contrib
 
         includeMitm := caps.Mitm
 	mitmCommand := "mitmdump --help || sleep infinity"
@@ -55,7 +55,6 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 	if caps.MitmArgs != "" {
 		mitmCommand = mitmCommand + " " + caps.MitmArgs
 	}
-	//TODO: parse mitmScripts and update mitmCommand accordingly
         mitmImage := imageRepo + "mitmproxy:1.0"
         mitmContainer := Container{
                 Name:       "mitm",
@@ -76,7 +75,6 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
         if (includeMitm) {
 		links = append(links, "mitm")
 	}
-
 
 	// In future maybe there will be need to disable vnc
 	enableVNC := true
