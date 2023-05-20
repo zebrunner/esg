@@ -45,12 +45,18 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 	var mitmMemory int64 = 64 // minimal memory to start container
 
         if includeMitm {
-		mitmCommand = "mitmdump  --quiet --verbose --scripts /har_dump.py --set hardump=" + logDir + "/network.har"
+		// --quiet is a must to run without interactive console
+		//to generate har we have to enable regular dump.mitm output by -w option and place it before har_dump.py!
+                mitmCommand = "mitmdump --quiet --scripts /har_dump.py -w " + logDir + "/dump.mitm --set hardump=" + logDir + "/dump.har"
 		mitmCpu = 256
 		mitmMemory = 256
-	}
-	if caps.MitmArgs != "" {
-		mitmCommand = mitmCommand + " " + caps.MitmArgs
+		if caps.MitmArgs != "" {
+			//append args only if mitm=true
+			mitmCommand = mitmCommand + " " + caps.MitmArgs
+		}
+		//TODO: parsing and adding mitmScipts should be inside this if otherwise default command with sleep infinity will be broken!
+
+		//TODO: register such capabilities automatically: -Dproxy_host=mitm -Dproxy_port=8080
 	}
         mitmImage := imageRepo + "mitmproxy:1.0"
         mitmContainer := Container{
@@ -64,8 +70,8 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
                         "fileserverPort": {fileserverPort, 0},
                 },
                 Mounts:     []string{logVolume},
-                Command: []string{"-c", "chmod a+rwx /tmp/log && ls -la /tmp/ && " + mitmCommand  + " > " + logDir + "/mitm.log 2>&1"},
-                EntryPoint: []string{"/bin/sh"},
+                Command: []string{"-c", "chmod a+rwx " + logDir + " || " + "cd " + logDir + " && " + mitmCommand}, // + " > " + logDir + "/mitm.log 2>&1"}, //IMPORTANT: chmod a+rwx is needed to provide permissions for linked browser into loDir
+                EntryPoint: []string{"/bin/bash"},
         }
 
 	links := []string{}
