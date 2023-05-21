@@ -146,7 +146,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
                 },
 	}
 
-        uploaderImage := imageRepo + "artifacts-uploader:2.2-beta4"
+        uploaderImage := imageRepo + "artifacts-uploader:2.2-beta5"
         uploaderrContainer := Container{
                 Name:              "artifacts-uploader",
                 Image:             uploaderImage,
@@ -162,7 +162,6 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
                         "AWS_DEFAULT_REGION":     conf.S3Region,
                 },
                 Mounts:      []string{logVolume},
-                Links:       []string{"browser"},
                 HealthCheck: nil,
         }
 

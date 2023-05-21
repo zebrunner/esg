@@ -24,9 +24,6 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 	entrypointDir := "/opt/entrypoint"
 	entrypointVolume := "entrypoint"
 
-	zebrunnerDir := "/opt/zebrunner"
-        zebrunnerVolume := "zebrunner"
-
 	mavenDir := "/root/.m2/repository"
 	mavenVolume := "maven"
 
@@ -65,7 +62,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
                 EntryPoint: []string{"/bin/sh"},
         }
 
-        entrypointImage := imageRepo + "entrypoint:1.6"
+        entrypointImage := imageRepo + "entrypoint:2.0-beta2"
         entrypointContainer := Container{
                 Name:              "entrypoint",
                 Image:             entrypointImage,
@@ -77,21 +74,20 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
                 EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
         }
 
-
-		includeMaven:= strings.Contains(caps.Image, "maven")
-		var mavenContainer *Container = nil
-		if includeMaven {
-			mavenImage := imageRepo + "m2-repo-carina:1.3"
-			mavenContainer = &Container{
-				Name:       "maven",
-				Image:      mavenImage,
-				cpu:        16,
-				memory:     16,
-				Privileged: false,
-				Essential:  false,
-				Mounts:     []string{mavenVolume},
-			}
+	includeMaven:= strings.Contains(caps.Image, "maven")
+	var mavenContainer *Container = nil
+	if includeMaven {
+		mavenImage := imageRepo + "m2-repo-carina:1.3"
+		mavenContainer = &Container{
+			Name:       "maven",
+			Image:      mavenImage,
+			cpu:        16,
+			memory:     16,
+			Privileged: false,
+			Essential:  false,
+			Mounts:     []string{mavenVolume},
 		}
+	}
 
         if caps.LaunchCommand == "" {
                 return nil, fmt.Errorf("Executor container launch command is not specified! LaunchCommand='%s'", caps.LaunchCommand)
@@ -101,7 +97,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 	//basic auth header for executor-logs service
 	basicAuthHeader := "Authorization: Basic " + b64.StdEncoding.EncodeToString([]byte(conf.ZebrunnerIntegrationUser + ":" + conf.ZebrunnerIntegrationPassword))
 
-	mounts := []string{entrypointVolume, taskVolume, logVolume, zebrunnerVolume}
+	mounts := []string{entrypointVolume, taskVolume, logVolume}
 	if includeMaven {
 		mounts = append(mounts, mavenVolume)
 	}
@@ -127,17 +123,13 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 		Privileged: false,
 		Essential:  true,
                 Env: map[string]string{
-                        "BUCKET":                 conf.S3Bucket,
-                        "TENANT":                 workspace,
-                        "AWS_ACCESS_KEY_ID":      conf.S3AwsAccessKeyID,
-                        "AWS_SECRET_ACCESS_KEY":  conf.S3AwsSecretAccessKey,
-                        "AWS_DEFAULT_REGION":     conf.S3Region,
-			"COMMAND":		  launchCommand,
-			"BASIC_AUTH":             basicAuthHeader,
+			"COMMAND":  launchCommand,
+			"LOG_DIR":  logDir,
                 },
 		Mounts: mounts,
                 WorkingDirectory: workDir,
-                EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
+                Command: []string{"-c", entrypointDir + "/entrypoint.sh" + taskLogRedirect},
+                EntryPoint: []string{"/bin/sh"},
                 DependsOn: dependsOn,
 	}
 
@@ -151,14 +143,41 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 	executorContainer.SetCpu(caps, 1024, conf.MaxCpu)
 	executorContainer.SetMemory(caps, 1024, conf.MaxMemory)
 
+        uploaderImage := imageRepo + "artifacts-uploader:2.2-beta5"
+        uploaderContainer := Container{
+                Name:              "artifacts-uploader",
+                Image:             uploaderImage,
+                cpu:               64,
+                memory:            64,
+                Privileged:        false,
+                Essential:         false,
+                Env: map[string]string{
+                        "BASIC_AUTH":             basicAuthHeader,
+                        "BUCKET":                 conf.S3Bucket,
+                        "TENANT":                 workspace,
+                        "AWS_ACCESS_KEY_ID":      conf.S3AwsAccessKeyID,
+                        "AWS_SECRET_ACCESS_KEY":  conf.S3AwsSecretAccessKey,
+                        "AWS_DEFAULT_REGION":     conf.S3Region,
+                },
+//                Mounts:      []string{logVolume},
+                Mounts:      []string{entrypointVolume, taskVolume, logVolume},
+                HealthCheck: nil,
+        }
+
+        if caps.EnvVariables != nil {
+                for v, k := range caps.EnvVariables {
+                        //fmt.Printf("var: %v; %v\n", v, k)
+                        uploaderContainer.Env[v] = k
+                }
+        }
+
 	containers := make([]*Container, 0)
 	volumes := make(map[string]volume,0)
 
 	volumes[taskVolume] = volume{Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false}
 	volumes[logVolume] = volume{Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false}
 	volumes[entrypointVolume] = volume{Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false}
-	volumes[zebrunnerVolume] = volume{HostPath: zebrunnerDir, ContainerPath: zebrunnerDir, ReadOnly: true}
-	containers = []*Container{&cloneContainer, &entrypointContainer}
+	containers = []*Container{&cloneContainer, &entrypointContainer, &uploaderContainer}
 
 	if includeMaven{
 		containers = append(containers, mavenContainer)
