@@ -159,8 +159,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
                         "AWS_SECRET_ACCESS_KEY":  conf.S3AwsSecretAccessKey,
                         "AWS_DEFAULT_REGION":     conf.S3Region,
                 },
-//                Mounts:      []string{logVolume},
-                Mounts:      []string{entrypointVolume, taskVolume, logVolume},
+                Mounts:      []string{logVolume},
                 HealthCheck: nil,
         }
 
