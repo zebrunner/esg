@@ -122,26 +122,20 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 	browserContainer.SetCpu(caps, 1024, conf.MaxCpu)
 	browserContainer.SetMemory(caps, 1024, conf.MaxMemory)
 
-	recorderImage := imageRepo + "artifacts-uploader:2.2"
+	recorderImage := imageRepo + "video-recorder:1.0-beta3"
 	videoRecorderContainer := Container{
-		Name:              "artifacts-uploader",
+		Name:              "video-recorder",
 		Image:             recorderImage,
 		cpu:               recorderCpu,
 		memory:            recorderMemory,
 		Privileged:        false,
 		Essential:         false,
 		Env: map[string]string{
-			"UUID":                   id,
 			"BROWSER_CONTAINER_NAME": "browser",
-			"BUCKET":                 conf.S3Bucket,
-			"TENANT":                 workspace,
-                        "AWS_ACCESS_KEY_ID":      conf.S3AwsAccessKeyID,
-                        "AWS_SECRET_ACCESS_KEY":  conf.S3AwsSecretAccessKey,
-                        "AWS_DEFAULT_REGION":     conf.S3Region,
 		},
 		Mounts:      []string{logVolume},
 		Links:       []string{"browser"},
-                Command: []string{"-c", "/entrypoint.sh" + " > " + logDir + "/video.log 2>&1"},
+                Command: []string{"-c", "/entrypoint.sh"}, // + " > " + logDir + "/video.log 2>&1"},
                 EntryPoint: []string{"/bin/sh"},
 		HealthCheck: nil,
                 DependsOn: []*ecs.ContainerDependency{
@@ -152,9 +146,30 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
                 },
 	}
 
+        uploaderImage := imageRepo + "artifacts-uploader:2.2-beta4"
+        uploaderrContainer := Container{
+                Name:              "artifacts-uploader",
+                Image:             uploaderImage,
+                cpu:               64,
+                memory:            64,
+                Privileged:        false,
+                Essential:         false,
+                Env: map[string]string{
+                        "BUCKET":                 conf.S3Bucket,
+                        "TENANT":                 workspace,
+                        "AWS_ACCESS_KEY_ID":      conf.S3AwsAccessKeyID,
+                        "AWS_SECRET_ACCESS_KEY":  conf.S3AwsSecretAccessKey,
+                        "AWS_DEFAULT_REGION":     conf.S3Region,
+                },
+                Mounts:      []string{logVolume},
+                Links:       []string{"browser"},
+                HealthCheck: nil,
+        }
+
+
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
-		Containers:           []*Container{&browserContainer, &videoRecorderContainer, &mitmContainer},
+		Containers:           []*Container{&browserContainer, &videoRecorderContainer, &mitmContainer, &uploaderrContainer},
 		Capabilities:         caps,
 		Volumes: map[string]volume{
                         logVolume: {ContainerPath: logDir, Driver: "local", Scope: "task", ReadOnly: false},
