@@ -147,7 +147,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 	}
 
         uploaderImage := imageRepo + "artifacts-uploader:2.2-beta5"
-        uploaderrContainer := Container{
+        uploaderContainer := Container{
                 Name:              "artifacts-uploader",
                 Image:             uploaderImage,
                 cpu:               64, // with 32  uploading is aborted
@@ -168,7 +168,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
-		Containers:           []*Container{&browserContainer, &videoRecorderContainer, &mitmContainer, &uploaderrContainer},
+		Containers:           []*Container{&browserContainer, &videoRecorderContainer, &mitmContainer, &uploaderContainer},
 		Capabilities:         caps,
 		Volumes: map[string]volume{
                         logVolume: {ContainerPath: logDir, Driver: "local", Scope: "task", ReadOnly: false},
