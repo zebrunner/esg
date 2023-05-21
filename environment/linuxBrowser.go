@@ -150,7 +150,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
         uploaderrContainer := Container{
                 Name:              "artifacts-uploader",
                 Image:             uploaderImage,
-                cpu:               64,
+                cpu:               64, // with 32  uploading is aborted
                 memory:            64,
                 Privileged:        false,
                 Essential:         false,
