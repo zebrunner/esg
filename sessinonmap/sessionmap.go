@@ -75,3 +75,9 @@ func Remove(id string) error {
 
 	return nil
 }
+
+func Keys() ([]string, error) {
+	keys, err := config.RedisConnection.Keys(context.Background(), "*").Result()
+
+	return keys, err
+}

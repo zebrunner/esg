@@ -57,13 +57,7 @@ func StartSession(ctx context.Context, driverUrl *url.URL, header http.Header, b
 }
 
 func CloseSession(session *sessionmap.Session) {
-        // remove driver session from map
-        err := sessionmap.Remove(session.ID)
-        if err != nil {
-                log.WithError(err).Error("Driver session not removed!")
-        }
-
-        l := log.WithFields(log.Fields{"_taskId": session.TaskID, "sessionId": session.ID, "workspace": session.Workspace})
+    l := log.WithFields(log.Fields{"_taskId": session.TaskID, "sessionId": session.ID, "workspace": session.Workspace})
 
 	conf := &config.Conf
 	client := http.Client{}
@@ -94,6 +88,5 @@ func CloseSession(session *sessionmap.Session) {
 		l.Error("failed to get driver url")
 	}
 
-        l.Debug("driver closed")
-
+	l.Debug("driver closed")
 }
