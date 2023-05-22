@@ -225,11 +225,15 @@ func RefreshTaskDefinitions() {
 	images := getImageList()
 
 	for _, image := range images {
-		time.Sleep(1000 * time.Millisecond)
-		err := RefreshTaskDefinition(image)
-		if err != nil {
-			continue
-		}
+		for i := 1; i <= 10; i++ {
+			time.Sleep(time.Duration(i) * 500 * time.Millisecond)
+			err := RefreshTaskDefinition(image)
+			if err != nil &&  strings.Contains(err.Error(), "ThrottlingException"){
+				log.WithField("image", image).WithFields(log.Fields{"retry": i}).Info("Recreating task defenition")
+			} else {
+				break
+			}
+		}		
 	}
 }
 
