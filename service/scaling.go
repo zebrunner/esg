@@ -327,6 +327,7 @@ func ScaleDown() {
 
 	maxInstancesToDelete := int(math.Ceil(float64(len(instancesToDelete)) * (1 - config.Conf.ReserveInstancesPercent)))
 
+	terminatedCount := 0
 	for _, instance := range instancesToDelete {
 		if desiredCapacity <= minSize {
 			break
@@ -348,6 +349,13 @@ func ScaleDown() {
 		log.WithField("instance", *instance.Ec2InstanceId).Trace("Stopping instance")
 		desiredCapacity -= 1
 		maxInstancesToDelete -= 1
+		terminatedCount++
 		time.Sleep(250 * time.Millisecond)
+	}
+	if terminatedCount != 0 {
+		log.WithFields(log.Fields{
+			"terminatedInstances": terminatedCount,
+			"currentCapacity":     *autoScalingGroup.DesiredCapacity,
+		}).Info("Scale down performed")
 	}
 }
