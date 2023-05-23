@@ -1,10 +1,11 @@
 #!/bin/bash
 # This script stops all tasks for specified in router.env file aws cluster
 
+BASEDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # find out cluster name
-cluster=`scripts/./cluster.sh`
+cluster=`$BASEDIR/./cluster.sh`
 # get all tasks
-tasks=`scripts/./list-tasks.sh`
+tasks=`$BASEDIR/./list-tasks.sh`
 
 # iterate tasks by their ARN
 echo $tasks | jq -r '.[]' | while read taskArn ; do
