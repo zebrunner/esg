@@ -2,11 +2,12 @@
 # This script stops all tasks for specified in router.env file aws cluster
 
 # find out cluster name
-clusterLine=`grep "AWS_CLUSTER" ../router.env`
-cluster=${clusterLine: `expr match $clusterLine "AWS_CLUSTER="`}
+cluster=`scripts/./cluster.sh`
+# get all tasks
+tasks=`scripts/./list-tasks.sh`
 
-# get all tasks for current cluster and iterate by their ARN
-aws ecs list-tasks --cluster $cluster | jq -r '.[]' | while read taskArn ; do
+# iterate tasks by their ARN
+echo $tasks | jq -r '.[]' | while read taskArn ; do
     taskIdIndex=`expr match $taskArn ^\"[a-z:0-9\-]*/$cluster/`
     if [[ $taskIdIndex != 0 ]]
     then 
