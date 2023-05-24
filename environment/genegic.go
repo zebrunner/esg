@@ -124,7 +124,6 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 		Essential:  true,
                 Env: map[string]string{
 			"COMMAND":  launchCommand,
-			"LOG_DIR":  logDir,
                 },
 		Mounts: mounts,
                 WorkingDirectory: workDir,
