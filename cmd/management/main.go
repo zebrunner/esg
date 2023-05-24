@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"math"
 	"os"
 	"strings"
 	"sync"
@@ -46,11 +45,19 @@ func ClearTasks() {
 			log.WithField("keys", keys).Trace("cached session keys")
 		}
 
+		tasks := service.GetSessionMapTasks(keys, svc)
+
 		wg.Add(1)
 		go StopIdleTasks(keys, &wg)
 
 		wg.Add(1)
-		go CheckTasksStatus(keys, svc, &wg)
+		go StopUnhealthyTasks(tasks, &wg)
+
+		wg.Add(1)
+		go StopLostTasks(keys, svc, &wg)
+
+		wg.Add(1)
+		go TrackResourceUsage(tasks, &wg)
 
 		wg.Wait()
 	}
@@ -69,7 +76,7 @@ func StopIdleTasks(keys []string, wg *sync.WaitGroup) {
 			continue
 		}
 
-		log.WithField("session", session).Debug("StopIdleTasks: analyzing session for idleTimeout")
+		log.WithField("session", session.TaskID).Debug("StopIdleTasks: analyzing session for idleTimeout")
 
 		idleTimeout := float64(session.Capabilities.IdleTimeout)
 		if idleTimeout == 0 {
@@ -95,85 +102,14 @@ func StopIdleTasks(keys []string, wg *sync.WaitGroup) {
 	wg.Done()
 }
 
-func CheckTasksStatus(keys []string, svc *ecs.ECS, wg *sync.WaitGroup) {
-	var taskIdsPtrs []*string = aws.StringSlice(keys)
-
-	// Construct pages of *string with 100 or fewer elements for requests. 100 is an AWS limitation for Describe* requests
-	pages := paginate(taskIdsPtrs, 100)
-
-	tasks := make([]*ecs.Task, 0)
-	// Send DescribeTasks requests and save response tasks into array
-	for _, page := range pages {
-		describeTasksInput := ecs.DescribeTasksInput{
-			Cluster: &config.Conf.AwsCluster,
-			Tasks:   page,
-		}
-
-		log.Trace("describeTasksInput: ", describeTasksInput)
-		output, err := svc.DescribeTasks(&describeTasksInput)
-		if err != nil {
-			log.WithError(err).Error("Failed to describe tasks!")
-		}
-
-		tasks = append(tasks, output.Tasks...)
-	}
-	// track STOPPED tasks id for removing them from sessionMap
-	var taskIds4Removal []string
-
-	/* Do not remove MISSING as any driver/browser sessionId we use can be removed from session map
-	for _, failure := range tasks {
-		//no sense to keep MISSING sessions as we can't detect resoutce usage anymore!
-		// failures="[{\n  Arn: \"arn:aws:ecs:us-east-1:659932254483:task/9fc25c3e9c1c865e94b68061f020d083\",\n  Reason: \"MISSING\"\n}]"
-		if *failure.Reason == "MISSING" {
-			taskId := strings.Split(*failure.Arn, "/")[1]
-			taskIds4Removal = append(taskIds4Removal, taskId)
-		}
-	}*/
-
-	// analyze tasks response
+func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 	for _, task := range tasks {
 		taskId := strings.Split(*task.TaskArn, "/")[2]
 		l := log.WithFields(log.Fields{"_taskId": taskId})
 
 		session, err := sessionmap.Find(taskId, false)
 		if err != nil {
-			l.WithError(err).Error("Failed to get task session from sessionmap!")
-			// if task is in a Running stage and still not registered in sessionMap for SessionStartupTimeout time
-			// stop this task
-			if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
-				sessStartup := config.Conf.SessionStartupTimeout.Seconds()
-				if task.CreatedAt != nil && time.Since(*task.CreatedAt).Seconds() > sessStartup {
-					l.WithField("sessionStartupTimeout", sessStartup).Warn("Task is running and wasn't registered in sessionMap in time. Aborting")
-					_, err := service.StopTask(taskId)
-					if err != nil {
-						l.WithError(err).Error("Failed to stop the task")
-					}
-				}
-			}
 			continue
-		}
-
-		// add task id for removal and track resources usage for STOPPED tasks
-		if *task.LastStatus == "STOPPED" {
-			l = l.WithFields(log.Fields{"workspace": session.Workspace})
-
-			if task.StartedAt != nil && task.StoppedAt != nil {
-				// don't calculate timing for terminated tasks by AWS due to the missted StartedAt!
-				//	StopCode: \"TerminationNotice\"
-				//	StoppedReason: \"Host EC2 (instance i-03dba81187d65ce7e) terminated.\"
-				l.Trace("StartedAt: ", *task.StartedAt)
-				l.Trace("StoppedAt: ", *task.StoppedAt)
-				startedAt := *task.StartedAt //local var needed to calculate difference via Sub(..)
-				stoppedAt := *task.StoppedAt
-				zebrunner.TrackResourcesUsage(session, stoppedAt.Sub(startedAt))
-			}
-
-			if !strings.HasPrefix(session.Capabilities.Image, "public.ecr.aws/zebrunner/cypress-") {
-				// #503: суpress tests aborted automatically
-				// automatic abort of the public.ecr.aws/zebrunner/cypress-* should be prohibited as execution is control by parent cyserver process
-				zebrunner.AbortTask(session, task)
-			}
-			taskIds4Removal = append(taskIds4Removal, taskId)
 		}
 
 		// stop zombie and UNHEALTHY tasks that are not pending for stop.
@@ -200,6 +136,92 @@ func CheckTasksStatus(keys []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 					}
 				}
 			}
+		}
+	}
+	wg.Done()
+}
+
+func StopLostTasks(cachedIds []string, svc *ecs.ECS, wg *sync.WaitGroup) {
+	taskArns, err := service.GetClusterTasksArn(svc)
+	if err != nil {
+		log.WithError(err).Error("Error on ListTasks operation")
+	}
+
+	for _, taskArn := range taskArns {
+		isFound := false
+		for _, cachedId := range cachedIds {
+			taskId := strings.Split(*taskArn, "/")[2]
+			if cachedId == taskId {
+				isFound = true
+				break
+			}
+		}
+
+		if !isFound {
+			tasksOutput, err := service.DescribeTask(*taskArn)
+			if err != nil {
+				log.WithError(err).Error("Error on DescribeTask operation")
+				continue
+			}
+
+			if len(tasksOutput.Tasks) != 1 {
+				continue
+			}
+			task := tasksOutput.Tasks[0]
+
+			if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
+				sessStartup := config.Conf.SessionStartupTimeout.Seconds()
+				if task.CreatedAt != nil && time.Since(*task.CreatedAt).Seconds() > sessStartup {
+					log.WithField("sessionStartupTimeout", sessStartup).Warn("Task is running but wasn't cached in sessionMap in time. Aborting")
+					taskId := strings.Split(*task.TaskArn, "/")[2]
+					_, err := service.StopTask(taskId)
+					if err != nil {
+						log.WithError(err).WithField("taskId", taskId).Error("Failed to stop the task")
+					}
+				}
+			}
+		}
+
+	}
+
+	wg.Done()
+}
+
+func TrackResourceUsage(tasks []*ecs.Task, wg *sync.WaitGroup) {
+	// track STOPPED tasks id for removing them from sessionMap
+	var taskIds4Removal []string
+
+	// analyze tasks response
+	for _, task := range tasks {
+		taskId := strings.Split(*task.TaskArn, "/")[2]
+		l := log.WithFields(log.Fields{"_taskId": taskId})
+
+		session, err := sessionmap.Find(taskId, false)
+		if err != nil {
+			continue
+		}
+
+		// add task id for removal and track resources usage for STOPPED tasks
+		if *task.LastStatus == "STOPPED" {
+			l = l.WithFields(log.Fields{"workspace": session.Workspace})
+
+			if task.StartedAt != nil && task.StoppedAt != nil {
+				// don't calculate timing for terminated tasks by AWS due to the missted StartedAt!
+				//	StopCode: \"TerminationNotice\"
+				//	StoppedReason: \"Host EC2 (instance i-03dba81187d65ce7e) terminated.\"
+				l.Trace("StartedAt: ", *task.StartedAt)
+				l.Trace("StoppedAt: ", *task.StoppedAt)
+				startedAt := *task.StartedAt //local var needed to calculate difference via Sub(..)
+				stoppedAt := *task.StoppedAt
+				zebrunner.TrackResourcesUsage(session, stoppedAt.Sub(startedAt))
+			}
+
+			if !strings.HasPrefix(session.Capabilities.Image, "public.ecr.aws/zebrunner/cypress-") {
+				// #503: суpress tests aborted automatically
+				// automatic abort of the public.ecr.aws/zebrunner/cypress-* should be prohibited as execution is control by parent cyserver process
+				zebrunner.AbortTask(session, task)
+			}
+			taskIds4Removal = append(taskIds4Removal, taskId)
 		}
 	}
 
@@ -281,21 +303,6 @@ func getImageSet() map[string]bool {
 	}
 
 	return imagesSet
-}
-
-func paginate[T interface{}](l []T, size int) [][]T {
-	numPages := int(math.Ceil(float64(len(l)) / float64(size)))
-	pages := make([][]T, numPages)
-	for i := 0; i < numPages; i++ {
-		left := i * size
-		right := (i + 1) * size
-		if right > len(l) {
-			right = len(l)
-		}
-		pages[i] = l[left:right]
-	}
-
-	return pages
 }
 
 func AddTaskDefinitions() {
