@@ -36,8 +36,8 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
         }
 
 	//TODO: handle resolution and video screen size
-	//TODO: handle mitmScripts and insert into the mitmCommand
-	// MitmScripts      string `json:"mitmscripts,string,omitempty"` //comma separated list of pre approved python scripts from https://github.com/mitmproxy/mitmproxy/tree/main/examples/contrib
+
+	sessionLogRedirect :=  ">>" + logDir + "/session.log 2>&1"
 
         includeMitm := caps.Mitm
 	mitmCommand := "mitmdump --help || sleep infinity"
@@ -47,16 +47,17 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
         if includeMitm {
 		// --quiet is a must to run without interactive console
 		//to generate har we have to enable regular dump.mitm output by -w option and place it before har_dump.py!
-                mitmCommand = "mitmdump --quiet --scripts /har_dump.py -w " + logDir + "/dump.mitm --set hardump=" + logDir + "/dump.har"
+                mitmCommand = "mitmdump --scripts /har_dump.py -w " + logDir + "/dump.mitm --set hardump=" + logDir + "/dump.har"
 		mitmCpu = 256
 		mitmMemory = 256
 		if caps.MitmArgs != "" {
 			//append args only if mitm=true
 			mitmCommand = mitmCommand + " " + caps.MitmArgs
 		}
-		//TODO: parsing and adding mitmScipts should be inside this if otherwise default command with sleep infinity will be broken!
+		mitmCommand = mitmCommand + " --quiet " + sessionLogRedirect
 
 		//TODO: register such capabilities automatically: -Dproxy_host=mitm -Dproxy_port=8080
+
 	}
         mitmImage := imageRepo + "mitmproxy:1.0"
         mitmContainer := Container{
@@ -70,7 +71,8 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
                         "fileserverPort": {fileserverPort, 0},
                 },
                 Mounts:     []string{logVolume},
-                Command: []string{"-c", "chmod a+rwx " + logDir + " || " + "cd " + logDir + " && " + mitmCommand}, // + " > " + logDir + "/mitm.log 2>&1"}, //IMPORTANT: chmod a+rwx is needed to provide permissions for linked browser into loDir
+		//TODO: play with actual command to guarantee mitm.har generation
+                Command: []string{"-c", "chmod a+rwx " + logDir + " && " + mitmCommand}, //IMPORTANT: chmod a+rwx is needed to provide permissions for linked browser into logDir //TODO: how about chown to selenoid (4096:4096?)
                 EntryPoint: []string{"/bin/bash"},
         }
 
@@ -101,8 +103,8 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			"TZ":            tz.String(),
 		},
 		Mounts: []string{"shm", logVolume},
-		Links:  []string{"mitm"},
-                Command: []string{"-c", "/entrypoint.sh" + " > " + logDir + "/session.log 2>&1"},
+		Links:  links,
+                Command: []string{"-c", "/entrypoint.sh" +  sessionLogRedirect},
                 EntryPoint: []string{"/bin/sh"},
 		HealthCheck: &ecs.HealthCheck{
 			Command:     []*string{aws.String("CMD-SHELL"), aws.String("curl -f localhost:4444/status || exit 1")},
@@ -122,26 +124,17 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 	browserContainer.SetCpu(caps, 1024, conf.MaxCpu)
 	browserContainer.SetMemory(caps, 1024, conf.MaxMemory)
 
-	recorderImage := imageRepo + "artifacts-uploader:2.2"
+	recorderImage := imageRepo + "video-recorder:1.0"
 	videoRecorderContainer := Container{
-		Name:              "artifacts-uploader",
+		Name:              "video-recorder",
 		Image:             recorderImage,
 		cpu:               recorderCpu,
 		memory:            recorderMemory,
 		Privileged:        false,
 		Essential:         false,
-		Env: map[string]string{
-			"UUID":                   id,
-			"BROWSER_CONTAINER_NAME": "browser",
-			"BUCKET":                 conf.S3Bucket,
-			"TENANT":                 workspace,
-                        "AWS_ACCESS_KEY_ID":      conf.S3AwsAccessKeyID,
-                        "AWS_SECRET_ACCESS_KEY":  conf.S3AwsSecretAccessKey,
-                        "AWS_DEFAULT_REGION":     conf.S3Region,
-		},
 		Mounts:      []string{logVolume},
 		Links:       []string{"browser"},
-                Command: []string{"-c", "/entrypoint.sh" + " > " + logDir + "/video.log 2>&1"},
+                Command: []string{"-c", "/entrypoint.sh" + sessionLogRedirect},
                 EntryPoint: []string{"/bin/sh"},
 		HealthCheck: nil,
                 DependsOn: []*ecs.ContainerDependency{
@@ -152,9 +145,29 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
                 },
 	}
 
+        uploaderImage := imageRepo + "artifacts-uploader:2.2"
+        uploaderContainer := Container{
+                Name:              "artifacts-uploader",
+                Image:             uploaderImage,
+                cpu:               64, // with 32  uploading is aborted
+                memory:            64,
+                Privileged:        false,
+                Essential:         false,
+                Env: map[string]string{
+                        "BUCKET":                 conf.S3Bucket,
+                        "TENANT":                 workspace,
+                        "AWS_ACCESS_KEY_ID":      conf.S3AwsAccessKeyID,
+                        "AWS_SECRET_ACCESS_KEY":  conf.S3AwsSecretAccessKey,
+                        "AWS_DEFAULT_REGION":     conf.S3Region,
+                },
+                Mounts:      []string{logVolume},
+                HealthCheck: nil,
+        }
+
+
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
-		Containers:           []*Container{&browserContainer, &videoRecorderContainer, &mitmContainer},
+		Containers:           []*Container{&browserContainer, &videoRecorderContainer, &mitmContainer, &uploaderContainer},
 		Capabilities:         caps,
 		Volumes: map[string]volume{
                         logVolume: {ContainerPath: logDir, Driver: "local", Scope: "task", ReadOnly: false},

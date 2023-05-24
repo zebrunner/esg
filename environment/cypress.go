@@ -29,6 +29,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
         cypressDir := "/opt/cypress"
 	cypressVolume := "cypress"
 
+	//TODO: test removal of /opt/zebrunner for cypress
 	zebrunnerDir := "/opt/zebrunner"
         zebrunnerVolume := "zebrunner"
 
@@ -44,11 +45,10 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 	log.Debug("browserImage: " + browserImage)
 
 	cloneCommand := "CHANGE_ME"
-        taskLogRedirect :=  ">>" + logDir + "/task.log 2>&1"
+        sessionLogRedirect :=  ">>" + logDir + "/session.log 2>&1"
         if caps.RepositoryUrl != "" {
 		cloneCommand = fmt.Sprintf("git clone --depth=1 --single-branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
-		cloneCommand = cloneCommand + taskLogRedirect + " ; chown -R 4096:4096 " + workDir + "; chown -R 4096:4096 " + logDir
-	        //fmt.Printf("cloneCommand: %s\n", cloneCommand)
+		cloneCommand = cloneCommand + sessionLogRedirect + " ; chown -R 4096:4096 " + workDir + "; chown -R 4096:4096 " + logDir
         }
 
 
@@ -61,7 +61,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
                 Privileged:        false,
                 Essential:         false,
                 Mounts: []string{taskVolume, logVolume},
-                Command: []string{"-c", cloneCommand + taskLogRedirect},
+                Command: []string{"-c", cloneCommand + sessionLogRedirect},
                 EntryPoint: []string{"/bin/sh"},
         }
 
@@ -70,7 +70,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
                 launchCommand = caps.LaunchCommand
         }
 
-        entrypointImage := imageRepo + "entrypoint:1.6"
+        entrypointImage := imageRepo + "entrypoint:2.0"
         entrypointContainer := Container{
                 Name:              "entrypoint",
                 Image:             entrypointImage,
@@ -79,29 +79,24 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
                 Privileged:        false,
                 Essential:         false,
                 Mounts: []string{entrypointVolume, cypressVolume},
-                EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
+                EntryPoint: []string{entrypointDir + "/entrypoint.sh"}, //TODO: do we need output in session.log?
         }
 
-        //basic auth header for executor-logs service
-        basicAuthHeader := "Authorization: Basic " + b64.StdEncoding.EncodeToString([]byte(conf.ZebrunnerIntegrationUser + ":" + conf.ZebrunnerIntegrationPassword))
-
-	executorContainer := Container{
-		Name:       "executor",
+	cypressContainer := Container{
+		Name:       "browser",
 		Image:      browserImage,
 		Privileged: false,
 		Essential:  true,
+                Ports: map[string]portMapping{
+                        "vnc":            {vncPort, 0},
+                },
                 Env: map[string]string{
-                        "BUCKET":                 conf.S3Bucket,
-                        "TENANT":                 workspace,
-                        "AWS_ACCESS_KEY_ID":      conf.AwsAccessKeyID,
-                        "AWS_SECRET_ACCESS_KEY":  conf.AwsSecretAccessKey,
-                        "AWS_DEFAULT_REGION":     conf.AwsRegion,
-			"COMMAND":		  launchCommand,
-                        "BASIC_AUTH":             basicAuthHeader,
+			"COMMAND":  launchCommand,
                 },
 		Mounts: []string{entrypointVolume, taskVolume, logVolume, zebrunnerVolume, cypressVolume},
 		WorkingDirectory: workDir,
-                EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
+                Command: []string{"-c", entrypointDir + "/entrypoint.sh" + sessionLogRedirect},
+                EntryPoint: []string{"/bin/sh"},
                 DependsOn: []*ecs.ContainerDependency{
                         &ecs.ContainerDependency{
                                 ContainerName: aws.String("entrypoint"),
@@ -112,18 +107,69 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 				Condition:  aws.String("COMPLETE"),
         	        },
 		},
-
 	}
 
         if caps.EnvVariables != nil {
  		for v, k := range caps.EnvVariables {
 			//fmt.Printf("var: %v; %v\n", v, k)
-			executorContainer.Env[v] = k
+			cypressContainer.Env[v] = k
 		}
         }
 
-	executorContainer.SetCpu(caps, 1024, conf.MaxCpu)
-	executorContainer.SetMemory(caps, 2048, conf.MaxMemory) // 2Gb RAM is minimal for cypress due to the potential memory leaks
+	cypressContainer.SetCpu(caps, 1024, conf.MaxCpu)
+	cypressContainer.SetMemory(caps, 2048, conf.MaxMemory) // 2Gb RAM is minimal for cypress due to the potential memory leaks
+
+        recorderImage := imageRepo + "video-recorder:1.0"
+        videoRecorderContainer := Container{
+                Name:              "video-recorder",
+                Image:             recorderImage,
+                cpu:               recorderCpu,
+                memory:            recorderMemory,
+                Privileged:        false,
+                Essential:         false,
+                Mounts:      []string{logVolume},
+                Links:       []string{"browser"},
+                Command: []string{"-c", "/entrypoint.sh" + sessionLogRedirect},
+                EntryPoint: []string{"/bin/sh"},
+                HealthCheck: nil,
+                DependsOn: []*ecs.ContainerDependency{
+                        &ecs.ContainerDependency{
+                                ContainerName: aws.String("browser"),
+                                Condition:  aws.String("START"),
+                        },
+                },
+        }
+
+        //basic auth header for executor-logs service
+        basicAuthHeader := "Authorization: Basic " + b64.StdEncoding.EncodeToString([]byte(conf.ZebrunnerIntegrationUser + ":" + conf.ZebrunnerIntegrationPassword))
+
+	uploaderImage := imageRepo + "artifacts-uploader:2.2"
+        uploaderContainer := Container{
+                Name:              "artifacts-uploader",
+                Image:             uploaderImage,
+                cpu:               64,
+                memory:            64,
+                Privileged:        false,
+                Essential:         false,
+                Env: map[string]string{
+                        "BASIC_AUTH":             basicAuthHeader,
+                        "BUCKET":                 conf.S3Bucket,
+                        "TENANT":                 workspace,
+                        "AWS_ACCESS_KEY_ID":      conf.S3AwsAccessKeyID,
+                        "AWS_SECRET_ACCESS_KEY":  conf.S3AwsSecretAccessKey,
+                        "AWS_DEFAULT_REGION":     conf.S3Region,
+                },
+                Mounts:      []string{logVolume},
+                HealthCheck: nil,
+        }
+
+        if caps.EnvVariables != nil {
+                for v, k := range caps.EnvVariables {
+                        //fmt.Printf("var: %v; %v\n", v, k)
+                        uploaderContainer.Env[v] = k
+                }
+        }
+
 
         // convert image "public.ecr.aws/zebrunner/cypress-chrome:107.0" to task definition failiy: "cypress-cypress-chrome-107-0"
         familyDefinition := strings.Replace(browserImage, imageRepo, "", -1)
@@ -133,7 +179,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: familyDefinition,
-		Containers:           []*Container{&cloneContainer, &entrypointContainer, &executorContainer},
+		Containers:           []*Container{&cloneContainer, &entrypointContainer, &cypressContainer, &videoRecorderContainer, &uploaderContainer},
 		Capabilities:         caps,
 		Volumes: map[string]volume{
 			taskVolume: {Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false},
@@ -146,6 +192,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
                         IP: "",
                         Endpoints: map[string]*Endpoint{
                                 "driver":      {ContainerPort: genericPort, HostPort: 0, Path: "/"},
+                                "vnc":         {ContainerPort: vncPort, HostPort: 0, Path: "/"},
                         },
                 },
 
