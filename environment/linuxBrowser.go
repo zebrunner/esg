@@ -7,7 +7,6 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
-	"github.com/google/uuid"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
 
@@ -16,8 +15,6 @@ import (
 
 func buildBrowser(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
         conf := &config.Conf
-
-	id := uuid.New().String()
 
 	browserImage, err := buildImage(caps)
 	if err != nil {
@@ -37,7 +34,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 
 	//TODO: handle resolution and video screen size
 
-	sessionLogRedirect :=  ">>" + logDir + "/session.log 2>&1"
+	sessionLogRedirect :=  " >> " + logDir + "/session.log 2>&1"
 
         includeMitm := caps.Mitm
 	mitmCommand := "mitmdump --help || sleep infinity"
@@ -72,14 +69,9 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
                 },
                 Mounts:     []string{logVolume},
 		//TODO: play with actual command to guarantee mitm.har generation
-                Command: []string{"-c", "chmod a+rwx " + logDir + " && " + mitmCommand}, //IMPORTANT: chmod a+rwx is needed to provide permissions for linked browser into logDir //TODO: how about chown to selenoid (4096:4096?)
+                Command: []string{"-c", "echo -n >" + logDir + "/session.log && chmod -R a+rwx " + logDir + " && " + mitmCommand}, //IMPORTANT: chmod a+rwx is needed to provide permissions for linked browser into logDir //TODO: how about chown to selenoid (4096:0)
                 EntryPoint: []string{"/bin/bash"},
         }
-
-	links := []string{}
-        if (includeMitm) {
-		links = append(links, "mitm")
-	}
 
 	// In future maybe there will be need to disable vnc
 	enableVNC := true
@@ -95,15 +87,13 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			"clipboardPort":  {clipboardPort, 0},
 		},
 		Env: map[string]string{
-			"VERBOSE":       "1",
-			"UUID":          id,
 			"ENABLE_VNC":    strconv.FormatBool(enableVNC),
 			"DNS_SERVERS":   strings.Join(caps.DNSServers, " "),
 			"HOSTS_ENTRIES": strings.Join(caps.HostsEntries, " "),
 			"TZ":            tz.String(),
 		},
 		Mounts: []string{"shm", logVolume},
-		Links:  links,
+		Links:  []string{"mitm"},
                 Command: []string{"-c", "/entrypoint.sh" +  sessionLogRedirect},
                 EntryPoint: []string{"/bin/sh"},
 		HealthCheck: &ecs.HealthCheck{
