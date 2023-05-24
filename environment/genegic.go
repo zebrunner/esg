@@ -62,7 +62,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
                 EntryPoint: []string{"/bin/sh"},
         }
 
-        entrypointImage := imageRepo + "entrypoint:2.0-beta2"
+        entrypointImage := imageRepo + "entrypoint:2.0"
         entrypointContainer := Container{
                 Name:              "entrypoint",
                 Image:             entrypointImage,
@@ -143,7 +143,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 	executorContainer.SetCpu(caps, 1024, conf.MaxCpu)
 	executorContainer.SetMemory(caps, 1024, conf.MaxMemory)
 
-        uploaderImage := imageRepo + "artifacts-uploader:2.2-beta5"
+        uploaderImage := imageRepo + "artifacts-uploader:2.2"
         uploaderContainer := Container{
                 Name:              "artifacts-uploader",
                 Image:             uploaderImage,
