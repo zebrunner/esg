@@ -87,6 +87,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			"clipboardPort":  {clipboardPort, 0},
 		},
 		Env: map[string]string{
+			"VERBOSE":       "1",
 			"ENABLE_VNC":    strconv.FormatBool(enableVNC),
 			"DNS_SERVERS":   strings.Join(caps.DNSServers, " "),
 			"HOSTS_ENTRIES": strings.Join(caps.HostsEntries, " "),
