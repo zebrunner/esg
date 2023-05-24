@@ -134,7 +134,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		Essential:         false,
 		Mounts:      []string{logVolume},
 		Links:       []string{"browser"},
-                Command: []string{"-c", "/entrypoint.sh"}, // + " > " + logDir + "/video.log 2>&1"},
+                Command: []string{"-c", "/entrypoint.sh" + sessionLogRedirect},
                 EntryPoint: []string{"/bin/sh"},
 		HealthCheck: nil,
                 DependsOn: []*ecs.ContainerDependency{

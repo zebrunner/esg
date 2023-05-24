@@ -79,7 +79,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
                 Privileged:        false,
                 Essential:         false,
                 Mounts: []string{entrypointVolume, cypressVolume},
-                EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
+                EntryPoint: []string{entrypointDir + "/entrypoint.sh"}, //TODO: do we need output in session.log?
         }
 
 	cypressContainer := Container{
@@ -129,7 +129,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
                 Essential:         false,
                 Mounts:      []string{logVolume},
                 Links:       []string{"browser"},
-                Command: []string{"-c", "/entrypoint.sh"}, // + " > " + logDir + "/video.log 2>&1"},
+                Command: []string{"-c", "/entrypoint.sh" + sessionLogRedirect},
                 EntryPoint: []string{"/bin/sh"},
                 HealthCheck: nil,
                 DependsOn: []*ecs.ContainerDependency{
