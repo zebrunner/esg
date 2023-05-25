@@ -17,7 +17,7 @@ const (
 func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
 	sharedFolder := "/opt/zebrunner"
 	taskVolume := "data"
-        browserVolume := "browser"
+	browserVolume := "browser"
 
 	conf := &config.Conf
 
@@ -41,12 +41,12 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities) (*Exe
 
 	appiumImage := imageRepo + "appium:1.4.10"
 	appiumContainer := Container{
-		Name:              "appium",
-		Image:             appiumImage,
-		cpu:               appiumCpu,
-		memory:            appiumMemory,
-		Privileged:        false,
-		Essential:         true,
+		Name:       "appium",
+		Image:      appiumImage,
+		cpu:        appiumCpu,
+		memory:     appiumMemory,
+		Privileged: false,
+		Essential:  true,
 		Ports: map[string]portMapping{
 			"driver": {appiumPort, 0},
 		},
@@ -78,7 +78,7 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities) (*Exe
 		Containers:           []*Container{&deviceContainer, &appiumContainer},
 		Capabilities:         caps,
 		Volumes: map[string]volume{
-                        taskVolume: {ContainerPath: sharedFolder, Driver: "local", Scope: "task", ReadOnly: false},
+			taskVolume:    {ContainerPath: sharedFolder, Driver: "local", Scope: "task", ReadOnly: false},
 			browserVolume: {ContainerPath: "/tmp/zebrunner/chrome", HostPath: "/opt/zebrunner/chrome", ReadOnly: false}, //TODO: think about path unification on hos and inside container
 		},
 		Network: &NetworkConfiguration{

@@ -3,8 +3,8 @@ package service
 import (
 	"context"
 	"errors"
-	"time"
 	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go/service/ecs"
 	log "github.com/sirupsen/logrus"
@@ -88,28 +88,27 @@ func (w *waitWorker) start() {
 
 		// Send responses for running tasks
 		for _, task := range tasks {
-                        req, ok := w.requests[*task.TaskArn]
-                        if !ok {
-                                continue
-                        }
+			req, ok := w.requests[*task.TaskArn]
+			if !ok {
+				continue
+			}
 
-                        if *task.LastStatus == "STOPPED" {
-                                log.Error("Task stopped: ", *task)
-                                req.errorChan <- errors.New("failed to start task: " + *task.StoppedReason)
-                                close(req.responseChan)
-                                close(req.errorChan)
-                                delete(w.requests, *task.TaskArn)
-                        }
+			if *task.LastStatus == "STOPPED" {
+				log.Error("Task stopped: ", *task)
+				req.errorChan <- errors.New("failed to start task: " + *task.StoppedReason)
+				close(req.responseChan)
+				close(req.errorChan)
+				delete(w.requests, *task.TaskArn)
+			}
 
-
-                        if *task.LastStatus != "RUNNING" {
+			if *task.LastStatus != "RUNNING" {
 				// no sense to verify HEALTHY if task is not started yet or already stopped.
-                                continue
-                        }
+				continue
+			}
 
 			switch *task.HealthStatus {
 			case "UNHEALTHY":
-                                log.Error("Task unhealthy: ", *task)
+				log.Error("Task unhealthy: ", *task)
 				req.errorChan <- errors.New("failed to start task. HealthStatus - UNHEALTHY")
 				close(req.responseChan)
 				close(req.errorChan)
@@ -142,7 +141,7 @@ func (w *waitWorker) waitFor(ctx context.Context, taskId string) *waitRequest {
 
 func (w *waitWorker) stopWait(taskId string) {
 	req := w.requests[taskId]
-	if (req != nil) {
+	if req != nil {
 		close(req.responseChan)
 		delete(w.requests, taskId)
 	}

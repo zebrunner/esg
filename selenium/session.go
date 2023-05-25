@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-//	"time"
+	//	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 
-        sessionmap "github.com/zebrunner/esg/sessinonmap"
-//	"github.com/zebrunner/esg/zebrunner"
+	sessionmap "github.com/zebrunner/esg/sessinonmap"
+	//	"github.com/zebrunner/esg/zebrunner"
 )
 
 var (
@@ -57,13 +57,13 @@ func StartSession(ctx context.Context, driverUrl *url.URL, header http.Header, b
 }
 
 func CloseSession(session *sessionmap.Session) {
-        // remove driver session from map
-        err := sessionmap.Remove(session.ID)
-        if err != nil {
-                log.WithError(err).Error("Driver session not removed!")
-        }
+	// remove driver session from map
+	err := sessionmap.Remove(session.ID)
+	if err != nil {
+		log.WithError(err).Error("Driver session not removed!")
+	}
 
-        l := log.WithFields(log.Fields{"_taskId": session.TaskID, "sessionId": session.ID, "workspace": session.Workspace})
+	l := log.WithFields(log.Fields{"_taskId": session.TaskID, "sessionId": session.ID, "workspace": session.Workspace})
 
 	conf := &config.Conf
 	client := http.Client{}
@@ -94,6 +94,6 @@ func CloseSession(session *sessionmap.Session) {
 		l.Error("failed to get driver url")
 	}
 
-        l.Debug("driver closed")
+	l.Debug("driver closed")
 
 }

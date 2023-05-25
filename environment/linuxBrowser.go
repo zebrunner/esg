@@ -10,11 +10,11 @@ import (
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
 
-        log "github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 func buildBrowser(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
-        conf := &config.Conf
+	conf := &config.Conf
 
 	browserImage, err := buildImage(caps)
 	if err != nil {
@@ -23,28 +23,28 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 
 	log.Trace("caps: ", caps)
 
-        logDir := "/tmp/log"
-        logVolume := "log"
+	logDir := "/tmp/log"
+	logVolume := "log"
 
 	tz, err := caps.GetTimeZone()
-        // Video recorder & artifacts uploader logic
-        if err != nil {
-                return nil, fmt.Errorf("failed to parse timezone. error=%s", err)
-        }
+	// Video recorder & artifacts uploader logic
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse timezone. error=%s", err)
+	}
 
 	//TODO: handle resolution and video screen size
 
-	sessionLogRedirect :=  " >> " + logDir + "/session.log 2>&1"
+	sessionLogRedirect := " >> " + logDir + "/session.log 2>&1"
 
-        includeMitm := caps.Mitm
+	includeMitm := caps.Mitm
 	mitmCommand := "mitmdump --help || sleep infinity"
 	var mitmCpu int64 = 32
 	var mitmMemory int64 = 64 // minimal memory to start container
 
-        if includeMitm {
+	if includeMitm {
 		// --quiet is a must to run without interactive console
 		//to generate har we have to enable regular dump.mitm output by -w option and place it before har_dump.py!
-                mitmCommand = "mitmdump --scripts /har_dump.py -w " + logDir + "/dump.mitm --set hardump=" + logDir + "/dump.har"
+    mitmCommand = "mitmdump --scripts /har_dump.py -w " + logDir + "/dump.mitm --set hardump=" + logDir + "/dump.har"
 		mitmCpu = 512
 		mitmMemory = 512
 		if caps.MitmArgs != "" {
@@ -56,24 +56,24 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		//TODO: register such capabilities automatically: -Dproxy_host=mitm -Dproxy_port=8080
 
 	}
-        mitmImage := imageRepo + "mitmproxy:1.0"
-        mitmContainer := Container{
-                Name:       "mitm",
-                Image:      mitmImage,
-                cpu:        mitmCpu,
-                memory:     mitmMemory,
-                Privileged: false,
-                Essential:  false,
-                Env: map[string]string{
-                        "COMMAND": 	mitmCommand,
-                },
-                Ports: map[string]portMapping{
-                        "fileserverPort": {fileserverPort, 0},
-                },
-                Mounts:     []string{logVolume},
-                Command: []string{"-c", "/entrypoint.sh" +  sessionLogRedirect},
-                EntryPoint: []string{"/bin/sh"},
-        }
+  mitmImage := imageRepo + "mitmproxy:1.0"
+  mitmContainer := Container{
+    Name:       "mitm",
+    Image:      mitmImage,
+    cpu:        mitmCpu,
+    memory:     mitmMemory,
+    Privileged: false,
+    Essential:  false,
+    Env: map[string]string{
+      "COMMAND": 	mitmCommand,
+    },
+    Ports: map[string]portMapping{
+      "fileserverPort": {fileserverPort, 0},
+    },
+    Mounts:     []string{logVolume},
+    Command: []string{"-c", "/entrypoint.sh" +  sessionLogRedirect},
+    EntryPoint: []string{"/bin/sh"},
+  }
 
 	// In future maybe there will be need to disable vnc
 	enableVNC := true
@@ -95,10 +95,10 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			"HOSTS_ENTRIES": strings.Join(caps.HostsEntries, " "),
 			"TZ":            tz.String(),
 		},
-		Mounts: []string{"shm", logVolume},
-		Links:  []string{"mitm"},
-                Command: []string{"-c", "/entrypoint.sh" +  sessionLogRedirect},
-                EntryPoint: []string{"/bin/sh"},
+		Mounts:     []string{"shm", logVolume},
+		Links:      []string{"mitm"},
+		Command:    []string{"-c", "/entrypoint.sh" + sessionLogRedirect},
+		EntryPoint: []string{"/bin/sh"},
 		HealthCheck: &ecs.HealthCheck{
 			Command:     []*string{aws.String("CMD-SHELL"), aws.String("curl -f localhost:4444/status || exit 1")},
 			Interval:    aws.Int64(10),
@@ -106,67 +106,57 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			Timeout:     aws.Int64(10),
 			StartPeriod: aws.Int64(5),
 		},
-/*
-                DependsOn: []*ecs.ContainerDependency{
-                        &ecs.ContainerDependency{
-                                ContainerName: aws.String("mitm"),
-                                Condition:  aws.String("START"),
-                        },
-                },
-*/
-
 	}
 	browserContainer.SetCpu(caps, 1024, conf.MaxCpu)
 	browserContainer.SetMemory(caps, 1024, conf.MaxMemory)
 
 	recorderImage := imageRepo + "video-recorder:1.0"
 	videoRecorderContainer := Container{
-		Name:              "video-recorder",
-		Image:             recorderImage,
-		cpu:               recorderCpu,
-		memory:            recorderMemory,
-		Privileged:        false,
-		Essential:         false,
+		Name:        "video-recorder",
+		Image:       recorderImage,
+		cpu:         recorderCpu,
+		memory:      recorderMemory,
+		Privileged:  false,
+		Essential:   false,
 		Mounts:      []string{logVolume},
 		Links:       []string{"browser"},
-                Command: []string{"-c", "/entrypoint.sh" + sessionLogRedirect},
-                EntryPoint: []string{"/bin/sh"},
+		Command:     []string{"-c", "/entrypoint.sh" + sessionLogRedirect},
+		EntryPoint:  []string{"/bin/sh"},
 		HealthCheck: nil,
-                DependsOn: []*ecs.ContainerDependency{
-                        &ecs.ContainerDependency{
-                                ContainerName: aws.String("browser"),
-                                Condition:  aws.String("START"),
-                        },
-                },
+		DependsOn: []*ecs.ContainerDependency{
+			&ecs.ContainerDependency{
+				ContainerName: aws.String("browser"),
+				Condition:     aws.String("START"),
+			},
+		},
 	}
 
-        uploaderImage := imageRepo + "artifacts-uploader:2.2"
-        uploaderContainer := Container{
-                Name:              "artifacts-uploader",
-                Image:             uploaderImage,
-                cpu:               64, // with 32  uploading is aborted
-                memory:            64,
-                Privileged:        false,
-                Essential:         false,
-                Env: map[string]string{
-                        "BUCKET":                 conf.S3Bucket,
-                        "TENANT":                 workspace,
-                        "AWS_ACCESS_KEY_ID":      conf.S3AwsAccessKeyID,
-                        "AWS_SECRET_ACCESS_KEY":  conf.S3AwsSecretAccessKey,
-                        "AWS_DEFAULT_REGION":     conf.S3Region,
-                },
-                Mounts:      []string{logVolume},
-                HealthCheck: nil,
-        }
-
+	uploaderImage := imageRepo + "artifacts-uploader:2.2"
+	uploaderContainer := Container{
+		Name:       "artifacts-uploader",
+		Image:      uploaderImage,
+		cpu:        64, // with 32  uploading is aborted
+		memory:     64,
+		Privileged: false,
+		Essential:  false,
+		Env: map[string]string{
+			"BUCKET":                conf.S3Bucket,
+			"TENANT":                workspace,
+			"AWS_ACCESS_KEY_ID":     conf.S3AwsAccessKeyID,
+			"AWS_SECRET_ACCESS_KEY": conf.S3AwsSecretAccessKey,
+			"AWS_DEFAULT_REGION":    conf.S3Region,
+		},
+		Mounts:      []string{logVolume},
+		HealthCheck: nil,
+	}
 
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
 		Containers:           []*Container{&browserContainer, &videoRecorderContainer, &mitmContainer, &uploaderContainer},
 		Capabilities:         caps,
 		Volumes: map[string]volume{
-                        logVolume: {ContainerPath: logDir, Driver: "local", Scope: "task", ReadOnly: false},
-                        "shm": {ContainerPath: "/dev/shm", HostPath: "/dev/shm", ReadOnly: false},
+			logVolume: {ContainerPath: logDir, Driver: "local", Scope: "task", ReadOnly: false},
+			"shm":     {ContainerPath: "/dev/shm", HostPath: "/dev/shm", ReadOnly: false},
 		},
 		Network: &NetworkConfiguration{
 			IP: "",

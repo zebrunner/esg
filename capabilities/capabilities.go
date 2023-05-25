@@ -34,19 +34,18 @@ type Capabilities struct {
 	DNSServers       []string
 
 	//Vendor caps
-	Cpu               int64 `json:"cpu,string,omitempty"`
-	Memory            int64 `json:"memory,string,omitempty"`
+	Cpu    int64 `json:"cpu,string,omitempty"`
+	Memory int64 `json:"memory,string,omitempty"`
 	//Mitm proxy caps
-	Mitm		 bool //enabl mitm with har dump and output generation for mitmweb
-	MitmArgs         string // list of arguments for mitmdump command. Important: --verbose and --quiet will be appended forcibly
+	Mitm     bool   //enabl mitm with har dump and output generation for mitmweb
+	MitmArgs string // list of arguments for mitmdump command. Important: --verbose and --quiet will be appended forcibly
 
 	// generic launcher caps
-	RepositoryUrl    string
-	Branch           string
-	Image            string
-	LaunchCommand    string
-	EnvVariables     map[string]string
-
+	RepositoryUrl string
+	Branch        string
+	Image         string
+	LaunchCommand string
+	EnvVariables  map[string]string
 }
 
 func (c *Capabilities) GetTimeZone() (*time.Location, error) {
@@ -77,7 +76,7 @@ func FromImage(image string) (*Capabilities, error) {
 	platforms := map[string][]string{
 		"android": {"redroid"},
 		"linux":   {"chrome", "firefox", "edge"},
-                "cypress": {"cypress-chrome", "cypress-chromium", "cypress-edge", "cypress-firefox"},
+		"cypress": {"cypress-chrome", "cypress-chromium", "cypress-edge", "cypress-firefox"},
 	}
 
 	parts := strings.Split(image, ":")
@@ -100,12 +99,12 @@ func FromImage(image string) (*Capabilities, error) {
 			BrowserName:    executor,
 			BrowserVersion: version,
 		}, nil
-        } else if in(executor, platforms["cypress"]) {
-                return &Capabilities{
-                        PlatformName:   "cypress",
-                        BrowserName:    executor,
-                        BrowserVersion: version,
-                }, nil
+	} else if in(executor, platforms["cypress"]) {
+		return &Capabilities{
+			PlatformName:   "cypress",
+			BrowserName:    executor,
+			BrowserVersion: version,
+		}, nil
 	} else {
 		return nil, fmt.Errorf("failed to build capabilities from unknown image. image=%s", image)
 	}

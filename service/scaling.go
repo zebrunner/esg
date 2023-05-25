@@ -288,8 +288,8 @@ func ScaleDown() {
 
 		log.WithField("listInstancesResult", listInstancesResult)
 
-		containerInstances:=make([]*string, 0)
-		for _, containerInstanceAws:= range listInstancesResult.ContainerInstanceArns {
+		containerInstances := make([]*string, 0)
+		for _, containerInstanceAws := range listInstancesResult.ContainerInstanceArns {
 			if containerInstanceAws != nil {
 				containerInstances = append(containerInstances, containerInstanceAws)
 			} else {

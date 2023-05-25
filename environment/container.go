@@ -2,7 +2,7 @@ package environment
 
 import (
 	"github.com/aws/aws-sdk-go/service/ecs"
-        "github.com/zebrunner/esg/capabilities"
+	"github.com/zebrunner/esg/capabilities"
 )
 
 type envVariables = map[string]string
@@ -21,24 +21,24 @@ type portMapping struct {
 }
 
 type Container struct {
-	Name              string
-	Image             string
-	cpu               int64
-	memory            int64
+	Name   string
+	Image  string
+	cpu    int64
+	memory int64
 
 	Essential  bool
 	Privileged bool
 
-	Ports       map[string]portMapping
-	Mounts  []string // List of volume names
-	Links       []string // List of linked containers
-	Command     []string // Comma separated container startup command
-	Env         envVariables
-	EntryPoint []string
+	Ports            map[string]portMapping
+	Mounts           []string // List of volume names
+	Links            []string // List of linked containers
+	Command          []string // Comma separated container startup command
+	Env              envVariables
+	EntryPoint       []string
 	WorkingDirectory string
 
-        HealthCheck *ecs.HealthCheck
-	DependsOn []*ecs.ContainerDependency
+	HealthCheck *ecs.HealthCheck
+	DependsOn   []*ecs.ContainerDependency
 }
 
 func (c *Container) Cpu() int64 {
@@ -47,7 +47,7 @@ func (c *Container) Cpu() int64 {
 
 func (c *Container) SetCpu(caps *capabilities.Capabilities, minCpu int64, maxCpu int64) {
 	c.cpu = calculateResource(caps.Cpu, minCpu, maxCpu)
-        caps.Cpu = c.cpu //override default one as we have min/max limits
+	caps.Cpu = c.cpu //override default one as we have min/max limits
 }
 
 func (c *Container) Memory() int64 {
@@ -56,7 +56,7 @@ func (c *Container) Memory() int64 {
 
 func (c *Container) SetMemory(caps *capabilities.Capabilities, minMemory int64, maxMemory int64) {
 	c.memory = calculateResource(caps.Memory, minMemory, maxMemory)
-        caps.Memory = c.memory //override default one as we have min/max limits
+	caps.Memory = c.memory //override default one as we have min/max limits
 }
 
 func calculateResource(amount int64, min int64, max int64) int64 {
