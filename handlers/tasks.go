@@ -287,9 +287,9 @@ func CloseSession(c *gin.Context) {
 	selenium.CloseSession(sess)
 	_, err = service.StopTask(sess.TaskID)
 	if err != nil {
-		log.WithError(err).WithFields(log.Fields{"_taskId": sess.TaskID}).Error("Failed to stop the task")
-		_ = c.Error(err).SetType(gin.ErrorTypePublic)
-		return
+		log.WithError(err).WithFields(log.Fields{"_taskId": sess.TaskID}).Error("CloseSession: Failed to stop the task")
+		// _ = c.Error(err).SetType(gin.ErrorTypePublic)
+		// return
 	}
 
 	log.WithField("_taskId", sess.TaskID).WithField("sessionId", sessionId).Info("driver closed")
@@ -306,9 +306,9 @@ func AbortTask(c *gin.Context) {
 	}
 	_, err = service.StopTask(sess.TaskID)
 	if err != nil {
-		log.WithError(err).WithFields(log.Fields{"_taskId": sess.TaskID}).Error("Failed to stop the task")
-		_ = c.Error(err).SetType(gin.ErrorTypePublic)
-		return
+		log.WithError(err).WithFields(log.Fields{"_taskId": sess.TaskID}).Error("AbortTask: Failed to stop the task")
+		// _ = c.Error(err).SetType(gin.ErrorTypePublic)
+		// return
 	}
 
 	log.WithField("_taskId", sess.TaskID).WithField("workspace", sess.Workspace).Info("task aborted")
