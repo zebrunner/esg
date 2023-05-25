@@ -196,7 +196,10 @@ func Create(c *gin.Context) {
 		if err != nil {
 			l.WithError(err).WithField("response", resp).Error("driver startup failed")
 			c.JSON(http.StatusInternalServerError, resp)
-			service.StopTask(env.TaskId)
+			_, err = service.StopTask(env.TaskId)
+			if err != nil {
+				l.WithError(err).Error("Failed to stop the task")
+			}
 			return
 		}
 
@@ -228,6 +231,12 @@ func Create(c *gin.Context) {
 		err = sessionmap.Write(sess.ID, &sess, 0)
 		if err != nil {
 			l.WithError(err).Error("Driver session not cached!")
+			_ = c.Error(creationError("failed to cache driver session", err)).SetType(gin.ErrorTypePublic)
+			_, err = service.StopTask(env.TaskId)
+			if err != nil {
+				l.WithError(err).Error("Failed to stop the task. Possible zombie task. Id: ", env.TaskId)
+			}
+			return
 		}
 		l.WithField("sessionId", sess.ID).WithField("latency", util.SecondsSince(sessionStartTime)).Info("driver started")
 
@@ -274,8 +283,14 @@ func CloseSession(c *gin.Context) {
 		_ = c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
+
 	selenium.CloseSession(sess)
-	service.StopTask(sess.TaskID)
+	_, err = service.StopTask(sess.TaskID)
+	if err != nil {
+		log.WithError(err).WithFields(log.Fields{"_taskId": sess.TaskID}).Error("CloseSession: Failed to stop the task")
+		// _ = c.Error(err).SetType(gin.ErrorTypePublic)
+		// return
+	}
 
 	log.WithField("_taskId", sess.TaskID).WithField("sessionId", sessionId).Info("driver closed")
 	c.JSON(http.StatusOK, gin.H{"value": nil})
@@ -289,7 +304,12 @@ func AbortTask(c *gin.Context) {
 		//there is no sense to proceed as task is already finished/removed and not present in the sessionmap
 		return
 	}
-	service.StopTask(sess.TaskID)
+	_, err = service.StopTask(sess.TaskID)
+	if err != nil {
+		log.WithError(err).WithFields(log.Fields{"_taskId": sess.TaskID}).Error("AbortTask: Failed to stop the task")
+		// _ = c.Error(err).SetType(gin.ErrorTypePublic)
+		// return
+	}
 
 	log.WithField("_taskId", sess.TaskID).WithField("workspace", sess.Workspace).Info("task aborted")
 	c.JSON(http.StatusNoContent, gin.H{})

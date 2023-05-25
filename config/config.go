@@ -78,7 +78,7 @@ func init() {
 	flag.Int64Var(&Conf.MaxCpu, "max-cpu", 16384, "maximum CPU limitation for session")          //max cpu for c5a.4xlarge
 
 	flag.DurationVar(&Conf.IdleTimeout, "idle-timeout", 60*time.Second, "Session idle timeout in time.Duration format")
-	flag.DurationVar(&Conf.SessionStartupTimeout, "session-startup-timeout", 90*time.Second, "Session healthcheck(s) startup timeout in time.Duration format")
+	flag.DurationVar(&Conf.SessionStartupTimeout, "session-startup-timeout", 180*time.Second, "Session startup timeout in time.Duration format")
 	flag.DurationVar(&Conf.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
 	flag.DurationVar(&Conf.ServiceStartupTimeout, "service-startup-timeout", 10*time.Minute, "Service startup timeout in time.Duration format")
 	flag.DurationVar(&Conf.InstanceCooldownTimeout, "instance-cooldown-timeout", 4*time.Minute, "Time after instance start when shutdown is prohibited on scale down in time.Duration format")
