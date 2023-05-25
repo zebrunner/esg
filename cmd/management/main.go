@@ -211,7 +211,7 @@ func RefreshTaskDefinition(image string) error {
 
 	_, err = service.CreateTaskDefinition(env)
 	if err != nil {
-		log.WithError(err).WithField("image", image).Error("Failed to create task definition!")
+		log.WithError(err).WithField("image", image).Debug("Failed to create task definition!")
 		return err
 	}
 
@@ -222,11 +222,20 @@ func RefreshTaskDefinitions() {
 	images := getImageList()
 
 	for _, image := range images {
-		for i := 1; i <= 10; i++ {
-			time.Sleep(time.Duration(i) * 500 * time.Millisecond)
+		maxRetryCount := 10
+		for i := 1; i <= maxRetryCount; i++ {
+			time.Sleep(time.Duration(i) * 1 * time.Second)
 			err := RefreshTaskDefinition(image)
-			if err != nil && strings.Contains(err.Error(), "ThrottlingException") {
-				log.WithField("image", image).WithFields(log.Fields{"retry": i}).Info("Recreating task defenition")
+			if err != nil {
+				if i == maxRetryCount {
+					log.WithField("error", err).WithField("image", image).Errorf("Couldn't create task defenition in %d retries. Stopping scaler...", i)
+					os.Exit(0)
+				} else if strings.Contains(err.Error(), "ThrottlingException") {
+					log.WithField("error", err).WithField("image", image).WithFields(log.Fields{"retry": i}).Info("Recreating task defenition")
+				} else {
+					log.WithField("error", err).WithField("image", image).Error("Couldn't create task defenition. Stopping scaler...")
+					os.Exit(0)
+				}
 			} else {
 				break
 			}
