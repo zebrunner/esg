@@ -355,7 +355,7 @@ func ScaleDown() {
 	if terminatedCount != 0 {
 		log.WithFields(log.Fields{
 			"terminatedInstances": terminatedCount,
-			"currentCapacity":     *autoScalingGroup.DesiredCapacity,
+			"currentCapacity":     desiredCapacity,
 		}).Info("Scale down performed")
 	}
 }
