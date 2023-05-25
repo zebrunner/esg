@@ -15,6 +15,7 @@ const (
 	SessionActive = iota
 	SessionStoppedIdle
 	SessionQueued
+	SessionStopped
 )
 
 type Session struct {
