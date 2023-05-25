@@ -234,7 +234,7 @@ func RefreshTaskDefinitions() {
 					log.WithField("error", err).WithField("image", image).Errorf("Couldn't create task defenition in %d retries. Stopping scaler...", i)
 					os.Exit(1)
 				} else if strings.Contains(err.Error(), "ThrottlingException") {
-					log.WithField("error", err).WithField("image", image).WithFields(log.Fields{"retry": i}).Info("Recreating task defenition")
+					log.WithField("error", err).WithField("image", image).WithFields(log.Fields{"retry": i}).Debug("Recreating task defenition")
 				} else {
 					log.WithField("error", err).WithField("image", image).Error("Couldn't create task defenition. Stopping scaler...")
 					os.Exit(1)
