@@ -45,13 +45,13 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		// --quiet is a must to run without interactive console
 		//to generate har we have to enable regular dump.mitm output by -w option and place it before har_dump.py!
                 mitmCommand = "mitmdump --scripts /har_dump.py -w " + logDir + "/dump.mitm --set hardump=" + logDir + "/dump.har"
-		mitmCpu = 256
-		mitmMemory = 256
+		mitmCpu = 512
+		mitmMemory = 512
 		if caps.MitmArgs != "" {
 			//append args only if mitm=true
 			mitmCommand = mitmCommand + " " + caps.MitmArgs
 		}
-		mitmCommand = mitmCommand + " --quiet " + sessionLogRedirect
+		mitmCommand = mitmCommand + " --quiet "
 
 		//TODO: register such capabilities automatically: -Dproxy_host=mitm -Dproxy_port=8080
 
@@ -64,13 +64,15 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
                 memory:     mitmMemory,
                 Privileged: false,
                 Essential:  false,
+                Env: map[string]string{
+                        "COMMAND": 	mitmCommand,
+                },
                 Ports: map[string]portMapping{
                         "fileserverPort": {fileserverPort, 0},
                 },
                 Mounts:     []string{logVolume},
-		//TODO: play with actual command to guarantee mitm.har generation
-                Command: []string{"-c", "echo -n >" + logDir + "/session.log && chmod -R a+rwx " + logDir + " && " + mitmCommand}, //IMPORTANT: chmod a+rwx is needed to provide permissions for linked browser into logDir //TODO: how about chown to selenoid (4096:0)
-                EntryPoint: []string{"/bin/bash"},
+                Command: []string{"-c", "/entrypoint.sh" +  sessionLogRedirect},
+                EntryPoint: []string{"/bin/sh"},
         }
 
 	// In future maybe there will be need to disable vnc
@@ -104,12 +106,14 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			Timeout:     aws.Int64(10),
 			StartPeriod: aws.Int64(5),
 		},
+/*
                 DependsOn: []*ecs.ContainerDependency{
                         &ecs.ContainerDependency{
                                 ContainerName: aws.String("mitm"),
                                 Condition:  aws.String("START"),
                         },
                 },
+*/
 
 	}
 	browserContainer.SetCpu(caps, 1024, conf.MaxCpu)
