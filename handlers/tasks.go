@@ -47,6 +47,15 @@ func getSession(id string) (*sessionmap.Session, error) {
 		}
 	}
 
+	if session.Status == sessionmap.SessionStopped {
+		return nil, &utils.SeleniumError{
+			ResponseStatus: http.StatusNotFound,
+			SeleniumCode:   "invalid session id",
+			Message:        fmt.Sprintf("Session already finished"),
+			Err:            err,
+		}
+	}
+
 	return session, nil
 }
 

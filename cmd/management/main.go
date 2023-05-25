@@ -68,7 +68,7 @@ func StopIdleTasks(keys []string, wg *sync.WaitGroup) {
 		session, _ := sessionmap.Find(key, false)
 
 		if session == nil {
-			log.WithField("session key", key).Error("Not found")
+			log.WithField("session key", key).Debug("StopIdleTasks: Not found")
 			continue
 		}
 
@@ -91,7 +91,7 @@ func StopIdleTasks(keys []string, wg *sync.WaitGroup) {
 			if err != nil {
 				log.WithError(err).Error("Failed to stop idle driver task!")
 			} else {
-				// Set stopped status and expiration time 10 minutes to be able to return "invalid session id" for requests
+				// Set idle stopped status and expiration time 10 minutes to be able to return "invalid session id" for requests
 				session.Status = sessionmap.SessionStoppedIdle
 				sessionmap.Write(key, session, 10*time.Minute)
 				log.WithField("_taskId", session.TaskID).WithField("workspace", session.Workspace).Warn("task aborted due to the idle timeout")

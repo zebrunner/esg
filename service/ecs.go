@@ -19,6 +19,7 @@ import (
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
 	"math/rand"
+	sessionmap "github.com/zebrunner/esg/sessinonmap"
 )
 
 const (
@@ -267,6 +268,12 @@ func StopTask(taskId string) (*ecs.StopTaskOutput, error) {
 		if err == nil { // the condition stops matching
 			l.WithField("result", result).Trace("task stopped")
 			l.Info("task stopped")
+			session, err := sessionmap.Find(taskId, true)
+			if session != nil && err == nil {
+				// Set stopped status and expiration time 10 minutes to be able to return "invalid session id" for requests
+				session.Status = sessionmap.SessionStopped
+				sessionmap.Write(taskId, session, 10*time.Minute)
+			}
 			// break out of the loop
 			break
 		} else {
