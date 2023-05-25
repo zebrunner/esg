@@ -9,8 +9,8 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/client"
+	"github.com/aws/aws-sdk-go/aws/credentials"
 	awsSession "github.com/aws/aws-sdk-go/aws/session"
-        "github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ecrpublic"
 	"github.com/aws/aws-sdk-go/service/ecs"
@@ -82,7 +82,7 @@ func ListBrowsers() ([]string, error) {
 		for _, image := range result.ImageDetails {
 			log.Debug("image: ", image)
 			for _, tag := range image.ImageTags {
-				images = append(images, repository + ":" +*tag)
+				images = append(images, repository+":"+*tag)
 			}
 		}
 	}
@@ -101,24 +101,24 @@ func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDe
 	}
 
 	volumes := []*ecs.Volume{}
-        for n, v := range environment.Volumes {
-                if v.HostPath != "" {
-                        volumes = append(volumes, &ecs.Volume{
-                                Host: &ecs.HostVolumeProperties{
-                                        SourcePath: aws.String(v.HostPath),
-                                },
-                                Name: aws.String(n),
-                        })
-                } else {
-                        volumes = append(volumes, &ecs.Volume{
-                                DockerVolumeConfiguration: &ecs.DockerVolumeConfiguration {
-                                        Driver: aws.String(v.Driver),
-                                        Scope: aws.String(v.Scope),
-                                },
-                                Name: aws.String(n),
-                        })
-                }
-        }
+	for n, v := range environment.Volumes {
+		if v.HostPath != "" {
+			volumes = append(volumes, &ecs.Volume{
+				Host: &ecs.HostVolumeProperties{
+					SourcePath: aws.String(v.HostPath),
+				},
+				Name: aws.String(n),
+			})
+		} else {
+			volumes = append(volumes, &ecs.Volume{
+				DockerVolumeConfiguration: &ecs.DockerVolumeConfiguration{
+					Driver: aws.String(v.Driver),
+					Scope:  aws.String(v.Scope),
+				},
+				Name: aws.String(n),
+			})
+		}
+	}
 
 	input.Volumes = volumes
 
@@ -130,47 +130,45 @@ func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDe
 	return resultTaskDefinition.TaskDefinition, nil
 }
 
-
 func CreateGenericTaskDefinition(environment *environment.ExecutionEnvironment) (taskDefinition *ecs.TaskDefinition, err error) {
-        svc := ecs.New(AwsSess)
+	svc := ecs.New(AwsSess)
 
-        networkMode := "bridge"
-        input := ecs.RegisterTaskDefinitionInput{
-                NetworkMode:          &networkMode,
-                ContainerDefinitions: environment.ContainerDefinitions(),
-                Family:               &environment.TaskDefinitionFamily,
-        }
+	networkMode := "bridge"
+	input := ecs.RegisterTaskDefinitionInput{
+		NetworkMode:          &networkMode,
+		ContainerDefinitions: environment.ContainerDefinitions(),
+		Family:               &environment.TaskDefinitionFamily,
+	}
 
-        volumes := []*ecs.Volume{}
-        for n, v := range environment.Volumes {
-                if v.HostPath != "" {
-                        volumes = append(volumes, &ecs.Volume{
-                                Host: &ecs.HostVolumeProperties{
-                                        SourcePath: aws.String(v.HostPath),
-                                },
-                                Name: aws.String(n),
-                        })
-                } else {
-                        volumes = append(volumes, &ecs.Volume{
-                                DockerVolumeConfiguration: &ecs.DockerVolumeConfiguration {
-                                        Driver: aws.String(v.Driver),
-                                        Scope: aws.String(v.Scope),
-                                },
-                                Name: aws.String(n),
-                        })
-                }
-        }
-        input.Volumes = volumes
+	volumes := []*ecs.Volume{}
+	for n, v := range environment.Volumes {
+		if v.HostPath != "" {
+			volumes = append(volumes, &ecs.Volume{
+				Host: &ecs.HostVolumeProperties{
+					SourcePath: aws.String(v.HostPath),
+				},
+				Name: aws.String(n),
+			})
+		} else {
+			volumes = append(volumes, &ecs.Volume{
+				DockerVolumeConfiguration: &ecs.DockerVolumeConfiguration{
+					Driver: aws.String(v.Driver),
+					Scope:  aws.String(v.Scope),
+				},
+				Name: aws.String(n),
+			})
+		}
+	}
+	input.Volumes = volumes
 
-        resultTaskDefinition, err := svc.RegisterTaskDefinition(&input)
-        log.WithField("resultTaskDefinition", resultTaskDefinition).Trace("Res TaskDefinition")
-        if err != nil {
-                return nil, fmt.Errorf("failed to create task definition: %v", err)
-        }
+	resultTaskDefinition, err := svc.RegisterTaskDefinition(&input)
+	log.WithField("resultTaskDefinition", resultTaskDefinition).Trace("Res TaskDefinition")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create task definition: %v", err)
+	}
 
-        return resultTaskDefinition.TaskDefinition, nil
+	return resultTaskDefinition.TaskDefinition, nil
 }
-
 
 func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (taskArn string, returnErr error) {
 	svc := ecs.New(AwsSess)
@@ -186,7 +184,7 @@ func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (t
 			},
 		},
 	}
-        log.WithField("runTaskInput", runTaskInput).Trace("Res runTaskInput")
+	log.WithField("runTaskInput", runTaskInput).Trace("Res runTaskInput")
 
 	// TODO: explicitly minimize errors range to wait only by well-known reasons aka RESOURCE:CPU etc
 	// TODO: convert existing hard-coded 25 retries into the queue or provisioning timeout: https://github.com/zebrunner/esg/issues/72
@@ -202,7 +200,7 @@ func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (t
 		default:
 		}
 		// Random sleep to fix problems with parallel 100+ threads startup. Not applicable got generic and cypress tasks!
-                if env.TaskDefinitionFamily != "generic" && !strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
+		if env.TaskDefinitionFamily != "generic" && !strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
 			sleep := time.Duration(rand.Intn(30)) * time.Second
 			time.Sleep(sleep)
 		}
@@ -215,10 +213,10 @@ func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (t
 		}
 
 		sleepRateLimit := time.Duration(15 + rand.Intn(15))
-                if err != nil &&
-		  (strings.Contains(err.Error(), "ThrottlingException: Rate exceeded") || err.Error() == "ClientException: Tasks provisioning capacity limit exceeded.") {
-                        time.Sleep(sleepRateLimit)
-                }
+		if err != nil &&
+			(strings.Contains(err.Error(), "ThrottlingException: Rate exceeded") || err.Error() == "ClientException: Tasks provisioning capacity limit exceeded.") {
+			time.Sleep(sleepRateLimit)
+		}
 
 		if err != nil {
 			l.WithError(err).Debug("Run task failed.")
@@ -260,26 +258,26 @@ func StopTask(taskId string) (*ecs.StopTaskOutput, error) {
 		Task:    aws.String(taskId),
 	}
 
-        l := log.WithFields(log.Fields{"_taskId": taskId})
+	l := log.WithFields(log.Fields{"_taskId": taskId})
 
 	i := 0
-        result, err := svc.StopTask(stopTaskInput)
+	result, err := svc.StopTask(stopTaskInput)
 	for i < 25 {
-	        l = log.WithFields(log.Fields{"_taskId": taskId, "retry": i})
-        	if err == nil {      // the condition stops matching
+		l = log.WithFields(log.Fields{"_taskId": taskId, "retry": i})
+		if err == nil { // the condition stops matching
 			l.WithField("result", result).Trace("task stopped")
-                        l.Info("task stopped")
-                        // break out of the loop
-                	break
-        	} else {
+			l.Info("task stopped")
+			// break out of the loop
+			break
+		} else {
 			time.Sleep(time.Duration(rand.Intn(30)) * time.Second)
 			i = i + 1
 			l.WithError(err).Debug("Failed to stop task")
-	                result, err = svc.StopTask(stopTaskInput)
+			result, err = svc.StopTask(stopTaskInput)
 		}
 	}
 
-	if (err != nil) {
+	if err != nil {
 		l.WithError(err).Error("Failed to stop task")
 	}
 
@@ -287,16 +285,16 @@ func StopTask(taskId string) (*ecs.StopTaskOutput, error) {
 }
 
 func DescribeTask(taskArn string) (*ecs.DescribeTasksOutput, error) {
-        svc := ecs.New(AwsSess)
-        input := &ecs.DescribeTasksInput{
-                Cluster: &config.Conf.AwsCluster,
-                Tasks: []*string{
-                        aws.String(taskArn),
-                },
-        }
+	svc := ecs.New(AwsSess)
+	input := &ecs.DescribeTasksInput{
+		Cluster: &config.Conf.AwsCluster,
+		Tasks: []*string{
+			aws.String(taskArn),
+		},
+	}
 
-        result, err := svc.DescribeTasks(input)
-        return result, err
+	result, err := svc.DescribeTasks(input)
+	return result, err
 }
 
 func searchHostPort(task *ecs.Task, containerPort int64) (port int64, ok bool) {
@@ -383,7 +381,7 @@ out:
 		taskId := strings.Split(taskArn, "/")[2]
 		env.TaskId = taskId
 		l = l.WithField("id", taskId)
-	        if env.TaskDefinitionFamily == "generic" || strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
+		if env.TaskDefinitionFamily == "generic" || strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
 			l.Debug("do not wait for generic and cypress task startup.")
 			outputErr = nil
 			return outputErr
@@ -420,18 +418,17 @@ out:
 }
 
 func GeneratePreSignedURL(key string) (string, error) {
-        //S3 connection information
+	//S3 connection information
 	s3Svc := s3.New(AwsSess)
 
-
-        conf := &config.Conf
+	conf := &config.Conf
 	if conf.S3AwsAccessKeyID != "" && conf.S3AwsSecretAccessKey != "" && conf.S3Region != "" {
 		creds := credentials.NewStaticCredentials(conf.S3AwsAccessKeyID, conf.S3AwsSecretAccessKey, "")
 		S3Sess := awsSession.Must(awsSession.NewSession(&aws.Config{
 			Credentials: creds,
 			Region:      &conf.S3Region,
 		}))
-	        s3Svc = s3.New(S3Sess)
+		s3Svc = s3.New(S3Sess)
 	}
 
 	//ZEB-5145: ESG: return 404 when requested video/session or execution log is not available
@@ -443,7 +440,7 @@ func GeneratePreSignedURL(key string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if (*res.KeyCount == 0) {
+	if *res.KeyCount == 0 {
 		err = errors.New("The specified key does not exist: " + key)
 		return "", err
 	}

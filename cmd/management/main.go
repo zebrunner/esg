@@ -25,102 +25,101 @@ import (
 )
 
 var (
-	wg                  sync.WaitGroup
+	wg sync.WaitGroup
 )
 
 func ClearTasks() {
 
-        session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
-        if err != nil {
-                log.WithError(err).Error("Failed to create AWS session!")
-                return
-        }
+	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
+	if err != nil {
+		log.WithError(err).Error("Failed to create AWS session!")
+		return
+	}
 	svc := ecs.New(session)
 
-        rdb := config.RedisConnection
-        for {
-                time.Sleep(1*time.Minute)
+	rdb := config.RedisConnection
+	for {
+		time.Sleep(1 * time.Minute)
 
-                keys, err := rdb.Keys(context.Background(), "*").Result()
-                if err != nil {
-                        log.WithError(err).Error("Failed to get list of keys!")
-                        continue
-                }
+		keys, err := rdb.Keys(context.Background(), "*").Result()
+		if err != nil {
+			log.WithError(err).Error("Failed to get list of keys!")
+			continue
+		}
 		if len(keys) > 0 {
 			log.WithField("keys", keys).Trace("cached session keys")
 		}
 
-                for _, key := range keys {
-                        session, err := sessionmap.Find(key, false)
+		for _, key := range keys {
+			session, err := sessionmap.Find(key, false)
 
-						if session==nil {
-							log.WithField("session key", key).Error("Not found")
-							//TDDO: since this session map entry does not exist on aws, we should remove it from sessionMap.
-							continue
-						}
-                        if session.Status != sessionmap.SessionActive {
-                                continue
-                        }
+			if session == nil {
+				log.WithField("session key", key).Error("Not found")
+				//TDDO: since this session map entry does not exist on aws, we should remove it from sessionMap.
+				continue
+			}
+			if session.Status != sessionmap.SessionActive {
+				continue
+			}
 
-                        log.WithField("session", session).Debug("analyzing session for idleTimeout")
+			log.WithField("session", session).Debug("analyzing session for idleTimeout")
 
-                        idleTimeout := float64(session.Capabilities.IdleTimeout)
-                        if idleTimeout == 0 {
-                                idleTimeout = config.Conf.IdleTimeout.Seconds()
-                        }
+			idleTimeout := float64(session.Capabilities.IdleTimeout)
+			if idleTimeout == 0 {
+				idleTimeout = config.Conf.IdleTimeout.Seconds()
+			}
 
-                        idleTime := time.Since(session.AccessedAt).Seconds()
-                        if idleTime > idleTimeout {
-                                // Set stopped status and expiration time 10 minutes to be able to return "invalid session id" for requests
-                                session.Status = sessionmap.SessionStoppedIdle
-                                err = sessionmap.Write(key, session, 10*time.Minute)
+			idleTime := time.Since(session.AccessedAt).Seconds()
+			if idleTime > idleTimeout {
+				// Set stopped status and expiration time 10 minutes to be able to return "invalid session id" for requests
+				session.Status = sessionmap.SessionStoppedIdle
+				err = sessionmap.Write(key, session, 10*time.Minute)
 
-                                // [VD] do not execute CloseSession as it remove session from sessionmap and we can't return idle timeout errors to client
-                                //selenium.CloseSession(session)
-                                _, err = service.StopTask(session.TaskID)
-                                if err != nil {
-                                        log.WithError(err).Error("Failed to stop idle driver task!")
-                                } else {
-                                        log.WithField("_taskId", session.TaskID).WithField("workspace", session.Workspace).Warn("task aborted due to the idle timeout")
-                                }
-                        }
-                }
+				// [VD] do not execute CloseSession as it remove session from sessionmap and we can't return idle timeout errors to client
+				//selenium.CloseSession(session)
+				_, err = service.StopTask(session.TaskID)
+				if err != nil {
+					log.WithError(err).Error("Failed to stop idle driver task!")
+				} else {
+					log.WithField("_taskId", session.TaskID).WithField("workspace", session.Workspace).Warn("task aborted due to the idle timeout")
+				}
+			}
+		}
 
+		// Construct pages of *string with 100 or fewer elements for requests. 100 is an AWS limitation for Describe* requests
+		var taskIdsPtrs []*string
+		for _, k := range keys {
+			taskId := k //local env required to generate new reference address to mew value
+			taskIdsPtrs = append(taskIdsPtrs, &taskId)
+		}
+		pages := paginate(taskIdsPtrs, 100)
 
-                // Construct pages of *string with 100 or fewer elements for requests. 100 is an AWS limitation for Describe* requests
-                var taskIdsPtrs []*string
-                for _, k := range keys {
-                        taskId := k //local env required to generate new reference address to mew value
-                        taskIdsPtrs = append(taskIdsPtrs, &taskId)
-                }
-                pages := paginate(taskIdsPtrs, 100)
-
-                // Send DescribeTasks requests and track resources usage for STOPPED tasks
-                for _, page := range pages {
-                        describeTasksInput := ecs.DescribeTasksInput{
-                                Cluster: &config.Conf.AwsCluster,
-                                Tasks:   page,
-                        }
+		// Send DescribeTasks requests and track resources usage for STOPPED tasks
+		for _, page := range pages {
+			describeTasksInput := ecs.DescribeTasksInput{
+				Cluster: &config.Conf.AwsCluster,
+				Tasks:   page,
+			}
 
 			log.Trace("describeTasksInput: ", describeTasksInput)
-                        output, err := svc.DescribeTasks(&describeTasksInput)
-                        if err != nil {
-                                log.WithError(err).Error("Failed to describe tasks!")
-                        }
+			output, err := svc.DescribeTasks(&describeTasksInput)
+			if err != nil {
+				log.WithError(err).Error("Failed to describe tasks!")
+			}
 
 			var taskIds4Removal []string
 			// Do not remove MISSING as any driver/browser sessionId we use can be removed from session map
-/*			for _, failure := range output.Failures {
-				//no sense to keep MISSING sessions as we can't detect resoutce usage anymore!
-				// failures="[{\n  Arn: \"arn:aws:ecs:us-east-1:659932254483:task/9fc25c3e9c1c865e94b68061f020d083\",\n  Reason: \"MISSING\"\n}]"
-				if *failure.Reason == "MISSING" {
-					taskId := strings.Split(*failure.Arn, "/")[1]
-					taskIds4Removal = append(taskIds4Removal, taskId)
-				}
-			}
-*/
+			/*			for _, failure := range output.Failures {
+							//no sense to keep MISSING sessions as we can't detect resoutce usage anymore!
+							// failures="[{\n  Arn: \"arn:aws:ecs:us-east-1:659932254483:task/9fc25c3e9c1c865e94b68061f020d083\",\n  Reason: \"MISSING\"\n}]"
+							if *failure.Reason == "MISSING" {
+								taskId := strings.Split(*failure.Arn, "/")[1]
+								taskIds4Removal = append(taskIds4Removal, taskId)
+							}
+						}
+			*/
 
-	                // analyze output.Tasks response for existing tasks in sessionmap
+			// analyze output.Tasks response for existing tasks in sessionmap
 			for _, task := range output.Tasks {
 				if *task.LastStatus == "STOPPED" || *task.LastStatus == "RUNNING" {
 					taskId := strings.Split(*task.TaskArn, "/")[2]
@@ -156,7 +155,7 @@ func ClearTasks() {
 
 					if *task.LastStatus == "RUNNING" {
 						maxTimeout := config.Conf.MaxTimeout
-						if (session.Capabilities.MaxTimeout != 0) {
+						if session.Capabilities.MaxTimeout != 0 {
 							maxTimeout = time.Duration(session.Capabilities.MaxTimeout) * time.Second
 						}
 						l.Debug("maxTimeout: ", maxTimeout)
@@ -170,7 +169,6 @@ func ClearTasks() {
 				}
 			}
 
-
 			// cleanup tracked task sessions
 			for _, id := range taskIds4Removal {
 				log.WithField("taskId", id).Trace("Removing task session")
@@ -180,10 +178,9 @@ func ClearTasks() {
 				}
 			}
 
-                }
-        }
+		}
+	}
 }
-
 
 func ScaleCluster() {
 	for {
@@ -228,16 +225,16 @@ func RefreshTaskDefinitions() {
 		for i := 1; i <= 10; i++ {
 			time.Sleep(time.Duration(i) * 500 * time.Millisecond)
 			err := RefreshTaskDefinition(image)
-			if err != nil &&  strings.Contains(err.Error(), "ThrottlingException"){
+			if err != nil && strings.Contains(err.Error(), "ThrottlingException") {
 				log.WithField("image", image).WithFields(log.Fields{"retry": i}).Info("Recreating task defenition")
 			} else {
 				break
 			}
-		}		
+		}
 	}
 }
 
-func getImageList() []string  {
+func getImageList() []string {
 	images, err := utils.ListBrowsers()
 	if err != nil {
 		log.WithError(err).Error("Failed to get image list!")
@@ -252,26 +249,25 @@ func getImageSet() map[string]bool {
 
 	imagesSet := make(map[string]bool, cap(images))
 	for _, image := range images {
-		imagesSet[image]= true
+		imagesSet[image] = true
 	}
 
 	return imagesSet
 }
 
-
 func paginate[T interface{}](l []T, size int) [][]T {
-        numPages := int(math.Ceil(float64(len(l)) / float64(size)))
-        pages := make([][]T, numPages)
-        for i := 0; i < numPages; i++ {
-                left := i * size
-                right := (i + 1) * size
-                if right > len(l) {
-                        right = len(l)
-                }
-                pages[i] = l[left:right]
-        }
+	numPages := int(math.Ceil(float64(len(l)) / float64(size)))
+	pages := make([][]T, numPages)
+	for i := 0; i < numPages; i++ {
+		left := i * size
+		right := (i + 1) * size
+		if right > len(l) {
+			right = len(l)
+		}
+		pages[i] = l[left:right]
+	}
 
-        return pages
+	return pages
 }
 
 func AddTaskDefinitions() {
@@ -323,9 +319,9 @@ func main() {
 
 	wg.Add(1)
 	go ClearTasks()
-	
+
 	wg.Add(1)
-	go AddTaskDefinitions()	
+	go AddTaskDefinitions()
 
 	wg.Wait()
 	log.Fatal("Background worker stopped!")
