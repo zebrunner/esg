@@ -61,7 +61,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 		EntryPoint: []string{"/bin/sh"},
 	}
 
-	entrypointImage := imageRepo + "entrypoint:2.0"
+	entrypointImage := imageRepo + "entrypoint:2.0-beta1"
 	entrypointContainer := Container{
 		Name:       "entrypoint",
 		Image:      entrypointImage,
@@ -141,18 +141,43 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 	executorContainer.SetCpu(caps, 1024, conf.MaxCpu)
 	executorContainer.SetMemory(caps, 1024, conf.MaxMemory)
 
-	uploaderImage := imageRepo + "artifacts-uploader:2.2"
+        recorderImage := imageRepo + "recorder:1.0-beta1"
+        recorderContainer := Container{
+                Name:        "recorder",
+                Image:       recorderImage,
+                cpu:         32,
+                memory:      128,
+                Privileged:  false,
+                Essential:   false,
+                Env: map[string]string{
+                        "ENABLE_VIDEO":          "false",
+                        "ENABLE_REALTIME_LOGS":  "true",
+                        "BASIC_AUTH":            basicAuthHeader,
+                        "LOG_FILE":              "console.log",
+                },
+                Mounts:      []string{logVolume},
+                Command:     []string{"-c", "/entrypoint.sh"}, // + taskLogRedirect}, //TODO: restore redirect
+                EntryPoint:  []string{"/bin/sh"},
+                HealthCheck: nil,
+        }
+        if caps.EnvVariables != nil {
+                for v, k := range caps.EnvVariables {
+                        //fmt.Printf("var: %v; %v\n", v, k)
+                        recorderContainer.Env[v] = k
+                }
+        }
+
+
+	uploaderImage := imageRepo + "uploader:1.0-beta1"
 	uploaderContainer := Container{
-		Name:       "artifacts-uploader",
+		Name:       "uploader",
 		Image:      uploaderImage,
 		cpu:        64,
 		memory:     64,
 		Privileged: false,
 		Essential:  false,
 		Env: map[string]string{
-			"BASIC_AUTH":            basicAuthHeader,
-			"BUCKET":                conf.S3Bucket,
-			"TENANT":                workspace,
+                        "S3_KEY_PATTERN":        fmt.Sprintf("s3://%s/%s/artifacts/launches", conf.S3Bucket, workspace),
 			"AWS_ACCESS_KEY_ID":     conf.S3AwsAccessKeyID,
 			"AWS_SECRET_ACCESS_KEY": conf.S3AwsSecretAccessKey,
 			"AWS_DEFAULT_REGION":    conf.S3Region,
@@ -161,20 +186,13 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 		HealthCheck: nil,
 	}
 
-	if caps.EnvVariables != nil {
-		for v, k := range caps.EnvVariables {
-			//fmt.Printf("var: %v; %v\n", v, k)
-			uploaderContainer.Env[v] = k
-		}
-	}
-
 	containers := make([]*Container, 0)
 	volumes := make(map[string]volume, 0)
 
 	volumes[taskVolume] = volume{Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false}
 	volumes[logVolume] = volume{Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false}
 	volumes[entrypointVolume] = volume{Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false}
-	containers = []*Container{&cloneContainer, &entrypointContainer, &uploaderContainer}
+	containers = []*Container{&cloneContainer, &entrypointContainer, &recorderContainer, &uploaderContainer}
 
 	if includeMaven {
 		containers = append(containers, mavenContainer)
