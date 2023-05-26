@@ -40,8 +40,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
         taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
 	if caps.RepositoryUrl != "" {
 		cloneCommand = fmt.Sprintf("git clone --depth=1 --single-branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
-                //TODO: move chown to entrypoint
-		cloneCommand = cloneCommand + taskLogRedirect + " ; chown -R 4096:4096 " + workDir + "; chown -R 4096:4096 " + logDir
+		cloneCommand = cloneCommand + taskLogRedirect
 	}
 
 	cloneImage := imageRepo + "git:latest"
@@ -62,7 +61,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		launchCommand = caps.LaunchCommand
 	}
 
-	entrypointImage := imageRepo + "entrypoint:2.0-beta1"
+	entrypointImage := imageRepo + "entrypoint:2.0"
 	entrypointContainer := Container{
 		Name:       "entrypoint",
 		Image:      entrypointImage,
