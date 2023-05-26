@@ -168,7 +168,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
         }
 
 
-	uploaderImage := imageRepo + "uploader:1.0-beta1"
+	uploaderImage := imageRepo + "uploader:2.2"
 	uploaderContainer := Container{
 		Name:       "uploader",
 		Image:      uploaderImage,
