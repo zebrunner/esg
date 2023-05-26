@@ -172,7 +172,7 @@ func StopLostTasks(cachedIds []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 			if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
 				sessStartup := config.Conf.SessionStartupTimeout.Seconds()
 				if task.CreatedAt != nil && time.Since(*task.CreatedAt).Seconds() > sessStartup {
-					log.WithField("sessionStartupTimeout", sessStartup).Warn("Task is running but wasn't cached in sessionMap in time. Aborting")
+					log.WithField("sessionStartupTimeout", sessStartup).Warn("Unrecognized task detected! Aborting")
 					taskId := strings.Split(*task.TaskArn, "/")[2]
 					_, err := service.StopTask(taskId)
 					if err != nil {
