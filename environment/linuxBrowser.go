@@ -23,6 +23,9 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 
 	log.Trace("caps: ", caps)
 
+        entrypointDir := "/opt/entrypoint"
+        entrypointVolume := "entrypoint"
+
 	logDir := "/tmp/log"
 	logVolume := "log"
 
@@ -34,9 +37,9 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 
 	//TODO: handle resolution and video screen size
 
-	sessionLogRedirect := " >> " + logDir + "/session.log 2>&1"
+        taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
 
-	includeMitm := caps.Mitm
+/*	includeMitm := caps.Mitm
 	mitmCommand := "mitmdump --help || sleep infinity"
 	var mitmCpu int64 = 32
 	var mitmMemory int64 = 64 // minimal memory to start container
@@ -71,9 +74,21 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
       "fileserverPort": {fileserverPort, 0},
     },
     Mounts:     []string{logVolume},
-    Command: []string{"-c", "/entrypoint.sh" +  sessionLogRedirect},
+    Command: []string{"-c", "/entrypoint.sh" +  taskLogRedirect},
     EntryPoint: []string{"/bin/sh"},
   }
+*/
+        entrypointImage := imageRepo + "entrypoint:2.0-beta1"
+        entrypointContainer := Container{
+                Name:       "entrypoint",
+                Image:      entrypointImage,
+                cpu:        16,
+                memory:     16,
+                Privileged: false,
+                Essential:  false,
+                Mounts:     []string{entrypointVolume, logVolume},
+                EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
+        }
 
 	// In future maybe there will be need to disable vnc
 	enableVNC := true
@@ -96,8 +111,8 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			"TZ":            tz.String(),
 		},
 		Mounts:     []string{"shm", logVolume},
-		Links:      []string{"mitm"},
-		Command:    []string{"-c", "/entrypoint.sh" + sessionLogRedirect},
+//		Links:      []string{"mitm"},
+		Command:    []string{"-c", "ls -la /tmp/log && /entrypoint.sh" + taskLogRedirect},
 		EntryPoint: []string{"/bin/sh"},
 		HealthCheck: &ecs.HealthCheck{
 			Command:     []*string{aws.String("CMD-SHELL"), aws.String("curl -f localhost:4444/status || exit 1")},
@@ -106,21 +121,33 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			Timeout:     aws.Int64(10),
 			StartPeriod: aws.Int64(5),
 		},
+                DependsOn: []*ecs.ContainerDependency{
+                        &ecs.ContainerDependency{
+                                ContainerName: aws.String("entrypoint"),
+                                Condition:     aws.String("COMPLETE"),
+                        },
+                },
 	}
 	browserContainer.SetCpu(caps, 1024, conf.MaxCpu)
 	browserContainer.SetMemory(caps, 1024, conf.MaxMemory)
 
-	recorderImage := imageRepo + "video-recorder:1.0"
-	videoRecorderContainer := Container{
-		Name:        "video-recorder",
+	recorderImage := imageRepo + "recorder:1.0-beta1"
+	recorderContainer := Container{
+		Name:        "recorder",
 		Image:       recorderImage,
 		cpu:         recorderCpu,
 		memory:      recorderMemory,
 		Privileged:  false,
 		Essential:   false,
+                Env: map[string]string{
+                        "ENABLE_VIDEO":          "true",
+                        "ENABLE_REALTIME_LOGS":  "false",
+                        "BASIC_AUTH":            "",
+                        "LOG_FILE":              "session.log",
+                },
 		Mounts:      []string{logVolume},
 		Links:       []string{"browser"},
-		Command:     []string{"-c", "/entrypoint.sh" + sessionLogRedirect},
+		Command:     []string{"-c", "/entrypoint.sh"}, // + taskLogRedirect}, //TODO: restore redirect after finishing feature
 		EntryPoint:  []string{"/bin/sh"},
 		HealthCheck: nil,
 		DependsOn: []*ecs.ContainerDependency{
@@ -130,18 +157,23 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			},
 		},
 	}
+        if caps.EnvVariables != nil {
+                for v, k := range caps.EnvVariables {
+                        //fmt.Printf("var: %v; %v\n", v, k)
+                        recorderContainer.Env[v] = k
+                }
+        }
 
-	uploaderImage := imageRepo + "artifacts-uploader:2.2"
+	uploaderImage := imageRepo + "uploader:1.0-beta1"
 	uploaderContainer := Container{
-		Name:       "artifacts-uploader",
+		Name:       "uploader",
 		Image:      uploaderImage,
 		cpu:        64, // with 32  uploading is aborted
 		memory:     64,
 		Privileged: false,
 		Essential:  false,
 		Env: map[string]string{
-			"BUCKET":                conf.S3Bucket,
-			"TENANT":                workspace,
+                        "S3_KEY_PATTERN":        fmt.Sprintf("s3://%s/%s/artifacts/test-sessions", conf.S3Bucket, workspace),
 			"AWS_ACCESS_KEY_ID":     conf.S3AwsAccessKeyID,
 			"AWS_SECRET_ACCESS_KEY": conf.S3AwsSecretAccessKey,
 			"AWS_DEFAULT_REGION":    conf.S3Region,
@@ -152,9 +184,10 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
-		Containers:           []*Container{&browserContainer, &videoRecorderContainer, &mitmContainer, &uploaderContainer},
+		Containers:           []*Container{&entrypointContainer, &browserContainer, &recorderContainer, &uploaderContainer}, //&mitmContainer
 		Capabilities:         caps,
 		Volumes: map[string]volume{
+                        entrypointVolume: {ContainerPath: entrypointDir, Driver: "local", Scope: "task", ReadOnly: false},
 			logVolume: {ContainerPath: logDir, Driver: "local", Scope: "task", ReadOnly: false},
 			"shm":     {ContainerPath: "/dev/shm", HostPath: "/dev/shm", ReadOnly: false},
 		},

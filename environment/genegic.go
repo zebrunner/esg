@@ -69,7 +69,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 		memory:     16,
 		Privileged: false,
 		Essential:  false,
-		Mounts:     []string{entrypointVolume},
+		Mounts:     []string{entrypointVolume, logVolume},
 		EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
 	}
 
@@ -189,9 +189,10 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 	containers := make([]*Container, 0)
 	volumes := make(map[string]volume, 0)
 
+        volumes[entrypointVolume] = volume{Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false}
 	volumes[taskVolume] = volume{Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false}
 	volumes[logVolume] = volume{Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false}
-	volumes[entrypointVolume] = volume{Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false}
+
 	containers = []*Container{&cloneContainer, &entrypointContainer, &recorderContainer, &uploaderContainer}
 
 	if includeMaven {
