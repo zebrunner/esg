@@ -61,7 +61,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 		EntryPoint: []string{"/bin/sh"},
 	}
 
-	entrypointImage := imageRepo + "entrypoint:2.0-beta1"
+	entrypointImage := imageRepo + "entrypoint:2.0"
 	entrypointContainer := Container{
 		Name:       "entrypoint",
 		Image:      entrypointImage,
