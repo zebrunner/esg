@@ -20,7 +20,15 @@ const (
 	anyPlatform     = "any"
 	genericPlatform = "generic"
 	cypressPlatform = "cypress"
+
 	imageRepo       = "public.ecr.aws/zebrunner/" //public zebrunner ECR docker registry
+	uploaderImage   = "artifacts-uploader:2.2"
+	mitmImage       = "mitmproxy:1.0"
+	recorderImage   = "video-recorder:1.0"
+	appiumImage     = "appium:1.4.10"
+	cloneImage      = "git:latest"
+	entrypointImage = "entrypoint:2.0"
+	mavenImage      = "m2-repo-carina:1.3"
 
 	ZEBRUNNER_HOME = "/opt/zebrunner"
 )

@@ -51,10 +51,10 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		cloneCommand = cloneCommand + sessionLogRedirect + " ; chown -R 4096:4096 " + workDir + "; chown -R 4096:4096 " + logDir
 	}
 
-	cloneImage := imageRepo + "git:latest"
+	cloneImageRef := imageRepo + cloneImage
 	cloneContainer := Container{
 		Name:       "clone",
-		Image:      cloneImage,
+		Image:      cloneImageRef,
 		cpu:        minCpu,
 		memory:     512,
 		Privileged: false,
@@ -69,10 +69,10 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		launchCommand = caps.LaunchCommand
 	}
 
-	entrypointImage := imageRepo + "entrypoint:2.0"
+	entrypointImageRef := imageRepo + entrypointImage
 	entrypointContainer := Container{
 		Name:       "entrypoint",
-		Image:      entrypointImage,
+		Image:      entrypointImageRef,
 		cpu:        minCpu,
 		memory:     minMemory,
 		Privileged: false,
@@ -118,10 +118,10 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 	cypressContainer.SetCpu(caps, 1024, conf.MaxCpu)
 	cypressContainer.SetMemory(caps, 2048, conf.MaxMemory) // 2Gb RAM is minimal for cypress due to the potential memory leaks
 
-	recorderImage := imageRepo + "video-recorder:1.0"
+	recorderImageRef := imageRepo + recorderImage
 	videoRecorderContainer := Container{
 		Name:        "video-recorder",
-		Image:       recorderImage,
+		Image:       recorderImageRef,
 		cpu:         recorderCpu,
 		memory:      recorderMemory,
 		Privileged:  false,
@@ -142,10 +142,10 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 	//basic auth header for executor-logs service
 	basicAuthHeader := "Authorization: Basic " + b64.StdEncoding.EncodeToString([]byte(conf.ZebrunnerIntegrationUser+":"+conf.ZebrunnerIntegrationPassword))
 
-	uploaderImage := imageRepo + "artifacts-uploader:2.2"
+	uploaderImageRef := imageRepo + uploaderImage
 	uploaderContainer := Container{
 		Name:       "artifacts-uploader",
-		Image:      uploaderImage,
+		Image:      uploaderImageRef,
 		cpu:        64,
 		memory:     64,
 		Privileged: false,

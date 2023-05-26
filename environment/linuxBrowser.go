@@ -56,10 +56,10 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		//TODO: register such capabilities automatically: -Dproxy_host=mitm -Dproxy_port=8080
 
 	}
-  mitmImage := imageRepo + "mitmproxy:1.0"
+  mitmImageRef := imageRepo + mitmImage
   mitmContainer := Container{
     Name:       "mitm",
-    Image:      mitmImage,
+    Image:      mitmImageRef,
     cpu:        mitmCpu,
     memory:     mitmMemory,
     Privileged: false,
@@ -110,10 +110,10 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 	browserContainer.SetCpu(caps, 1024, conf.MaxCpu)
 	browserContainer.SetMemory(caps, 1024, conf.MaxMemory)
 
-	recorderImage := imageRepo + "video-recorder:1.0"
+	recorderImageRef := imageRepo + recorderImage
 	videoRecorderContainer := Container{
 		Name:        "video-recorder",
-		Image:       recorderImage,
+		Image:       recorderImageRef,
 		cpu:         recorderCpu,
 		memory:      recorderMemory,
 		Privileged:  false,
@@ -131,10 +131,10 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		},
 	}
 
-	uploaderImage := imageRepo + "artifacts-uploader:2.2"
+	uploaderImageRef := imageRepo + uploaderImage
 	uploaderContainer := Container{
 		Name:       "artifacts-uploader",
-		Image:      uploaderImage,
+		Image:      uploaderImageRef,
 		cpu:        64, // with 32  uploading is aborted
 		memory:     64,
 		Privileged: false,

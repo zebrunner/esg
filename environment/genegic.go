@@ -48,10 +48,10 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 
 	taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
 
-	cloneImage := imageRepo + "git:latest"
+	cloneImageRef := imageRepo + cloneImage
 	cloneContainer := Container{
 		Name:       "clone",
-		Image:      cloneImage,
+		Image:      cloneImageRef,
 		cpu:        minCpu,
 		memory:     512, //increased memory to fix OOM for huge repositories (3K+ branches)
 		Privileged: false,
@@ -61,10 +61,10 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 		EntryPoint: []string{"/bin/sh"},
 	}
 
-	entrypointImage := imageRepo + "entrypoint:2.0"
+	entrypointImageRef := imageRepo + entrypointImage
 	entrypointContainer := Container{
 		Name:       "entrypoint",
-		Image:      entrypointImage,
+		Image:      entrypointImageRef,
 		cpu:        16,
 		memory:     16,
 		Privileged: false,
@@ -76,10 +76,10 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 	includeMaven := strings.Contains(caps.Image, "maven")
 	var mavenContainer *Container = nil
 	if includeMaven {
-		mavenImage := imageRepo + "m2-repo-carina:1.3"
+		mavenImageRef := imageRepo + mavenImage
 		mavenContainer = &Container{
 			Name:       "maven",
-			Image:      mavenImage,
+			Image:      mavenImageRef,
 			cpu:        16,
 			memory:     16,
 			Privileged: false,
@@ -141,10 +141,10 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 	executorContainer.SetCpu(caps, 1024, conf.MaxCpu)
 	executorContainer.SetMemory(caps, 1024, conf.MaxMemory)
 
-	uploaderImage := imageRepo + "artifacts-uploader:2.2"
+	uploaderImageRef := imageRepo + uploaderImage
 	uploaderContainer := Container{
 		Name:       "artifacts-uploader",
-		Image:      uploaderImage,
+		Image:      uploaderImageRef,
 		cpu:        64,
 		memory:     64,
 		Privileged: false,
