@@ -297,6 +297,28 @@ func DescribeTask(taskArn string) (*ecs.DescribeTasksOutput, error) {
 	return result, err
 }
 
+func DescribeTasks(taskArns []string) ([]*ecs.Task, error) {
+	svc := ecs.New(AwsSess)
+	taskPages := paginate(taskArns, 100)
+	resultArr := make([]*ecs.Task, 0)
+
+	for _, tasks := range taskPages {
+		time.Sleep(2 * time.Second)
+		input := &ecs.DescribeTasksInput{
+			Cluster: &config.Conf.AwsCluster,
+			Tasks:   aws.StringSlice(tasks),
+		}
+
+		result, err := svc.DescribeTasks(input)
+		if err != nil {
+			return nil, err
+		}
+		resultArr = append(resultArr, result.Tasks...)
+	}
+
+	return resultArr, nil
+}
+
 func searchHostPort(task *ecs.Task, containerPort int64) (port int64, ok bool) {
 	for _, container := range task.Containers {
 		for _, networkBinding := range container.NetworkBindings {
