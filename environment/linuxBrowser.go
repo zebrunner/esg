@@ -112,7 +112,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		},
 		Mounts:     []string{"shm", logVolume},
 //		Links:      []string{"mitm"},
-		Command:    []string{"-c", "ls -la /tmp/log && /entrypoint.sh" + taskLogRedirect},
+		Command:    []string{"-c", "/entrypoint.sh" + taskLogRedirect},
 		EntryPoint: []string{"/bin/sh"},
 		HealthCheck: &ecs.HealthCheck{
 			Command:     []*string{aws.String("CMD-SHELL"), aws.String("curl -f localhost:4444/status || exit 1")},
