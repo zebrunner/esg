@@ -157,6 +157,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			},
 		},
 	}
+        //TODO: do we need sharing vars? it is required for the real time logs only (?!)
         if caps.EnvVariables != nil {
                 for v, k := range caps.EnvVariables {
                         //fmt.Printf("var: %v; %v\n", v, k)
