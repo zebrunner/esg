@@ -147,7 +147,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
                 },
 		Mounts:      []string{logVolume},
 		Links:       []string{"browser"},
-		Command:     []string{"-c", "/entrypoint.sh"}, // + taskLogRedirect}, //TODO: restore redirect after finishing feature
+		Command:     []string{"-c", "/entrypoint.sh" + ">>" + logDir + "/video.log 2>&1"},
 		EntryPoint:  []string{"/bin/sh"},
 		HealthCheck: nil,
 		DependsOn: []*ecs.ContainerDependency{
@@ -164,7 +164,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
                 }
         }
 
-	uploaderImage := imageRepo + "uploader:1.0-beta1"
+	uploaderImage := imageRepo + "uploader:2.2"
 	uploaderContainer := Container{
 		Name:       "uploader",
 		Image:      uploaderImage,
