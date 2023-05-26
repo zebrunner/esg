@@ -1,11 +1,13 @@
 #!/bin/bash
-# Get full information about all tasks
+# This script prints full information about all tasks
 
+# get base directory and cluster
 BASEDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# find out cluster name
-cluster=`$BASEDIR/./cluster.sh`
+cluster=`$BASEDIR/cluster.sh`
+
 # get all tasks
-tasks=`$BASEDIR/./list-tasks.sh`
+tasks=`$BASEDIR/list-tasks.sh`
+
 # parse Arns into array
 readarray -t tasksArns < <(echo $tasks | jq -j '.[]')
 # counter of concatenated tasks arns for describe-tasks command (max 100 per call)
