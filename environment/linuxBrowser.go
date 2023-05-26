@@ -131,7 +131,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 	browserContainer.SetCpu(caps, 1024, conf.MaxCpu)
 	browserContainer.SetMemory(caps, 1024, conf.MaxMemory)
 
-	recorderImage := imageRepo + "recorder:1.0-beta1"
+	recorderImage := imageRepo + "recorder:1.0"
 	recorderContainer := Container{
 		Name:        "recorder",
 		Image:       recorderImage,

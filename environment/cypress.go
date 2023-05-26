@@ -69,7 +69,11 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		memory:     16,
 		Privileged: false,
 		Essential:  false,
-		Mounts:     []string{entrypointVolume, logVolume},
+                Env: map[string]string{
+                        "LOG_DIR": logDir,
+                        "WORK_DIR": workDir,
+                },
+		Mounts:     []string{entrypointVolume, logVolume, taskVolume},
                 EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
 	}
 
@@ -111,7 +115,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 	cypressContainer.SetCpu(caps, 1024, conf.MaxCpu)
 	cypressContainer.SetMemory(caps, 2048, conf.MaxMemory) // 2Gb RAM is minimal for cypress due to the potential memory leaks
 
-	recorderImage := imageRepo + "recorder:1.0-beta1"
+	recorderImage := imageRepo + "recorder:1.0"
 	recorderContainer := Container{
 		Name:        "recorder",
 		Image:       recorderImage,

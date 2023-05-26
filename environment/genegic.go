@@ -141,7 +141,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 	executorContainer.SetCpu(caps, 1024, conf.MaxCpu)
 	executorContainer.SetMemory(caps, 1024, conf.MaxMemory)
 
-        recorderImage := imageRepo + "recorder:1.0-beta1"
+        recorderImage := imageRepo + "recorder:1.0"
         recorderContainer := Container{
                 Name:        "recorder",
                 Image:       recorderImage,
