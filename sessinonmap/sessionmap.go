@@ -11,11 +11,23 @@ import (
 	"github.com/zebrunner/esg/environment"
 )
 
+type SessionStatus int
+
 const (
-	SessionActive = iota
-	SessionStoppedIdle
+	SessionActive SessionStatus = iota
 	SessionQueued
 	SessionStopped
+)
+
+type StoppedReason string
+
+const (
+	SessionIdleTimeout    StoppedReason = "Session stopped due IDLE timeout"
+	SessionFinished       StoppedReason = "Session finished"
+	SessionAborted        StoppedReason = "Session aborted"
+	SessionUnhealthy      StoppedReason = "Session aborted due to unhealthy status"
+	SessionMaxTimeout     StoppedReason = "Session aborted due to the max timeout"
+	SessionStartupFailure StoppedReason = "Session startup failure"
 )
 
 type Session struct {
@@ -27,7 +39,8 @@ type Session struct {
 	StartedAt       time.Time
 	TaskID          string
 	Workspace       string
-	Status          int
+	Status          SessionStatus
+	StopReason      StoppedReason `json:",omitempty"`
 }
 
 func Find(id string, rewriteAccessTime bool) (*Session, error) {

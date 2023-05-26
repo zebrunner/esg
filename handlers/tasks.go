@@ -33,16 +33,7 @@ func getSession(id string) (*sessionmap.Session, error) {
 		return nil, &utils.SeleniumError{
 			ResponseStatus: http.StatusNotFound,
 			SeleniumCode:   "invalid session id",
-			Message:        fmt.Sprintf("Session not found"),
-			Err:            err,
-		}
-	}
-
-	if session.Status == sessionmap.SessionStoppedIdle {
-		return nil, &utils.SeleniumError{
-			ResponseStatus: http.StatusNotFound,
-			SeleniumCode:   "invalid session id",
-			Message:        fmt.Sprintf("Session stopped due IDLE timeout"),
+			Message:        "Session not found",
 			Err:            err,
 		}
 	}
@@ -51,7 +42,7 @@ func getSession(id string) (*sessionmap.Session, error) {
 		return nil, &utils.SeleniumError{
 			ResponseStatus: http.StatusNotFound,
 			SeleniumCode:   "invalid session id",
-			Message:        fmt.Sprintf("Session already finished"),
+			Message:        string(session.StopReason),
 			Err:            err,
 		}
 	}
@@ -205,7 +196,7 @@ func Create(c *gin.Context) {
 		if err != nil {
 			l.WithError(err).WithField("response", resp).Error("driver startup failed")
 			c.JSON(http.StatusInternalServerError, resp)
-			_, err = service.StopTask(env.TaskId)
+			_, err = service.StopTask(env.TaskId, sessionmap.SessionStartupFailure)
 			if err != nil {
 				l.WithError(err).Error("Failed to stop the task")
 			}
@@ -241,7 +232,7 @@ func Create(c *gin.Context) {
 		if err != nil {
 			l.WithError(err).Error("Driver session not cached!")
 			_ = c.Error(creationError("failed to cache driver session", err)).SetType(gin.ErrorTypePublic)
-			_, err = service.StopTask(env.TaskId)
+			_, err = service.StopTask(env.TaskId, sessionmap.SessionStartupFailure)
 			if err != nil {
 				l.WithError(err).Error("Failed to stop the task. Possible zombie task. Id: ", env.TaskId)
 			}
@@ -294,7 +285,7 @@ func CloseSession(c *gin.Context) {
 	}
 
 	selenium.CloseSession(sess)
-	_, err = service.StopTask(sess.TaskID)
+	_, err = service.StopTask(sess.TaskID, sessionmap.SessionFinished)
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{"_taskId": sess.TaskID}).Error("CloseSession: Failed to stop the task")
 		// _ = c.Error(err).SetType(gin.ErrorTypePublic)
@@ -313,7 +304,7 @@ func AbortTask(c *gin.Context) {
 		//there is no sense to proceed as task is already finished/removed and not present in the sessionmap
 		return
 	}
-	_, err = service.StopTask(sess.TaskID)
+	_, err = service.StopTask(sess.TaskID, sessionmap.SessionAborted)
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{"_taskId": sess.TaskID}).Error("AbortTask: Failed to stop the task")
 		// _ = c.Error(err).SetType(gin.ErrorTypePublic)

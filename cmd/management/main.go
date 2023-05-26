@@ -87,13 +87,10 @@ func StopIdleTasks(keys []string, wg *sync.WaitGroup) {
 		if idleTime > idleTimeout {
 			// [VD] do not execute CloseSession as it remove session from sessionmap and we can't return idle timeout errors to client
 			//selenium.CloseSession(session)
-			_, err := service.StopTask(session.TaskID)
+			stopOutput, err := service.StopTask(session.TaskID, sessionmap.SessionIdleTimeout)
 			if err != nil {
 				log.WithError(err).Error("Failed to stop idle driver task!")
-			} else {
-				// Set idle stopped status and expiration time 10 minutes to be able to return "invalid session id" for requests
-				session.Status = sessionmap.SessionStoppedIdle
-				sessionmap.Write(key, session, 10*time.Minute)
+			} else if stopOutput != nil {
 				log.WithField("_taskId", session.TaskID).WithField("workspace", session.Workspace).Warn("task aborted due to the idle timeout")
 			}
 		}
@@ -117,7 +114,7 @@ func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 		if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
 			if *task.HealthStatus == "UNHEALTHY" {
 				l.Warn("Aborting task due to UNHEALTHY HealthStatus")
-				_, err := service.StopTask(taskId)
+				_, err := service.StopTask(taskId, sessionmap.SessionUnhealthy)
 				if err != nil {
 					l.WithError(err).Error("Failed to stop the task")
 				}
@@ -130,7 +127,7 @@ func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 
 				if task.CreatedAt != nil && time.Since(*task.CreatedAt) > maxTimeout {
 					l.WithField("maxTimeout", maxTimeout).Warn("Aborting task due to the max timeout")
-					_, err := service.StopTask(taskId)
+					_, err := service.StopTask(taskId, sessionmap.SessionMaxTimeout)
 					if err != nil {
 						l.WithError(err).Error("Failed to stop the task")
 					}
@@ -174,7 +171,7 @@ func StopLostTasks(cachedIds []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 				if task.CreatedAt != nil && time.Since(*task.CreatedAt).Seconds() > sessStartup {
 					log.WithField("sessionStartupTimeout", sessStartup).Warn("Task is running but wasn't cached in sessionMap in time. Aborting")
 					taskId := strings.Split(*task.TaskArn, "/")[2]
-					_, err := service.StopTask(taskId)
+					_, err := service.StopTask(taskId, sessionmap.SessionFinished)
 					if err != nil {
 						log.WithError(err).WithField("taskId", taskId).Error("Failed to stop the task")
 					}
@@ -188,8 +185,9 @@ func StopLostTasks(cachedIds []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 }
 
 func TrackResourceUsage(tasks []*ecs.Task, wg *sync.WaitGroup) {
+	// all stopped tasks are marked in cache with expiration time for 10 mins
 	// track STOPPED tasks id for removing them from sessionMap
-	var taskIds4Removal []string
+	// var taskIds4Removal []string
 
 	// analyze tasks response
 	for _, task := range tasks {
@@ -221,16 +219,6 @@ func TrackResourceUsage(tasks []*ecs.Task, wg *sync.WaitGroup) {
 				// automatic abort of the public.ecr.aws/zebrunner/cypress-* should be prohibited as execution is control by parent cyserver process
 				zebrunner.AbortTask(session, task)
 			}
-			taskIds4Removal = append(taskIds4Removal, taskId)
-		}
-	}
-
-	// cleanup tracked task sessions
-	for _, id := range taskIds4Removal {
-		log.WithField("taskId", id).Trace("Removing task session")
-		err := sessionmap.Remove(id)
-		if err != nil {
-			log.WithError(err).WithField("id", id).Error("Failed to remove task session from sessionmap!")
 		}
 	}
 	wg.Done()
