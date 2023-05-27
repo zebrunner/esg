@@ -22,6 +22,9 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 	logDir := "/tmp/log"
 	logVolume := "log"
 
+        cypressDir := "/tmp/cypress"
+        cypressVolume := "cypress"
+
 	entrypointDir := "/opt/entrypoint"
 	entrypointVolume := "entrypoint"
 
@@ -40,7 +43,6 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
         taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
 	if caps.RepositoryUrl != "" {
 		cloneCommand = fmt.Sprintf("git clone --depth=1 --single-branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
-		cloneCommand = cloneCommand + taskLogRedirect
 	}
 
 	cloneImage := imageRepo + "git:latest"
@@ -72,9 +74,16 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
                 Env: map[string]string{
                         "LOG_DIR": logDir,
                         "WORK_DIR": workDir,
+                        "CYPRESS_DIR": cypressDir,
                 },
-		Mounts:     []string{entrypointVolume, logVolume, taskVolume},
+		Mounts:     []string{entrypointVolume, taskVolume, logVolume, cypressVolume},
                 EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
+                DependsOn: []*ecs.ContainerDependency{
+                        &ecs.ContainerDependency{
+                                ContainerName: aws.String("clone"),
+                                Condition:     aws.String("COMPLETE"),
+                        },
+                },
 	}
 
 	cypressContainer := Container{
@@ -88,17 +97,13 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		Env: map[string]string{
 			"COMMAND": launchCommand,
 		},
-		Mounts:           []string{entrypointVolume, taskVolume, logVolume},
+		Mounts:           []string{entrypointVolume, taskVolume, logVolume, cypressVolume},
 		WorkingDirectory: workDir,
 		Command:          []string{"-c", entrypointDir + "/entrypoint.sh" + taskLogRedirect},
 		EntryPoint:       []string{"/bin/sh"},
 		DependsOn: []*ecs.ContainerDependency{
 			&ecs.ContainerDependency{
 				ContainerName: aws.String("entrypoint"),
-				Condition:     aws.String("COMPLETE"),
-			},
-			&ecs.ContainerDependency{
-				ContainerName: aws.String("clone"),
 				Condition:     aws.String("COMPLETE"),
 			},
 		},
@@ -181,6 +186,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		Volumes: map[string]volume{
 			taskVolume:       {Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false},
 			logVolume:        {Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false},
+                        cypressVolume:    {Driver: "local", Scope: "task", ContainerPath: cypressDir, ReadOnly: false},
 			entrypointVolume: {Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false},
 		},
 		Network: &NetworkConfiguration{
