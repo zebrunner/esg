@@ -39,7 +39,8 @@ func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration) {
 		platformName = "linux"
 	}
 
-        if !&conf.SingleTenant {
+        if !conf.SingleTenant {
+		// add workspace/tenant to the url
 		requestUrl.Host = sess.Workspace + "." + requestUrl.Host
 	}
 	requestUrl.Path = USAGE_API_PATH
@@ -128,7 +129,8 @@ func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
 		log.WithError(err).Error("Failed to parse zebrunner base url")
 		return
 	}
-        if !&conf.SingleTenant {
+        if !conf.SingleTenant {
+		// add workspace/tenant to the url
 		requestUrl.Host = sess.Workspace + "." + requestUrl.Host
 	}
 

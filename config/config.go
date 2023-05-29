@@ -103,7 +103,7 @@ func init() {
 
 	flag.StringVar(&Conf.ExcludeBrowsers, "exclude-browsers", "", "Pattern for excluding browsers from available images")
 
-        flag.StringVar(&Conf.SingleTenant, "single-tenant", false, "Single tenant mode")
+        flag.BoolVar(&Conf.SingleTenant, "single-tenant", false, "Single tenant mode")
 }
 
 func (c *Config) ParseLogLevel() logrus.Level {
