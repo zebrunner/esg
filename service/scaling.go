@@ -96,7 +96,7 @@ func getTasksResources(tasks []*ecs.Task, status string) []*Resources {
 	return resources
 }
 
-func setDesiredCapacity(autoscalingService *autoscaling.AutoScaling, newDesiredCapacity int64) {
+func setDesiredCapacity(autoscalingService *autoscaling.AutoScaling, newCapacity int64) {
 	describeAutoScalingGroupsInput := &autoscaling.DescribeAutoScalingGroupsInput{
 		AutoScalingGroupNames: []*string{&config.Conf.AwsAutoScalingGroup},
 	}
@@ -107,30 +107,30 @@ func setDesiredCapacity(autoscalingService *autoscaling.AutoScaling, newDesiredC
 	}
 	autoScalingGroup := describeAutoScalingGroupsOutput.AutoScalingGroups[0]
 	currentCapacity := *autoScalingGroup.DesiredCapacity
-	if newDesiredCapacity < currentCapacity {
+	if newCapacity < currentCapacity {
 		log.WithFields(log.Fields{
 			"currentCapacity": currentCapacity,
-			"newCapacity":     newDesiredCapacity,
+			"newCapacity":     newCapacity,
 		}).Warn("Scale down not allowed")
 		return
 	}
 
-	if newDesiredCapacity > *autoScalingGroup.MaxSize {
+	if newCapacity > *autoScalingGroup.MaxSize {
 		log.WithFields(log.Fields{
 			"maxCount":    *autoScalingGroup.MaxSize,
-			"newCapacity": newDesiredCapacity,
+			"newCapacity": newCapacity,
 		}).Warn("ASG desired size reached limit!")
-		newDesiredCapacity = *autoScalingGroup.MaxSize
+		newCapacity = *autoScalingGroup.MaxSize
 	}
 
-	if newDesiredCapacity == currentCapacity {
+	if newCapacity == currentCapacity {
 		// do nothing
 		return
 	}
 
 	updateGroupInput := &autoscaling.UpdateAutoScalingGroupInput{
 		AutoScalingGroupName: autoScalingGroup.AutoScalingGroupName,
-		DesiredCapacity:      &newDesiredCapacity,
+		DesiredCapacity:      &newCapacity,
 	}
 	_, err = autoscalingService.UpdateAutoScalingGroup(updateGroupInput)
 	if err != nil {
@@ -139,7 +139,7 @@ func setDesiredCapacity(autoscalingService *autoscaling.AutoScaling, newDesiredC
 	}
 	log.WithFields(log.Fields{
 		"currentCapacity": currentCapacity,
-		"newCapacity":     newDesiredCapacity,
+		"newCapacity":     newCapacity,
 	}).Info("Capacity updated")
 }
 
