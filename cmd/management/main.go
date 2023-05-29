@@ -338,7 +338,6 @@ func getImageSet() map[string]bool {
 }
 
 func AddTaskDefinitions() {
-	log.Debug("Saved list of images for task defenition refresh: ")
 	imagesSet := getImageSet()
 
 	for {
