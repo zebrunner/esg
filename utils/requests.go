@@ -25,7 +25,7 @@ type excludeRules []string
 
 func getRules() excludeRules {
 	if config.Conf.ExcludeBrowsers == "" {
-		log.Debug("No exclude rules were found " + config.Conf.ExcludeBrowsers)
+		log.Trace("No exclude rules were found")
 		return nil
 	}
 
