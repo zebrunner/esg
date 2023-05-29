@@ -341,12 +341,12 @@ func AddTaskDefinitions() {
 	imagesSet := getImageSet()
 
 	for {
-		time.Sleep(24 * time.Hour)
+		time.Sleep(12 * time.Hour)
 
 		updatedImages := getImageList()
 		for _, image := range updatedImages {
 			if present := imagesSet[image]; !present {
-				log.Info("Found new image in ecr: " + image)
+				log.Info("Adding task definition for new image: " + image)
 				err := RefreshTaskDefinition(image)
 				if err == nil {
 					imagesSet[image] = true
