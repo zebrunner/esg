@@ -141,47 +141,66 @@ func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 	wg.Done()
 }
 
-func StopLostTasks(cachedIds []string, svc *ecs.ECS, wg *sync.WaitGroup) {
+func StopLostTasks(keys []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 	taskArns, err := service.GetClusterTasksArn(svc)
 	if err != nil {
 		log.WithError(err).Error("Error on ListTasks operation")
 	}
 
+	tasksToDescribe := make([]string, 0)
+
 	for _, taskArn := range taskArns {
 		isFound := false
-		for _, cachedId := range cachedIds {
+		for _, key := range keys {
 			taskId := strings.Split(*taskArn, "/")[2]
-			if cachedId == taskId {
+			if key == taskId {
 				isFound = true
 				break
 			}
 		}
 
 		if !isFound {
-			tasksOutput, err := service.DescribeTask(*taskArn)
-			if err != nil {
-				log.WithError(err).Error("Error on DescribeTask operation")
+			tasksToDescribe = append(tasksToDescribe, *taskArn)
+		}
+	}
+
+	if len(tasksToDescribe) == 0 {
+		log.Debug("No lost tasks found")
+		return
+	}
+	maxRetryCount := 10
+
+	var tasks []*ecs.Task
+	for i := 1; i <= maxRetryCount; i++ {
+		time.Sleep(time.Duration(i) * 1 * time.Second)
+		tasks, err = service.DescribeTasks(tasksToDescribe)
+		if err != nil {
+			if i == maxRetryCount {
+				log.WithField("error", err).Errorf("Couldn't DescribeTasks in %d retries.", i)
+				return
+			} else if strings.Contains(err.Error(), "ThrottlingException") {
+				log.WithField("error", err).WithFields(log.Fields{"retry": i}).Debug("Recdescribing task defenition")
+			} else {
+				log.WithField("error", err).Error("Couldn't DescribeTasks.")
 				continue
 			}
+		} else {
+			break
+		}
+	}
 
-			if len(tasksOutput.Tasks) != 1 {
-				continue
-			}
-			task := tasksOutput.Tasks[0]
-
-			if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
-				sessStartup := config.Conf.SessionStartupTimeout.Seconds()
-				if task.CreatedAt != nil && time.Since(*task.CreatedAt).Seconds() > sessStartup {
-					log.WithField("sessionStartupTimeout", sessStartup).Warn("Task is running but wasn't cached in sessionMap in time. Aborting")
-					taskId := strings.Split(*task.TaskArn, "/")[2]
-					_, err := service.StopTask(taskId, sessionmap.SessionFinished)
-					if err != nil {
-						log.WithError(err).WithField("taskId", taskId).Error("Failed to stop the task")
-					}
+	for _, task := range tasks {
+		if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
+			sessStartup := config.Conf.SessionStartupTimeout.Seconds()
+			if task.CreatedAt != nil && time.Since(*task.CreatedAt).Seconds() > sessStartup {
+				log.WithField("sessionStartupTimeout", sessStartup).Warn("Task is running but wasn't cached in sessionMap in time. Aborting")
+				taskId := strings.Split(*task.TaskArn, "/")[2]
+				_, err := service.StopTask(taskId, sessionmap.SessionFinished)
+				if err != nil {
+					log.WithError(err).WithField("taskId", taskId).Error("Failed to stop the task")
 				}
 			}
 		}
-
 	}
 
 	wg.Done()

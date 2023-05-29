@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"strings"
 
-	b64 "encoding/base64"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -23,15 +22,11 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 	logDir := "/tmp/log"
 	logVolume := "log"
 
+        cypressDir := "/tmp/cypress"
+        cypressVolume := "cypress"
+
 	entrypointDir := "/opt/entrypoint"
 	entrypointVolume := "entrypoint"
-
-	cypressDir := "/opt/cypress"
-	cypressVolume := "cypress"
-
-	//TODO: test removal of /opt/zebrunner for cypress
-	zebrunnerDir := "/opt/zebrunner"
-	zebrunnerVolume := "zebrunner"
 
 	branchArg := ""
 	if caps.Branch != "" {
@@ -45,10 +40,9 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 	log.Debug("browserImage: " + browserImage)
 
 	cloneCommand := "CHANGE_ME"
-	sessionLogRedirect := ">>" + logDir + "/session.log 2>&1"
+        taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
 	if caps.RepositoryUrl != "" {
 		cloneCommand = fmt.Sprintf("git clone --depth=1 --single-branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
-		cloneCommand = cloneCommand + sessionLogRedirect + " ; chown -R 4096:4096 " + workDir + "; chown -R 4096:4096 " + logDir
 	}
 
 	cloneImage := imageRepo + "git:latest"
@@ -60,7 +54,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		Privileged: false,
 		Essential:  false,
 		Mounts:     []string{taskVolume, logVolume},
-		Command:    []string{"-c", cloneCommand + sessionLogRedirect},
+		Command:    []string{"-c", cloneCommand + taskLogRedirect},
 		EntryPoint: []string{"/bin/sh"},
 	}
 
@@ -73,12 +67,23 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 	entrypointContainer := Container{
 		Name:       "entrypoint",
 		Image:      entrypointImage,
-		cpu:        minCpu,
-		memory:     minMemory,
+		cpu:        16,
+		memory:     16,
 		Privileged: false,
 		Essential:  false,
-		Mounts:     []string{entrypointVolume, cypressVolume},
-		EntryPoint: []string{entrypointDir + "/entrypoint.sh"}, //TODO: do we need output in session.log?
+                Env: map[string]string{
+                        "LOG_DIR": logDir,
+                        "WORK_DIR": workDir,
+                        "CYPRESS_DIR": cypressDir,
+                },
+		Mounts:     []string{entrypointVolume, taskVolume, logVolume, cypressVolume},
+                EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
+                DependsOn: []*ecs.ContainerDependency{
+                        &ecs.ContainerDependency{
+                                ContainerName: aws.String("clone"),
+                                Condition:     aws.String("COMPLETE"),
+                        },
+                },
 	}
 
 	cypressContainer := Container{
@@ -92,22 +97,19 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		Env: map[string]string{
 			"COMMAND": launchCommand,
 		},
-		Mounts:           []string{entrypointVolume, taskVolume, logVolume, zebrunnerVolume, cypressVolume},
+		Mounts:           []string{entrypointVolume, taskVolume, logVolume, cypressVolume},
 		WorkingDirectory: workDir,
-		Command:          []string{"-c", entrypointDir + "/entrypoint.sh" + sessionLogRedirect},
+		Command:          []string{"-c", entrypointDir + "/entrypoint.sh" + taskLogRedirect},
 		EntryPoint:       []string{"/bin/sh"},
 		DependsOn: []*ecs.ContainerDependency{
 			&ecs.ContainerDependency{
 				ContainerName: aws.String("entrypoint"),
 				Condition:     aws.String("COMPLETE"),
 			},
-			&ecs.ContainerDependency{
-				ContainerName: aws.String("clone"),
-				Condition:     aws.String("COMPLETE"),
-			},
 		},
 	}
 
+        //TODO: do we need sharing vars? it is required for the real time logs only (?!)
 	if caps.EnvVariables != nil {
 		for v, k := range caps.EnvVariables {
 			//fmt.Printf("var: %v; %v\n", v, k)
@@ -118,17 +120,23 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 	cypressContainer.SetCpu(caps, 1024, conf.MaxCpu)
 	cypressContainer.SetMemory(caps, 2048, conf.MaxMemory) // 2Gb RAM is minimal for cypress due to the potential memory leaks
 
-	recorderImage := imageRepo + "video-recorder:1.0"
-	videoRecorderContainer := Container{
-		Name:        "video-recorder",
+	recorderImage := imageRepo + "recorder:1.0"
+	recorderContainer := Container{
+		Name:        "recorder",
 		Image:       recorderImage,
 		cpu:         recorderCpu,
 		memory:      recorderMemory,
 		Privileged:  false,
 		Essential:   false,
+                Env: map[string]string{
+                        "ENABLE_VIDEO":          "true",
+                        "ENABLE_REALTIME_LOGS":  "false",
+                        "BASIC_AUTH":            "",
+                        "LOG_FILE":              "session.log",
+                },
 		Mounts:      []string{logVolume},
 		Links:       []string{"browser"},
-		Command:     []string{"-c", "/entrypoint.sh" + sessionLogRedirect},
+		Command:     []string{"-c", "/entrypoint.sh" + ">>" + logDir + "/video.log 2>&1"},
 		EntryPoint:  []string{"/bin/sh"},
 		HealthCheck: nil,
 		DependsOn: []*ecs.ContainerDependency{
@@ -139,34 +147,30 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		},
 	}
 
-	//basic auth header for executor-logs service
-	basicAuthHeader := "Authorization: Basic " + b64.StdEncoding.EncodeToString([]byte(conf.ZebrunnerIntegrationUser+":"+conf.ZebrunnerIntegrationPassword))
+        //TODO: do we need sharing vars? it is required for the real time logs only (?!)
+        if caps.EnvVariables != nil {
+                for v, k := range caps.EnvVariables {
+                        //fmt.Printf("var: %v; %v\n", v, k)
+                        recorderContainer.Env[v] = k
+                }
+        }
 
-	uploaderImage := imageRepo + "artifacts-uploader:2.2"
+	uploaderImage := imageRepo + "uploader:2.2"
 	uploaderContainer := Container{
-		Name:       "artifacts-uploader",
+		Name:       "uploader",
 		Image:      uploaderImage,
-		cpu:        64,
+		cpu:        64, // with 32  uploading is aborted
 		memory:     64,
 		Privileged: false,
 		Essential:  false,
 		Env: map[string]string{
-			"BASIC_AUTH":            basicAuthHeader,
-			"BUCKET":                conf.S3Bucket,
-			"TENANT":                workspace,
+                        "S3_KEY_PATTERN":        fmt.Sprintf("s3://%s/%s/artifacts/test-sessions", conf.S3Bucket, workspace),
 			"AWS_ACCESS_KEY_ID":     conf.S3AwsAccessKeyID,
 			"AWS_SECRET_ACCESS_KEY": conf.S3AwsSecretAccessKey,
 			"AWS_DEFAULT_REGION":    conf.S3Region,
 		},
 		Mounts:      []string{logVolume},
 		HealthCheck: nil,
-	}
-
-	if caps.EnvVariables != nil {
-		for v, k := range caps.EnvVariables {
-			//fmt.Printf("var: %v; %v\n", v, k)
-			uploaderContainer.Env[v] = k
-		}
 	}
 
 	// convert image "public.ecr.aws/zebrunner/cypress-chrome:107.0" to task definition failiy: "cypress-cypress-chrome-107-0"
@@ -177,14 +181,13 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: familyDefinition,
-		Containers:           []*Container{&cloneContainer, &entrypointContainer, &cypressContainer, &videoRecorderContainer, &uploaderContainer},
+		Containers:           []*Container{&cloneContainer, &entrypointContainer, &cypressContainer, &recorderContainer, &uploaderContainer},
 		Capabilities:         caps,
 		Volumes: map[string]volume{
 			taskVolume:       {Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false},
 			logVolume:        {Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false},
+                        cypressVolume:    {Driver: "local", Scope: "task", ContainerPath: cypressDir, ReadOnly: false},
 			entrypointVolume: {Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false},
-			cypressVolume:    {Driver: "local", Scope: "task", ContainerPath: cypressDir, ReadOnly: false},
-			zebrunnerVolume:  {HostPath: zebrunnerDir, ContainerPath: zebrunnerDir, ReadOnly: true},
 		},
 		Network: &NetworkConfiguration{
 			IP: "",
