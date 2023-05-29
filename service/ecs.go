@@ -18,8 +18,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
-	"math/rand"
 	sessionmap "github.com/zebrunner/esg/sessinonmap"
+	"math/rand"
 )
 
 const (
@@ -274,7 +274,7 @@ func StopTask(taskId string, stopReason sessionmap.StoppedReason) (*ecs.StopTask
 			l.WithField("result", result).Trace("task stopped")
 			l.Info("task stopped")
 			if session != nil {
-				// Set stopped status and expiration time 10 minutes to be able to return stop reason for requests
+				// Set stopped status and expiration time 10 minutes to be able to track task's usage
 				session.Status = sessionmap.SessionStopped
 				session.StopReason = stopReason
 				sessionmap.Write(taskId, session, 10*time.Minute)
@@ -284,9 +284,13 @@ func StopTask(taskId string, stopReason sessionmap.StoppedReason) (*ecs.StopTask
 		} else {
 			time.Sleep(time.Duration(rand.Intn(30)) * time.Second)
 			l.WithError(err).Debug("Failed to stop task")
-			if session != nil && isTaskAlrStopped(taskId) {
-				log.Debug("StopTask() call for already stopped task")
-				return nil, nil
+
+			if session != nil {
+				session, _ = sessionmap.Find(taskId, true)
+				if session != nil && session.Status == sessionmap.SessionStopped {
+					log.Debug("StopTask() call for already stopped task")
+					return nil, nil
+				}
 			}
 			i = i + 1
 			result, err = svc.StopTask(stopTaskInput)
@@ -298,16 +302,6 @@ func StopTask(taskId string, stopReason sessionmap.StoppedReason) (*ecs.StopTask
 	}
 
 	return result, err
-}
-
-func isTaskAlrStopped(taskId string) (bool) {
-	// Update session information
-	session, _ := sessionmap.Find(taskId, true)
-	if session == nil {
-		return false
-	}
-
-	return session.Status == sessionmap.SessionStopped
 }
 
 func DescribeTask(taskArn string) (*ecs.DescribeTasksOutput, error) {

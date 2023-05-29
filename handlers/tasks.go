@@ -304,6 +304,7 @@ func AbortTask(c *gin.Context) {
 		//there is no sense to proceed as task is already finished/removed and not present in the sessionmap
 		return
 	}
+	selenium.CloseSession(sess)
 	_, err = service.StopTask(sess.TaskID, sessionmap.SessionAborted)
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{"_taskId": sess.TaskID}).Error("AbortTask: Failed to stop the task")

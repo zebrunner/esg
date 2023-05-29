@@ -92,6 +92,9 @@ func StopIdleTasks(keys []string, wg *sync.WaitGroup) {
 				log.WithError(err).Error("Failed to stop idle driver task!")
 			} else if stopOutput != nil {
 				log.WithField("_taskId", session.TaskID).WithField("workspace", session.Workspace).Warn("task aborted due to the idle timeout")
+				session.Status = sessionmap.SessionStopped
+				session.StopReason = sessionmap.SessionIdleTimeout
+				sessionmap.Write(session.ID, session, 10*time.Minute)
 			}
 		}
 	}
@@ -195,12 +198,21 @@ func TrackResourceUsage(tasks []*ecs.Task, wg *sync.WaitGroup) {
 		l := log.WithFields(log.Fields{"_taskId": taskId})
 
 		session, err := sessionmap.Find(taskId, false)
-		if err != nil {
+		if err != nil || session.UsageTracked {
 			continue
 		}
 
 		// add task id for removal and track resources usage for STOPPED tasks
 		if *task.LastStatus == "STOPPED" {
+			// Set tracked status and expiration time 2 minutes to be able to return stop reason
+			session.UsageTracked = true
+			sessionmap.Write(taskId, session, 2*time.Minute)
+
+			// Don't track Unhealthy and StartupFailure tasks
+			if session.StopReason != "" && (session.StopReason == sessionmap.SessionUnhealthy || session.StopReason == sessionmap.SessionStartupFailure) {
+				continue
+			}
+
 			l = l.WithFields(log.Fields{"workspace": session.Workspace})
 
 			if task.StartedAt != nil && task.StoppedAt != nil {

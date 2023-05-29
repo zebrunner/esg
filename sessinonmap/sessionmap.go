@@ -41,6 +41,7 @@ type Session struct {
 	Workspace       string
 	Status          SessionStatus
 	StopReason      StoppedReason `json:",omitempty"`
+	UsageTracked 	bool
 }
 
 func Find(id string, rewriteAccessTime bool) (*Session, error) {
