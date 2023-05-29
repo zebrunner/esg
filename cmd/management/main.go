@@ -141,7 +141,7 @@ func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 	wg.Done()
 }
 
-func StopLostTasks(cachedIds []string, svc *ecs.ECS, wg *sync.WaitGroup) {
+func StopLostTasks(keys []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 	taskArns, err := service.GetClusterTasksArn(svc)
 	if err != nil {
 		log.WithError(err).Error("Error on ListTasks operation")
@@ -151,9 +151,9 @@ func StopLostTasks(cachedIds []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 
 	for _, taskArn := range taskArns {
 		isFound := false
-		for _, cachedId := range cachedIds {
+		for _, key := range keys {
 			taskId := strings.Split(*taskArn, "/")[2]
-			if cachedId == taskId {
+			if key == taskId {
 				isFound = true
 				break
 			}
@@ -165,6 +165,7 @@ func StopLostTasks(cachedIds []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 	}
 
 	if len(tasksToDescribe) == 0 {
+		log.Debug("No lost tasks found")
 		return
 	}
 	maxRetryCount := 10
