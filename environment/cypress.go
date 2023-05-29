@@ -101,6 +101,14 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		WorkingDirectory: workDir,
 		Command:          []string{"-c", entrypointDir + "/entrypoint.sh" + taskLogRedirect},
 		EntryPoint:       []string{"/bin/sh"},
+                HealthCheck: &ecs.HealthCheck{
+			//TODO: think about smarter healthcheck
+                        Command:     []*string{aws.String("CMD-SHELL"), aws.String("exit 0")}, // Healthy as only entrypoint started to init network endpoints ip correctly
+                        Interval:    aws.Int64(5),
+                        Retries:     aws.Int64(3),
+                        Timeout:     aws.Int64(10),
+                        StartPeriod: aws.Int64(0),
+                },
 		DependsOn: []*ecs.ContainerDependency{
 			&ecs.ContainerDependency{
 				ContainerName: aws.String("entrypoint"),
@@ -192,7 +200,6 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		Network: &NetworkConfiguration{
 			IP: "",
 			Endpoints: map[string]*Endpoint{
-				"driver": {ContainerPort: genericPort, HostPort: 0, Path: "/"},
 				"vnc":    {ContainerPort: vncPort, HostPort: 0, Path: "/"},
 			},
 		},
