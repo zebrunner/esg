@@ -39,7 +39,9 @@ func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration) {
 		platformName = "linux"
 	}
 
-	requestUrl.Host = sess.Workspace + "." + requestUrl.Host
+        if !&conf.SingleTenant {
+		requestUrl.Host = sess.Workspace + "." + requestUrl.Host
+	}
 	requestUrl.Path = USAGE_API_PATH
 	requestBody := map[string]interface{}{
 		"cpu":      strconv.FormatInt(sess.Capabilities.Cpu, 10) + " millicores",
@@ -126,7 +128,9 @@ func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
 		log.WithError(err).Error("Failed to parse zebrunner base url")
 		return
 	}
-	requestUrl.Host = sess.Workspace + "." + requestUrl.Host
+        if !&conf.SingleTenant {
+		requestUrl.Host = sess.Workspace + "." + requestUrl.Host
+	}
 
 	stopReason := getStoppedReason(*task)
 	requestBody := map[string]interface{}{
