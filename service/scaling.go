@@ -271,6 +271,7 @@ func ScaleDown() {
 	autoScalingGroup := describeAutoScalingGroupsOutput.AutoScalingGroups[0]
 	minSize := *autoScalingGroup.MinSize
 	desiredCapacity := *autoScalingGroup.DesiredCapacity
+        currentCapacity := desiredCapacity
 
 	instances := []*ecs.ContainerInstance{}
 	listInstancesInput := ecs.ListContainerInstancesInput{
@@ -354,8 +355,8 @@ func ScaleDown() {
 	}
 	if terminatedCount != 0 {
 		log.WithFields(log.Fields{
-			"terminatedInstances": terminatedCount,
-			"currentCapacity":     desiredCapacity,
-		}).Info("Scale down performed")
+			"currentCapacity": currentCapacity,
+			"newCapacity":     desiredCapacity,
+		}).Info("Capacity updated")
 	}
 }
