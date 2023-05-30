@@ -18,8 +18,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
-	"math/rand"
 	sessionmap "github.com/zebrunner/esg/sessinonmap"
+	"math/rand"
 )
 
 const (
@@ -250,7 +250,7 @@ func ConstDelay(t time.Duration) func(int) time.Duration {
 	}
 }
 
-func StopTask(taskId string) (*ecs.StopTaskOutput, error) {
+func StopTask(taskId string, stopReason sessionmap.StoppedReason) (*ecs.StopTaskOutput, error) {
 	svc := ecs.New(AwsSess)
 
 	stopTaskInput := &ecs.StopTaskInput{
@@ -261,6 +261,20 @@ func StopTask(taskId string) (*ecs.StopTaskOutput, error) {
 
 	l := log.WithFields(log.Fields{"_taskId": taskId})
 
+	session, _ := sessionmap.Find(taskId, true)
+	var oldSessStatus sessionmap.SessionStatus
+	if session != nil {
+		if session.Status == sessionmap.SessionStopped || session.Status == sessionmap.SessionPendingToStop {
+			err := errors.New("StopTask() call for already stopped task")
+			return nil, err
+		} else {
+			// Set pendingToStop status so no new StopTask() call for current task would be performed
+			oldSessStatus = session.Status
+			session.Status = sessionmap.SessionPendingToStop
+			sessionmap.Write(taskId, session, 0)
+		}
+	}
+
 	i := 0
 	result, err := svc.StopTask(stopTaskInput)
 	for i < 25 {
@@ -268,10 +282,10 @@ func StopTask(taskId string) (*ecs.StopTaskOutput, error) {
 		if err == nil { // the condition stops matching
 			l.WithField("result", result).Trace("task stopped")
 			l.Info("task stopped")
-			session, err := sessionmap.Find(taskId, true)
-			if session != nil && err == nil {
-				// Set stopped status and expiration time 10 minutes to be able to return "invalid session id" for requests
+			if session != nil {
+				// Set stopped status and expiration time 10 minutes to be able to track task's usage
 				session.Status = sessionmap.SessionStopped
+				session.StopReason = stopReason
 				sessionmap.Write(taskId, session, 10*time.Minute)
 			}
 			// break out of the loop
@@ -286,6 +300,11 @@ func StopTask(taskId string) (*ecs.StopTaskOutput, error) {
 
 	if err != nil {
 		l.WithError(err).Error("Failed to stop task")
+		// revert old status because of a stop failure
+		if session != nil {
+			session.Status = oldSessStatus
+			sessionmap.Write(taskId, session, 0)
+		}
 	}
 
 	return result, err
@@ -419,7 +438,7 @@ out:
 		req := taskWaiter.waitFor(ctx, taskArn)
 		select {
 		case err := <-req.errorChan:
-			StopTask(taskId)
+			StopTask(taskId, sessionmap.SessionStartupFailure)
 			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to wait until Task is running and healthy")
 			outputErr = err
 			continue
@@ -427,7 +446,7 @@ out:
 			err = setEnvironmentNetwork(env, task)
 			l.WithField("attempt", i).Debug("setEnvironmentNetwork latency: ", time.Since(startTime))
 			if err != nil {
-				StopTask(taskId)
+				StopTask(taskId, sessionmap.SessionStartupFailure)
 				l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Error("Failed to get service info.")
 				outputErr = fmt.Errorf("failed to get service info: %v", err)
 				continue
@@ -437,7 +456,7 @@ out:
 			return outputErr
 		case <-req.ctx.Done():
 			outputErr = errors.New("failed to wait until task is running. context deadline")
-			StopTask(taskId)
+			StopTask(taskId, sessionmap.SessionStartupFailure)
 			taskWaiter.stopWait(taskArn)
 			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("failed to wait until task is running")
 		}
