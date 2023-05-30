@@ -165,7 +165,7 @@ func StopLostTasks(keys []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 	}
 
 	if len(tasksToDescribe) == 0 {
-                // no need to print any log message because it should happen in 99.99% cases.
+		// no need to print any log message because it should happen in 99.99% cases.
 		return
 	}
 	maxRetryCount := 10
@@ -193,8 +193,8 @@ func StopLostTasks(keys []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 		if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
 			sessStartup := config.Conf.SessionStartupTimeout.Seconds()
 			if task.CreatedAt != nil && time.Since(*task.CreatedAt).Seconds() > sessStartup {
-				log.WithField("sessionStartupTimeout", sessStartup).Warn("Task is running but wasn't cached in sessionMap in time. Aborting")
 				taskId := strings.Split(*task.TaskArn, "/")[2]
+				log.WithFields(log.Fields{"_taskId": taskId, "sessionStartupTimeout": sessStartup}).Warn("Unrecognized task detected! Aborting")
 				_, err := service.StopTask(taskId)
 				if err != nil {
 					log.WithError(err).WithField("taskId", taskId).Error("Failed to stop the task")
