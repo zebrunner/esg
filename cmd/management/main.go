@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/environment"
+	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/service"
 	sessionmap "github.com/zebrunner/esg/sessinonmap"
 	"github.com/zebrunner/esg/utils"
@@ -85,17 +86,12 @@ func StopIdleTasks(keys []string, wg *sync.WaitGroup) {
 
 		idleTime := time.Since(session.AccessedAt).Seconds()
 		if idleTime > idleTimeout {
-			// [VD] do not execute CloseSession as it remove session from sessionmap and we can't return idle timeout errors to client
-			//selenium.CloseSession(session)
+			selenium.CloseSession(session, sessionmap.SessionIdleTimeout)
 			stopOutput, err := service.StopTask(session.TaskID, sessionmap.SessionIdleTimeout)
-			if err != nil {
+			if err != nil || stopOutput == nil {
 				log.WithError(err).Error("Failed to stop idle driver task!")
-			} else if stopOutput != nil {
-				log.WithField("_taskId", session.TaskID).WithField("workspace", session.Workspace).Warn("task aborted due to the idle timeout")
-				session.Status = sessionmap.SessionStopped
-				session.StopReason = sessionmap.SessionIdleTimeout
-				sessionmap.Write(session.ID, session, 10*time.Minute)
 			}
+			log.WithField("_taskId", session.TaskID).WithField("workspace", session.Workspace).Warn("task aborted due to the idle timeout")
 		}
 	}
 

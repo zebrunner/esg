@@ -264,7 +264,7 @@ func StopTask(taskId string, stopReason sessionmap.StoppedReason) (*ecs.StopTask
 	session, _ := sessionmap.Find(taskId, true)
 	var oldSessStatus sessionmap.SessionStatus
 	if session != nil {
-		if session.Status == sessionmap.SessionStopped {
+		if session.Status == sessionmap.SessionStopped || session.Status == sessionmap.SessionPendingToStop {
 			log.Debug("StopTask() call for already stopped task")
 			return nil, nil
 		} else {
@@ -292,8 +292,8 @@ func StopTask(taskId string, stopReason sessionmap.StoppedReason) (*ecs.StopTask
 			break
 		} else {
 			time.Sleep(time.Duration(rand.Intn(30)) * time.Second)
-			l.WithError(err).Debug("Failed to stop task")
 			i = i + 1
+			l.WithError(err).Debug("Failed to stop task")
 			result, err = svc.StopTask(stopTaskInput)
 		}
 	}
@@ -302,10 +302,10 @@ func StopTask(taskId string, stopReason sessionmap.StoppedReason) (*ecs.StopTask
 		l.WithError(err).Error("Failed to stop task")
 		// revert old status because of a stop failure
 		if session != nil {
-				session.Status = oldSessStatus
-				sessionmap.Write(taskId, session, 0)
-			}
+			session.Status = oldSessStatus
+			sessionmap.Write(taskId, session, 0)
 		}
+	}
 
 	return result, err
 }
