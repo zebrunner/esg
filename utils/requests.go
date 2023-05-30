@@ -25,7 +25,7 @@ type excludeRules []string
 
 func getRules() excludeRules {
 	if config.Conf.ExcludeBrowsers == "" {
-		log.Debug("No exclude rules were found " + config.Conf.ExcludeBrowsers)
+		log.Trace("No exclude rules were found")
 		return nil
 	}
 
@@ -123,10 +123,9 @@ func ListBrowsers() ([]string, error) {
 		for _, tag := range versions.ImageTagDetails {
 			image := fmt.Sprintf("%s:%s", imgName, tag.ImageTag)
 			if excludeRules.isAcceptableImage(image) {
-				log.Debug("image: ", image)
 				images = append(images, image)
 			} else {
-				log.Debug("Excluded " + image + " image")
+				log.Debug("Excluded " + image + " image for task definition update")
 			}
 		}
 	}

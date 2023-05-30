@@ -304,6 +304,28 @@ func DescribeTask(taskArn string) (*ecs.DescribeTasksOutput, error) {
 	return result, err
 }
 
+func DescribeTasks(taskArns []string) ([]*ecs.Task, error) {
+	svc := ecs.New(AwsSess)
+	taskPages := paginate(taskArns, 100)
+	resultArr := make([]*ecs.Task, 0)
+
+	for _, tasks := range taskPages {
+		time.Sleep(2 * time.Second)
+		input := &ecs.DescribeTasksInput{
+			Cluster: &config.Conf.AwsCluster,
+			Tasks:   aws.StringSlice(tasks),
+		}
+
+		result, err := svc.DescribeTasks(input)
+		if err != nil {
+			return nil, err
+		}
+		resultArr = append(resultArr, result.Tasks...)
+	}
+
+	return resultArr, nil
+}
+
 func searchHostPort(task *ecs.Task, containerPort int64) (port int64, ok bool) {
 	for _, container := range task.Containers {
 		for _, networkBinding := range container.NetworkBindings {
@@ -388,8 +410,8 @@ out:
 		taskId := strings.Split(taskArn, "/")[2]
 		env.TaskId = taskId
 		l = l.WithField("id", taskId)
-		if env.TaskDefinitionFamily == "generic" || strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
-			l.Debug("do not wait for generic and cypress task startup.")
+		if env.TaskDefinitionFamily == "generic" {
+			l.Debug("do not wait for generic task startup.")
 			outputErr = nil
 			return outputErr
 		}
