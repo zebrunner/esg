@@ -146,7 +146,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
                 Name:        "recorder",
                 Image:       recorderImage,
                 cpu:         32,
-                memory:      128,
+                memory:      256, // with 128 failed for cyserver "OutOfMemoryError: Container killed due to memory usage"
                 Privileged:  false,
                 Essential:   false,
                 Env: map[string]string{
