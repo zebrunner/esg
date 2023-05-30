@@ -162,6 +162,7 @@ func StopLostTasks(keys []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 
 	if len(tasksToDescribe) == 0 {
 		// no need to print any log message because it should happen in 99.99% cases.
+		wg.Done()
 		return
 	}
 	maxRetryCount := 10
