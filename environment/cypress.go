@@ -37,7 +37,6 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 	if err != nil {
 		return nil, err
 	}
-	log.Debug("browserImage: " + browserImage)
 
 	cloneCommand := "CHANGE_ME"
         taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
