@@ -284,8 +284,10 @@ func CloseSession(c *gin.Context) {
 		_ = c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
-
-	selenium.CloseSession(sess, sessionmap.SessionFinished)
+	// if session id were passed
+	if sess.ID != sess.TaskID {
+		selenium.CloseSession(sess, sessionmap.SessionFinished)
+	}
 	_, err = service.StopTask(sess.TaskID, sessionmap.SessionFinished)
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{"_taskId": sess.TaskID}).Error("CloseSession: Failed to stop the task")
@@ -305,7 +307,10 @@ func AbortTask(c *gin.Context) {
 		//there is no sense to proceed as task is already finished/removed and not present in the sessionmap
 		return
 	}
-	selenium.CloseSession(sess, sessionmap.SessionAborted)
+	// if session id were passed
+	if sess.ID != sess.TaskID {
+		selenium.CloseSession(sess, sessionmap.SessionAborted)
+	}
 	_, err = service.StopTask(sess.TaskID, sessionmap.SessionAborted)
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{"_taskId": sess.TaskID}).Error("AbortTask: Failed to stop the task")
@@ -328,7 +333,7 @@ func Vnc(wsconn *websocket.Conn) {
 		l.WithError(err).Error("Session not found")
 		return
 	}
-        log.Debug("sess.Network: ", sess.Network)
+	log.Debug("sess.Network: ", sess.Network)
 
 	vncUrl, ok := sess.Network.GetUrl("vnc")
 	if !ok {
