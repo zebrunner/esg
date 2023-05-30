@@ -87,9 +87,9 @@ func StopIdleTasks(keys []string, wg *sync.WaitGroup) {
 		idleTime := time.Since(session.AccessedAt).Seconds()
 		if idleTime > idleTimeout {
 			selenium.CloseSession(session, sessionmap.SessionIdleTimeout)
-			stopOutput, err := service.StopTask(session.TaskID, sessionmap.SessionIdleTimeout)
-			if err != nil || stopOutput == nil {
-				log.WithError(err).Error("Failed to stop idle driver task!")
+			_, err := service.StopTask(session.TaskID, sessionmap.SessionIdleTimeout)
+			if err != nil {
+				log.WithField("_taskId", session.TaskID).WithError(err).Error("Failed to stop idle driver task!")
 			}
 			log.WithField("_taskId", session.TaskID).WithField("workspace", session.Workspace).Warn("task aborted due to the idle timeout")
 		}

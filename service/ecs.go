@@ -265,8 +265,8 @@ func StopTask(taskId string, stopReason sessionmap.StoppedReason) (*ecs.StopTask
 	var oldSessStatus sessionmap.SessionStatus
 	if session != nil {
 		if session.Status == sessionmap.SessionStopped || session.Status == sessionmap.SessionPendingToStop {
-			log.Debug("StopTask() call for already stopped task")
-			return nil, nil
+			err := errors.New("StopTask() call for already stopped task")
+			return nil, err
 		} else {
 			// Set pendingToStop status so no new StopTask() call for current task would be performed
 			oldSessStatus = session.Status
