@@ -57,6 +57,7 @@ func StartSession(ctx context.Context, driverUrl *url.URL, header http.Header, b
 }
 
 func CloseSession(session *sessionmap.Session, stopReason sessionmap.StoppedReason) {
+	// Set SessionStopped status and expiration time 10 minutes to be able to return sessionID and stop reason for session
 	session.Status = sessionmap.SessionStopped
 	session.StopReason = stopReason
 	err := sessionmap.Write(session.ID, session, 10*time.Minute)

@@ -219,9 +219,9 @@ func TrackResourceUsage(tasks []*ecs.Task, wg *sync.WaitGroup) {
 
 		// track resources usage for STOPPED tasks
 		if *task.LastStatus == "STOPPED" {
-			// Set tracked status and expiration time 2 minutes to be able to return stop reason
+			// Set tracked status and expiration time 5 minutes to be able to return taskId and stop reason for task
 			session.UsageTracked = true
-			sessionmap.Write(taskId, session, 2*time.Minute)
+			sessionmap.Write(taskId, session, 5*time.Minute)
 
 			// Don't track Unhealthy and StartupFailure tasks
 			if session.StopReason == sessionmap.SessionUnhealthy || session.StopReason == sessionmap.SessionStartupFailure {
