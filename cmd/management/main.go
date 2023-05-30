@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/environment"
+	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/service"
 	sessionmap "github.com/zebrunner/esg/sessinonmap"
 	"github.com/zebrunner/esg/utils"
@@ -76,7 +77,7 @@ func StopIdleTasks(keys []string, wg *sync.WaitGroup) {
 			continue
 		}
 
-		log.WithField("session", session.TaskID).Debug("StopIdleTasks: analyzing session for idleTimeout")
+		log.WithField("session", session.ID).Debug("StopIdleTasks: analyzing session for idleTimeout")
 
 		idleTimeout := float64(session.Capabilities.IdleTimeout)
 		if idleTimeout == 0 {
@@ -85,17 +86,12 @@ func StopIdleTasks(keys []string, wg *sync.WaitGroup) {
 
 		idleTime := time.Since(session.AccessedAt).Seconds()
 		if idleTime > idleTimeout {
-			// [VD] do not execute CloseSession as it remove session from sessionmap and we can't return idle timeout errors to client
-			//selenium.CloseSession(session)
-			_, err := service.StopTask(session.TaskID)
+			selenium.CloseSession(session, sessionmap.SessionIdleTimeout)
+			_, err := service.StopTask(session.TaskID, sessionmap.SessionIdleTimeout)
 			if err != nil {
-				log.WithError(err).Error("Failed to stop idle driver task!")
-			} else {
-				// Set idle stopped status and expiration time 10 minutes to be able to return "invalid session id" for requests
-				session.Status = sessionmap.SessionStoppedIdle
-				sessionmap.Write(key, session, 10*time.Minute)
-				log.WithField("_taskId", session.TaskID).WithField("workspace", session.Workspace).Warn("task aborted due to the idle timeout")
+				log.WithField("_taskId", session.TaskID).WithError(err).Error("Failed to stop idle driver task!")
 			}
+			log.WithField("_taskId", session.TaskID).WithField("workspace", session.Workspace).Warn("task aborted due to the idle timeout")
 		}
 	}
 
@@ -117,7 +113,7 @@ func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 		if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
 			if *task.HealthStatus == "UNHEALTHY" {
 				l.Warn("Aborting task due to UNHEALTHY HealthStatus")
-				_, err := service.StopTask(taskId)
+				_, err := service.StopTask(taskId, sessionmap.SessionUnhealthy)
 				if err != nil {
 					l.WithError(err).Error("Failed to stop the task")
 				}
@@ -130,7 +126,7 @@ func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 
 				if task.CreatedAt != nil && time.Since(*task.CreatedAt) > maxTimeout {
 					l.WithField("maxTimeout", maxTimeout).Warn("Aborting task due to the max timeout")
-					_, err := service.StopTask(taskId)
+					_, err := service.StopTask(taskId, sessionmap.SessionMaxTimeout)
 					if err != nil {
 						l.WithError(err).Error("Failed to stop the task")
 					}
@@ -141,68 +137,97 @@ func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 	wg.Done()
 }
 
-func StopLostTasks(cachedIds []string, svc *ecs.ECS, wg *sync.WaitGroup) {
+func StopLostTasks(keys []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 	taskArns, err := service.GetClusterTasksArn(svc)
 	if err != nil {
 		log.WithError(err).Error("Error on ListTasks operation")
 	}
 
+	tasksToDescribe := make([]string, 0)
+
 	for _, taskArn := range taskArns {
 		isFound := false
-		for _, cachedId := range cachedIds {
+		for _, key := range keys {
 			taskId := strings.Split(*taskArn, "/")[2]
-			if cachedId == taskId {
+			if key == taskId {
 				isFound = true
 				break
 			}
 		}
 
 		if !isFound {
-			tasksOutput, err := service.DescribeTask(*taskArn)
-			if err != nil {
-				log.WithError(err).Error("Error on DescribeTask operation")
+			tasksToDescribe = append(tasksToDescribe, *taskArn)
+		}
+	}
+
+	if len(tasksToDescribe) == 0 {
+		// no need to print any log message because it should happen in 99.99% cases.
+		return
+	}
+	maxRetryCount := 10
+
+	var tasks []*ecs.Task
+	for i := 1; i <= maxRetryCount; i++ {
+		time.Sleep(time.Duration(i) * 1 * time.Second)
+		tasks, err = service.DescribeTasks(tasksToDescribe)
+		if err != nil {
+			if i == maxRetryCount {
+				log.WithField("error", err).Errorf("Couldn't DescribeTasks in %d retries.", i)
+				return
+			} else if strings.Contains(err.Error(), "ThrottlingException") {
+				log.WithField("error", err).WithFields(log.Fields{"retry": i}).Debug("Recdescribing task defenition")
+			} else {
+				log.WithField("error", err).Error("Couldn't DescribeTasks.")
 				continue
 			}
+		} else {
+			break
+		}
+	}
 
-			if len(tasksOutput.Tasks) != 1 {
-				continue
-			}
-			task := tasksOutput.Tasks[0]
-
-			if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
-				sessStartup := config.Conf.SessionStartupTimeout.Seconds()
-				if task.CreatedAt != nil && time.Since(*task.CreatedAt).Seconds() > sessStartup {
-					log.WithField("sessionStartupTimeout", sessStartup).Warn("Task is running but wasn't cached in sessionMap in time. Aborting")
-					taskId := strings.Split(*task.TaskArn, "/")[2]
-					_, err := service.StopTask(taskId)
-					if err != nil {
-						log.WithError(err).WithField("taskId", taskId).Error("Failed to stop the task")
-					}
+	for _, task := range tasks {
+		if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
+			sessStartup := config.Conf.SessionStartupTimeout.Seconds()
+			if task.CreatedAt != nil && time.Since(*task.CreatedAt).Seconds() > sessStartup {
+				taskId := strings.Split(*task.TaskArn, "/")[2]
+				log.WithFields(log.Fields{"_taskId": taskId, "sessionStartupTimeout": sessStartup}).Warn("Unrecognized task detected! Aborting")
+				_, err := service.StopTask(taskId, sessionmap.SessionFinished)
+				if err != nil {
+					log.WithError(err).WithField("taskId", taskId).Error("Failed to stop the task")
 				}
 			}
 		}
-
 	}
 
 	wg.Done()
 }
 
 func TrackResourceUsage(tasks []*ecs.Task, wg *sync.WaitGroup) {
-	// track STOPPED tasks id for removing them from sessionMap
-	var taskIds4Removal []string
-
 	// analyze tasks response
 	for _, task := range tasks {
 		taskId := strings.Split(*task.TaskArn, "/")[2]
 		l := log.WithFields(log.Fields{"_taskId": taskId})
 
+		// don't track tasks that:
+		// 1) are not cached;
+		// 2) already tracked;
+		// 3) don't have the stop status, because later we'll need a stop reason
 		session, err := sessionmap.Find(taskId, false)
-		if err != nil {
+		if err != nil || session.UsageTracked || session.Status != sessionmap.SessionStopped {
 			continue
 		}
 
-		// add task id for removal and track resources usage for STOPPED tasks
+		// track resources usage for STOPPED tasks
 		if *task.LastStatus == "STOPPED" {
+			// Set tracked status and expiration time 5 minutes to be able to return taskId and stop reason for task
+			session.UsageTracked = true
+			sessionmap.Write(taskId, session, 5*time.Minute)
+
+			// Don't track Unhealthy and StartupFailure tasks
+			if session.StopReason == sessionmap.SessionUnhealthy || session.StopReason == sessionmap.SessionStartupFailure {
+				continue
+			}
+
 			l = l.WithFields(log.Fields{"workspace": session.Workspace})
 
 			if task.StartedAt != nil && task.StoppedAt != nil {
@@ -221,16 +246,6 @@ func TrackResourceUsage(tasks []*ecs.Task, wg *sync.WaitGroup) {
 				// automatic abort of the public.ecr.aws/zebrunner/cypress-* should be prohibited as execution is control by parent cyserver process
 				zebrunner.AbortTask(session, task)
 			}
-			taskIds4Removal = append(taskIds4Removal, taskId)
-		}
-	}
-
-	// cleanup tracked task sessions
-	for _, id := range taskIds4Removal {
-		log.WithField("taskId", id).Trace("Removing task session")
-		err := sessionmap.Remove(id)
-		if err != nil {
-			log.WithError(err).WithField("id", id).Error("Failed to remove task session from sessionmap!")
 		}
 	}
 	wg.Done()
@@ -319,16 +334,15 @@ func getImageSet() map[string]bool {
 }
 
 func AddTaskDefinitions() {
-	log.Debug("Saved list of images for task defenition refresh: ")
 	imagesSet := getImageSet()
 
 	for {
-		time.Sleep(24 * time.Hour)
+		time.Sleep(12 * time.Hour)
 
 		updatedImages := getImageList()
 		for _, image := range updatedImages {
 			if present := imagesSet[image]; !present {
-				log.Info("Found new image in ecr: " + image)
+				log.Info("Adding task definition for new image: " + image)
 				err := RefreshTaskDefinition(image)
 				if err == nil {
 					imagesSet[image] = true

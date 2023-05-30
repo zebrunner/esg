@@ -9,8 +9,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/zebrunner/esg/capabilities"
-
-	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -22,9 +20,9 @@ const (
 	cypressPlatform = "cypress"
 
 	imageRepo       = "public.ecr.aws/zebrunner/" //public zebrunner ECR docker registry
-	uploaderImage   = "artifacts-uploader:2.2"
+	uploaderImage   = "uploader:2.2"
 	mitmImage       = "mitmproxy:1.0"
-	recorderImage   = "video-recorder:1.0"
+	recorderImage   = "recorder:1.0"
 	appiumImage     = "appium:1.4.10"
 	cloneImage      = "git:latest"
 	entrypointImage = "entrypoint:2.0"
@@ -284,7 +282,6 @@ func buildTaskDefinitionFamily(caps *capabilities.Capabilities) string {
 		familyParts = append(familyParts, browserVersion)
 	}
 
-	log.Debug("caps: ", caps)
 	return strings.Join(familyParts, "-")
 }
 

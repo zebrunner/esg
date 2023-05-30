@@ -18,8 +18,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
-	"math/rand"
 	sessionmap "github.com/zebrunner/esg/sessinonmap"
+	"math/rand"
 )
 
 const (
@@ -250,7 +250,7 @@ func ConstDelay(t time.Duration) func(int) time.Duration {
 	}
 }
 
-func StopTask(taskId string) (*ecs.StopTaskOutput, error) {
+func StopTask(taskId string, stopReason sessionmap.StoppedReason) (*ecs.StopTaskOutput, error) {
 	svc := ecs.New(AwsSess)
 
 	stopTaskInput := &ecs.StopTaskInput{
@@ -261,6 +261,20 @@ func StopTask(taskId string) (*ecs.StopTaskOutput, error) {
 
 	l := log.WithFields(log.Fields{"_taskId": taskId})
 
+	session, _ := sessionmap.Find(taskId, true)
+	var oldSessStatus sessionmap.SessionStatus
+	if session != nil {
+		if session.Status == sessionmap.SessionStopped || session.Status == sessionmap.SessionPendingToStop {
+			err := errors.New("StopTask() call for already stopped task")
+			return nil, err
+		} else {
+			// Set pendingToStop status so no new StopTask() call for current task would be performed
+			oldSessStatus = session.Status
+			session.Status = sessionmap.SessionPendingToStop
+			sessionmap.Write(taskId, session, 0)
+		}
+	}
+
 	i := 0
 	result, err := svc.StopTask(stopTaskInput)
 	for i < 25 {
@@ -268,10 +282,10 @@ func StopTask(taskId string) (*ecs.StopTaskOutput, error) {
 		if err == nil { // the condition stops matching
 			l.WithField("result", result).Trace("task stopped")
 			l.Info("task stopped")
-			session, err := sessionmap.Find(taskId, true)
-			if session != nil && err == nil {
-				// Set stopped status and expiration time 10 minutes to be able to return "invalid session id" for requests
+			if session != nil {
+				// Set stopped status and expiration time 10 minutes to be able to track task's usage
 				session.Status = sessionmap.SessionStopped
+				session.StopReason = stopReason
 				sessionmap.Write(taskId, session, 10*time.Minute)
 			}
 			// break out of the loop
@@ -286,6 +300,11 @@ func StopTask(taskId string) (*ecs.StopTaskOutput, error) {
 
 	if err != nil {
 		l.WithError(err).Error("Failed to stop task")
+		// revert old status because of a stop failure
+		if session != nil {
+			session.Status = oldSessStatus
+			sessionmap.Write(taskId, session, 0)
+		}
 	}
 
 	return result, err
@@ -302,6 +321,28 @@ func DescribeTask(taskArn string) (*ecs.DescribeTasksOutput, error) {
 
 	result, err := svc.DescribeTasks(input)
 	return result, err
+}
+
+func DescribeTasks(taskArns []string) ([]*ecs.Task, error) {
+	svc := ecs.New(AwsSess)
+	taskPages := paginate(taskArns, 100)
+	resultArr := make([]*ecs.Task, 0)
+
+	for _, tasks := range taskPages {
+		time.Sleep(2 * time.Second)
+		input := &ecs.DescribeTasksInput{
+			Cluster: &config.Conf.AwsCluster,
+			Tasks:   aws.StringSlice(tasks),
+		}
+
+		result, err := svc.DescribeTasks(input)
+		if err != nil {
+			return nil, err
+		}
+		resultArr = append(resultArr, result.Tasks...)
+	}
+
+	return resultArr, nil
 }
 
 func searchHostPort(task *ecs.Task, containerPort int64) (port int64, ok bool) {
@@ -388,8 +429,8 @@ out:
 		taskId := strings.Split(taskArn, "/")[2]
 		env.TaskId = taskId
 		l = l.WithField("id", taskId)
-		if env.TaskDefinitionFamily == "generic" || strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
-			l.Debug("do not wait for generic and cypress task startup.")
+		if env.TaskDefinitionFamily == "generic" {
+			l.Debug("do not wait for generic task startup.")
 			outputErr = nil
 			return outputErr
 		}
@@ -397,7 +438,7 @@ out:
 		req := taskWaiter.waitFor(ctx, taskArn)
 		select {
 		case err := <-req.errorChan:
-			StopTask(taskId)
+			StopTask(taskId, sessionmap.SessionStartupFailure)
 			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to wait until Task is running and healthy")
 			outputErr = err
 			continue
@@ -405,7 +446,7 @@ out:
 			err = setEnvironmentNetwork(env, task)
 			l.WithField("attempt", i).Debug("setEnvironmentNetwork latency: ", time.Since(startTime))
 			if err != nil {
-				StopTask(taskId)
+				StopTask(taskId, sessionmap.SessionStartupFailure)
 				l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Error("Failed to get service info.")
 				outputErr = fmt.Errorf("failed to get service info: %v", err)
 				continue
@@ -415,7 +456,7 @@ out:
 			return outputErr
 		case <-req.ctx.Done():
 			outputErr = errors.New("failed to wait until task is running. context deadline")
-			StopTask(taskId)
+			StopTask(taskId, sessionmap.SessionStartupFailure)
 			taskWaiter.stopWait(taskArn)
 			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("failed to wait until task is running")
 		}
