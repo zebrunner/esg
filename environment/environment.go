@@ -9,8 +9,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/zebrunner/esg/capabilities"
-
-	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -276,7 +274,6 @@ func buildTaskDefinitionFamily(caps *capabilities.Capabilities) string {
 		familyParts = append(familyParts, browserVersion)
 	}
 
-	log.Debug("caps: ", caps)
 	return strings.Join(familyParts, "-")
 }
 

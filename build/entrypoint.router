@@ -79,6 +79,9 @@ fi
 if [ ! -z ${EXCLUDE_BROWSERS} ]; then
   CMD_ARGS="${CMD_ARGS} -exclude-browsers ${EXCLUDE_BROWSERS}"
 fi
+if [ ! -z ${SINGLE_TENANT} ]; then
+  CMD_ARGS="${CMD_ARGS} -single-tenant ${SINGLE_TENANT}"
+fi
 
 echo "CMD_ARGS: $CMD_ARGS"
 

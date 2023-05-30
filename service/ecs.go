@@ -429,8 +429,8 @@ out:
 		taskId := strings.Split(taskArn, "/")[2]
 		env.TaskId = taskId
 		l = l.WithField("id", taskId)
-		if env.TaskDefinitionFamily == "generic" || strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
-			l.Debug("do not wait for generic and cypress task startup.")
+		if env.TaskDefinitionFamily == "generic" {
+			l.Debug("do not wait for generic task startup.")
 			outputErr = nil
 			return outputErr
 		}

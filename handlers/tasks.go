@@ -328,10 +328,11 @@ func Vnc(wsconn *websocket.Conn) {
 		l.WithError(err).Error("Session not found")
 		return
 	}
+        log.Debug("sess.Network: ", sess.Network)
 
 	vncUrl, ok := sess.Network.GetUrl("vnc")
 	if !ok {
-		l.Debug("Vnc not enabled")
+		l.Warn("Vnc url is not available: ", vncUrl)
 		return
 	}
 
@@ -347,14 +348,14 @@ func Vnc(wsconn *websocket.Conn) {
 	go func() {
 		_, e := io.Copy(wsconn, conn)
 		if e != nil {
-			log.WithError(e).Error("VNC WS Copy error")
+			log.WithError(e).Debug("VNC WS Copy error")
 		}
 		wsconn.Close()
 		l.Debug("Vnc session closed")
 	}()
 	_, err = io.Copy(conn, wsconn)
 	if err != nil {
-		log.WithError(err).Error("VNC WS Copy error")
+		log.WithError(err).Debug("VNC WS Copy error")
 	}
 	l.Debug("Vnc client disconected")
 }

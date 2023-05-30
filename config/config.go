@@ -64,6 +64,8 @@ type Config struct {
 	ReserveInstancesPercent float64
 
 	ExcludeBrowsers string
+
+	SingleTenant bool
 }
 
 func init() {
@@ -100,6 +102,8 @@ func init() {
 	flag.Float64Var(&Conf.ReserveInstancesPercent, "reserve-instances-percent", 0.25, "Reserved cluster capacity quota during scale up and down operations")
 
 	flag.StringVar(&Conf.ExcludeBrowsers, "exclude-browsers", "", "Pattern for excluding browsers from available images")
+
+        flag.BoolVar(&Conf.SingleTenant, "single-tenant", false, "Single tenant mode")
 }
 
 func (c *Config) ParseLogLevel() logrus.Level {
