@@ -165,12 +165,13 @@ func Create(c *gin.Context) {
 	err = sessionmap.Write(env.TaskId, &sess, 0)
 	if err != nil {
 		l.WithError(err).Error("Task not cached!")
+		service.StopTask(env.TaskId, sessionmap.SessionStartupFailure)
+		c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
+		return
 	}
 
-	sessionId := ""
 	var resp map[string]interface{}
 	if env.TaskDefinitionFamily == "generic" || strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
-		sessionId = env.TaskId
 		data := "{\"taskId\": \"" + env.TaskId + "\"}"
 		json.Unmarshal([]byte(data), &resp)
 		l.WithFields(log.Fields{"resp": resp}).Debug("Response")
@@ -203,7 +204,7 @@ func Create(c *gin.Context) {
 			return
 		}
 
-		sessionId, err = getSessionId(resp)
+		sessionId, err := getSessionId(resp)
 		if err != nil {
 			l.WithError(err).Error("Failed to get sessionId from driver response")
 			_ = c.Error(creationError("Failed to create driver", err)).SetType(gin.ErrorTypePublic)
@@ -284,7 +285,7 @@ func CloseSession(c *gin.Context) {
 		return
 	}
 
-	selenium.CloseSession(sess)
+	selenium.CloseSession(sess, sessionmap.SessionFinished)
 	_, err = service.StopTask(sess.TaskID, sessionmap.SessionFinished)
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{"_taskId": sess.TaskID}).Error("CloseSession: Failed to stop the task")
@@ -304,7 +305,7 @@ func AbortTask(c *gin.Context) {
 		//there is no sense to proceed as task is already finished/removed and not present in the sessionmap
 		return
 	}
-	selenium.CloseSession(sess)
+	selenium.CloseSession(sess, sessionmap.SessionAborted)
 	_, err = service.StopTask(sess.TaskID, sessionmap.SessionAborted)
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{"_taskId": sess.TaskID}).Error("AbortTask: Failed to stop the task")

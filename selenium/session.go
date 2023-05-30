@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	//	"time"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
@@ -56,12 +56,14 @@ func StartSession(ctx context.Context, driverUrl *url.URL, header http.Header, b
 	return reply, nil
 }
 
-func CloseSession(session *sessionmap.Session) {
-	err := sessionmap.Remove(session.ID)
+func CloseSession(session *sessionmap.Session, stopReason sessionmap.StoppedReason) {
+	session.Status = sessionmap.SessionStopped
+	session.StopReason = stopReason
+	err := sessionmap.Write(session.ID, session, 10*time.Minute)
 	if err != nil {
-		log.WithError(err).Error("Driver session not removed!")
+		log.WithError(err).Error("Driver session not marked as stopped!")
 	}
-	
+
 	l := log.WithFields(log.Fields{"_taskId": session.TaskID, "sessionId": session.ID, "workspace": session.Workspace})
 
 	conf := &config.Conf

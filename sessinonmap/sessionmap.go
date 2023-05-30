@@ -16,6 +16,7 @@ type SessionStatus int
 const (
 	SessionActive SessionStatus = iota
 	SessionQueued
+	SessionPendingToStop
 	SessionStopped
 )
 
@@ -41,7 +42,7 @@ type Session struct {
 	Workspace       string
 	Status          SessionStatus
 	StopReason      StoppedReason `json:",omitempty"`
-	UsageTracked 	bool
+	UsageTracked    bool
 }
 
 func Find(id string, rewriteAccessTime bool) (*Session, error) {

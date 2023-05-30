@@ -76,7 +76,7 @@ func StopIdleTasks(keys []string, wg *sync.WaitGroup) {
 			continue
 		}
 
-		log.WithField("session", session.TaskID).Debug("StopIdleTasks: analyzing session for idleTimeout")
+		log.WithField("session", session.ID).Debug("StopIdleTasks: analyzing session for idleTimeout")
 
 		idleTimeout := float64(session.Capabilities.IdleTimeout)
 		if idleTimeout == 0 {
@@ -207,28 +207,28 @@ func StopLostTasks(keys []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 }
 
 func TrackResourceUsage(tasks []*ecs.Task, wg *sync.WaitGroup) {
-	// all stopped tasks are marked in cache with expiration time for 10 mins
-	// track STOPPED tasks id for removing them from sessionMap
-	// var taskIds4Removal []string
-
 	// analyze tasks response
 	for _, task := range tasks {
 		taskId := strings.Split(*task.TaskArn, "/")[2]
 		l := log.WithFields(log.Fields{"_taskId": taskId})
 
+		// don't track tasks that:
+		// 1) are not cached;
+		// 2) already tracked;
+		// 3) don't have the stop status, because later we'll need a stop reason
 		session, err := sessionmap.Find(taskId, false)
-		if err != nil || session.UsageTracked {
+		if err != nil || session.UsageTracked || session.Status != sessionmap.SessionStopped {
 			continue
 		}
 
-		// add task id for removal and track resources usage for STOPPED tasks
+		// track resources usage for STOPPED tasks
 		if *task.LastStatus == "STOPPED" {
 			// Set tracked status and expiration time 2 minutes to be able to return stop reason
 			session.UsageTracked = true
 			sessionmap.Write(taskId, session, 2*time.Minute)
 
 			// Don't track Unhealthy and StartupFailure tasks
-			if session.StopReason != "" && (session.StopReason == sessionmap.SessionUnhealthy || session.StopReason == sessionmap.SessionStartupFailure) {
+			if session.StopReason == sessionmap.SessionUnhealthy || session.StopReason == sessionmap.SessionStartupFailure {
 				continue
 			}
 
