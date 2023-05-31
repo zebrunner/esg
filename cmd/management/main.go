@@ -220,13 +220,15 @@ func TrackResourceUsage(tasks []*ecs.Task, wg *sync.WaitGroup) {
 		// don't track tasks that:
 		// 1) are not cached;
 		// 2) already tracked;
-		// 3) don't have the stop status, because later we'll need a stop reason
+		// 3) don't have the stop or generic status, because later we'll need a stop reason
+		// 4) are not STOPPED
 		session, err := sessionmap.Find(taskId, false)
-		if err != nil || session.UsageTracked || session.Status != sessionmap.SessionStopped {
-			// TODO: delete this if when CloseSession() for generic tasks will be called
-			if session.Status != sessionmap.SessionGeneric {
-				continue
-			}
+		if err != nil ||
+			session.UsageTracked ||
+			(session.Status != sessionmap.SessionStopped && session.Status != sessionmap.SessionGeneric) ||
+			*task.LastStatus != "STOPPED" {
+			// TODO: delete session.Status != sessionmap.SessionGeneric when CloseSession() for generic tasks will be called	
+			continue
 		}
 
 		l := log.WithFields(log.Fields{"_taskId": taskId})
@@ -235,35 +237,34 @@ func TrackResourceUsage(tasks []*ecs.Task, wg *sync.WaitGroup) {
 		}
 
 		// track resources usage for STOPPED tasks
-		if *task.LastStatus == "STOPPED" {
 
-			// Set tracked status and expiration time 5 minutes to be able to return taskId and stop reason for task
-			session.UsageTracked = true
-			sessionmap.Write(taskId, session, 5*time.Minute)
+		// Set tracked status and expiration time 5 minutes to be able to return taskId and stop reason for task
+		session.UsageTracked = true
+		sessionmap.Write(taskId, session, 5*time.Minute)
 
-			// Don't track Unhealthy and StartupFailure tasks
-			if session.StopReason == sessionmap.SessionUnhealthy || session.StopReason == sessionmap.SessionStartupFailure {
-				l.Info("Not tracking task with stop reason:", session.StopReason)
-				continue
-			}
-
-			if task.StartedAt != nil && task.StoppedAt != nil {
-				// don't calculate timing for terminated tasks by AWS due to the missted StartedAt!
-				//	StopCode: \"TerminationNotice\"
-				//	StoppedReason: \"Host EC2 (instance i-03dba81187d65ce7e) terminated.\"
-				l.Trace("StartedAt: ", *task.StartedAt)
-				l.Trace("StoppedAt: ", *task.StoppedAt)
-				startedAt := *task.StartedAt //local var needed to calculate difference via Sub(..)
-				stoppedAt := *task.StoppedAt
-				zebrunner.TrackResourcesUsage(session, stoppedAt.Sub(startedAt))
-			}
-
-			if !strings.HasPrefix(session.Capabilities.Image, "public.ecr.aws/zebrunner/cypress-") {
-				// #503: суpress tests aborted automatically
-				// automatic abort of the public.ecr.aws/zebrunner/cypress-* should be prohibited as execution is control by parent cyserver process
-				zebrunner.AbortTask(session, task)
-			}
+		// Don't track Unhealthy and StartupFailure tasks
+		if session.StopReason == sessionmap.SessionUnhealthy || session.StopReason == sessionmap.SessionStartupFailure {
+			l.Info("Not tracking task with stop reason:", session.StopReason)
+			continue
 		}
+
+		if task.StartedAt != nil && task.StoppedAt != nil {
+			// don't calculate timing for terminated tasks by AWS due to the missted StartedAt!
+			//	StopCode: \"TerminationNotice\"
+			//	StoppedReason: \"Host EC2 (instance i-03dba81187d65ce7e) terminated.\"
+			l.Trace("StartedAt: ", *task.StartedAt)
+			l.Trace("StoppedAt: ", *task.StoppedAt)
+			startedAt := *task.StartedAt //local var needed to calculate difference via Sub(..)
+			stoppedAt := *task.StoppedAt
+			zebrunner.TrackResourcesUsage(session, stoppedAt.Sub(startedAt))
+		}
+
+		if !strings.HasPrefix(session.Capabilities.Image, "public.ecr.aws/zebrunner/cypress-") {
+			// #503: суpress tests aborted automatically
+			// automatic abort of the public.ecr.aws/zebrunner/cypress-* should be prohibited as execution is control by parent cyserver process
+			zebrunner.AbortTask(session, task)
+		}
+
 	}
 	wg.Done()
 }
