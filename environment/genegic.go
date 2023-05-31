@@ -48,10 +48,9 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 
 	taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
 
-	cloneImageRef := imageRepo + cloneImage
 	cloneContainer := Container{
 		Name:       "clone",
-		Image:      cloneImageRef,
+		Image:      cloneImage,
 		cpu:        minCpu,
 		memory:     512, //increased memory to fix OOM for huge repositories (3K+ branches)
 		Privileged: false,
@@ -61,10 +60,9 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 		EntryPoint: []string{"/bin/sh"},
 	}
 
-	entrypointImageRef := imageRepo + entrypointImage
 	entrypointContainer := Container{
 		Name:       "entrypoint",
-		Image:      entrypointImageRef,
+		Image:      entrypointImage,
 		cpu:        16,
 		memory:     16,
 		Privileged: false,
@@ -76,10 +74,9 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 	includeMaven := strings.Contains(caps.Image, "maven")
 	var mavenContainer *Container = nil
 	if includeMaven {
-		mavenImageRef := imageRepo + mavenImage
 		mavenContainer = &Container{
 			Name:       "maven",
-			Image:      mavenImageRef,
+			Image:      mavenImage,
 			cpu:        16,
 			memory:     16,
 			Privileged: false,
@@ -141,10 +138,9 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 	executorContainer.SetCpu(caps, 1024, conf.MaxCpu)
 	executorContainer.SetMemory(caps, 1024, conf.MaxMemory)
 
-		recorderImageRef := imageRepo + recorderImage
         recorderContainer := Container{
                 Name:        "recorder",
-                Image:       recorderImageRef,
+                Image:       recorderImage,
                 cpu:         32,
                 memory:      256, // with 128 failed for cyserver "OutOfMemoryError: Container killed due to memory usage"
                 Privileged:  false,
@@ -167,11 +163,9 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
                 }
         }
 
-
-	uploaderImageRef := imageRepo + uploaderImage
 	uploaderContainer := Container{
 		Name:       "uploader",
-		Image:      uploaderImageRef,
+		Image:      uploaderImage,
 		cpu:        64,
 		memory:     64,
 		Privileged: false,

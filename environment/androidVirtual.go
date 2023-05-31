@@ -39,10 +39,9 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities) (*Exe
 	deviceContainer.SetCpu(caps, 2048, conf.MaxCpu)
 	deviceContainer.SetMemory(caps, 2048, conf.MaxMemory)
 
-	appiumImageRef := imageRepo + appiumImage
 	appiumContainer := Container{
 		Name:       "appium",
-		Image:      appiumImageRef,
+		Image:      appiumImage,
 		cpu:        appiumCpu,
 		memory:     appiumMemory,
 		Privileged: false,

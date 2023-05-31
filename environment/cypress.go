@@ -44,10 +44,9 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		cloneCommand = fmt.Sprintf("git clone --depth=1 --single-branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
 	}
 
-	cloneImageRef := imageRepo + cloneImage
 	cloneContainer := Container{
 		Name:       "clone",
-		Image:      cloneImageRef,
+		Image:      cloneImage,
 		cpu:        minCpu,
 		memory:     512,
 		Privileged: false,
@@ -62,10 +61,9 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		launchCommand = caps.LaunchCommand
 	}
 
-	entrypointImageRef := imageRepo + entrypointImage
 	entrypointContainer := Container{
 		Name:       "entrypoint",
-		Image:      entrypointImageRef,
+		Image:      entrypointImage,
 		cpu:        16,
 		memory:     16,
 		Privileged: false,
@@ -127,10 +125,9 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 	cypressContainer.SetCpu(caps, 1024, conf.MaxCpu)
 	cypressContainer.SetMemory(caps, 2048, conf.MaxMemory) // 2Gb RAM is minimal for cypress due to the potential memory leaks
 
-	recorderImageRef := imageRepo + recorderImage
 	recorderContainer := Container{
 		Name:        "recorder",
-		Image:       recorderImageRef,
+		Image:       recorderImage,
 		cpu:         recorderCpu,
 		memory:      recorderMemory,
 		Privileged:  false,
@@ -162,10 +159,9 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
                 }
         }
 
-	uploaderImageRef := imageRepo + uploaderImage
 	uploaderContainer := Container{
 		Name:       "uploader",
-		Image:      uploaderImageRef,
+		Image:      uploaderImage,
 		cpu:        64, // with 32  uploading is aborted
 		memory:     64,
 		Privileged: false,
