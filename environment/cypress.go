@@ -44,7 +44,6 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		cloneCommand = fmt.Sprintf("git clone --depth=1 --single-branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
 	}
 
-	cloneImage := imageRepo + "git:latest"
 	cloneContainer := Container{
 		Name:       "clone",
 		Image:      cloneImage,
@@ -62,7 +61,6 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		launchCommand = caps.LaunchCommand
 	}
 
-	entrypointImage := imageRepo + "entrypoint:2.0"
 	entrypointContainer := Container{
 		Name:       "entrypoint",
 		Image:      entrypointImage,
@@ -127,7 +125,6 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 	cypressContainer.SetCpu(caps, 1024, conf.MaxCpu)
 	cypressContainer.SetMemory(caps, 2048, conf.MaxMemory) // 2Gb RAM is minimal for cypress due to the potential memory leaks
 
-	recorderImage := imageRepo + "recorder:1.0"
 	recorderContainer := Container{
 		Name:        "recorder",
 		Image:       recorderImage,
@@ -162,7 +159,6 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
                 }
         }
 
-	uploaderImage := imageRepo + "uploader:2.2"
 	uploaderContainer := Container{
 		Name:       "uploader",
 		Image:      uploaderImage,

@@ -48,7 +48,6 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 
 	taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
 
-	cloneImage := imageRepo + "git:latest"
 	cloneContainer := Container{
 		Name:       "clone",
 		Image:      cloneImage,
@@ -61,7 +60,6 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 		EntryPoint: []string{"/bin/sh"},
 	}
 
-	entrypointImage := imageRepo + "entrypoint:2.0"
 	entrypointContainer := Container{
 		Name:       "entrypoint",
 		Image:      entrypointImage,
@@ -76,7 +74,6 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 	includeMaven := strings.Contains(caps.Image, "maven")
 	var mavenContainer *Container = nil
 	if includeMaven {
-		mavenImage := imageRepo + "m2-repo-carina:1.3"
 		mavenContainer = &Container{
 			Name:       "maven",
 			Image:      mavenImage,
@@ -141,7 +138,6 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 	executorContainer.SetCpu(caps, 1024, conf.MaxCpu)
 	executorContainer.SetMemory(caps, 1024, conf.MaxMemory)
 
-        recorderImage := imageRepo + "recorder:1.0"
         recorderContainer := Container{
                 Name:        "recorder",
                 Image:       recorderImage,
@@ -167,8 +163,6 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
                 }
         }
 
-
-	uploaderImage := imageRepo + "uploader:2.2"
 	uploaderContainer := Container{
 		Name:       "uploader",
 		Image:      uploaderImage,
@@ -177,7 +171,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 		Privileged: false,
 		Essential:  false,
 		Env: map[string]string{
-                        "S3_KEY_PATTERN":        fmt.Sprintf("s3://%s/%s/artifacts/launches", conf.S3Bucket, workspace),
+			"S3_KEY_PATTERN":        fmt.Sprintf("s3://%s/%s/artifacts/launches", conf.S3Bucket, workspace),
 			"AWS_ACCESS_KEY_ID":     conf.S3AwsAccessKeyID,
 			"AWS_SECRET_ACCESS_KEY": conf.S3AwsSecretAccessKey,
 			"AWS_DEFAULT_REGION":    conf.S3Region,
@@ -189,7 +183,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 	containers := make([]*Container, 0)
 	volumes := make(map[string]volume, 0)
 
-        volumes[entrypointVolume] = volume{Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false}
+	volumes[entrypointVolume] = volume{Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false}
 	volumes[taskVolume] = volume{Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false}
 	volumes[logVolume] = volume{Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false}
 
