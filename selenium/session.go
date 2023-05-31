@@ -65,8 +65,11 @@ func CloseSession(session *sessionmap.Session, stopReason sessionmap.StoppedReas
 		log.WithError(err).Error("Driver session not marked as stopped!")
 	}
 
-	l := log.WithFields(log.Fields{"_taskId": session.TaskID, "sessionId": session.ID, "workspace": session.Workspace})
-
+	l := log.WithFields(log.Fields{"_taskId": session.TaskID, "sessionId": session.ID})
+	if !config.Conf.SingleTenant {
+		l = l.WithField("workspace", session.Workspace)
+	}
+	
 	conf := &config.Conf
 	client := http.Client{}
 	sessionUrl, ok := session.Network.GetUrl("driver")

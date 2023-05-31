@@ -26,7 +26,7 @@ import (
 func ClearTasks() {
 	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
 	if err != nil {
-		log.WithError(err).Error("Failed to create AWS session!")
+		log.WithError(err).Error("Failed to create AWS session! Stopping scaler...")
 		os.Exit(1)
 	}
 
@@ -77,7 +77,12 @@ func StopIdleTasks(keys []string, wg *sync.WaitGroup) {
 			continue
 		}
 
-		log.WithField("session", session.ID).Debug("StopIdleTasks: analyzing session for idleTimeout")
+		l := log.WithFields(log.Fields{"_taskId": session.TaskID, "sessionId": session.ID})
+		if !config.Conf.SingleTenant {
+			l = l.WithField("workspace", session.Workspace)
+		}
+
+		l.Debug("StopIdleTasks: analyzing session for idleTimeout")
 
 		idleTimeout := float64(session.Capabilities.IdleTimeout)
 		if idleTimeout == 0 {
@@ -89,9 +94,10 @@ func StopIdleTasks(keys []string, wg *sync.WaitGroup) {
 			selenium.CloseSession(session, sessionmap.SessionIdleTimeout)
 			_, err := service.StopTask(session.TaskID, sessionmap.SessionIdleTimeout)
 			if err != nil {
-				log.WithField("_taskId", session.TaskID).WithError(err).Error("Failed to stop idle driver task!")
+				l.WithError(err).Error("Failed to stop idle driver task!")
+			} else {
+				l.Warn("task aborted due to the session idle timeout")
 			}
-			log.WithField("_taskId", session.TaskID).WithField("workspace", session.Workspace).Warn("task aborted due to the idle timeout")
 		}
 	}
 
@@ -101,7 +107,7 @@ func StopIdleTasks(keys []string, wg *sync.WaitGroup) {
 func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 	for _, task := range tasks {
 		taskId := strings.Split(*task.TaskArn, "/")[2]
-		l := log.WithFields(log.Fields{"_taskId": taskId})
+		l := log.WithField("_taskId", taskId)
 
 		session, err := sessionmap.Find(taskId, false)
 		if err != nil {
@@ -140,7 +146,7 @@ func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 func StopLostTasks(keys []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 	taskArns, err := service.GetClusterTasksArn(svc)
 	if err != nil {
-		log.WithError(err).Error("Error on ListTasks operation")
+		log.WithError(err).Error("Error on ecs list-tasks operation")
 	}
 
 	tasksToDescribe := make([]string, 0)
@@ -192,10 +198,12 @@ func StopLostTasks(keys []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 			sessStartup := config.Conf.SessionStartupTimeout.Seconds()
 			if task.CreatedAt != nil && time.Since(*task.CreatedAt).Seconds() > sessStartup {
 				taskId := strings.Split(*task.TaskArn, "/")[2]
-				log.WithFields(log.Fields{"_taskId": taskId, "sessionStartupTimeout": sessStartup}).Warn("Unrecognized task detected! Aborting")
+				l := log.WithField("_taskId", taskId)
+				l.WithField("sessionStartupTimeout", sessStartup).Warn("Unrecognized task detected! Aborting")
+
 				_, err := service.StopTask(taskId, sessionmap.SessionFinished)
 				if err != nil {
-					log.WithError(err).WithField("taskId", taskId).Error("Failed to stop the task")
+					l.WithError(err).Error("Failed to stop the task")
 				}
 			}
 		}
@@ -208,7 +216,6 @@ func TrackResourceUsage(tasks []*ecs.Task, wg *sync.WaitGroup) {
 	// analyze tasks response
 	for _, task := range tasks {
 		taskId := strings.Split(*task.TaskArn, "/")[2]
-		l := log.WithFields(log.Fields{"_taskId": taskId})
 
 		// don't track tasks that:
 		// 1) are not cached;
@@ -219,18 +226,23 @@ func TrackResourceUsage(tasks []*ecs.Task, wg *sync.WaitGroup) {
 			continue
 		}
 
+		l := log.WithFields(log.Fields{"_taskId": taskId})
+		if !config.Conf.SingleTenant {
+			l = l.WithField("workspace", session.Workspace)
+		}
+
 		// track resources usage for STOPPED tasks
 		if *task.LastStatus == "STOPPED" {
+
 			// Set tracked status and expiration time 5 minutes to be able to return taskId and stop reason for task
 			session.UsageTracked = true
 			sessionmap.Write(taskId, session, 5*time.Minute)
 
 			// Don't track Unhealthy and StartupFailure tasks
 			if session.StopReason == sessionmap.SessionUnhealthy || session.StopReason == sessionmap.SessionStartupFailure {
+				l.Info("Not tracking task with stop reason:", session.StopReason)
 				continue
 			}
-
-			l = l.WithFields(log.Fields{"workspace": session.Workspace})
 
 			if task.StartedAt != nil && task.StoppedAt != nil {
 				// don't calculate timing for terminated tasks by AWS due to the missted StartedAt!
@@ -269,20 +281,21 @@ func ScaleDownCluster() {
 
 func RefreshTaskDefinition(image string) error {
 	caps, err := capabilities.FromImage(image)
+	l := log.WithField("image", image)
 	if err != nil {
-		log.WithError(err).WithField("image", image).Error("Failed to build capabilities for image!")
+		l.WithError(err).Error("Failed to build capabilities for image!")
 		return err
 	}
 
 	env, err := environment.Build("", caps)
 	if err != nil {
-		log.WithError(err).WithField("image", image).Error("Failed to build execution environment!")
+		l.WithError(err).Error("Failed to build execution environment!")
 		return err
 	}
 
 	_, err = service.CreateTaskDefinition(env)
 	if err != nil {
-		log.WithError(err).WithField("image", image).Debug("Failed to create task definition!")
+		l.WithError(err).Debug("Failed to create task definition!")
 		return err
 	}
 
@@ -293,18 +306,19 @@ func RefreshTaskDefinitions() {
 	images := getImageList()
 
 	for _, image := range images {
+		l := log.WithField("image", image)
 		maxRetryCount := 10
 		for i := 1; i <= maxRetryCount; i++ {
 			time.Sleep(time.Duration(i) * 1 * time.Second)
 			err := RefreshTaskDefinition(image)
 			if err != nil {
 				if i == maxRetryCount {
-					log.WithField("error", err).WithField("image", image).Errorf("Couldn't create task defenition in %d retries. Stopping scaler...", i)
+					l.WithError(err).Errorf("Couldn't create task defenition in %d retries. Stopping scaler...", i)
 					os.Exit(1)
 				} else if strings.Contains(err.Error(), "ThrottlingException") {
-					log.WithField("error", err).WithField("image", image).WithFields(log.Fields{"retry": i}).Debug("Recreating task defenition")
+					l.WithError(err).WithField("retry", i).Debug("Recreating task defenition")
 				} else {
-					log.WithField("error", err).WithField("image", image).Error("Couldn't create task defenition. Stopping scaler...")
+					l.WithError(err).Error("Couldn't create task defenition. Stopping scaler...")
 					os.Exit(1)
 				}
 			} else {
@@ -344,7 +358,7 @@ func AddTaskDefinitions() {
 		updatedImages := getImageList()
 		for _, image := range updatedImages {
 			if present := imagesSet[image]; !present {
-				log.Info("Adding task definition for new image: " + image)
+				log.Info("Adding task definition for new image: ", image)
 				err := RefreshTaskDefinition(image)
 				if err == nil {
 					imagesSet[image] = true
@@ -362,13 +376,15 @@ func main() {
 
 	awsSess, err := service.InitAws()
 	if err != nil {
-		log.WithError(err).Fatal("Failed to init aws session")
+		log.WithError(err).Fatal("Failed to init aws session! Stopping scaler...")
+		os.Exit(1)
 	}
 	service.AwsSess = awsSess
 
 	rdb, err := config.InitCache()
 	if err != nil {
-		log.WithError(err).Fatal("Failed to init redis connection")
+		log.WithError(err).Fatal("Failed to init redis connection! Stopping scaler...")
+		os.Exit(1)
 	}
 	config.RedisConnection = rdb
 

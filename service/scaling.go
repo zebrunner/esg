@@ -341,8 +341,9 @@ func ScaleDown() {
 			break
 		}
 
+		l := log.WithField("instance", *instance.Ec2InstanceId)
 		if maxInstancesToDelete <= 0 {
-			log.WithField("instance", *instance.Ec2InstanceId).Trace("Keep instance for reservation")
+			l.Trace("Keep instance for reservation")
 			break
 		}
 
@@ -352,9 +353,9 @@ func ScaleDown() {
 		}
 		_, err := autoscalingSvc.TerminateInstanceInAutoScalingGroup(&stopInstanceInput)
 		if err != nil {
-			log.WithError(err).WithField("instance", *instance.Ec2InstanceId).Error("Failed to stop instance")
+			l.WithError(err).Error("Failed to stop instance")
 		}
-		log.WithField("instance", *instance.Ec2InstanceId).Trace("Stopping instance")
+		l.Trace("Stopping instance")
 		desiredCapacity -= 1
 		maxInstancesToDelete -= 1
 		terminatedCount++
