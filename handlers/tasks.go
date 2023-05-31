@@ -175,6 +175,9 @@ func Create(c *gin.Context) {
 
 	var resp map[string]interface{}
 	if env.TaskDefinitionFamily == "generic" || strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
+		// TODO: delete status update when CloseSession() for generic tasks will be called
+		sess.Status = sessionmap.SessionGeneric
+		sessionmap.Write(env.TaskId, &sess, 0)
 		data := "{\"taskId\": \"" + env.TaskId + "\"}"
 		json.Unmarshal([]byte(data), &resp)
 		l.WithFields(log.Fields{"resp": resp}).Debug("Response")
@@ -300,7 +303,7 @@ func CloseSession(c *gin.Context) {
 		// return
 	}
 
-	l.Info("driver closed")
+	l.Info("task closed")
 	c.JSON(http.StatusOK, gin.H{"value": nil})
 }
 

@@ -223,7 +223,10 @@ func TrackResourceUsage(tasks []*ecs.Task, wg *sync.WaitGroup) {
 		// 3) don't have the stop status, because later we'll need a stop reason
 		session, err := sessionmap.Find(taskId, false)
 		if err != nil || session.UsageTracked || session.Status != sessionmap.SessionStopped {
-			continue
+			// TODO: delete this if when CloseSession() for generic tasks will be called
+			if session.Status != sessionmap.SessionGeneric {
+				continue
+			}
 		}
 
 		l := log.WithFields(log.Fields{"_taskId": taskId})
