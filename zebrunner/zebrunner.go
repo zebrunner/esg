@@ -39,7 +39,7 @@ func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration) {
 		platformName = "linux"
 	}
 
-        if !conf.SingleTenant {
+	if !conf.SingleTenant {
 		// add workspace/tenant to the url
 		requestUrl.Host = sess.Workspace + "." + requestUrl.Host
 	}
@@ -85,7 +85,11 @@ func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration) {
 		}).Error("Failed to track task resource usage!")
 		return
 	} else {
-		log.WithField("_taskId", sess.ID).WithField("workspace", sess.Workspace).WithField("request body", requestBody).Info("shape recorded")
+		l := log.WithFields(log.Fields{"sessionId": sess.ID, "_taskId": sess.TaskID, "request body": requestBody})
+		if !conf.SingleTenant {
+			l = l.WithField("workspace", sess.Workspace)
+		}
+		l.Info("shape recorded")
 	}
 }
 
@@ -129,7 +133,7 @@ func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
 		log.WithError(err).Error("Failed to parse zebrunner base url")
 		return
 	}
-        if !conf.SingleTenant {
+	if !conf.SingleTenant {
 		// add workspace/tenant to the url
 		requestUrl.Host = sess.Workspace + "." + requestUrl.Host
 	}
@@ -167,6 +171,10 @@ func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
 		}).Error("Failed to abort task!")
 		return
 	} else {
-		log.WithField("_taskId", sess.ID).WithField("workspace", sess.Workspace).WithField("comment", stopReason).Trace("task aborted")
+		l := log.WithFields(log.Fields{"sessionId": sess.ID, "_taskId": sess.TaskID, "comment": stopReason})
+		if !conf.SingleTenant {
+			l = l.WithField("workspace", sess.Workspace)
+		}
+		l.Trace("task aborted")
 	}
 }

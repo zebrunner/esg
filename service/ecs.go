@@ -56,6 +56,8 @@ func InitAws() (*awsSession.Session, error) {
 }
 
 func ListBrowsers() ([]string, error) {
+	log.Warn("Used ListBrowsers() func with aws call to ecrpublic")
+
 	sess, err := awsSession.NewSession(&aws.Config{
 		Region:     aws.String("us-east-1"), // Hardcoded because ecr-public has only this region
 		MaxRetries: &config.Conf.AwsRetry,
@@ -70,7 +72,6 @@ func ListBrowsers() ([]string, error) {
 
 	svc := ecrpublic.New(sess)
 	var images []string
-
 	for _, repository := range config.SupportedRepositories {
 		input := ecrpublic.DescribeImagesInput{
 			RegistryId:     aws.String(browsersRepository),
@@ -81,7 +82,7 @@ func ListBrowsers() ([]string, error) {
 			return nil, err
 		}
 		for _, image := range result.ImageDetails {
-			log.Debug("image: ", image)
+			// log.Debug("image: ", image)
 			for _, tag := range image.ImageTags {
 				images = append(images, repository+":"+*tag)
 			}
@@ -193,14 +194,14 @@ func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (t
 	var outputErr error
 	for i := 0; i < 25; i++ {
 
-		l := log.WithFields(log.Fields{"retry": i})
+		l := log.WithField("retry", i)
 
 		select {
 		case <-ctx.Done():
 			return "", ctx.Err()
 		default:
 		}
-		// Random sleep to fix problems with parallel 100+ threads startup. Not applicable got generic and cypress tasks!
+		// Random sleep to fix problems with parallel 100+ threads startup. Not applicable for generic and cypress tasks!
 		if env.TaskDefinitionFamily != "generic" && !strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
 			sleep := time.Duration(rand.Intn(30)) * time.Second
 			time.Sleep(sleep)
@@ -259,7 +260,7 @@ func StopTask(taskId string, stopReason sessionmap.StoppedReason) (*ecs.StopTask
 		Task:    aws.String(taskId),
 	}
 
-	l := log.WithFields(log.Fields{"_taskId": taskId})
+	l := log.WithField("_taskId", taskId)
 
 	session, _ := sessionmap.Find(taskId, true)
 	var oldSessStatus sessionmap.SessionStatus
@@ -278,7 +279,7 @@ func StopTask(taskId string, stopReason sessionmap.StoppedReason) (*ecs.StopTask
 	i := 0
 	result, err := svc.StopTask(stopTaskInput)
 	for i < 25 {
-		l = log.WithFields(log.Fields{"_taskId": taskId, "retry": i})
+		l := l.WithField("retry", i)
 		if err == nil { // the condition stops matching
 			l.WithField("result", result).Trace("task stopped")
 			l.Info("task stopped")
@@ -381,7 +382,7 @@ func getTaskIp(task *ecs.Task) (string, error) {
 	if config.Conf.UsePublicIp {
 		ipAddress = *ec2Instance.PublicIpAddress
 	}
-	log.WithFields(log.Fields{"instanceIP": ipAddress}).Debug()
+	log.WithField("instanceIP", ipAddress).Debug()
 	return ipAddress, nil
 }
 
@@ -419,7 +420,7 @@ out:
 
 		if err != nil {
 			l.WithError(err).WithField("attempt", i).WithField("latency", time.Since(startTime)).Warn("Failed to run task")
-			outputErr = fmt.Errorf("failed to run task: ", err)
+			outputErr = fmt.Errorf("failed to run task: %v", err)
 			if strings.HasPrefix(err.Error(), "image not found: ") || strings.HasPrefix(err.Error(), "InvalidParameterException") { //#366 disable retries for InvalidParameterException
 				break out
 			}
@@ -428,7 +429,7 @@ out:
 
 		taskId := strings.Split(taskArn, "/")[2]
 		env.TaskId = taskId
-		l = l.WithField("id", taskId)
+		l = l.WithField("_taskId", taskId)
 		if env.TaskDefinitionFamily == "generic" {
 			l.Debug("do not wait for generic task startup.")
 			outputErr = nil
@@ -439,15 +440,15 @@ out:
 		select {
 		case err := <-req.errorChan:
 			StopTask(taskId, sessionmap.SessionStartupFailure)
-			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to wait until Task is running and healthy")
+			l.WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to wait until Task is running and healthy")
 			outputErr = err
 			continue
 		case task := <-req.responseChan:
 			err = setEnvironmentNetwork(env, task)
-			l.WithField("attempt", i).Debug("setEnvironmentNetwork latency: ", time.Since(startTime))
+			l.Debug("setEnvironmentNetwork latency: ", time.Since(startTime))
 			if err != nil {
 				StopTask(taskId, sessionmap.SessionStartupFailure)
-				l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Error("Failed to get service info.")
+				l.WithField("latency", time.Since(startTime)).WithError(err).Error("Failed to get service info.")
 				outputErr = fmt.Errorf("failed to get service info: %v", err)
 				continue
 			}
@@ -458,7 +459,7 @@ out:
 			outputErr = errors.New("failed to wait until task is running. context deadline")
 			StopTask(taskId, sessionmap.SessionStartupFailure)
 			taskWaiter.stopWait(taskArn)
-			l.WithField("attempt", i).WithField("latency", time.Since(startTime)).WithError(err).Warn("failed to wait until task is running")
+			l.WithField("latency", time.Since(startTime)).WithError(err).Warn("failed to wait until task is running")
 		}
 	}
 
