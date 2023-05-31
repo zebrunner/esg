@@ -221,16 +221,18 @@ func TrackResourceUsage(tasks []*ecs.Task, wg *sync.WaitGroup) {
 
 		// track resources usage for STOPPED tasks
 		if *task.LastStatus == "STOPPED" {
+
+			l = l.WithFields(log.Fields{"workspace": session.Workspace})
+
 			// Set tracked status and expiration time 5 minutes to be able to return taskId and stop reason for task
 			session.UsageTracked = true
 			sessionmap.Write(taskId, session, 5*time.Minute)
 
 			// Don't track Unhealthy and StartupFailure tasks
 			if session.StopReason == sessionmap.SessionUnhealthy || session.StopReason == sessionmap.SessionStartupFailure {
+				l.Info("Not tracking task with stop reason:", session.StopReason)
 				continue
 			}
-
-			l = l.WithFields(log.Fields{"workspace": session.Workspace})
 
 			if task.StartedAt != nil && task.StoppedAt != nil {
 				// don't calculate timing for terminated tasks by AWS due to the missted StartedAt!
