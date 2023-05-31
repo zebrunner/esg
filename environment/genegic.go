@@ -141,31 +141,32 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 	executorContainer.SetCpu(caps, 1024, conf.MaxCpu)
 	executorContainer.SetMemory(caps, 1024, conf.MaxMemory)
 
-	recorderImageRef := imageRepo + recorderImage
-	recorderContainer := Container{
-		Name:       "recorder",
-		Image:      recorderImageRef,
-		cpu:        32,
-		memory:     128,
-		Privileged: false,
-		Essential:  false,
-		Env: map[string]string{
-			"ENABLE_VIDEO":         "false",
-			"ENABLE_REALTIME_LOGS": "true",
-			"BASIC_AUTH":           basicAuthHeader,
-			"LOG_FILE":             "console.log",
-		},
-		Mounts:      []string{logVolume},
-		Command:     []string{"-c", "/entrypoint.sh"}, // + taskLogRedirect}, //TODO: restore redirect
-		EntryPoint:  []string{"/bin/sh"},
-		HealthCheck: nil,
-	}
-	if caps.EnvVariables != nil {
-		for v, k := range caps.EnvVariables {
-			//fmt.Printf("var: %v; %v\n", v, k)
-			recorderContainer.Env[v] = k
-		}
-	}
+		recorderImageRef := imageRepo + recorderImage
+        recorderContainer := Container{
+                Name:        "recorder",
+                Image:       recorderImageRef,
+                cpu:         32,
+                memory:      256, // with 128 failed for cyserver "OutOfMemoryError: Container killed due to memory usage"
+                Privileged:  false,
+                Essential:   false,
+                Env: map[string]string{
+                        "ENABLE_VIDEO":          "false",
+                        "ENABLE_REALTIME_LOGS":  "true",
+                        "BASIC_AUTH":            basicAuthHeader,
+                        "LOG_FILE":              "console.log",
+                },
+                Mounts:      []string{logVolume},
+                Command:     []string{"-c", "/entrypoint.sh"}, // + taskLogRedirect}, //TODO: restore redirect
+                EntryPoint:  []string{"/bin/sh"},
+                HealthCheck: nil,
+        }
+        if caps.EnvVariables != nil {
+                for v, k := range caps.EnvVariables {
+                        //fmt.Printf("var: %v; %v\n", v, k)
+                        recorderContainer.Env[v] = k
+                }
+        }
+
 
 	uploaderImageRef := imageRepo + uploaderImage
 	uploaderContainer := Container{

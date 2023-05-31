@@ -27,7 +27,7 @@ func ClearTasks() {
 	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
 	if err != nil {
 		log.WithError(err).Error("Failed to create AWS session!")
-		return
+		os.Exit(1)
 	}
 
 	svc := ecs.New(session)
@@ -162,6 +162,7 @@ func StopLostTasks(keys []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 
 	if len(tasksToDescribe) == 0 {
 		// no need to print any log message because it should happen in 99.99% cases.
+		wg.Done()
 		return
 	}
 	maxRetryCount := 10
@@ -173,6 +174,7 @@ func StopLostTasks(keys []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 		if err != nil {
 			if i == maxRetryCount {
 				log.WithField("error", err).Errorf("Couldn't DescribeTasks in %d retries.", i)
+				wg.Done()
 				return
 			} else if strings.Contains(err.Error(), "ThrottlingException") {
 				log.WithField("error", err).WithFields(log.Fields{"retry": i}).Debug("Recdescribing task defenition")
