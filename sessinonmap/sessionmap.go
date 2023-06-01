@@ -16,6 +16,8 @@ type SessionStatus int
 const (
 	SessionActive SessionStatus = iota
 	SessionQueued
+	// TODO: delete SessionGeneric status when CloseSession() for generic tasks will be called
+	SessionGeneric
 	SessionPendingToStop
 	SessionStopped
 )
