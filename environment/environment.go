@@ -26,7 +26,7 @@ const (
 	appiumImage     = imageRepo + "appium:1.4.10"
 	cloneImage      = imageRepo + "git:latest"
 	entrypointImage = imageRepo + "entrypoint:2.0"
-	mavenImage      = imageRepo + "m2-repo-carina:1.3"
+	mavenImage      = imageRepo + "m2-repo-carina:1.4"
 )
 
 const (
