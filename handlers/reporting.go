@@ -1,16 +1,13 @@
-
 package handlers
 
 import (
-	"io/ioutil"
 	"net/http"
 	"os"
 	"runtime"
 	"strings"
 	"time"
 
-	"github.com/zebrunner/esg/config"
-	"github.com/zebrunner/esg/service"
+	"github.com/zebrunner/esg/utils"
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
@@ -58,30 +55,11 @@ func ClusterStatus(c *gin.Context) {
 
 func ListDrivers(c *gin.Context) {
 	// TODO: Refactor code: code must be split in few different functions
-	var images []string
-
-	if config.Conf.BrowsersFile != "" {
-		text, err := ioutil.ReadFile(config.Conf.BrowsersFile)
-		if err != nil {
-			log.WithError(err).Error("Failed to read file browsers.txt")
-			_ = c.Error(err)
-			return
-		}
-		lines := strings.Split(string(text), "\n")
-
-		for _, line := range lines {
-			if line != "" {
-				images = append(images, line)
-			}
-		}
-	} else {
-		imgs, err := service.ListBrowsers()
-		if err != nil {
-			log.WithError(err).Warn("Failed to get browser list")
-			_ = c.Error(err).SetType(gin.ErrorTypePublic)
-			return
-		}
-		images = imgs
+	images, err := utils.ListBrowsers()
+	if err != nil {
+		log.WithError(err).Warn("Failed to get browser list")
+		_ = c.Error(err).SetType(gin.ErrorTypePublic)
+		return
 	}
 
 	var browsersResponse []map[string]interface{}
@@ -89,12 +67,12 @@ func ListDrivers(c *gin.Context) {
 	imagesPlatforms := map[string]string{
 		"redroid": "android",
 	}
-        cypressPlatforms := map[string]string{
-                "cypress-chrome": "cypress",
-                "cypress-chromium": "cypress",
-                "cypress-edge": "cypress",
-                "cypress-firefox": "cypress",
-        }
+	cypressPlatforms := map[string]string{
+		"cypress-chrome":   "cypress",
+		"cypress-chromium": "cypress",
+		"cypress-edge":     "cypress",
+		"cypress-firefox":  "cypress",
+	}
 
 	for _, image := range images {
 		name := strings.Split(image, ":")[0]
@@ -114,12 +92,12 @@ func ListDrivers(c *gin.Context) {
 			"platform": "linux",
 		}
 
-                if _, ok := imagesPlatforms[name]; ok {
+		if _, ok := imagesPlatforms[name]; ok {
 			// hardcoded browser name and verion for ReDroid emulator
-                        browserData["platform"] = imagesPlatforms[name]
-                        browserData["browserName"] = "chrome"
-                        browserData["browserVersion"] = "107.0"
-                }
+			browserData["platform"] = imagesPlatforms[name]
+			browserData["browserName"] = "chrome"
+			browserData["browserVersion"] = "107.0"
+		}
 
 		if _, ok := cypressPlatforms[name]; ok {
 			browserData["image"] = "public.ecr.aws/zebrunner/" + image

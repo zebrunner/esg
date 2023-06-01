@@ -6,11 +6,9 @@ import (
 	"strconv"
 	"strings"
 
-        "github.com/aws/aws-sdk-go/aws"
-        "github.com/aws/aws-sdk-go/service/ecs"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/zebrunner/esg/capabilities"
-
-        log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -20,26 +18,31 @@ const (
 	anyPlatform     = "any"
 	genericPlatform = "generic"
 	cypressPlatform = "cypress"
-	imageRepo       = "public.ecr.aws/zebrunner/" //public zebrunner ECR docker registry
 
-	ZEBRUNNER_HOME  = "/opt/zebrunner"
+	imageRepo       = "public.ecr.aws/zebrunner/" //public zebrunner ECR docker registry
+	uploaderImage   = imageRepo + "uploader:2.2"
+	mitmImage       = imageRepo + "mitmproxy:1.0"
+	recorderImage   = imageRepo + "recorder:1.0"
+	appiumImage     = imageRepo + "appium:1.4.10"
+	cloneImage      = imageRepo + "git:latest"
+	entrypointImage = imageRepo + "entrypoint:2.0"
+	mavenImage      = imageRepo + "m2-repo-carina:1.3"
 )
 
 const (
-        seleniumPort   int64 = 4444
-        vncPort        int64 = 5900
-        devtoolsPort   int64 = 7070
-        fileserverPort int64 = 8080
-        clipboardPort  int64 = 9090
+	seleniumPort   int64 = 4444
+	vncPort        int64 = 5900
+	devtoolsPort   int64 = 7070
+	fileserverPort int64 = 8080
+	clipboardPort  int64 = 9090
 
-        recorderCpu    int64 = 320
-        recorderMemory int64 = 1024
+	recorderCpu    int64 = 320
+	recorderMemory int64 = 1024
 
-        genericPort   int64 = 22
-        minCpu    = 128
-        minMemory = 256
+	genericPort int64 = 22
+	minCpu            = 128
+	minMemory         = 256
 )
-
 
 type NetworkConfiguration struct {
 	IP        string
@@ -91,13 +94,12 @@ func (e *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefinition
 		}
 		definition.Links = links
 
-                entrypoints := []*string{}
-                for _, entrypoint := range c.EntryPoint {
-                        entrypointName := entrypoint //local declaration required to append all values
-                        entrypoints = append(entrypoints, &entrypointName)
-                }
-                definition.EntryPoint = entrypoints
-
+		entrypoints := []*string{}
+		for _, entrypoint := range c.EntryPoint {
+			entrypointName := entrypoint //local declaration required to append all values
+			entrypoints = append(entrypoints, &entrypointName)
+		}
+		definition.EntryPoint = entrypoints
 
 		volumes := []*ecs.MountPoint{}
 		for _, volumeName := range c.Mounts {
@@ -124,12 +126,12 @@ func (e *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefinition
 		}
 		definition.PortMappings = portMappings
 
-                command := []*string{}
-                for _, cmd := range c.Command {
-                        cmdName := cmd //local declaration required to append all values
-                        command = append(command, &cmdName)
-                }
-                definition.Command = command
+		command := []*string{}
+		for _, cmd := range c.Command {
+			cmdName := cmd //local declaration required to append all values
+			command = append(command, &cmdName)
+		}
+		definition.Command = command
 		definitions = append(definitions, &definition)
 	}
 
@@ -157,12 +159,12 @@ func (e *ExecutionEnvironment) ContainerOverrides() []*ecs.ContainerOverride {
 		}
 		override.Environment = env
 
-                command := []*string{}
-                for _, cmd := range container.Command {
-                        cmdName := cmd //local declaration required to append all values
-                        command = append(command, &cmdName)
-                }
-                override.Command = command
+		command := []*string{}
+		for _, cmd := range container.Command {
+			cmdName := cmd //local declaration required to append all values
+			command = append(command, &cmdName)
+		}
+		override.Command = command
 
 		overrides = append(overrides, &override)
 
@@ -180,7 +182,7 @@ func Build(workspace string, caps *capabilities.Capabilities) (*ExecutionEnviron
 		return nil, fmt.Errorf("device is not supported. deviceName=%s", caps.DeviceName)
 	} else if platform == genericPlatform {
 		return buildGeneric(workspace, caps)
-        } else if platform == cypressPlatform {
+	} else if platform == cypressPlatform {
 		return buildCypress(workspace, caps)
 	} else if platform == linuxPlatform || platform == "" || platform == anyPlatform {
 		return buildBrowser(workspace, caps)
@@ -236,16 +238,16 @@ func buildImage(caps *capabilities.Capabilities) (string, error) {
 		version := strings.ToLower(caps.BrowserVersion)
 		version = remapVersion(version)
 		return imageRepo + name + ":" + version, nil
-        } else if platformName == cypressPlatform {
-                if caps.Image != "" {
-                        return caps.Image, nil
-                }
+	} else if platformName == cypressPlatform {
+		if caps.Image != "" {
+			return caps.Image, nil
+		}
 		//use-case for task definition generation
-                name := strings.ToLower(caps.BrowserName)
-       	        name = remapName(name)
-               	version := strings.ToLower(caps.BrowserVersion)
-                version = remapVersion(version)
-                return imageRepo + name + ":" + version, nil
+		name := strings.ToLower(caps.BrowserName)
+		name = remapName(name)
+		version := strings.ToLower(caps.BrowserVersion)
+		version = remapVersion(version)
+		return imageRepo + name + ":" + version, nil
 	} else {
 		return "", fmt.Errorf("filed to build container image. unsupported platform specified. platformName=%s", caps.PlatformName)
 	}
@@ -278,7 +280,6 @@ func buildTaskDefinitionFamily(caps *capabilities.Capabilities) string {
 		familyParts = append(familyParts, browserVersion)
 	}
 
-        log.Debug("caps: ", caps)
 	return strings.Join(familyParts, "-")
 }
 

@@ -15,7 +15,7 @@ type CreateUserModel struct {
 }
 
 type RefreshTokenModel struct {
-        Password *string `json:"password"`
+	Password *string `json:"password"`
 }
 
 type UserActivationModel struct {
@@ -77,15 +77,15 @@ func RefreshToken(c *gin.Context) {
 		}).SetType(gin.ErrorTypePublic)
 		return
 	}
-        body := RefreshTokenModel{}
-        err := c.ShouldBindJSON(&body)
-        if err != nil {
-                _ = c.Error(&utils.HTTPError{
-                        Status:  http.StatusBadRequest,
-                        Message: "request body is invalid",
-                }).SetType(gin.ErrorTypePublic).SetMeta(err.Error())
-                return
-        }
+	body := RefreshTokenModel{}
+	err := c.ShouldBindJSON(&body)
+	if err != nil {
+		_ = c.Error(&utils.HTTPError{
+			Status:  http.StatusBadRequest,
+			Message: "request body is invalid",
+		}).SetType(gin.ErrorTypePublic).SetMeta(err.Error())
+		return
+	}
 
 	password, err := service.RefreshToken(user, body.Password)
 	if err != nil {

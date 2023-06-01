@@ -36,8 +36,8 @@ type Config struct {
 	AwsSecretAccessKey  string
 
 	// Session resource limitations
-	MaxMemory            int64
-	MaxCpu               int64
+	MaxMemory int64
+	MaxCpu    int64
 
 	// Timeouts
 	IdleTimeout             time.Duration
@@ -54,16 +54,18 @@ type Config struct {
 	ZebrunnerIntegrationUser     string
 	ZebrunnerIntegrationPassword string
 
-	UsePublicIp             bool
-	S3Bucket                string // For static artifacts
-	S3Region		string
-	S3AwsAccessKeyID	string
-	S3AwsSecretAccessKey	string
+	UsePublicIp          bool
+	S3Bucket             string // For static artifacts
+	S3Region             string
+	S3AwsAccessKeyID     string
+	S3AwsSecretAccessKey string
 
 	LogLevel                string
 	ReserveInstancesPercent float64
 
-	BrowsersFile string
+	ExcludeBrowsers string
+
+	SingleTenant bool
 }
 
 func init() {
@@ -75,14 +77,14 @@ func init() {
 	flag.StringVar(&Conf.AwsSecretAccessKey, "aws-secret-access-key", "", "Secret key for AWS services")
 
 	flag.Int64Var(&Conf.MaxMemory, "max-memory", 28675, "maximum memory limitation for session") // max memory for c5a.4xlarge
-	flag.Int64Var(&Conf.MaxCpu, "max-cpu", 16384, "maximum CPU limitation for session") //max cpu for c5a.4xlarge
+	flag.Int64Var(&Conf.MaxCpu, "max-cpu", 16384, "maximum CPU limitation for session")          //max cpu for c5a.4xlarge
 
 	flag.DurationVar(&Conf.IdleTimeout, "idle-timeout", 60*time.Second, "Session idle timeout in time.Duration format")
-	flag.DurationVar(&Conf.SessionStartupTimeout, "session-startup-timeout", 90*time.Second, "Session healthcheck(s) startup timeout in time.Duration format")
+	flag.DurationVar(&Conf.SessionStartupTimeout, "session-startup-timeout", 180*time.Second, "Session startup timeout in time.Duration format")
 	flag.DurationVar(&Conf.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
 	flag.DurationVar(&Conf.ServiceStartupTimeout, "service-startup-timeout", 10*time.Minute, "Service startup timeout in time.Duration format")
 	flag.DurationVar(&Conf.InstanceCooldownTimeout, "instance-cooldown-timeout", 4*time.Minute, "Time after instance start when shutdown is prohibited on scale down in time.Duration format")
-        flag.DurationVar(&Conf.MaxTimeout, "max-timeout", 24*time.Hour, "Maximum valid task/session timeout in time.Duration format")
+	flag.DurationVar(&Conf.MaxTimeout, "max-timeout", 24*time.Hour, "Maximum valid task/session timeout in time.Duration format")
 
 	flag.StringVar(&Conf.DbConnectionString, "db-connection", "", "Connection string for database")
 	flag.StringVar(&Conf.RedisConnectionString, "aws-elastic-cache", "localhost:6379", "Connection string for Session cache")
@@ -99,7 +101,9 @@ func init() {
 	flag.StringVar(&Conf.LogLevel, "log-level", "debug", "Desired log level. Valid levels: `panic`, `fatal`, `error`, `warning`, `info`, `debug`, `trace`")
 	flag.Float64Var(&Conf.ReserveInstancesPercent, "reserve-instances-percent", 0.25, "Reserved cluster capacity quota during scale up and down operations")
 
-	flag.StringVar(&Conf.BrowsersFile, "browsers-file", "", "Path to txt file with supported browsers")
+	flag.StringVar(&Conf.ExcludeBrowsers, "exclude-browsers", "", "Pattern for excluding browsers from available images")
+
+        flag.BoolVar(&Conf.SingleTenant, "single-tenant", false, "Single tenant mode")
 }
 
 func (c *Config) ParseLogLevel() logrus.Level {

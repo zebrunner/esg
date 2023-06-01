@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-//	"time"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 
-        sessionmap "github.com/zebrunner/esg/sessinonmap"
-//	"github.com/zebrunner/esg/zebrunner"
+	sessionmap "github.com/zebrunner/esg/sessinonmap"
+	//	"github.com/zebrunner/esg/zebrunner"
 )
 
 var (
@@ -56,15 +56,20 @@ func StartSession(ctx context.Context, driverUrl *url.URL, header http.Header, b
 	return reply, nil
 }
 
-func CloseSession(session *sessionmap.Session) {
-        // remove driver session from map
-        err := sessionmap.Remove(session.ID)
-        if err != nil {
-                log.WithError(err).Error("Driver session not removed!")
-        }
+func CloseSession(session *sessionmap.Session, stopReason sessionmap.StoppedReason) {
+	// Set SessionStopped status and expiration time 10 minutes to be able to return sessionID and stop reason for session
+	session.Status = sessionmap.SessionStopped
+	session.StopReason = stopReason
+	err := sessionmap.Write(session.ID, session, 10*time.Minute)
+	if err != nil {
+		log.WithError(err).Error("Driver session not marked as stopped!")
+	}
 
-        l := log.WithFields(log.Fields{"_taskId": session.TaskID, "sessionId": session.ID, "workspace": session.Workspace})
-
+	l := log.WithFields(log.Fields{"_taskId": session.TaskID, "sessionId": session.ID})
+	if !config.Conf.SingleTenant {
+		l = l.WithField("workspace", session.Workspace)
+	}
+	
 	conf := &config.Conf
 	client := http.Client{}
 	sessionUrl, ok := session.Network.GetUrl("driver")
@@ -94,6 +99,5 @@ func CloseSession(session *sessionmap.Session) {
 		l.Error("failed to get driver url")
 	}
 
-        l.Debug("driver closed")
-
+	l.Debug("driver closed")
 }

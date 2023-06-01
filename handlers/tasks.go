@@ -33,16 +33,16 @@ func getSession(id string) (*sessionmap.Session, error) {
 		return nil, &utils.SeleniumError{
 			ResponseStatus: http.StatusNotFound,
 			SeleniumCode:   "invalid session id",
-			Message:        fmt.Sprintf("Session not found"),
+			Message:        "Session not found",
 			Err:            err,
 		}
 	}
 
-	if session.Status == sessionmap.SessionStoppedIdle {
+	if session.Status == sessionmap.SessionStopped {
 		return nil, &utils.SeleniumError{
 			ResponseStatus: http.StatusNotFound,
 			SeleniumCode:   "invalid session id",
-			Message:        fmt.Sprintf("Session stopped due IDLE timeout"),
+			Message:        string(session.StopReason),
 			Err:            err,
 		}
 	}
@@ -122,7 +122,10 @@ func Create(c *gin.Context) {
 		return
 	}
 
-	l = log.WithFields(log.Fields{"workspace": workspace, "remote": remote, "family": env.TaskDefinitionFamily})
+	l = log.WithFields(log.Fields{"remote": remote, "family": env.TaskDefinitionFamily})
+	if !config.Conf.SingleTenant {
+		l = l.WithField("workspace", workspace)
+	}
 
 	l.Info("new request")
 	l.WithField("env", env).Debug("Env details")
@@ -146,7 +149,7 @@ func Create(c *gin.Context) {
 		return
 	}
 
-	l = log.WithFields(log.Fields{"_taskId": env.TaskId, "workspace": workspace, "remote": remote, "family": env.TaskDefinitionFamily})
+	l = l.WithField("_taskId", env.TaskId)
 
 	l.Info("task started")
 
@@ -165,12 +168,16 @@ func Create(c *gin.Context) {
 	err = sessionmap.Write(env.TaskId, &sess, 0)
 	if err != nil {
 		l.WithError(err).Error("Task not cached!")
+		service.StopTask(env.TaskId, sessionmap.SessionStartupFailure)
+		c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
+		return
 	}
 
-	sessionId := ""
 	var resp map[string]interface{}
 	if env.TaskDefinitionFamily == "generic" || strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
-		sessionId = env.TaskId
+		// TODO: delete status update when CloseSession() for generic tasks will be called
+		sess.Status = sessionmap.SessionGeneric
+		sessionmap.Write(env.TaskId, &sess, 0)
 		data := "{\"taskId\": \"" + env.TaskId + "\"}"
 		json.Unmarshal([]byte(data), &resp)
 		l.WithFields(log.Fields{"resp": resp}).Debug("Response")
@@ -196,11 +203,14 @@ func Create(c *gin.Context) {
 		if err != nil {
 			l.WithError(err).WithField("response", resp).Error("driver startup failed")
 			c.JSON(http.StatusInternalServerError, resp)
-			service.StopTask(env.TaskId)
+			_, err = service.StopTask(env.TaskId, sessionmap.SessionStartupFailure)
+			if err != nil {
+				l.WithError(err).Error("Failed to stop the task")
+			}
 			return
 		}
 
-		sessionId, err = getSessionId(resp)
+		sessionId, err := getSessionId(resp)
 		if err != nil {
 			l.WithError(err).Error("Failed to get sessionId from driver response")
 			_ = c.Error(creationError("Failed to create driver", err)).SetType(gin.ErrorTypePublic)
@@ -228,6 +238,12 @@ func Create(c *gin.Context) {
 		err = sessionmap.Write(sess.ID, &sess, 0)
 		if err != nil {
 			l.WithError(err).Error("Driver session not cached!")
+			_ = c.Error(creationError("failed to cache driver session", err)).SetType(gin.ErrorTypePublic)
+			_, err = service.StopTask(env.TaskId, sessionmap.SessionStartupFailure)
+			if err != nil {
+				l.WithError(err).Error("Failed to stop the task. Possible zombie task.")
+			}
+			return
 		}
 		l.WithField("sessionId", sess.ID).WithField("latency", util.SecondsSince(sessionStartTime)).Info("driver started")
 
@@ -240,7 +256,7 @@ func Proxy(c *gin.Context) {
 	sessionID := c.Param("session")
 	sess, err := getSession(sessionID)
 	if err != nil {
-		log.WithError(err).WithField("sessionID", sessionID).Error("Cant find session")
+		log.WithError(err).WithField("sessionId", sessionID).Error("Cant find session")
 		_ = c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
@@ -270,14 +286,24 @@ func CloseSession(c *gin.Context) {
 	sessionId := c.Param("session")
 	sess, err := getSession(sessionId)
 	if err != nil {
-		log.WithError(err).WithField("sessionID", sessionId).Error("Can't find session!")
+		log.WithError(err).WithField("sessionId", sessionId).Error("Can't find session!")
 		_ = c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}
-	selenium.CloseSession(sess)
-	service.StopTask(sess.TaskID)
+	l := log.WithField("_taskId", sess.TaskID)
+	// if session id were passed
+	if sess.ID != sess.TaskID {
+		selenium.CloseSession(sess, sessionmap.SessionFinished)
+		l = l.WithField("sessionId", sess.ID)
+	}
+	_, err = service.StopTask(sess.TaskID, sessionmap.SessionFinished)
+	if err != nil {
+		l.WithError(err).Error("CloseSession: Failed to stop the task")
+		// _ = c.Error(err).SetType(gin.ErrorTypePublic)
+		// return
+	}
 
-	log.WithField("_taskId", sess.TaskID).WithField("sessionId", sessionId).Info("driver closed")
+	l.Info("task closed")
 	c.JSON(http.StatusOK, gin.H{"value": nil})
 }
 
@@ -285,13 +311,29 @@ func AbortTask(c *gin.Context) {
 	sessionId := c.Param("task")
 	sess, err := getSession(sessionId)
 	if err != nil {
-		log.WithField("id", sessionId).WithError(err).Warn("Task not found!")
+		log.WithField("id", sessionId).WithError(err).Warn("Task/Session not found!")
 		//there is no sense to proceed as task is already finished/removed and not present in the sessionmap
 		return
 	}
-	service.StopTask(sess.TaskID)
 
-	log.WithField("_taskId", sess.TaskID).WithField("workspace", sess.Workspace).Info("task aborted")
+	l := log.WithField("_taskId", sess.TaskID)
+	if !config.Conf.SingleTenant {
+		l = l.WithField("workspace", sess.Workspace)
+	}
+
+	// if session id were passed
+	if sess.ID != sess.TaskID {
+		selenium.CloseSession(sess, sessionmap.SessionAborted)
+		l = l.WithField("sessionId", sess.ID)
+	}
+	_, err = service.StopTask(sess.TaskID, sessionmap.SessionAborted)
+	if err != nil {
+		l.WithError(err).Error("AbortTask: Failed to stop the task")
+		// _ = c.Error(err).SetType(gin.ErrorTypePublic)
+		// return
+	}
+
+	l.Info("task aborted")
 	c.JSON(http.StatusNoContent, gin.H{})
 }
 
@@ -299,17 +341,18 @@ func Vnc(wsconn *websocket.Conn) {
 	defer wsconn.Close()
 	fragments := strings.Split(wsconn.Request().URL.Path, "/")
 	sid := fragments[len(fragments)-1]
-	l := log.WithField("sessionID", sid)
+	l := log.WithField("sessionId", sid)
 	sess, err := getSession(sid)
 
 	if err != nil {
 		l.WithError(err).Error("Session not found")
 		return
 	}
+	log.Debug("sess.Network: ", sess.Network)
 
 	vncUrl, ok := sess.Network.GetUrl("vnc")
 	if !ok {
-		l.Debug("Vnc not enabled")
+		l.Warn("Vnc url is not available: ", vncUrl)
 		return
 	}
 
@@ -325,14 +368,14 @@ func Vnc(wsconn *websocket.Conn) {
 	go func() {
 		_, e := io.Copy(wsconn, conn)
 		if e != nil {
-			log.WithError(e).Error("VNC WS Copy error")
+			log.WithError(e).Debug("VNC WS Copy error")
 		}
 		wsconn.Close()
 		l.Debug("Vnc session closed")
 	}()
 	_, err = io.Copy(conn, wsconn)
 	if err != nil {
-		log.WithError(err).Error("VNC WS Copy error")
+		log.WithError(err).Debug("VNC WS Copy error")
 	}
 	l.Debug("Vnc client disconected")
 }
@@ -374,7 +417,7 @@ func Video(c *gin.Context) {
 		log.WithError(err).WithFields(log.Fields{
 			"user":      user,
 			"remote":    c.ClientIP(),
-			"sessionID": sessionID,
+			"sessionId": sessionID,
 		}).Error("Failed to create pre signed url to session video")
 		_ = c.Error(err)
 		c.JSON(http.StatusNotFound, gin.H{"message": "Resource Not Found"})
@@ -415,10 +458,11 @@ func TaskDescribe(c *gin.Context) {
 		return
 	}
 	taskId := c.Param("task")
-	log.WithField("user", user).WithField("taskId", taskId).Debug("Get task status")
+	l := log.WithField("user", user).WithField("_taskId", taskId)
+	l.Debug("Get task status")
 	result, err := service.DescribeTask(taskId)
 	if err != nil {
-		log.WithError(err).WithField("taskId", taskId).Error("Failed to get task status")
+		l.Error("Failed to get task status")
 		_ = c.Error(err).SetType(gin.ErrorTypePublic)
 		return
 	}

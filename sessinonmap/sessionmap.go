@@ -11,10 +11,26 @@ import (
 	"github.com/zebrunner/esg/environment"
 )
 
+type SessionStatus int
+
 const (
-	SessionActive = iota
-	SessionStoppedIdle
+	SessionActive SessionStatus = iota
 	SessionQueued
+	// TODO: delete SessionGeneric status when CloseSession() for generic tasks will be called
+	SessionGeneric
+	SessionPendingToStop
+	SessionStopped
+)
+
+type StoppedReason string
+
+const (
+	SessionIdleTimeout    StoppedReason = "Session stopped due IDLE timeout"
+	SessionFinished       StoppedReason = "Session finished"
+	SessionAborted        StoppedReason = "Session aborted"
+	SessionUnhealthy      StoppedReason = "Session aborted due to unhealthy status"
+	SessionMaxTimeout     StoppedReason = "Session aborted due to the max timeout"
+	SessionStartupFailure StoppedReason = "Session startup failure"
 )
 
 type Session struct {
@@ -26,7 +42,9 @@ type Session struct {
 	StartedAt       time.Time
 	TaskID          string
 	Workspace       string
-	Status          int
+	Status          SessionStatus
+	StopReason      StoppedReason `json:",omitempty"`
+	UsageTracked    bool
 }
 
 func Find(id string, rewriteAccessTime bool) (*Session, error) {
@@ -74,4 +92,10 @@ func Remove(id string) error {
 	}
 
 	return nil
+}
+
+func Keys() ([]string, error) {
+	keys, err := config.RedisConnection.Keys(context.Background(), "*").Result()
+
+	return keys, err
 }

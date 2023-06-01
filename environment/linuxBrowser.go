@@ -7,28 +7,87 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
-	"github.com/google/uuid"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func buildBrowser(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
-        conf := &config.Conf
-
-	id := uuid.New().String()
+	conf := &config.Conf
 
 	browserImage, err := buildImage(caps)
 	if err != nil {
 		return nil, err
 	}
 
-	// TODO: Find better way to specify this
-	sharedFolder := "/opt/zebrunner"
-	taskVolume := "data"
-        dockerSocketVolume := "docker-socket"
+	log.Trace("caps: ", caps)
 
+	entrypointDir := "/opt/entrypoint"
+	entrypointVolume := "entrypoint"
+
+	logDir := "/tmp/log"
+	logVolume := "log"
 
 	tz, err := caps.GetTimeZone()
+	// Video recorder & artifacts uploader logic
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse timezone. error=%s", err)
+	}
+
+	//TODO: handle resolution and video screen size
+
+	taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
+
+	/*	includeMitm := caps.Mitm
+			mitmCommand := "mitmdump --help || sleep infinity"
+			var mitmCpu int64 = 32
+			var mitmMemory int64 = 64 // minimal memory to start container
+
+			if includeMitm {
+				// --quiet is a must to run without interactive console
+				//to generate har we have to enable regular dump.mitm output by -w option and place it before har_dump.py!
+		    mitmCommand = "mitmdump --scripts /har_dump.py -w " + logDir + "/dump.mitm --set hardump=" + logDir + "/dump.har"
+				mitmCpu = 512
+				mitmMemory = 512
+				if caps.MitmArgs != "" {
+					//append args only if mitm=true
+					mitmCommand = mitmCommand + " " + caps.MitmArgs
+				}
+				mitmCommand = mitmCommand + " --quiet "
+
+				//TODO: register such capabilities automatically: -Dproxy_host=mitm -Dproxy_port=8080
+
+			}
+		  mitmContainer := Container{
+		    Name:       "mitm",
+		    Image:      mitmImage,
+		    cpu:        mitmCpu,
+		    memory:     mitmMemory,
+		    Privileged: false,
+		    Essential:  false,
+		    Env: map[string]string{
+		      "COMMAND": 	mitmCommand,
+		    },
+		    Ports: map[string]portMapping{
+		      "fileserverPort": {fileserverPort, 0},
+		    },
+		    Mounts:     []string{logVolume},
+		    Command: []string{"-c", "/entrypoint.sh" +  taskLogRedirect},
+		    EntryPoint: []string{"/bin/sh"},
+		  }
+	*/
+	entrypointContainer := Container{
+		Name:       "entrypoint",
+		Image:      entrypointImage,
+		cpu:        16,
+		memory:     16,
+		Privileged: false,
+		Essential:  false,
+		Mounts:     []string{entrypointVolume, logVolume},
+		EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
+	}
+
 	// In future maybe there will be need to disable vnc
 	enableVNC := true
 	browserContainer := Container{
@@ -44,13 +103,15 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		},
 		Env: map[string]string{
 			"VERBOSE":       "1",
-			"UUID":          id,
 			"ENABLE_VNC":    strconv.FormatBool(enableVNC),
 			"DNS_SERVERS":   strings.Join(caps.DNSServers, " "),
 			"HOSTS_ENTRIES": strings.Join(caps.HostsEntries, " "),
 			"TZ":            tz.String(),
 		},
-		Mounts: []string{"shm", taskVolume},
+		Mounts: []string{"shm", logVolume},
+		//		Links:      []string{"mitm"},
+		Command:    []string{"-c", "/entrypoint.sh" + taskLogRedirect},
+		EntryPoint: []string{"/bin/sh"},
 		HealthCheck: &ecs.HealthCheck{
 			Command:     []*string{aws.String("CMD-SHELL"), aws.String("curl -f localhost:4444/status || exit 1")},
 			Interval:    aws.Int64(10),
@@ -58,51 +119,73 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			Timeout:     aws.Int64(10),
 			StartPeriod: aws.Int64(5),
 		},
+		DependsOn: []*ecs.ContainerDependency{
+			&ecs.ContainerDependency{
+				ContainerName: aws.String("entrypoint"),
+				Condition:     aws.String("COMPLETE"),
+			},
+		},
 	}
 	browserContainer.SetCpu(caps, 1024, conf.MaxCpu)
 	browserContainer.SetMemory(caps, 1024, conf.MaxMemory)
 
-	// Video recorder & artifacts uploader logic
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse timezone. error=%s", err)
+	recorderContainer := Container{
+		Name:       "recorder",
+		Image:      recorderImage,
+		cpu:        recorderCpu,
+		memory:     recorderMemory,
+		Privileged: false,
+		Essential:  false,
+		Env: map[string]string{
+			"ENABLE_VIDEO":         "true",
+			"ENABLE_REALTIME_LOGS": "false",
+			"BASIC_AUTH":           "",
+			"LOG_FILE":             "session.log",
+		},
+		Mounts:      []string{logVolume},
+		Links:       []string{"browser"},
+		Command:     []string{"-c", "/entrypoint.sh" + ">>" + logDir + "/video.log 2>&1"},
+		EntryPoint:  []string{"/bin/sh"},
+		HealthCheck: nil,
+		DependsOn: []*ecs.ContainerDependency{
+			&ecs.ContainerDependency{
+				ContainerName: aws.String("browser"),
+				Condition:     aws.String("START"),
+			},
+		},
+	}
+	if caps.EnvVariables != nil {
+		for v, k := range caps.EnvVariables {
+			//fmt.Printf("var: %v; %v\n", v, k)
+			recorderContainer.Env[v] = k
+		}
 	}
 
-	recorderImage := imageRepo + "artifacts-uploader:2.1"
-	videoRecorderContainer := Container{
-		Name:              "artifacts-uploader",
-		Image:             recorderImage,
-		cpu:               recorderCpu,
-		memory:            recorderMemory,
-		Privileged:        false,
-		Essential:         false,
+	uploaderContainer := Container{
+		Name:       "uploader",
+		Image:      uploaderImage,
+		cpu:        64, // with 32  uploading is aborted
+		memory:     64,
+		Privileged: false,
+		Essential:  false,
 		Env: map[string]string{
-			"UUID":                   id,
-			"BROWSER_CONTAINER_NAME": "browser",
-			"BUCKET":                 conf.S3Bucket,
-			"TENANT":                 workspace,
-                        "AWS_ACCESS_KEY_ID":      conf.S3AwsAccessKeyID,
-                        "AWS_SECRET_ACCESS_KEY":  conf.S3AwsSecretAccessKey,
-                        "AWS_DEFAULT_REGION":     conf.S3Region,
+			"S3_KEY_PATTERN":        fmt.Sprintf("s3://%s/%s/artifacts/test-sessions", conf.S3Bucket, workspace),
+			"AWS_ACCESS_KEY_ID":     conf.S3AwsAccessKeyID,
+			"AWS_SECRET_ACCESS_KEY": conf.S3AwsSecretAccessKey,
+			"AWS_DEFAULT_REGION":    conf.S3Region,
 		},
-		Mounts:      []string{taskVolume, dockerSocketVolume},
-		Links:       []string{"browser"},
+		Mounts:      []string{logVolume},
 		HealthCheck: nil,
-                DependsOn: []*ecs.ContainerDependency{
-                        &ecs.ContainerDependency{
-                                ContainerName: aws.String("browser"),
-                                Condition:  aws.String("START"),
-                        },
-                },
 	}
 
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
-		Containers:           []*Container{&browserContainer, &videoRecorderContainer},
+		Containers:           []*Container{&entrypointContainer, &browserContainer, &recorderContainer, &uploaderContainer}, //&mitmContainer
 		Capabilities:         caps,
 		Volumes: map[string]volume{
-                        taskVolume: {ContainerPath: sharedFolder, Driver: "local", Scope: "task", ReadOnly: false},
-                        "shm": {ContainerPath: "/dev/shm", HostPath: "/dev/shm", ReadOnly: false},
-			dockerSocketVolume: {ContainerPath: "/var/run/docker.sock", HostPath: "/var/run/docker.sock", ReadOnly: false},
+			entrypointVolume: {ContainerPath: entrypointDir, Driver: "local", Scope: "task", ReadOnly: false},
+			logVolume:        {ContainerPath: logDir, Driver: "local", Scope: "task", ReadOnly: false},
+			"shm":            {ContainerPath: "/dev/shm", HostPath: "/dev/shm", ReadOnly: false},
 		},
 		Network: &NetworkConfiguration{
 			IP: "",

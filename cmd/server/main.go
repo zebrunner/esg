@@ -4,6 +4,7 @@ import (
 	"flag"
 	"net/http"
 	"net/http/httputil"
+	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -119,21 +120,24 @@ func main() {
 
 	db, err := config.InitDBConnection(config.Conf.DbConnectionString)
 	if err != nil {
-		log.WithError(err).Fatal("Failed to init DB client.")
+		log.WithError(err).Fatal("Failed to init DB client! Stopping router...")
+		os.Exit(1)
 	}
 	config.DbConnection = db
 	defer db.Close()
 
 	rdb, err := config.InitCache()
 	if err != nil {
-		log.WithError(err).Fatal("Failed to init Redis client")
+		log.WithError(err).Fatal("Failed to init Redis client! Stopping router...")
+		os.Exit(1)
 	}
 	config.RedisConnection = rdb
 	defer rdb.Close()
 
 	aws, err := service.InitAws()
 	if err != nil {
-		log.WithError(err).Fatal("Failed to start aws session")
+		log.WithError(err).Fatal("Failed to start aws session! Stopping router...")
+		os.Exit(1)
 	}
 	service.AwsSess = aws
 

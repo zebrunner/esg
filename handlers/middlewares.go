@@ -62,7 +62,7 @@ func SeleniumError(c *gin.Context) {
 	for _, err := range c.Errors {
 		l := log.WithError(err)
 		if sess, ok := c.Get("sessionID"); ok {
-			l.WithField("session", sess)
+			l.WithField("sessionId", sess)
 		}
 		l.Debug("Selenium error received")
 	}

@@ -96,7 +96,7 @@ func getTasksResources(tasks []*ecs.Task, status string) []*Resources {
 	return resources
 }
 
-func setDesiredCapacity(autoscalingService *autoscaling.AutoScaling, newDesiredCapacity int64) {
+func setDesiredCapacity(autoscalingService *autoscaling.AutoScaling, newCapacity int64) {
 	describeAutoScalingGroupsInput := &autoscaling.DescribeAutoScalingGroupsInput{
 		AutoScalingGroupNames: []*string{&config.Conf.AwsAutoScalingGroup},
 	}
@@ -106,24 +106,31 @@ func setDesiredCapacity(autoscalingService *autoscaling.AutoScaling, newDesiredC
 		return
 	}
 	autoScalingGroup := describeAutoScalingGroupsOutput.AutoScalingGroups[0]
-	if newDesiredCapacity < *autoScalingGroup.DesiredCapacity {
+	currentCapacity := *autoScalingGroup.DesiredCapacity
+	if newCapacity < currentCapacity {
 		log.WithFields(log.Fields{
-			"currentCapacity": *autoScalingGroup.DesiredCapacity,
-			"newCapacity":     newDesiredCapacity,
+			"currentCapacity": currentCapacity,
+			"newCapacity":     newCapacity,
 		}).Warn("Scale down not allowed")
 		return
 	}
 
-	if newDesiredCapacity > *autoScalingGroup.MaxSize {
+	if newCapacity > *autoScalingGroup.MaxSize {
 		log.WithFields(log.Fields{
 			"maxCount":    *autoScalingGroup.MaxSize,
-			"newCapacity": newDesiredCapacity,
+			"newCapacity": newCapacity,
 		}).Warn("ASG desired size reached limit!")
-		newDesiredCapacity = *autoScalingGroup.MaxSize
+		newCapacity = *autoScalingGroup.MaxSize
 	}
+
+	if newCapacity == currentCapacity {
+		// do nothing
+		return
+	}
+
 	updateGroupInput := &autoscaling.UpdateAutoScalingGroupInput{
 		AutoScalingGroupName: autoScalingGroup.AutoScalingGroupName,
-		DesiredCapacity:      &newDesiredCapacity,
+		DesiredCapacity:      &newCapacity,
 	}
 	_, err = autoscalingService.UpdateAutoScalingGroup(updateGroupInput)
 	if err != nil {
@@ -131,8 +138,8 @@ func setDesiredCapacity(autoscalingService *autoscaling.AutoScaling, newDesiredC
 		return
 	}
 	log.WithFields(log.Fields{
-		"currentCapacity": *autoScalingGroup.DesiredCapacity,
-		"newCapacity":     newDesiredCapacity,
+		"currentCapacity": currentCapacity,
+		"newCapacity":     newCapacity,
 	}).Info("Capacity updated")
 }
 
@@ -271,6 +278,7 @@ func ScaleDown() {
 	autoScalingGroup := describeAutoScalingGroupsOutput.AutoScalingGroups[0]
 	minSize := *autoScalingGroup.MinSize
 	desiredCapacity := *autoScalingGroup.DesiredCapacity
+        currentCapacity := desiredCapacity
 
 	instances := []*ecs.ContainerInstance{}
 	listInstancesInput := ecs.ListContainerInstancesInput{
@@ -288,8 +296,8 @@ func ScaleDown() {
 
 		log.WithField("listInstancesResult", listInstancesResult)
 
-		containerInstances:=make([]*string, 0)
-		for _, containerInstanceAws:= range listInstancesResult.ContainerInstanceArns {
+		containerInstances := make([]*string, 0)
+		for _, containerInstanceAws := range listInstancesResult.ContainerInstanceArns {
 			if containerInstanceAws != nil {
 				containerInstances = append(containerInstances, containerInstanceAws)
 			} else {
@@ -327,13 +335,15 @@ func ScaleDown() {
 
 	maxInstancesToDelete := int(math.Ceil(float64(len(instancesToDelete)) * (1 - config.Conf.ReserveInstancesPercent)))
 
+	terminatedCount := 0
 	for _, instance := range instancesToDelete {
 		if desiredCapacity <= minSize {
 			break
 		}
 
+		l := log.WithField("instance", *instance.Ec2InstanceId)
 		if maxInstancesToDelete <= 0 {
-			log.WithField("instance", *instance.Ec2InstanceId).Trace("Keep instance for reservation")
+			l.Trace("Keep instance for reservation")
 			break
 		}
 
@@ -343,11 +353,18 @@ func ScaleDown() {
 		}
 		_, err := autoscalingSvc.TerminateInstanceInAutoScalingGroup(&stopInstanceInput)
 		if err != nil {
-			log.WithError(err).WithField("instance", *instance.Ec2InstanceId).Error("Failed to stop instance")
+			l.WithError(err).Error("Failed to stop instance")
 		}
-		log.WithField("instance", *instance.Ec2InstanceId).Trace("Stopping instance")
+		l.Trace("Stopping instance")
 		desiredCapacity -= 1
 		maxInstancesToDelete -= 1
+		terminatedCount++
 		time.Sleep(250 * time.Millisecond)
+	}
+	if terminatedCount != 0 {
+		log.WithFields(log.Fields{
+			"currentCapacity": currentCapacity,
+			"newCapacity":     desiredCapacity,
+		}).Info("Capacity updated")
 	}
 }
