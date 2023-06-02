@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
-	"net/url"
 	"path"
 	"strings"
 	"time"
@@ -519,11 +518,14 @@ func Devtools(c *gin.Context) {
 		return
 	}
 
-	u, _ := sess.Network.GetUrl("devtools")
-	fileUrl := url.URL{
-		Host: u.Host,
-	}
-	c.Redirect(http.StatusFound, fileUrl.String())
+        director := func(req *http.Request) {
+                req.URL.Scheme = "http"
+                url, _ := sess.Network.GetUrl("devtools")
+                req.URL.Host = url.Host
+                req.Host = url.Host
+        }
+        proxy := &httputil.ReverseProxy{Director: director}
+        proxy.ServeHTTP(c.Writer, c.Request)
 }
 
 func defaultErrorHandler(с *gin.Context) func(http.ResponseWriter, *http.Request, error) {
