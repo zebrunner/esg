@@ -523,6 +523,7 @@ func Devtools(c *gin.Context) {
                 url, _ := sess.Network.GetUrl("devtools")
                 req.URL.Host = url.Host
                 req.Host = url.Host
+		req.Header.Set("Access-Control-Allow-Origin", "*")
         }
         proxy := &httputil.ReverseProxy{Director: director}
         proxy.ServeHTTP(c.Writer, c.Request)
