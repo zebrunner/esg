@@ -125,6 +125,14 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 		WorkingDirectory: workDir,
 		Command:          []string{"-c", entrypointDir + "/entrypoint.sh" + taskLogRedirect},
 		EntryPoint:       []string{"/bin/sh"},
+		//TODO: what about verification for PID=1 among the processes?
+                HealthCheck: &ecs.HealthCheck{
+                        Command:     []*string{aws.String("CMD-SHELL"), aws.String("exit 0")}, // Healthy as container started
+                        Interval:    aws.Int64(5),
+                        Retries:     aws.Int64(3),
+                        Timeout:     aws.Int64(10),
+                        StartPeriod: aws.Int64(0),
+                },
 		DependsOn:        dependsOn,
 	}
 
