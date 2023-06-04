@@ -25,7 +25,7 @@ const (
 	recorderImage   = imageRepo + "recorder:1.1"
 	appiumImage     = imageRepo + "appium:1.4.10"
 	cloneImage      = imageRepo + "git:latest"
-	entrypointImage = imageRepo + "entrypoint:2.1-beta1"
+	entrypointImage = imageRepo + "entrypoint:2.1"
 	mavenImage      = imageRepo + "m2-repo-carina:1.4"
 )
 
