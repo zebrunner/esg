@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	log "github.com/sirupsen/logrus"
+        b64 "encoding/base64"
 )
 
 func buildCypress(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
@@ -41,14 +42,22 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 	cloneCommand := "CHANGE_ME"
         taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
 	if caps.RepositoryUrl != "" {
-		cloneCommand = fmt.Sprintf("git clone --depth=1 --single-branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
+		cloneCommand = fmt.Sprintf("git clone --progress --depth=1 --single-branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
+	}
+
+	tempCpu := 128
+	tempMemory := 512
+	// temp workaround until 626 is fixed
+	if workspace == "pandora" {
+		tempCpu = 1024 //increase so far on ly for pandora
+		tempMemory = 1024
 	}
 
 	cloneContainer := Container{
 		Name:       "clone",
 		Image:      cloneImage,
-		cpu:        minCpu,
-		memory:     512,
+		cpu:        tempCpu,
+		memory:     tempMemory,
 		Privileged: false,
 		Essential:  false,
 		Mounts:     []string{taskVolume, logVolume},
@@ -122,6 +131,9 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		}
 	}
 
+        //basic auth header for executor-logs service
+        basicAuthHeader := "Authorization: Basic " + b64.StdEncoding.EncodeToString([]byte(conf.ZebrunnerIntegrationUser+":"+conf.ZebrunnerIntegrationPassword))
+
 	cypressContainer.SetCpu(caps, 1024, conf.MaxCpu)
 	cypressContainer.SetMemory(caps, 2048, conf.MaxMemory) // 2Gb RAM is minimal for cypress due to the potential memory leaks
 
@@ -134,8 +146,8 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		Essential:   false,
                 Env: map[string]string{
                         "ENABLE_VIDEO":          "true",
-                        "ENABLE_REALTIME_LOGS":  "false",
-                        "BASIC_AUTH":            "",
+                        "ENABLE_REALTIME_LOGS":  "true",
+                        "BASIC_AUTH":            basicAuthHeader,
                         "LOG_FILE":              "session.log",
                 },
 		Mounts:      []string{logVolume},
