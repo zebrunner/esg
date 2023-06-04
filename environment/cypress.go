@@ -47,9 +47,9 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 
 	tempCpu := 128
 	tempMemory := 512
-	// temp workaround until 626 is fixed
+	// temp workaround until #626 is fixed
 	if workspace == "pandora" {
-		tempCpu = 1024 //increase so far on ly for pandora
+		tempCpu = 1024 // increase so far only for pandora
 		tempMemory = 1024
 	}
 
