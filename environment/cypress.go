@@ -56,8 +56,8 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 	cloneContainer := Container{
 		Name:       "clone",
 		Image:      cloneImage,
-		cpu:        tempCpu,
-		memory:     tempMemory,
+		cpu:        int64(tempCpu),
+		memory:     int64(tempMemory),
 		Privileged: false,
 		Essential:  false,
 		Mounts:     []string{taskVolume, logVolume},
