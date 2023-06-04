@@ -201,8 +201,8 @@ func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (t
 			return "", ctx.Err()
 		default:
 		}
-		// Random sleep to fix problems with parallel 100+ threads startup. Not applicable for generic and cypress tasks!
-		if env.TaskDefinitionFamily != "generic" && !strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
+		// Random sleep to fix problems with parallel 100+ threads startup. Not applicable for generic tasks!
+		if env.TaskDefinitionFamily != "generic" {
 			sleep := time.Duration(rand.Intn(30)) * time.Second
 			time.Sleep(sleep)
 		}
