@@ -43,7 +43,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 	executorImage := caps.Image
 	//fmt.Printf("executorImage: %s\n", executorImage)
 
-	cloneCommand := fmt.Sprintf("git clone --progress --depth=1 --single-branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
+	cloneCommand := fmt.Sprintf("git clone --progress --no-checkout --depth=1 --single-branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
 	//fmt.Printf("cloneCommand: %s\n", cloneCommand)
 
 	taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
