@@ -42,7 +42,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 	cloneCommand := "CHANGE_ME"
         taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
 	if caps.RepositoryUrl != "" {
-		cloneCommand = fmt.Sprintf("git clone --progress --depth=1 --single-branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
+		cloneCommand = fmt.Sprintf("git clone --progress --no-checkout --depth=1 --single-branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
 	}
 
 	tempCpu := 128
