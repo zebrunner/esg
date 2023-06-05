@@ -1,6 +1,8 @@
 package environment
 
 import (
+	"math/rand"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
 
@@ -10,8 +12,9 @@ import (
 	"fmt"
 	"strings"
 
+	b64 "encoding/base64"
+
 	log "github.com/sirupsen/logrus"
-        b64 "encoding/base64"
 )
 
 func buildCypress(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
@@ -42,7 +45,11 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 	cloneCommand := "CHANGE_ME"
         taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
 	if caps.RepositoryUrl != "" {
-		cloneCommand = fmt.Sprintf("git clone --progress --depth=1 --single-branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
+		if rand.Intn(2) == 1 {
+			cloneCommand = fmt.Sprintf("git clone --progress --depth=1 --single-branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
+		} else {
+			cloneCommand = fmt.Sprintf("git clone --progress --depth=1 --single-branch --branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
+		}
 	}
 
 	tempCpu := 128
@@ -84,12 +91,17 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
                 },
 		Mounts:     []string{entrypointVolume, taskVolume, logVolume, cypressVolume},
                 EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
-                DependsOn: []*ecs.ContainerDependency{
-                        &ecs.ContainerDependency{
-                                ContainerName: aws.String("clone"),
-                                Condition:     aws.String("COMPLETE"),
-                        },
-                },
+	}
+
+	executorDependings := []*ecs.ContainerDependency {
+		{
+			ContainerName: aws.String("clone"),
+			Condition:     aws.String("SUCCESS"),
+		},
+		{
+			ContainerName: aws.String("entrypoint"),
+			Condition:     aws.String("SUCCESS"),
+		},
 	}
 
 	cypressContainer := Container{
@@ -115,12 +127,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
                         Timeout:     aws.Int64(10),
                         StartPeriod: aws.Int64(0),
                 },
-		DependsOn: []*ecs.ContainerDependency{
-			&ecs.ContainerDependency{
-				ContainerName: aws.String("entrypoint"),
-				Condition:     aws.String("COMPLETE"),
-			},
-		},
+		DependsOn: executorDependings, 
 	}
 
         //TODO: do we need sharing vars? it is required for the real time logs only (?!)
