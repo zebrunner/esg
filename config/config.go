@@ -36,8 +36,10 @@ type Config struct {
 	AwsSecretAccessKey  string
 
 	// Session resource limitations
-	MaxMemory int64
-	MaxCpu    int64
+	MaxMemory      int64
+	MaxCpu         int64
+	MaxCloneMemory int64
+	MaxCloneCpu    int64
 
 	// Timeouts
 	IdleTimeout             time.Duration
@@ -78,6 +80,8 @@ func init() {
 
 	flag.Int64Var(&Conf.MaxMemory, "max-memory", 28675, "maximum memory limitation for session") // max memory for c5a.4xlarge
 	flag.Int64Var(&Conf.MaxCpu, "max-cpu", 16384, "maximum CPU limitation for session")          //max cpu for c5a.4xlarge
+	flag.Int64Var(&Conf.MaxMemory, "max-clone-memory", 1024, "maximum memory limitation for clone container")
+	flag.Int64Var(&Conf.MaxCpu, "max-clone-cpu", 1024, "maximum CPU limitation for clone container")    
 
 	flag.DurationVar(&Conf.IdleTimeout, "idle-timeout", 60*time.Second, "Session idle timeout in time.Duration format")
 	flag.DurationVar(&Conf.SessionStartupTimeout, "session-startup-timeout", 180*time.Second, "Session startup timeout in time.Duration format")
@@ -103,7 +107,7 @@ func init() {
 
 	flag.StringVar(&Conf.ExcludeBrowsers, "exclude-browsers", "", "Pattern for excluding browsers from available images")
 
-        flag.BoolVar(&Conf.SingleTenant, "single-tenant", false, "Single tenant mode")
+	flag.BoolVar(&Conf.SingleTenant, "single-tenant", false, "Single tenant mode")
 }
 
 func (c *Config) ParseLogLevel() logrus.Level {

@@ -43,7 +43,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 	executorImage := caps.Image
 	//fmt.Printf("executorImage: %s\n", executorImage)
 
-	cloneCommand := fmt.Sprintf("git clone --progress --depth=1 --single-branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
+	cloneCommand := fmt.Sprintf("git clone --progress --depth=1 --single-branch %s %s %s || exit 1", branchArg, caps.RepositoryUrl, workDir)
 	//fmt.Printf("cloneCommand: %s\n", cloneCommand)
 
 	taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
@@ -51,14 +51,17 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 	cloneContainer := Container{
 		Name:       "clone",
 		Image:      cloneImage,
-		cpu:        minCpu,
-		memory:     512, //increased memory to fix OOM for huge repositories (3K+ branches)
 		Privileged: false,
 		Essential:  false,
 		Mounts:     []string{taskVolume, logVolume},
 		Command:    []string{"-c", cloneCommand + taskLogRedirect},
 		EntryPoint: []string{"/bin/sh"},
 	}
+
+	cloneContainer.SetCpu(caps.CloneCpu, minCpu, conf.MaxCloneCpu)
+	cloneContainer.SetMemory(caps.CloneMemory, 512, conf.MaxCloneMemory)
+	caps.CloneCpu = cloneContainer.cpu       //override default one as we have min/max limits
+	caps.CloneMemory = cloneContainer.memory //override default one as we have min/max limits
 
 	entrypointContainer := Container{
 		Name:       "entrypoint",
@@ -111,7 +114,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 	})
 	dependsOn = append(dependsOn, &ecs.ContainerDependency{
 		ContainerName: aws.String("clone"),
-		Condition:     aws.String("COMPLETE"),
+		Condition:     aws.String("SUCCESS"),
 	})
 	executorContainer := Container{
 		Name:       "executor",
@@ -143,8 +146,10 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 		}
 	}
 
-	executorContainer.SetCpu(caps, 1024, conf.MaxCpu)
-	executorContainer.SetMemory(caps, 1024, conf.MaxMemory)
+	executorContainer.SetCpu(caps.Cpu, 1024, conf.MaxCpu)
+	executorContainer.SetMemory(caps.Memory, 1024, conf.MaxMemory)
+	caps.Cpu = executorContainer.cpu //override default one as we have min/max limits
+	caps.Memory = executorContainer.memory //override default one as we have min/max limits
 
         recorderContainer := Container{
                 Name:        "recorder",

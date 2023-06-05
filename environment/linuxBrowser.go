@@ -131,8 +131,10 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			},
 		},
 	}
-	browserContainer.SetCpu(caps, 1024, conf.MaxCpu)
-	browserContainer.SetMemory(caps, 1024, conf.MaxMemory)
+	browserContainer.SetCpu(caps.Cpu, 1024, conf.MaxCpu)
+	browserContainer.SetMemory(caps.Memory, 1024, conf.MaxMemory)
+	caps.Cpu = browserContainer.cpu //override default one as we have min/max limits
+	caps.Memory = browserContainer.memory //override default one as we have min/max limits
 
 	recorderContainer := Container{
 		Name:       "recorder",

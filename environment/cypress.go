@@ -23,8 +23,8 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 	logDir := "/tmp/log"
 	logVolume := "log"
 
-        cypressDir := "/tmp/cypress"
-        cypressVolume := "cypress"
+	cypressDir := "/tmp/cypress"
+	cypressVolume := "cypress"
 
 	entrypointDir := "/opt/entrypoint"
 	entrypointVolume := "entrypoint"
@@ -42,28 +42,28 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 	cloneCommand := "CHANGE_ME"
         taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
 	if caps.RepositoryUrl != "" {
-		cloneCommand = fmt.Sprintf("git clone --progress --depth=1 --single-branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
-	}
-
-	tempCpu := 128
-	tempMemory := 512
-	// temp workaround until #626 is fixed
-	if workspace == "pandora" {
-		tempCpu = 1024 // increase so far only for pandora
-		tempMemory = 1024
+		cloneCommand = fmt.Sprintf("git clone --progress --depth=1 --single-branch %s %s %s || exit 1", branchArg, caps.RepositoryUrl, workDir)
 	}
 
 	cloneContainer := Container{
 		Name:       "clone",
 		Image:      cloneImage,
-		cpu:        int64(tempCpu),
-		memory:     int64(tempMemory),
 		Privileged: false,
 		Essential:  false,
 		Mounts:     []string{taskVolume, logVolume},
 		Command:    []string{"-c", cloneCommand + taskLogRedirect},
 		EntryPoint: []string{"/bin/sh"},
 	}
+
+	if workspace == "pandora" {
+		cloneContainer.SetCpu(1024, minCpu, conf.MaxCloneCpu)
+		cloneContainer.SetMemory(1024, 512, conf.MaxCloneMemory)
+	} else {
+		cloneContainer.SetCpu(caps.CloneCpu, minCpu, conf.MaxCloneCpu)
+		cloneContainer.SetMemory(caps.CloneMemory, 512, conf.MaxCloneMemory)
+	}
+	caps.CloneCpu = cloneContainer.cpu //override default one as we have min/max limits
+	caps.CloneMemory = cloneContainer.memory //override default one as we have min/max limits
 
 	launchCommand := "CHANGE_ME"
 	if caps.LaunchCommand != "" {
@@ -87,7 +87,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
                 DependsOn: []*ecs.ContainerDependency{
                         &ecs.ContainerDependency{
                                 ContainerName: aws.String("clone"),
-                                Condition:     aws.String("COMPLETE"),
+                                Condition:     aws.String("SUCCESS"),
                         },
                 },
 	}
@@ -134,8 +134,10 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
         //basic auth header for executor-logs service
         basicAuthHeader := "Authorization: Basic " + b64.StdEncoding.EncodeToString([]byte(conf.ZebrunnerIntegrationUser+":"+conf.ZebrunnerIntegrationPassword))
 
-	cypressContainer.SetCpu(caps, 1024, conf.MaxCpu)
-	cypressContainer.SetMemory(caps, 2048, conf.MaxMemory) // 2Gb RAM is minimal for cypress due to the potential memory leaks
+	cypressContainer.SetCpu(caps.Cpu, 1024, conf.MaxCpu)
+	cypressContainer.SetMemory(caps.Memory, 2048, conf.MaxMemory) // 2GB RAM is minimal for cypress due to the potential memory leaks
+	caps.Cpu = cypressContainer.cpu //override default one as we have min/max limits
+	caps.Memory = cypressContainer.memory //override default one as we have min/max limits
 
 	recorderContainer := Container{
 		Name:        "recorder",

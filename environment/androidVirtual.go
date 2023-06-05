@@ -36,8 +36,10 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities) (*Exe
 		},
 		Mounts: []string{taskVolume},
 	}
-	deviceContainer.SetCpu(caps, 2048, conf.MaxCpu)
-	deviceContainer.SetMemory(caps, 2048, conf.MaxMemory)
+	deviceContainer.SetCpu(caps.Cpu, 2048, conf.MaxCpu)
+	deviceContainer.SetMemory(caps.Memory, 2048, conf.MaxMemory)
+	caps.Cpu = deviceContainer.cpu //override default one as we have min/max limits
+	caps.Memory = deviceContainer.memory //override default one as we have min/max limits
 
 	appiumContainer := Container{
 		Name:       "appium",

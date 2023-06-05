@@ -34,8 +34,10 @@ type Capabilities struct {
 	DNSServers       []string
 
 	//Vendor caps
-	Cpu    int64 `json:"cpu,string,omitempty"`
-	Memory int64 `json:"memory,string,omitempty"`
+	Cpu         int64 `json:"cpu,string,omitempty"`
+	Memory      int64 `json:"memory,string,omitempty"`
+	CloneCpu    int64 `json:"cloneCpu,string,omitempty"`
+	CloneMemory int64 `json:"cloneMemory,string,omitempty"`
 	//Mitm proxy caps
 	Mitm     bool   //enabl mitm with har dump and output generation for mitmweb
 	MitmArgs string // list of arguments for mitmdump command. Important: --verbose and --quiet will be appended forcibly

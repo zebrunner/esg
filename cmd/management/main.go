@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
 	"strings"
@@ -118,6 +119,52 @@ func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 		// resource usage register and taskId mark for removal is performed only for stopped tasks
 		if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
 			if *task.HealthStatus == "UNHEALTHY" {
+				for _, container := range task.Containers {
+					if *container.Name != "clone" {
+						continue
+					}
+
+					if *container.ExitCode != 0 {
+						// restarting generic task because of startup failure in clone container
+						env, err := environment.Build(session.Workspace, &session.Capabilities)
+						if err != nil {
+							l.WithError(err).Error("Failed to rebuild execution environment")
+							break
+						}
+						ctx, ctxCancel := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout)
+						defer ctxCancel()
+
+						err = service.StartTask(ctx, env)
+
+						if err != nil {
+							l.WithError(err).Error("Service restart failed")
+							break
+						}
+						l := log.WithField("_taskId", env.TaskId)
+
+						sess := sessionmap.Session{
+							ID:              env.TaskId,
+							RawCapabilities: session.RawCapabilities,
+							Capabilities:    session.Capabilities,
+							Network:         *env.Network,
+							StartedAt:       time.Now(),
+							AccessedAt:      time.Now(),
+							Status:          sessionmap.SessionGeneric,
+							TaskID:          env.TaskId,
+							Workspace:       session.Workspace,
+						}
+
+						err = sessionmap.Write(env.TaskId, &sess, 0)
+						if err != nil {
+							l.WithError(err).Error("Recreated task is not cached!")
+							service.StopTask(env.TaskId, sessionmap.SessionStartupFailure)
+							break
+						}
+
+						l.WithField("_taskIdOld", session.TaskID).Info("Recreated unhealthy task")
+					}
+					break
+				}
 				l.Warn("Aborting task due to UNHEALTHY HealthStatus")
 				_, err := service.StopTask(taskId, sessionmap.SessionUnhealthy)
 				if err != nil {
@@ -227,7 +274,7 @@ func TrackResourceUsage(tasks []*ecs.Task, wg *sync.WaitGroup) {
 			session.UsageTracked ||
 			(session.Status != sessionmap.SessionStopped && session.Status != sessionmap.SessionGeneric) ||
 			*task.LastStatus != "STOPPED" {
-			// TODO: delete session.Status != sessionmap.SessionGeneric when CloseSession() for generic tasks will be called	
+			// TODO: delete session.Status != sessionmap.SessionGeneric when CloseSession() for generic tasks will be called
 			continue
 		}
 
