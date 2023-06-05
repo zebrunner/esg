@@ -42,7 +42,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 	cloneCommand := "CHANGE_ME"
         taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
 	if caps.RepositoryUrl != "" {
-		cloneCommand = fmt.Sprintf("git clone --progress --depth=1 --single-branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
+		cloneCommand = fmt.Sprintf("git clone --progress --depth=1 --single-branch --branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
 	}
 
 	tempCpu := 128
@@ -87,7 +87,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
                 DependsOn: []*ecs.ContainerDependency{
                         &ecs.ContainerDependency{
                                 ContainerName: aws.String("clone"),
-                                Condition:     aws.String("COMPLETE"),
+                                Condition:     aws.String("SUCCESS"),
                         },
                 },
 	}
@@ -109,6 +109,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		EntryPoint:       []string{"/bin/sh"},
                 HealthCheck: &ecs.HealthCheck{
 			//TODO: think about smarter healthcheck
+			//TODO: during heltchcheck verify exit code for clone and entrypoint
                         Command:     []*string{aws.String("CMD-SHELL"), aws.String("exit 0")}, // Healthy as only entrypoint started to init network endpoints ip correctly
                         Interval:    aws.Int64(5),
                         Retries:     aws.Int64(3),
@@ -116,9 +117,13 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
                         StartPeriod: aws.Int64(0),
                 },
 		DependsOn: []*ecs.ContainerDependency{
+                        &ecs.ContainerDependency{
+                                ContainerName: aws.String("clone"),
+                                Condition:     aws.String("SUCCESS"),
+                        },
 			&ecs.ContainerDependency{
 				ContainerName: aws.String("entrypoint"),
-				Condition:     aws.String("COMPLETE"),
+				Condition:     aws.String("SUCCESS"),
 			},
 		},
 	}
@@ -156,6 +161,14 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		EntryPoint:  []string{"/bin/sh"},
 		HealthCheck: nil,
 		DependsOn: []*ecs.ContainerDependency{
+                        &ecs.ContainerDependency{
+                                ContainerName: aws.String("clone"),
+                                Condition:     aws.String("SUCCESS"),
+                        },
+                        &ecs.ContainerDependency{
+                                ContainerName: aws.String("entrypoint"),
+                                Condition:     aws.String("SUCCESS"),
+                        },
 			&ecs.ContainerDependency{
 				ContainerName: aws.String("browser"),
 				Condition:     aws.String("START"),
