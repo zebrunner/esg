@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"math/rand"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -16,10 +18,10 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/aws/aws-sdk-go/service/s3"
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
 	sessionmap "github.com/zebrunner/esg/sessinonmap"
-	"math/rand"
 )
 
 const (
@@ -402,8 +404,8 @@ func setEnvironmentNetwork(env *environment.ExecutionEnvironment, task *ecs.Task
 	env.Network.IP = ip
 	return nil
 }
-
-func StartTask(ctx context.Context, env *environment.ExecutionEnvironment) error {
+// TODO: delete user and caps arguments after testing
+func StartTask(ctx context.Context, env *environment.ExecutionEnvironment, user string, caps *capabilities.Capabilities) error {
 	var outputErr error
 	startTime := time.Now()
 out:
@@ -442,6 +444,9 @@ out:
 			StopTask(taskId, sessionmap.SessionStartupFailure)
 			l.WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to wait until Task is running and healthy")
 			outputErr = err
+			// TODO: delete env rebuild after testing
+			l.Debug("Rectreating environment, so we could get correct clone command")
+			env, _ = environment.Build(user, caps)
 			continue
 		case task := <-req.responseChan:
 			err = setEnvironmentNetwork(env, task)

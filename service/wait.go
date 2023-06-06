@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"time"
 
@@ -99,6 +100,22 @@ func (w *waitWorker) start() {
 				close(req.responseChan)
 				close(req.errorChan)
 				delete(w.requests, *task.TaskArn)
+			}
+
+			if *task.LastStatus == "PENDING" {
+				for _, container := range task.Containers {
+					if *container.Name != "clone" || *container.LastStatus != "STOPPED" {
+						continue
+					}
+					if *container.ExitCode != 0 {
+						taskId := strings.Split(*task.TaskArn, "/")[2]
+						log.WithField("_taskId", taskId).Error("Unsuccessful creation of task due to clone container error")
+						req.errorChan <- errors.New("failed to start task. Clone container error")
+						close(req.responseChan)
+						close(req.errorChan)
+						delete(w.requests, *task.TaskArn)
+					}
+				}
 			}
 
 			if *task.LastStatus != "RUNNING" {

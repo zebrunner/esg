@@ -44,10 +44,12 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 
 	cloneCommand := "CHANGE_ME"
         taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
+	// TODO: delete wrong clone command after testing
 	if caps.RepositoryUrl != "" {
 		if rand.Intn(2) == 1 {
 			cloneCommand = fmt.Sprintf("git clone --progress --depth=1 --single-branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
 		} else {
+			log.Info("Giving wrong clone command")
 			cloneCommand = fmt.Sprintf("git clone --progress --depth=1 --single-branch --branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
 		}
 	}
