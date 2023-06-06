@@ -42,22 +42,14 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 	cloneCommand := "CHANGE_ME"
         taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
 	if caps.RepositoryUrl != "" {
-		cloneCommand = fmt.Sprintf("git clone --progress --depth=1 --single-branch --branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
-	}
-
-	tempCpu := 128
-	tempMemory := 512
-	// temp workaround until #626 is fixed
-	if workspace == "pandora" {
-		tempCpu = 1024 // increase so far only for pandora
-		tempMemory = 1024
+		cloneCommand = fmt.Sprintf("git clone --progress --depth=1 --single-branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
 	}
 
 	cloneContainer := Container{
 		Name:       "clone",
 		Image:      cloneImage,
-		cpu:        int64(tempCpu),
-		memory:     int64(tempMemory),
+		cpu:        minCpu,
+		memory:     minMemory,
 		Privileged: false,
 		Essential:  false,
 		Mounts:     []string{taskVolume, logVolume},
@@ -109,7 +101,6 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		EntryPoint:       []string{"/bin/sh"},
                 HealthCheck: &ecs.HealthCheck{
 			//TODO: think about smarter healthcheck
-			//TODO: during heltchcheck verify exit code for clone and entrypoint
                         Command:     []*string{aws.String("CMD-SHELL"), aws.String("exit 0")}, // Healthy as only entrypoint started to init network endpoints ip correctly
                         Interval:    aws.Int64(5),
                         Retries:     aws.Int64(3),
