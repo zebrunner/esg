@@ -49,7 +49,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		Name:       "clone",
 		Image:      cloneImage,
 		cpu:        minCpu,
-		memory:     minMemory,
+		memory:     512, //increased memory to fix OOM for huge repositories (3K+ branches)
 		Privileged: false,
 		Essential:  false,
 		Mounts:     []string{taskVolume, logVolume},
