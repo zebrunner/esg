@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	log "github.com/sirupsen/logrus"
+        b64 "encoding/base64"
 )
 
 func buildCypress(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
@@ -41,14 +42,14 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 	cloneCommand := "CHANGE_ME"
         taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
 	if caps.RepositoryUrl != "" {
-		cloneCommand = fmt.Sprintf("git clone --depth=1 --single-branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
+		cloneCommand = fmt.Sprintf("git clone --progress --depth=1 --single-branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
 	}
 
 	cloneContainer := Container{
 		Name:       "clone",
 		Image:      cloneImage,
 		cpu:        minCpu,
-		memory:     512,
+		memory:     512, //increased memory to fix OOM for huge repositories (3K+ branches)
 		Privileged: false,
 		Essential:  false,
 		Mounts:     []string{taskVolume, logVolume},
@@ -78,7 +79,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
                 DependsOn: []*ecs.ContainerDependency{
                         &ecs.ContainerDependency{
                                 ContainerName: aws.String("clone"),
-                                Condition:     aws.String("COMPLETE"),
+                                Condition:     aws.String("SUCCESS"),
                         },
                 },
 	}
@@ -107,9 +108,13 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
                         StartPeriod: aws.Int64(0),
                 },
 		DependsOn: []*ecs.ContainerDependency{
+                        &ecs.ContainerDependency{
+                                ContainerName: aws.String("clone"),
+                                Condition:     aws.String("SUCCESS"),
+                        },
 			&ecs.ContainerDependency{
 				ContainerName: aws.String("entrypoint"),
-				Condition:     aws.String("COMPLETE"),
+				Condition:     aws.String("SUCCESS"),
 			},
 		},
 	}
@@ -121,6 +126,9 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 			cypressContainer.Env[v] = k
 		}
 	}
+
+        //basic auth header for executor-logs service
+        basicAuthHeader := "Authorization: Basic " + b64.StdEncoding.EncodeToString([]byte(conf.ZebrunnerIntegrationUser+":"+conf.ZebrunnerIntegrationPassword))
 
 	cypressContainer.SetCpu(caps, 1024, conf.MaxCpu)
 	cypressContainer.SetMemory(caps, 2048, conf.MaxMemory) // 2Gb RAM is minimal for cypress due to the potential memory leaks
@@ -134,8 +142,8 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		Essential:   false,
                 Env: map[string]string{
                         "ENABLE_VIDEO":          "true",
-                        "ENABLE_REALTIME_LOGS":  "false",
-                        "BASIC_AUTH":            "",
+                        "ENABLE_REALTIME_LOGS":  "true",
+                        "BASIC_AUTH":            basicAuthHeader,
                         "LOG_FILE":              "session.log",
                 },
 		Mounts:      []string{logVolume},
@@ -144,6 +152,14 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		EntryPoint:  []string{"/bin/sh"},
 		HealthCheck: nil,
 		DependsOn: []*ecs.ContainerDependency{
+                        &ecs.ContainerDependency{
+                                ContainerName: aws.String("clone"),
+                                Condition:     aws.String("SUCCESS"),
+                        },
+                        &ecs.ContainerDependency{
+                                ContainerName: aws.String("entrypoint"),
+                                Condition:     aws.String("SUCCESS"),
+                        },
 			&ecs.ContainerDependency{
 				ContainerName: aws.String("browser"),
 				Condition:     aws.String("START"),

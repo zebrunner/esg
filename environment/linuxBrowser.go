@@ -26,8 +26,10 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 	entrypointDir := "/opt/entrypoint"
 	entrypointVolume := "entrypoint"
 
-	logDir := "/tmp/log"
+	// for browsers images try to reuse Doensloads to be able to share this content via upload/downbloan endpoint
+	logDir := "/home/selenium/Downloads"
 	logVolume := "log"
+
 
 	tz, err := caps.GetTimeZone()
 	// Video recorder & artifacts uploader logic
@@ -84,6 +86,9 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		memory:     16,
 		Privileged: false,
 		Essential:  false,
+                Env: map[string]string{
+                        "LOG_DIR": logDir,
+                },
 		Mounts:     []string{entrypointVolume, logVolume},
 		EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
 	}
@@ -137,10 +142,12 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		Privileged: false,
 		Essential:  false,
 		Env: map[string]string{
+                        "LOG_DIR": logDir,
+			"TASK_LOG": logDir + "/task.log",
+                        "LOG_FILE":             "session.log",
 			"ENABLE_VIDEO":         "true",
 			"ENABLE_REALTIME_LOGS": "false",
 			"BASIC_AUTH":           "",
-			"LOG_FILE":             "session.log",
 		},
 		Mounts:      []string{logVolume},
 		Links:       []string{"browser"},
@@ -169,6 +176,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		Privileged: false,
 		Essential:  false,
 		Env: map[string]string{
+                        "LOG_DIR": logDir,
 			"S3_KEY_PATTERN":        fmt.Sprintf("s3://%s/%s/artifacts/test-sessions", conf.S3Bucket, workspace),
 			"AWS_ACCESS_KEY_ID":     conf.S3AwsAccessKeyID,
 			"AWS_SECRET_ACCESS_KEY": conf.S3AwsSecretAccessKey,
