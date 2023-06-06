@@ -123,6 +123,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		EntryPoint:       []string{"/bin/sh"},
                 HealthCheck: &ecs.HealthCheck{
 			//TODO: think about smarter healthcheck
+			//TODO: during heltchcheck verify exit code for clone and entrypoint
                         Command:     []*string{aws.String("CMD-SHELL"), aws.String("exit 0")}, // Healthy as only entrypoint started to init network endpoints ip correctly
                         Interval:    aws.Int64(5),
                         Retries:     aws.Int64(3),
@@ -165,6 +166,14 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		EntryPoint:  []string{"/bin/sh"},
 		HealthCheck: nil,
 		DependsOn: []*ecs.ContainerDependency{
+                        &ecs.ContainerDependency{
+                                ContainerName: aws.String("clone"),
+                                Condition:     aws.String("SUCCESS"),
+                        },
+                        &ecs.ContainerDependency{
+                                ContainerName: aws.String("entrypoint"),
+                                Condition:     aws.String("SUCCESS"),
+                        },
 			&ecs.ContainerDependency{
 				ContainerName: aws.String("browser"),
 				Condition:     aws.String("START"),
