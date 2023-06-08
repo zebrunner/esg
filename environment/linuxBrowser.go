@@ -196,7 +196,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		Volumes: map[string]volume{
 			entrypointVolume: {ContainerPath: entrypointDir, Driver: "local", Scope: "task", ReadOnly: false},
 			logVolume:        {ContainerPath: logDir, Driver: "local", Scope: "task", ReadOnly: false},
-			shmVolume:        {ContainerPath: shmDir, HostPath: shmDir, ReadOnly: false},
+			shmVolume:        {ContainerPath: shmDir, HostPath: shmDir, ReadOnly: false}, // no way to reuse local task volume due to the reset of permissions on browser container start
 		},
 		Network: &NetworkConfiguration{
 			IP: "",

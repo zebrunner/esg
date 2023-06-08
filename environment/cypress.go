@@ -210,7 +210,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 			logVolume:        {Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false},
                         cypressVolume:    {Driver: "local", Scope: "task", ContainerPath: cypressDir, ReadOnly: false},
 			entrypointVolume: {Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false},
-			shmVolume:        {ContainerPath: shmDir, HostPath: shmDir, ReadOnly: false},
+			shmVolume:        {ContainerPath: shmDir, HostPath: shmDir, ReadOnly: false}, // no way to reuse local task volume due to the reset of permissions on browser container start
 		},
 		Network: &NetworkConfiguration{
 			IP: "",
