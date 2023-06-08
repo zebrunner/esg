@@ -29,6 +29,9 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 	entrypointDir := "/opt/entrypoint"
 	entrypointVolume := "entrypoint"
 
+        shmDir := "/dev/shm"
+        shmVolume := "shm"
+
 	branchArg := ""
 	if caps.Branch != "" {
 		branchArg = "--branch=" + caps.Branch
@@ -95,7 +98,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		Env: map[string]string{
 			"COMMAND": launchCommand,
 		},
-		Mounts:           []string{entrypointVolume, taskVolume, logVolume, cypressVolume},
+		Mounts:           []string{entrypointVolume, taskVolume, logVolume, cypressVolume, shmVolume},
 		WorkingDirectory: workDir,
 		Command:          []string{"-c", entrypointDir + "/entrypoint.sh" + taskLogRedirect},
 		EntryPoint:       []string{"/bin/sh"},
@@ -207,6 +210,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 			logVolume:        {Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false},
                         cypressVolume:    {Driver: "local", Scope: "task", ContainerPath: cypressDir, ReadOnly: false},
 			entrypointVolume: {Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false},
+			shmVolume:        {ContainerPath: shmDir, HostPath: shmDir, ReadOnly: false}, // no way to reuse local task volume due to the reset of permissions on browser container start
 		},
 		Network: &NetworkConfiguration{
 			IP: "",
