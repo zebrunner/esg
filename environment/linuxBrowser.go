@@ -30,6 +30,9 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 	logDir := "/home/selenium/Downloads"
 	logVolume := "log"
 
+	devShmDir := "/dev/shm"
+	devShmVolume := "shm"
+
 
 	tz, err := caps.GetTimeZone()
 	// Video recorder & artifacts uploader logic
@@ -89,7 +92,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
                 Env: map[string]string{
                         "LOG_DIR": logDir,
                 },
-		Mounts:     []string{entrypointVolume, logVolume},
+		Mounts:     []string{entrypointVolume, devShmVolume, logVolume},
 		EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
 	}
 
@@ -113,7 +116,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			"HOSTS_ENTRIES": strings.Join(caps.HostsEntries, " "),
 			"TZ":            tz.String(),
 		},
-		Mounts: []string{"shm", logVolume},
+		Mounts: []string{devShmVolume, logVolume},
 		//		Links:      []string{"mitm"},
 		Command:    []string{"-c", "/entrypoint.sh" + taskLogRedirect},
 		EntryPoint: []string{"/bin/sh"},
@@ -193,7 +196,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		Volumes: map[string]volume{
 			entrypointVolume: {ContainerPath: entrypointDir, Driver: "local", Scope: "task", ReadOnly: false},
 			logVolume:        {ContainerPath: logDir, Driver: "local", Scope: "task", ReadOnly: false},
-			"shm":            {ContainerPath: "/dev/shm", HostPath: "/dev/shm", ReadOnly: false},
+			devShmVolume:     {ContainerPath: devShmDir, Driver: "local", Scope: "task", ReadOnly: false},
 		},
 		Network: &NetworkConfiguration{
 			IP: "",

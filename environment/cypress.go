@@ -29,6 +29,9 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 	entrypointDir := "/opt/entrypoint"
 	entrypointVolume := "entrypoint"
 
+        devShmDir := "/dev/shm"
+        devShmVolume := "shm"
+
 	branchArg := ""
 	if caps.Branch != "" {
 		branchArg = "--branch=" + caps.Branch
@@ -74,7 +77,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
                         "WORK_DIR": workDir,
                         "CYPRESS_DIR": cypressDir,
                 },
-		Mounts:     []string{entrypointVolume, taskVolume, logVolume, cypressVolume},
+		Mounts:     []string{entrypointVolume, taskVolume, logVolume, devShmVolume, cypressVolume},
                 EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
                 DependsOn: []*ecs.ContainerDependency{
                         &ecs.ContainerDependency{
@@ -95,7 +98,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		Env: map[string]string{
 			"COMMAND": launchCommand,
 		},
-		Mounts:           []string{entrypointVolume, taskVolume, logVolume, cypressVolume},
+		Mounts:           []string{entrypointVolume, taskVolume, logVolume, devShmVolume, cypressVolume},
 		WorkingDirectory: workDir,
 		Command:          []string{"-c", entrypointDir + "/entrypoint.sh" + taskLogRedirect},
 		EntryPoint:       []string{"/bin/sh"},
@@ -207,6 +210,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 			logVolume:        {Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false},
                         cypressVolume:    {Driver: "local", Scope: "task", ContainerPath: cypressDir, ReadOnly: false},
 			entrypointVolume: {Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false},
+			devShmVolume:     {ContainerPath: devShmDir, Driver: "local", Scope: "task", ReadOnly: false},
 		},
 		Network: &NetworkConfiguration{
 			IP: "",
