@@ -12,7 +12,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	awsSession "github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ec2"
-	"github.com/aws/aws-sdk-go/service/ecrpublic"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/aws/aws-sdk-go/service/s3"
 	log "github.com/sirupsen/logrus"
@@ -55,43 +54,6 @@ func InitAws() (*awsSession.Session, error) {
 	return sess, nil
 }
 
-func ListBrowsers() ([]string, error) {
-	log.Warn("Used ListBrowsers() func with aws call to ecrpublic")
-
-	sess, err := awsSession.NewSession(&aws.Config{
-		Region:     aws.String("us-east-1"), // Hardcoded because ecr-public has only this region
-		MaxRetries: &config.Conf.AwsRetry,
-		Retryer: client.DefaultRetryer{
-			MaxThrottleDelay: 60 * time.Second,
-			MinThrottleDelay: 5 * time.Second,
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	svc := ecrpublic.New(sess)
-	var images []string
-	for _, repository := range config.SupportedRepositories {
-		input := ecrpublic.DescribeImagesInput{
-			RegistryId:     aws.String(browsersRepository),
-			RepositoryName: &repository,
-		}
-		result, err := svc.DescribeImages(&input)
-		if err != nil {
-			return nil, err
-		}
-		for _, image := range result.ImageDetails {
-			// log.Debug("image: ", image)
-			for _, tag := range image.ImageTags {
-				images = append(images, repository+":"+*tag)
-			}
-		}
-	}
-
-	return images, nil
-}
-
 func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDefinition *ecs.TaskDefinition, err error) {
 	svc := ecs.New(AwsSess)
 
@@ -125,46 +87,6 @@ func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDe
 	input.Volumes = volumes
 
 	resultTaskDefinition, err := svc.RegisterTaskDefinition(&input)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create task definition: %v", err)
-	}
-
-	return resultTaskDefinition.TaskDefinition, nil
-}
-
-func CreateGenericTaskDefinition(environment *environment.ExecutionEnvironment) (taskDefinition *ecs.TaskDefinition, err error) {
-	svc := ecs.New(AwsSess)
-
-	networkMode := "bridge"
-	input := ecs.RegisterTaskDefinitionInput{
-		NetworkMode:          &networkMode,
-		ContainerDefinitions: environment.ContainerDefinitions(),
-		Family:               &environment.TaskDefinitionFamily,
-	}
-
-	volumes := []*ecs.Volume{}
-	for n, v := range environment.Volumes {
-		if v.HostPath != "" {
-			volumes = append(volumes, &ecs.Volume{
-				Host: &ecs.HostVolumeProperties{
-					SourcePath: aws.String(v.HostPath),
-				},
-				Name: aws.String(n),
-			})
-		} else {
-			volumes = append(volumes, &ecs.Volume{
-				DockerVolumeConfiguration: &ecs.DockerVolumeConfiguration{
-					Driver: aws.String(v.Driver),
-					Scope:  aws.String(v.Scope),
-				},
-				Name: aws.String(n),
-			})
-		}
-	}
-	input.Volumes = volumes
-
-	resultTaskDefinition, err := svc.RegisterTaskDefinition(&input)
-	log.WithField("resultTaskDefinition", resultTaskDefinition).Trace("Res TaskDefinition")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create task definition: %v", err)
 	}
