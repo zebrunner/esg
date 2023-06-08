@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
+	"github.com/zebrunner/esg/utils"
 )
 
 var taskWaiter *waitWorker
@@ -67,7 +68,7 @@ func (w *waitWorker) start() {
 				Cluster: &config.Conf.AwsCluster,
 				Tasks:   page,
 			}
-			output, err := svc.DescribeTasks(&describeTasksInput)
+			output, err := utils.RetryThrottling(svc.DescribeTasks)(&describeTasksInput)
 			if err != nil {
 				log.WithError(err).Error("RunningTaskWaiter: failed to describe tasks")
 				continue

@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/zebrunner/esg/config"
+	"github.com/zebrunner/esg/utils"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -56,7 +57,7 @@ func (w *instanceWatchWorker) start() {
 			Cluster: &config.Conf.AwsCluster,
 		}
 		for {
-			listResult, err := svc.ListContainerInstances(&listInput)
+			listResult, err := utils.RetryThrottling(svc.ListContainerInstances)(&listInput)
 			if err != nil {
 				log.WithField("list", listInput).WithField("error", err).Error("Failed to ListContainerInstances!")
 				return // exit from method as cluster instances can't be detected
@@ -79,7 +80,7 @@ func (w *instanceWatchWorker) start() {
 				Cluster:            &config.Conf.AwsCluster,
 				ContainerInstances: page,
 			}
-			describeResult, err := svc.DescribeContainerInstances(&input)
+			describeResult, err := utils.RetryThrottling(svc.DescribeContainerInstances)(&input)
 			if err != nil {
 				log.WithField("list", input).WithField("error", err).Error("Failed to DescribeContainerInstances!")
 				continue
@@ -126,7 +127,7 @@ func (w *instanceWatchWorker) start() {
 					}
 				}
 
-				ec2Result, err := ec2Svc.DescribeInstances(&input)
+				ec2Result, err := utils.RetryThrottling(ec2Svc.DescribeInstances)(&input)
 				if err != nil {
 					log.WithField("error", err).Error("Failed to DescribeInstances!")
 					break
