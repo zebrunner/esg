@@ -130,7 +130,7 @@ func Create(c *gin.Context) {
 	l.WithField("env", env).Debug("Env details")
 
 	if env.TaskDefinitionFamily == "generic" {
-		_, err = service.CreateGenericTaskDefinition(env)
+		_, err = service.CreateTaskDefinition(env)
 		if err != nil {
 			log.WithError(err).Error("Failed to create task definition")
 			return

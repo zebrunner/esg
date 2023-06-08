@@ -94,46 +94,6 @@ func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDe
 	return resultTaskDefinition.TaskDefinition, nil
 }
 
-func CreateGenericTaskDefinition(environment *environment.ExecutionEnvironment) (taskDefinition *ecs.TaskDefinition, err error) {
-	svc := ecs.New(AwsSess)
-
-	networkMode := "bridge"
-	input := ecs.RegisterTaskDefinitionInput{
-		NetworkMode:          &networkMode,
-		ContainerDefinitions: environment.ContainerDefinitions(),
-		Family:               &environment.TaskDefinitionFamily,
-	}
-
-	volumes := []*ecs.Volume{}
-	for n, v := range environment.Volumes {
-		if v.HostPath != "" {
-			volumes = append(volumes, &ecs.Volume{
-				Host: &ecs.HostVolumeProperties{
-					SourcePath: aws.String(v.HostPath),
-				},
-				Name: aws.String(n),
-			})
-		} else {
-			volumes = append(volumes, &ecs.Volume{
-				DockerVolumeConfiguration: &ecs.DockerVolumeConfiguration{
-					Driver: aws.String(v.Driver),
-					Scope:  aws.String(v.Scope),
-				},
-				Name: aws.String(n),
-			})
-		}
-	}
-	input.Volumes = volumes
-
-	resultTaskDefinition, err := svc.RegisterTaskDefinition(&input)
-	log.WithField("resultTaskDefinition", resultTaskDefinition).Trace("Res TaskDefinition")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create task definition: %v", err)
-	}
-
-	return resultTaskDefinition.TaskDefinition, nil
-}
-
 func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (taskArn string, returnErr error) {
 	svc := ecs.New(AwsSess)
 
