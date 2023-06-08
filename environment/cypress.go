@@ -29,6 +29,8 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 	entrypointDir := "/opt/entrypoint"
 	entrypointVolume := "entrypoint"
 
+	// Potentially it is uselsess based on this article: https://github.com/cypress-io/cypress/pull/9242
+	// or one more issue in cypress which in spite of the disabling continue to use it.
         shmDir := "/dev/shm"
         shmVolume := "shm"
 
