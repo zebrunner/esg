@@ -271,10 +271,11 @@ func ScaleDown() {
 		AutoScalingGroupNames: []*string{&config.Conf.AwsAutoScalingGroup},
 	}
 	describeAutoScalingGroupsOutput, err := autoscalingSvc.DescribeAutoScalingGroups(describeAutoScalingGroupsInput)
-	if err != nil {
+	if err != nil || len(describeAutoScalingGroupsOutput.AutoScalingGroups) == 0 {
 		log.WithError(err).Error("Can't describe auto scaling group.")
 		return
 	}
+
 	autoScalingGroup := describeAutoScalingGroupsOutput.AutoScalingGroups[0]
 	minSize := *autoScalingGroup.MinSize
 	desiredCapacity := *autoScalingGroup.DesiredCapacity
