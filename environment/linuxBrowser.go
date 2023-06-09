@@ -30,6 +30,9 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 	logDir := "/home/selenium/Downloads"
 	logVolume := "log"
 
+        shmDir := "/dev/shm"
+        shmVolume := "shm"
+
 
 	tz, err := caps.GetTimeZone()
 	// Video recorder & artifacts uploader logic
@@ -113,7 +116,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			"HOSTS_ENTRIES": strings.Join(caps.HostsEntries, " "),
 			"TZ":            tz.String(),
 		},
-		Mounts: []string{"shm", logVolume},
+		Mounts: []string{shmVolume, logVolume},
 		//		Links:      []string{"mitm"},
 		Command:    []string{"-c", "/entrypoint.sh" + taskLogRedirect},
 		EntryPoint: []string{"/bin/sh"},
@@ -193,7 +196,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		Volumes: map[string]volume{
 			entrypointVolume: {ContainerPath: entrypointDir, Driver: "local", Scope: "task", ReadOnly: false},
 			logVolume:        {ContainerPath: logDir, Driver: "local", Scope: "task", ReadOnly: false},
-			"shm":            {ContainerPath: "/dev/shm", HostPath: "/dev/shm", ReadOnly: false},
+			shmVolume:        {ContainerPath: shmDir, HostPath: shmDir, ReadOnly: false}, // no way to reuse local task volume due to the reset of permissions on browser container start
 		},
 		Network: &NetworkConfiguration{
 			IP: "",
