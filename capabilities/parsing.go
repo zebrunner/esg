@@ -33,6 +33,26 @@ func addPrefix(prefix string) func(string) string {
 	}
 }
 
+func deletePref(prefKey string) func(interface{}) interface{} {
+	return func(options interface{}) interface{} {
+		if optionsMap, ok := options.(map[string]interface{}); ok {
+
+			deleteF := func(dir map[string]interface{}){
+				if downlaodDir := dir[prefKey]; downlaodDir != nil {
+					delete(dir, prefKey)
+				}
+			}
+
+			if prefMap, ok := optionsMap["prefs"].(map[string]interface{}); ok {
+				deleteF(prefMap)
+			}
+			
+			deleteF(optionsMap)
+		}
+		return options
+	}
+}
+
 func applyProcessor(caps map[string]interface{}, processors map[string]*CapProcessor) (map[string]interface{}, error) {
 	newCaps := map[string]interface{}{}
 	for name, value := range caps {
@@ -245,52 +265,13 @@ func processVendorCaps(caps map[string]interface{}) (map[string]interface{}, err
 func processOptions(caps map[string]interface{}) (map[string]interface{}, error) {
 	optionProcessors := map[string]*CapProcessor{
 		"goog:chromeOptions": {
-			ValueProcessor: func(options interface{}) interface{} {
-				if optionsMap, ok := options.(map[string]interface{}); ok {
-					if downlaodDir := optionsMap["download.default_directory"]; downlaodDir != nil {
-						log.Debug("Deleted chrome dowload dir from caps")
-						delete(optionsMap, "download.default_directory")
-					}
-					if prefMap, ok := optionsMap["prefs"].(map[string]interface{}); ok {
-						if downlaodDir := prefMap["download.default_directory"]; downlaodDir != nil {
-							log.Debug("Deleted chrome dowload dir from caps")
-							delete(prefMap, "download.default_directory")
-						}
-					}
-				}
-				return options
-			},
+			ValueProcessor: deletePref("download.default_directory"),
 		},
-
 		"ms:edgeOptions": {
-			ValueProcessor: func(options interface{}) interface{} {
-				if optionsMap, ok := options.(map[string]interface{}); ok {
-					if nestedOptions, ok := optionsMap["ms:edgeOptions"].(map[string]interface{}); ok {
-						if downlaodDir := nestedOptions["download.default_directory"]; downlaodDir != nil {
-							log.Debug("Deleted edge dowload dir from nested caps")
-							delete(nestedOptions, "download.default_directory")
-						}
-						if prefMap, ok := optionsMap["prefs"].(map[string]interface{}); ok {
-							if downlaodDir := prefMap["download.default_directory"]; downlaodDir != nil {
-								log.Debug("Deleted chrome dowload dir from caps")
-								delete(prefMap, "download.default_directory")
-							}
-						}
-					}
-
-					if downlaodDir := optionsMap["download.default_directory"]; downlaodDir != nil {
-						log.Debug("Deleted edge dowload dir from nested caps")
-						delete(optionsMap, "download.default_directory")
-					}
-					if prefMap, ok := optionsMap["prefs"].(map[string]interface{}); ok {
-						if downlaodDir := prefMap["download.default_directory"]; downlaodDir != nil {
-							log.Debug("Deleted chrome dowload dir from caps")
-							delete(prefMap, "download.default_directory")
-						}
-					}
-				}
-				return options
-			},
+			ValueProcessor: deletePref("download.default_directory"),
+		},
+		"prefs": {
+			ValueProcessor: deletePref("download.default_directory"),
 		},
 		"moz:firefoxOptions": {
 			ValueProcessor: func(options interface{}) interface{} {
@@ -305,18 +286,15 @@ func processOptions(caps map[string]interface{}) (map[string]interface{}, error)
 						if err != nil {
 							return options
 						}
-						log.Debug(profilesMap)
 
 						for name, prefernces := range profilesMap {
 							for i := 0; i < len(prefernces); i++ {
 								if strings.Contains(prefernces[i], "browser.download.dir") {
-									log.Debug("Deleted", prefernces[i])
 									profilesMap[name] = append(prefernces[:i], prefernces[i+1:]...)
 									break
 								}
 							}
 						}
-						log.Debug(profilesMap)
 
 						zippedBuf, err := zipFFProfile(profilesMap)
 						if err != nil {
