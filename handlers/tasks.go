@@ -101,7 +101,7 @@ func Create(c *gin.Context) {
 		_ = c.Error(&processingError).SetType(gin.ErrorTypePublic)
 		return
 	}
-	log.Trace("Driver capabilitites: ", driverCaps.ToMap())
+	log.Debug("Driver capabilitites: ", driverCaps.ToMap())
 
 	caps, err := driverCaps.GetContainerConfiguration()
 	if err != nil {
