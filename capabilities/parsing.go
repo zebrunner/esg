@@ -1,8 +1,13 @@
 package capabilities
 
 import (
+	"archive/zip"
+	"bufio"
+	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
 	"strings"
 
 	"github.com/imdario/mergo"
@@ -25,6 +30,26 @@ func replaceName(name string) func(string) string {
 func addPrefix(prefix string) func(string) string {
 	return func(name string) string {
 		return prefix + ":" + name
+	}
+}
+
+func deletePref(prefKey string) func(interface{}) interface{} {
+	return func(options interface{}) interface{} {
+		if optionsMap, ok := options.(map[string]interface{}); ok {
+
+			deleteF := func(dir map[string]interface{}){
+				if downlaodDir := dir[prefKey]; downlaodDir != nil {
+					delete(dir, prefKey)
+				}
+			}
+
+			if prefMap, ok := optionsMap["prefs"].(map[string]interface{}); ok {
+				deleteF(prefMap)
+			}
+			
+			deleteF(optionsMap)
+		}
+		return options
 	}
 }
 
@@ -88,13 +113,18 @@ func (c *RequestCaps) ProcessLegacy() error {
 		return err
 	}
 
+	processedDesiredCaps, err = processOptions(processedDesiredCaps)
+	if err != nil {
+		return err
+	}
+
 	if c.Capabilities.AlwaysMatch != nil {
 		for k := range c.Capabilities.AlwaysMatch {
 			delete(processedDesiredCaps, k)
 		}
 	}
 
-	// Add vendor caps to all from firstMatch
+	// Add vendor and option caps to all from firstMatch
 	for _, fmCaps := range c.Capabilities.FirstMatch {
 		for name, value := range processedDesiredCaps {
 			if strings.Contains(name, ":") {
@@ -230,6 +260,103 @@ func processVendorCaps(caps map[string]interface{}) (map[string]interface{}, err
 	}
 
 	return newCaps, nil
+}
+
+func processOptions(caps map[string]interface{}) (map[string]interface{}, error) {
+	optionProcessors := map[string]*CapProcessor{
+		"goog:chromeOptions": {
+			ValueProcessor: deletePref("download.default_directory"),
+		},
+		"ms:edgeOptions": {
+			ValueProcessor: deletePref("download.default_directory"),
+		},
+		"prefs": {
+			ValueProcessor: deletePref("download.default_directory"),
+		},
+		"moz:firefoxOptions": {
+			ValueProcessor: func(options interface{}) interface{} {
+				if optionsMap, ok := options.(map[string]interface{}); ok {
+					if profileEncoded, ok := optionsMap["profile"].(string); ok {
+						profileBytes, err := base64.StdEncoding.DecodeString(profileEncoded)
+						if err != nil {
+							return options
+						}
+
+						profilesMap, err := unzipFFProfile(profileBytes)
+						if err != nil {
+							return options
+						}
+
+						for name, prefernces := range profilesMap {
+							for i := 0; i < len(prefernces); i++ {
+								if strings.Contains(prefernces[i], "browser.download.dir") {
+									profilesMap[name] = append(prefernces[:i], prefernces[i+1:]...)
+									break
+								}
+							}
+						}
+
+						zippedBuf, err := zipFFProfile(profilesMap)
+						if err != nil {
+							return options
+						}
+						optionsMap["profile"] = base64.StdEncoding.EncodeToString(zippedBuf.Bytes())
+					}
+				}
+				return options
+			},
+		},
+	}
+
+	newCaps, err := applyProcessor(caps, optionProcessors)
+	if err != nil {
+		return nil, err
+	}
+
+	return newCaps, nil
+}
+
+func unzipFFProfile(profiles []byte) (map[string][]string, error) {
+	zipReader, err := zip.NewReader(bytes.NewReader(profiles), int64(len(profiles)))
+	if err != nil {
+		return nil, err
+	}
+
+	profilesMap := make(map[string][]string, 0)
+	for _, zipFile := range zipReader.File {
+		file, err := zipFile.Open()
+		if err != nil {
+			return nil, err
+		}
+		defer file.Close()
+		scanner := bufio.NewScanner(file)
+		prefs := make([]string, 0)
+		for scanner.Scan() {
+			prefs = append(prefs, scanner.Text())
+		}
+		// key - profileName; value - prefernces array
+		profilesMap[zipFile.Name] = prefs
+	}
+
+	return profilesMap, nil
+}
+
+func zipFFProfile(profilesMap map[string][]string) (*bytes.Buffer, error) {
+	zippedBuf := bytes.NewBuffer(make([]byte, 0))
+	zipWriter := zip.NewWriter(zippedBuf)
+	for k, v := range profilesMap {
+		w, err := zipWriter.Create(k)
+		if err != nil {
+			return nil, err
+		}
+		profileStr := strings.Join(v, "\n")
+		_, err = io.Copy(w, bytes.NewReader([]byte(profileStr)))
+		if err != nil {
+			return nil, err
+		}
+	}
+	zipWriter.Close()
+	return zippedBuf, nil
 }
 
 func MapConfig(m map[string]interface{}) (*Capabilities, error) {

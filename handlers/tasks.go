@@ -82,8 +82,8 @@ func Create(c *gin.Context) {
 
 	l := log.WithFields(log.Fields{"user": user, "remote": remote})
 
-	var body capabilities.RequestCaps
-	err = c.BindJSON(&body)
+	var driverCaps capabilities.RequestCaps
+	err = c.BindJSON(&driverCaps)
 	if err != nil {
 		l.WithError(err).Error("Failed to bind json to browser struct")
 		_ = c.Error(creationError("Bad JSON format", err)).SetType(gin.ErrorTypePublic)
@@ -95,14 +95,15 @@ func Create(c *gin.Context) {
 		ResponseStatus: http.StatusBadRequest,
 		Message:        "Failed to process capabilities. ",
 	}
-	err = body.ProcessLegacy()
+	err = driverCaps.ProcessLegacy()
 	if err != nil {
 		l.WithError(err).Error("Failed to process capabilities")
 		_ = c.Error(&processingError).SetType(gin.ErrorTypePublic)
 		return
 	}
+	log.Trace("Driver capabilitites: ", driverCaps.ToMap())
 
-	caps, err := body.GetContainerConfiguration()
+	caps, err := driverCaps.GetContainerConfiguration()
 	if err != nil {
 		l.WithError(err).Error("Failed to get container config.Configuration")
 		_ = c.Error(&processingError).SetType(gin.ErrorTypePublic)
@@ -155,7 +156,7 @@ func Create(c *gin.Context) {
 	// register session by TaskId to track resources
 	sess := sessionmap.Session{
 		ID:              env.TaskId,
-		RawCapabilities: body.ToMap(),
+		RawCapabilities: driverCaps.ToMap(),
 		Capabilities:    *caps,
 		Network:         *env.Network,
 		StartedAt:       time.Now(),
@@ -188,7 +189,7 @@ func Create(c *gin.Context) {
 			return
 		}
 
-		requestBody, err := json.Marshal(body)
+		requestBody, err := json.Marshal(driverCaps)
 		if err != nil {
 			l.WithError(err).Error("Failed to marshal request")
 			_ = c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
@@ -224,7 +225,7 @@ func Create(c *gin.Context) {
 
 		sess := sessionmap.Session{
 			ID:              sessionId,
-			RawCapabilities: body.ToMap(),
+			RawCapabilities: driverCaps.ToMap(),
 			Capabilities:    *caps,
 			Network:         *env.Network,
 			StartedAt:       time.Now(),
