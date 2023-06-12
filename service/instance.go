@@ -2,6 +2,7 @@ package service
 
 import (
 	"math"
+	"os"
 	"sync"
 	"time"
 
@@ -60,7 +61,7 @@ func (w *instanceWatchWorker) start() {
 			listResult, err := utils.RetryThrottling(svc.ListContainerInstances)(&listInput)
 			if err != nil {
 				log.WithField("list", listInput).WithField("error", err).Error("Failed to ListContainerInstances!")
-				return // exit from method as cluster instances can't be detected
+				os.Exit(1)
 			}
 
 			containerInstanceIds = append(containerInstanceIds, listResult.ContainerInstanceArns...)
