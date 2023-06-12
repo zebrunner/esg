@@ -140,9 +140,9 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 
 	recorderContainer := Container{
 		Name:        "recorder",
-		Image:       recorderImage,
+		Image:       cypressRecorderImage,
 		cpu:         recorderCpu,
-		memory:      recorderMemory,
+		memory:      2048,
 		Privileged:  false,
 		Essential:   false,
                 Env: map[string]string{
