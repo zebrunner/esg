@@ -340,10 +340,8 @@ func AddTaskDefinitions() {
 				if err == nil {
 					imagesSet[image] = true
 				} else {
-					if err != nil {
-						log.WithField("image", image).WithError(err).Error("Couldn't create task defenition. Stopping scaler...")
-						os.Exit(1)
-					}
+					log.WithField("image", image).WithError(err).Error("Couldn't create task defenition. Stopping scaler...")
+					os.Exit(1)
 				}
 			}
 		}
