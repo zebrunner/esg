@@ -37,7 +37,7 @@ func deletePref(prefKey string) func(interface{}) interface{} {
 	return func(options interface{}) interface{} {
 		if optionsMap, ok := options.(map[string]interface{}); ok {
 
-			deleteF := func(dir map[string]interface{}){
+			deleteF := func(dir map[string]interface{}) {
 				if downlaodDir := dir[prefKey]; downlaodDir != nil {
 					delete(dir, prefKey)
 				}
@@ -46,7 +46,7 @@ func deletePref(prefKey string) func(interface{}) interface{} {
 			if prefMap, ok := optionsMap["prefs"].(map[string]interface{}); ok {
 				deleteF(prefMap)
 			}
-			
+
 			deleteF(optionsMap)
 		}
 		return options
@@ -103,42 +103,77 @@ func (c *RequestCaps) ProcessLegacy() error {
 		processedDesiredCaps[k] = v
 	}
 
-	// Process desired caps
-	processedDesiredCaps, err := processLegacyCaps(processedDesiredCaps)
-	if err != nil {
-		return err
-	}
-	processedDesiredCaps, err = processVendorCaps(processedDesiredCaps)
-	if err != nil {
-		return err
-	}
-
-	processedDesiredCaps, err = processOptions(processedDesiredCaps)
-	if err != nil {
-		return err
-	}
-
-	if c.Capabilities.AlwaysMatch != nil {
-		for k := range c.Capabilities.AlwaysMatch {
-			delete(processedDesiredCaps, k)
+	if len(processedDesiredCaps) != 0 {
+		// Process desired caps
+		processedDesiredCaps, err := processLegacyCaps(processedDesiredCaps)
+		if err != nil {
+			return err
 		}
-	}
+		processedDesiredCaps, err = processVendorCaps(processedDesiredCaps)
+		if err != nil {
+			return err
+		}
 
-	// Add vendor and option caps to all from firstMatch
-	for _, fmCaps := range c.Capabilities.FirstMatch {
-		for name, value := range processedDesiredCaps {
-			if strings.Contains(name, ":") {
-				fmCaps[name] = value
+		processedDesiredCaps, err = processOptions(processedDesiredCaps)
+		if err != nil {
+			return err
+		}
+
+		if c.Capabilities.AlwaysMatch != nil {
+			for k := range c.Capabilities.AlwaysMatch {
+				delete(processedDesiredCaps, k)
 			}
 		}
 
-		renamedLegacy := []string{"browserName", "platformName", "browserVersion"}
-		for _, name := range renamedLegacy {
-			if fmCaps[name] == nil && processedDesiredCaps[name] != nil {
-				fmCaps[name] = processedDesiredCaps[name]
+		// Add vendor and option caps to all from firstMatch
+		for _, fmCaps := range c.Capabilities.FirstMatch {
+			for name, value := range processedDesiredCaps {
+				if strings.Contains(name, ":") {
+					fmCaps[name] = value
+				}
 			}
+
+			renamedLegacy := []string{"browserName", "platformName", "browserVersion"}
+			for _, name := range renamedLegacy {
+				if fmCaps[name] == nil && processedDesiredCaps[name] != nil {
+					fmCaps[name] = processedDesiredCaps[name]
+				}
+			}
+
+		}
+	} else {
+		var err error
+		c.Capabilities.AlwaysMatch, err = processLegacyCaps(c.Capabilities.AlwaysMatch)
+		if err != nil {
+			return err
 		}
 
+		c.Capabilities.AlwaysMatch, err = processVendorCaps(c.Capabilities.AlwaysMatch)
+		if err != nil {
+			return err
+		}
+
+		c.Capabilities.AlwaysMatch, err = processOptions(c.Capabilities.AlwaysMatch)
+		if err != nil {
+			return err
+		}
+
+		for index, fmCaps := range c.Capabilities.FirstMatch {
+			c.Capabilities.FirstMatch[index], err = processLegacyCaps(fmCaps)
+			if err != nil {
+				return err
+			}
+	
+			c.Capabilities.FirstMatch[index], err = processVendorCaps(fmCaps)
+			if err != nil {
+				return err
+			}
+	
+			c.Capabilities.FirstMatch[index], err = processOptions(fmCaps)
+			if err != nil {
+				return err
+			}
+		}
 	}
 
 	// Replace latest version
