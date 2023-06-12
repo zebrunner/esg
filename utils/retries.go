@@ -22,9 +22,9 @@ func RetryThrottling[T, R interface{}](executeFunc func(T) (R, error)) func(T) (
 			result, err = executeFunc(arg)
 			if err != nil {
 				if strings.Contains(err.Error(), "ThrottlingException") {
-					l.WithError(err).WithField("retry", i)
+					l.WithError(err).WithField("retry", i).Debug()
 					time.Sleep(time.Duration(i) * time.Second)
-				} else if strings.Contains(err.Error(), "ClusterNotFoundException") {
+				} else if strings.Contains(err.Error(), "ClusterNotFoundException") || strings.Contains(err.Error(), "NoCredentialProviders") {
 					l.WithError(err).Error("Stopping container because of exception")
 					os.Exit(1)
 				} else {
