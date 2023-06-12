@@ -53,8 +53,7 @@ func deletePref(prefKey string) func(interface{}) interface{} {
 	}
 }
 
-func applyProcessor(caps map[string]interface{}, processors map[string]*CapProcessor) (map[string]interface{}, error) {
-	newCaps := map[string]interface{}{}
+func applyProcessor(caps map[string]interface{}, processors map[string]*CapProcessor) error {
 	for name, value := range caps {
 		newKey := name
 		newValue := value
@@ -69,14 +68,17 @@ func applyProcessor(caps map[string]interface{}, processors map[string]*CapProce
 			if processor.Validator != nil {
 				err := processor.Validator(newValue)
 				if err != nil {
-					return nil, err
+					return err
 				}
 			}
 		}
-
-		newCaps[newKey] = newValue
+		
+		if newKey != name {
+			delete(caps, name)
+		}
+		caps[newKey] = newValue
 	}
-	return newCaps, nil
+	return nil
 }
 
 type RequestCaps struct {
@@ -97,81 +99,95 @@ func (c *RequestCaps) ToMap() map[string]interface{} {
 	}
 }
 
-func (c *RequestCaps) ProcessLegacy() error {
-	processedDesiredCaps := map[string]interface{}{}
-	for k, v := range c.DesiredCapabilities {
-		processedDesiredCaps[k] = v
+func (c *RequestCaps) Process() error {
+	var err error
+	err = processLegacyCaps(c.Capabilities.AlwaysMatch)
+	if err != nil {
+		return err
 	}
 
-	if len(processedDesiredCaps) != 0 {
-		// Process desired caps
-		processedDesiredCaps, err := processLegacyCaps(processedDesiredCaps)
-		if err != nil {
-			return err
-		}
-		processedDesiredCaps, err = processVendorCaps(processedDesiredCaps)
+	err = processVendorCaps(c.Capabilities.AlwaysMatch)
+	if err != nil {
+		return err
+	}
+
+	err = processOptions(c.Capabilities.AlwaysMatch)
+	if err != nil {
+		return err
+	}
+
+	for index := range c.Capabilities.FirstMatch {
+		err = processLegacyCaps(c.Capabilities.FirstMatch[index])
 		if err != nil {
 			return err
 		}
 
-		processedDesiredCaps, err = processOptions(processedDesiredCaps)
+		err = processVendorCaps(c.Capabilities.FirstMatch[index])
 		if err != nil {
 			return err
 		}
 
-		if c.Capabilities.AlwaysMatch != nil {
-			for k := range c.Capabilities.AlwaysMatch {
-				delete(processedDesiredCaps, k)
+		err = processOptions(c.Capabilities.FirstMatch[index])
+		if err != nil {
+			return err
+		}
+	}
+
+	if c.Capabilities.AlwaysMatch != nil && c.Capabilities.AlwaysMatch["browserName"] == "firefox" {
+		version, ok := c.Capabilities.AlwaysMatch["browserVersion"].(string)
+		version = strings.ToLower(version)
+		if ok && (version == "latest" || version == "null" || version == "") {
+			delete(c.Capabilities.AlwaysMatch, "browserVersion")
+		}
+	}
+
+	for _, fmCaps := range c.Capabilities.FirstMatch {
+		version, ok := fmCaps["browserVersion"].(string)
+		name := fmCaps["browserName"]
+		version = strings.ToLower(version)
+		if ok && name == "firefox" && (version == "latest" || version == "null" || version == "") {
+			delete(fmCaps, "browserVersion")
+		}
+	}
+
+	return nil
+}
+
+func (c *RequestCaps) ProcessLegacy() error {
+	// Process desired caps
+	err := processLegacyCaps(c.DesiredCapabilities)
+	if err != nil {
+		return err
+	}
+
+	err = processVendorCaps(c.DesiredCapabilities)
+	if err != nil {
+		return err
+	}
+
+	err = processOptions(c.DesiredCapabilities)
+	if err != nil {
+		return err
+	}
+
+	if c.Capabilities.AlwaysMatch != nil {
+		for k := range c.Capabilities.AlwaysMatch {
+			delete(c.DesiredCapabilities, k)
+		}
+	}
+
+	// Add vendor and option caps to all from firstMatch
+	for _, fmCaps := range c.Capabilities.FirstMatch {
+		for name, value := range c.DesiredCapabilities {
+			if strings.Contains(name, ":") {
+				fmCaps[name] = value
 			}
 		}
 
-		// Add vendor and option caps to all from firstMatch
-		for _, fmCaps := range c.Capabilities.FirstMatch {
-			for name, value := range processedDesiredCaps {
-				if strings.Contains(name, ":") {
-					fmCaps[name] = value
-				}
-			}
-
-			renamedLegacy := []string{"browserName", "platformName", "browserVersion"}
-			for _, name := range renamedLegacy {
-				if fmCaps[name] == nil && processedDesiredCaps[name] != nil {
-					fmCaps[name] = processedDesiredCaps[name]
-				}
-			}
-
-		}
-	} else {
-		var err error
-		c.Capabilities.AlwaysMatch, err = processLegacyCaps(c.Capabilities.AlwaysMatch)
-		if err != nil {
-			return err
-		}
-
-		c.Capabilities.AlwaysMatch, err = processVendorCaps(c.Capabilities.AlwaysMatch)
-		if err != nil {
-			return err
-		}
-
-		c.Capabilities.AlwaysMatch, err = processOptions(c.Capabilities.AlwaysMatch)
-		if err != nil {
-			return err
-		}
-
-		for index, fmCaps := range c.Capabilities.FirstMatch {
-			c.Capabilities.FirstMatch[index], err = processLegacyCaps(fmCaps)
-			if err != nil {
-				return err
-			}
-	
-			c.Capabilities.FirstMatch[index], err = processVendorCaps(fmCaps)
-			if err != nil {
-				return err
-			}
-	
-			c.Capabilities.FirstMatch[index], err = processOptions(fmCaps)
-			if err != nil {
-				return err
+		renamedLegacy := []string{"browserName", "platformName", "browserVersion"}
+		for _, name := range renamedLegacy {
+			if fmCaps[name] == nil && c.DesiredCapabilities[name] != nil {
+				fmCaps[name] = c.DesiredCapabilities[name]
 			}
 		}
 	}
@@ -233,7 +249,7 @@ func (c *RequestCaps) GetContainerConfiguration() (*Capabilities, error) {
 	return &conf, nil
 }
 
-func processLegacyCaps(caps map[string]interface{}) (map[string]interface{}, error) {
+func processLegacyCaps(caps map[string]interface{}) error {
 	allowedPlatforms := []string{"linux", "any"}
 	legacyProcessors := map[string]*CapProcessor{
 		"platform": {
@@ -256,15 +272,15 @@ func processLegacyCaps(caps map[string]interface{}) (map[string]interface{}, err
 		},
 	}
 
-	newCaps, err := applyProcessor(caps, legacyProcessors)
+	err := applyProcessor(caps, legacyProcessors)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return newCaps, nil
+	return nil
 }
 
-func processVendorCaps(caps map[string]interface{}) (map[string]interface{}, error) {
+func processVendorCaps(caps map[string]interface{}) error {
 	vendorCapNames := []string{
 		"enableVNC",
 		"enableVideo",
@@ -289,15 +305,15 @@ func processVendorCaps(caps map[string]interface{}) (map[string]interface{}, err
 		}
 	}
 
-	newCaps, err := applyProcessor(caps, processors)
+	err := applyProcessor(caps, processors)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return newCaps, nil
+	return nil
 }
 
-func processOptions(caps map[string]interface{}) (map[string]interface{}, error) {
+func processOptions(caps map[string]interface{}) error {
 	optionProcessors := map[string]*CapProcessor{
 		"goog:chromeOptions": {
 			ValueProcessor: deletePref("download.default_directory"),
@@ -343,12 +359,12 @@ func processOptions(caps map[string]interface{}) (map[string]interface{}, error)
 		},
 	}
 
-	newCaps, err := applyProcessor(caps, optionProcessors)
+	err := applyProcessor(caps, optionProcessors)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return newCaps, nil
+	return nil
 }
 
 func unzipFFProfile(profiles []byte) (map[string][]string, error) {

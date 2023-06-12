@@ -95,7 +95,12 @@ func Create(c *gin.Context) {
 		ResponseStatus: http.StatusBadRequest,
 		Message:        "Failed to process capabilities. ",
 	}
-	err = taskCaps.ProcessLegacy()
+	
+	if len(taskCaps.DesiredCapabilities) != 0 {
+		err = taskCaps.ProcessLegacy()
+	} else {
+		err = taskCaps.Process()
+	}
 	if err != nil {
 		l.WithError(err).Error("Failed to process capabilities")
 		_ = c.Error(&processingError).SetType(gin.ErrorTypePublic)
@@ -519,15 +524,15 @@ func Devtools(c *gin.Context) {
 		return
 	}
 
-        director := func(req *http.Request) {
-                req.URL.Scheme = "http"
-                url, _ := sess.Network.GetUrl("devtools")
-                req.URL.Host = url.Host
-                req.Host = url.Host
+	director := func(req *http.Request) {
+		req.URL.Scheme = "http"
+		url, _ := sess.Network.GetUrl("devtools")
+		req.URL.Host = url.Host
+		req.Host = url.Host
 		req.Header.Set("Access-Control-Allow-Origin", "*")
-        }
-        proxy := &httputil.ReverseProxy{Director: director}
-        proxy.ServeHTTP(c.Writer, c.Request)
+	}
+	proxy := &httputil.ReverseProxy{Director: director}
+	proxy.ServeHTTP(c.Writer, c.Request)
 }
 
 func defaultErrorHandler(с *gin.Context) func(http.ResponseWriter, *http.Request, error) {
