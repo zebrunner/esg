@@ -279,6 +279,13 @@ func Proxy(c *gin.Context) {
 			r.URL.Scheme = "http"
 		},
 		ErrorHandler: defaultErrorHandler(c),
+		ModifyResponse: func(response *http.Response) error {
+            contentType := response.Header.Get("Content-Type")
+            if contentType != "application/json; charset=utf-8" && contentType != "" {
+                response.Header.Set("Content-Type", "application/json; charset=utf-8")
+            }
+            return nil
+        },
 	}).ServeHTTP(c.Writer, c.Request)
 }
 
