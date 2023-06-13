@@ -82,8 +82,8 @@ func Create(c *gin.Context) {
 
 	l := log.WithFields(log.Fields{"user": user, "remote": remote})
 
-	var driverCaps capabilities.RequestCaps
-	err = c.BindJSON(&driverCaps)
+	var taskCaps capabilities.RequestCaps
+	err = c.BindJSON(&taskCaps)
 	if err != nil {
 		l.WithError(err).Error("Failed to bind json to browser struct")
 		_ = c.Error(creationError("Bad JSON format", err)).SetType(gin.ErrorTypePublic)
@@ -95,15 +95,20 @@ func Create(c *gin.Context) {
 		ResponseStatus: http.StatusBadRequest,
 		Message:        "Failed to process capabilities. ",
 	}
-	err = driverCaps.ProcessLegacy()
+	
+	if len(taskCaps.DesiredCapabilities) != 0 {
+		err = taskCaps.ProcessLegacy()
+	} else {
+		err = taskCaps.Process()
+	}
 	if err != nil {
 		l.WithError(err).Error("Failed to process capabilities")
 		_ = c.Error(&processingError).SetType(gin.ErrorTypePublic)
 		return
 	}
-	log.Trace("Driver capabilitites: ", driverCaps.ToMap())
+	log.Trace("Driver capabilitites: ", taskCaps.ToMap())
 
-	caps, err := driverCaps.GetContainerConfiguration()
+	caps, err := taskCaps.GetContainerConfiguration()
 	if err != nil {
 		l.WithError(err).Error("Failed to get container config.Configuration")
 		_ = c.Error(&processingError).SetType(gin.ErrorTypePublic)
@@ -156,7 +161,7 @@ func Create(c *gin.Context) {
 	// register session by TaskId to track resources
 	sess := sessionmap.Session{
 		ID:              env.TaskId,
-		RawCapabilities: driverCaps.ToMap(),
+		RawCapabilities: taskCaps.ToMap(),
 		Capabilities:    *caps,
 		Network:         *env.Network,
 		StartedAt:       time.Now(),
@@ -189,7 +194,7 @@ func Create(c *gin.Context) {
 			return
 		}
 
-		requestBody, err := json.Marshal(driverCaps)
+		requestBody, err := json.Marshal(taskCaps)
 		if err != nil {
 			l.WithError(err).Error("Failed to marshal request")
 			_ = c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
@@ -225,7 +230,7 @@ func Create(c *gin.Context) {
 
 		sess := sessionmap.Session{
 			ID:              sessionId,
-			RawCapabilities: driverCaps.ToMap(),
+			RawCapabilities: taskCaps.ToMap(),
 			Capabilities:    *caps,
 			Network:         *env.Network,
 			StartedAt:       time.Now(),
@@ -526,15 +531,15 @@ func Devtools(c *gin.Context) {
 		return
 	}
 
-        director := func(req *http.Request) {
-                req.URL.Scheme = "http"
-                url, _ := sess.Network.GetUrl("devtools")
-                req.URL.Host = url.Host
-                req.Host = url.Host
+	director := func(req *http.Request) {
+		req.URL.Scheme = "http"
+		url, _ := sess.Network.GetUrl("devtools")
+		req.URL.Host = url.Host
+		req.Host = url.Host
 		req.Header.Set("Access-Control-Allow-Origin", "*")
-        }
-        proxy := &httputil.ReverseProxy{Director: director}
-        proxy.ServeHTTP(c.Writer, c.Request)
+	}
+	proxy := &httputil.ReverseProxy{Director: director}
+	proxy.ServeHTTP(c.Writer, c.Request)
 }
 
 func defaultErrorHandler(с *gin.Context) func(http.ResponseWriter, *http.Request, error) {
