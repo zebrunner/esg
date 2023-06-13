@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"math/rand"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -18,7 +20,7 @@ import (
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
 	sessionmap "github.com/zebrunner/esg/sessinonmap"
-	"math/rand"
+	"github.com/zebrunner/esg/utils"
 )
 
 const (
@@ -86,7 +88,7 @@ func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDe
 
 	input.Volumes = volumes
 
-	resultTaskDefinition, err := svc.RegisterTaskDefinition(&input)
+	resultTaskDefinition, err := utils.RetryThrottling(svc.RegisterTaskDefinition)(&input)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create task definition: %v", err)
 	}
@@ -242,7 +244,7 @@ func DescribeTask(taskArn string) (*ecs.DescribeTasksOutput, error) {
 		},
 	}
 
-	result, err := svc.DescribeTasks(input)
+	result, err := utils.RetryThrottling(svc.DescribeTasks)(input)
 	return result, err
 }
 
@@ -258,7 +260,7 @@ func DescribeTasks(taskArns []string) ([]*ecs.Task, error) {
 			Tasks:   aws.StringSlice(tasks),
 		}
 
-		result, err := svc.DescribeTasks(input)
+		result, err := utils.RetryThrottling(svc.DescribeTasks)(input)
 		if err != nil {
 			return nil, err
 		}
@@ -403,7 +405,7 @@ func GeneratePreSignedURL(key string) (string, error) {
 	}
 
 	//ZEB-5145: ESG: return 404 when requested video/session or execution log is not available
-	res, err := s3Svc.ListObjectsV2(&s3.ListObjectsV2Input{
+	res, err := utils.RetryThrottling(s3Svc.ListObjectsV2)(&s3.ListObjectsV2Input{
 		Bucket: &config.Conf.S3Bucket,
 		Prefix: &key,
 	})

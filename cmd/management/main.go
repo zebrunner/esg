@@ -171,26 +171,11 @@ func StopLostTasks(keys []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 		wg.Done()
 		return
 	}
-	maxRetryCount := 10
 
-	var tasks []*ecs.Task
-	for i := 1; i <= maxRetryCount; i++ {
-		time.Sleep(time.Duration(i) * 1 * time.Second)
-		tasks, err = service.DescribeTasks(tasksToDescribe)
-		if err != nil {
-			if i == maxRetryCount {
-				log.WithField("error", err).Errorf("Couldn't DescribeTasks in %d retries.", i)
-				wg.Done()
-				return
-			} else if strings.Contains(err.Error(), "ThrottlingException") {
-				log.WithField("error", err).WithFields(log.Fields{"retry": i}).Debug("Recdescribing task defenition")
-			} else {
-				log.WithField("error", err).Error("Couldn't DescribeTasks.")
-				continue
-			}
-		} else {
-			break
-		}
+	tasks, err := service.DescribeTasks(tasksToDescribe)
+	if err != nil {
+		wg.Done()
+		return
 	}
 
 	for _, task := range tasks {
@@ -227,7 +212,7 @@ func TrackResourceUsage(tasks []*ecs.Task, wg *sync.WaitGroup) {
 			session.UsageTracked ||
 			(session.Status != sessionmap.SessionStopped && session.Status != sessionmap.SessionGeneric) ||
 			*task.LastStatus != "STOPPED" {
-			// TODO: delete session.Status != sessionmap.SessionGeneric when CloseSession() for generic tasks will be called	
+			// TODO: delete session.Status != sessionmap.SessionGeneric when CloseSession() for generic tasks will be called
 			continue
 		}
 
@@ -299,7 +284,7 @@ func RefreshTaskDefinition(image string) error {
 
 	_, err = service.CreateTaskDefinition(env)
 	if err != nil {
-		l.WithError(err).Debug("Failed to create task definition!")
+		l.WithError(err).Error("Failed to create task definition!")
 		return err
 	}
 
@@ -311,24 +296,12 @@ func RefreshTaskDefinitions() {
 
 	for _, image := range images {
 		l := log.WithField("image", image)
-		maxRetryCount := 10
-		for i := 1; i <= maxRetryCount; i++ {
-			time.Sleep(time.Duration(i) * 1 * time.Second)
-			err := RefreshTaskDefinition(image)
-			if err != nil {
-				if i == maxRetryCount {
-					l.WithError(err).Errorf("Couldn't create task defenition in %d retries. Stopping scaler...", i)
-					os.Exit(1)
-				} else if strings.Contains(err.Error(), "ThrottlingException") {
-					l.WithError(err).WithField("retry", i).Debug("Recreating task defenition")
-				} else {
-					l.WithError(err).Error("Couldn't create task defenition. Stopping scaler...")
-					os.Exit(1)
-				}
-			} else {
-				break
-			}
+		err := RefreshTaskDefinition(image)
+		if err != nil {
+			l.WithError(err).Error("Couldn't create task defenition. Stopping scaler...")
+			os.Exit(1)
 		}
+		time.Sleep(1 * time.Second)
 	}
 }
 
@@ -366,6 +339,9 @@ func AddTaskDefinitions() {
 				err := RefreshTaskDefinition(image)
 				if err == nil {
 					imagesSet[image] = true
+				} else {
+					log.WithField("image", image).WithError(err).Error("Couldn't create task defenition. Stopping scaler...")
+					os.Exit(1)
 				}
 			}
 		}

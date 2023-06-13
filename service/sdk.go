@@ -5,6 +5,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
+	"github.com/zebrunner/esg/utils"
 )
 
 func GetClusterTasks(svc *ecs.ECS) ([]*ecs.Task, error) {
@@ -13,7 +14,7 @@ func GetClusterTasks(svc *ecs.ECS) ([]*ecs.Task, error) {
 		Cluster: &config.Conf.AwsCluster,
 	}
 	for {
-		listTasksResult, err := svc.ListTasks(listTasksInput)
+		listTasksResult, err := utils.RetryThrottling(svc.ListTasks)(listTasksInput)
 		if err != nil {
 			return nil, err
 		}
@@ -25,7 +26,7 @@ func GetClusterTasks(svc *ecs.ECS) ([]*ecs.Task, error) {
 			Cluster: &config.Conf.AwsCluster,
 			Tasks:   listTasksResult.TaskArns,
 		}
-		describeTasksResult, err := svc.DescribeTasks(describeTasksInput)
+		describeTasksResult, err := utils.RetryThrottling(svc.DescribeTasks)(describeTasksInput)
 		if err != nil {
 			log.WithError(err).Warn("Failed to get all tasks. Only partial results returned")
 			break
@@ -48,7 +49,7 @@ func GetClusterTasksArn(svc *ecs.ECS) ([]*string, error) {
 	}
 
 	for {
-		listTasksResult, err := svc.ListTasks(listTasksInput)
+		listTasksResult, err := utils.RetryThrottling(svc.ListTasks)(listTasksInput)
 		if err != nil {
 			return nil, err
 		}
@@ -81,7 +82,7 @@ func GetSessionMapTasks(keys []string, svc *ecs.ECS) []*ecs.Task {
 			Cluster: &config.Conf.AwsCluster,
 			Tasks:   tasksPage,
 		}
-		output, err := svc.DescribeTasks(&describeTasksInput)
+		output, err := utils.RetryThrottling(svc.DescribeTasks)(&describeTasksInput)
 		if err != nil {
 			log.WithError(err).Error("Failed to describe tasks!")
 		}
