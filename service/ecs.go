@@ -391,18 +391,25 @@ out:
 }
 
 func GeneratePreSignedURL(key string) (string, error) {
-	//S3 connection information
-	s3Svc := s3.New(AwsSess)
+        conf := &config.Conf
 
-	conf := &config.Conf
-	if conf.S3AwsAccessKeyID != "" && conf.S3AwsSecretAccessKey != "" && conf.S3Region != "" {
-		creds := credentials.NewStaticCredentials(conf.S3AwsAccessKeyID, conf.S3AwsSecretAccessKey, "")
-		S3Sess := awsSession.Must(awsSession.NewSession(&aws.Config{
-			Credentials: creds,
-			Region:      &conf.S3Region,
-		}))
-		s3Svc = s3.New(S3Sess)
+	s3Session := AwsSess
+	if conf.S3AwsAccessKeyID == "" && conf.S3AwsSecretAccessKey == "" && conf.S3Region != "" {
+		// only s3 region is provided
+                s3Session = awsSession.Must(awsSession.NewSession(&aws.Config{
+                        Region:      &conf.S3Region,
+                }))
+
+	} else if conf.S3AwsAccessKeyID != "" && conf.S3AwsSecretAccessKey != "" && conf.S3Region != "" {
+                creds := credentials.NewStaticCredentials(conf.S3AwsAccessKeyID, conf.S3AwsSecretAccessKey, "")
+                s3Session = awsSession.Must(awsSession.NewSession(&aws.Config{
+                        Credentials: creds,
+                        Region:      &conf.S3Region,
+                }))
 	}
+
+	//S3 connection information
+	s3Svc := s3.New(s3Session)
 
 	//ZEB-5145: ESG: return 404 when requested video/session or execution log is not available
 	res, err := utils.RetryThrottling(s3Svc.ListObjectsV2)(&s3.ListObjectsV2Input{
