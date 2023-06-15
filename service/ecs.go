@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"os"
 
 	"math/rand"
 
@@ -56,14 +57,25 @@ func InitAws() (*awsSession.Session, error) {
 	return sess, nil
 }
 
+func getFamily(name string) (string) {
+        zbrEnv := os.Getenv("ZEBRUNNER_ENV")
+	if zbrEnv != "" {
+		name = zbrEnv + "-" + name
+		log.Debug("name: ", name)
+	}
+	return name
+}
+
 func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDefinition *ecs.TaskDefinition, err error) {
 	svc := ecs.New(AwsSess)
+
+	family := getFamily(environment.TaskDefinitionFamily)
 
 	networkMode := "bridge"
 	input := ecs.RegisterTaskDefinitionInput{
 		NetworkMode:          &networkMode,
 		ContainerDefinitions: environment.ContainerDefinitions(),
-		Family:               &environment.TaskDefinitionFamily,
+		Family:               &family,
 	}
 
 	volumes := []*ecs.Volume{}
@@ -99,9 +111,10 @@ func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDe
 func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (taskArn string, returnErr error) {
 	svc := ecs.New(AwsSess)
 
+	family := getFamily(env.TaskDefinitionFamily)
 	runTaskInput := &ecs.RunTaskInput{
 		Cluster:        &config.Conf.AwsCluster,
-		TaskDefinition: &env.TaskDefinitionFamily,
+		TaskDefinition: &family,
 		Overrides:      &ecs.TaskOverride{ContainerOverrides: env.ContainerOverrides()},
 		PlacementStrategy: []*ecs.PlacementStrategy{
 			{
