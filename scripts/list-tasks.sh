@@ -6,26 +6,20 @@ BASEDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$BASEDIR/../router.env"
 
 #get all cluster's tasks
-TASKS=`aws ecs list-tasks --cluster $AWS_CLUSTER`
+TASKS=`aws ecs list-tasks --cluster $AWS_CLUSTER | jq -r '[.taskArns[]]'`
 
 # parse Arns into array
+readarray -t tasksArns < <(echo ${TASKS} | jq -r '.[]')
 tasks=
-readarray -t tasksArns < <(echo ${TASKS} | jq -j '.[]')
 for taskArn in "${tasksArns[@]}"; do
   # example of the taskArn:
   # arn:aws:ecs:us-east-1:659932254483:task/esg-dev/50d8fcf7a7e24adeb4dca2fda5b600d7
-  taskId=`echo ${taskArn} | cut -d '/' -f 3 | cut -d '"' -f 1`
-
-  if [ "$taskId" = "[" ] || [ "$taskId" = "]" ] || [ "$taskId" = "[]" ]; then
-    continue
-  fi
   if [ -z "$tasks" ]; then
-    tasks="$taskId"
+    tasks="$taskArn"
   else
-    tasks="$tasks\n$taskId"
+    tasks="$tasks\n$taskArn"
   fi
 done
-
 
 if [ ! -z "$tasks" ]; then
   echo "Tasks:"
