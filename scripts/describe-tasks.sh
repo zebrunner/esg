@@ -1,7 +1,7 @@
 #!/bin/bash
 # This script prints information about all tasks
 
-# get base directory
+# get base directory and cluster
 BASEDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # get all tasks
