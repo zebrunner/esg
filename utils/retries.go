@@ -18,7 +18,8 @@ func RetryThrottling[T, R interface{}](executeFunc func(T) (R, error)) func(T) (
 		l := log.WithField("func", funcName)
 
 		retryCount := 10
-		for i := 1; i <= retryCount; i++ {
+		var i int
+		for i = 1; i <= retryCount; i++ {
 			result, err = executeFunc(arg)
 			if err != nil {
 				if strings.Contains(err.Error(), "ThrottlingException") {
@@ -30,13 +31,12 @@ func RetryThrottling[T, R interface{}](executeFunc func(T) (R, error)) func(T) (
 				} else {
 					break
 				}
-
 			} else {
 				return result, err
 			}
 		}
 
-		l.WithError(err).Errorf("Couldn't perform func in %d retries", retryCount)
+		l.WithError(err).Errorf("RetryThrottling: performed %d retries", i-1)
 		return result, err
 	}
 }
