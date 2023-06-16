@@ -26,7 +26,7 @@ const (
         cypressRecorderImage = imageRepo + "cypress-recorder:1.1"
 	appiumImage     = imageRepo + "appium:1.4.10"
 	cloneImage      = imageRepo + "git:latest"
-	entrypointImage = imageRepo + "entrypoint:2.1"
+	entrypointImage = imageRepo + "entrypoint:2.2-beta1"
 	mavenImage      = imageRepo + "m2-repo-carina:1.4"
 )
 
