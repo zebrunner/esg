@@ -44,44 +44,43 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 
 	taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
 
-	/*	includeMitm := caps.Mitm
-			mitmCommand := "mitmdump --help || sleep infinity"
-			var mitmCpu int64 = 32
-			var mitmMemory int64 = 64 // minimal memory to start container
+	includeMitm := caps.Mitm
+	mitmCommand := "mitmdump --help || sleep infinity"
+	var mitmCpu int64 = 32
+	var mitmMemory int64 = 64 // minimal memory to start container
 
-			if includeMitm {
-				// --quiet is a must to run without interactive console
-				//to generate har we have to enable regular dump.mitm output by -w option and place it before har_dump.py!
-		    mitmCommand = "mitmdump --scripts /har_dump.py -w " + logDir + "/dump.mitm --set hardump=" + logDir + "/dump.har"
-				mitmCpu = 512
-				mitmMemory = 512
-				if caps.MitmArgs != "" {
-					//append args only if mitm=true
-					mitmCommand = mitmCommand + " " + caps.MitmArgs
-				}
-				mitmCommand = mitmCommand + " --quiet "
+	if includeMitm {
+		// --quiet is a must to run without interactive console
+		//to generate har we have to enable regular dump.mitm output by -w option and place it before har_dump.py!
+		mitmCommand = "mitmdump --scripts /har_dump.py -w " + logDir + "/dump.mitm --set hardump=" + logDir + "/dump.har"
+		mitmCpu = 512
+		mitmMemory = 512
+		if caps.MitmArgs != "" {
+			//append args only if mitm=true
+			mitmCommand = mitmCommand + " " + caps.MitmArgs
+		}
+		mitmCommand = mitmCommand + " --quiet "
 
-				//TODO: register such capabilities automatically: -Dproxy_host=mitm -Dproxy_port=8080
+		//TODO: register such capabilities automatically: -Dproxy_host=mitm -Dproxy_port=8080
+	}
+	mitmContainer := Container{
+		Name:       "mitm",
+		Image:      mitmImage,
+		cpu:        mitmCpu,
+		memory:     mitmMemory,
+		Privileged: false,
+		Essential:  false,
+		Env: map[string]string{
+			"COMMAND": 	mitmCommand,
+		},
+		Ports: map[string]portMapping{
+			"fileserverPort": {fileserverPort, 0},
+		},
+		Mounts:     []string{logVolume},
+		Command: []string{"-c", "/entrypoint.sh" +  taskLogRedirect},
+		EntryPoint: []string{"/bin/sh"},
+	}
 
-			}
-		  mitmContainer := Container{
-		    Name:       "mitm",
-		    Image:      mitmImage,
-		    cpu:        mitmCpu,
-		    memory:     mitmMemory,
-		    Privileged: false,
-		    Essential:  false,
-		    Env: map[string]string{
-		      "COMMAND": 	mitmCommand,
-		    },
-		    Ports: map[string]portMapping{
-		      "fileserverPort": {fileserverPort, 0},
-		    },
-		    Mounts:     []string{logVolume},
-		    Command: []string{"-c", "/entrypoint.sh" +  taskLogRedirect},
-		    EntryPoint: []string{"/bin/sh"},
-		  }
-	*/
 	entrypointContainer := Container{
 		Name:       "entrypoint",
 		Image:      entrypointImage,
@@ -191,7 +190,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
-		Containers:           []*Container{&entrypointContainer, &browserContainer, &recorderContainer, &uploaderContainer}, //&mitmContainer
+		Containers:           []*Container{&entrypointContainer, &mitmContainer, &browserContainer, &recorderContainer, &uploaderContainer},
 		Capabilities:         caps,
 		Volumes: map[string]volume{
 			entrypointVolume: {ContainerPath: entrypointDir, Driver: "local", Scope: "task", ReadOnly: false},
