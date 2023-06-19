@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
+	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -131,4 +133,42 @@ func ListBrowsers() ([]string, error) {
 	}
 
 	return images, nil
+}
+
+func RefreshIMDSV2Token() error {
+	generateTokenReq, err := http.NewRequest("PUT", "http://169.254.169.254/latest/api/token", nil)
+	if err != nil {
+		return err
+	}
+	// 21600 - 6 hours
+	generateTokenReq.Header.Set("X-aws-ec2-metadata-token-ttl-seconds", "21600")
+	tokenResp, err := http.DefaultClient.Do(generateTokenReq)
+	if err != nil {
+		return err
+	}
+
+	defer tokenResp.Body.Close()
+	body, err := ioutil.ReadAll(tokenResp.Body)
+	if err != nil {
+		return err
+	}
+	token := string(body)
+
+	generateMetadataReq, err := http.NewRequest("GET", "http://169.254.169.254/latest/meta-data/", nil)
+	if err != nil {
+		return err
+	}
+
+	generateMetadataReq.Header.Set("X-aws-ec2-metadata-token", token)
+	_, err = http.DefaultClient.Do(generateMetadataReq)
+	if err != nil {
+		return err
+	}
+
+	err = os.Setenv("TOKEN", token)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

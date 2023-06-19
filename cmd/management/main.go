@@ -349,6 +349,22 @@ func AddTaskDefinitions() {
 	}
 }
 
+func refreshIMDSV2Token(){
+	err := utils.RefreshIMDSV2Token()
+	if err != nil {
+		log.Debug(err)
+	}
+	
+	for {
+		time.Sleep(4 * time.Hour)
+		err := utils.RefreshIMDSV2Token()
+		if err != nil {
+			log.Debug(err)
+		}
+	}
+}
+
+
 func main() {
 	flag.Parse()
 
@@ -381,6 +397,8 @@ func main() {
 	go ClearTasks()
 
 	go AddTaskDefinitions()
+
+	go refreshIMDSV2Token()
 
 	wg.Wait()
 	log.Fatal("Background worker stopped!")
