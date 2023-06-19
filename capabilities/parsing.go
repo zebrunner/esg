@@ -16,9 +16,10 @@ import (
 )
 
 type CapProcessor struct {
-	KeyProcessor   func(string) string
-	ValueProcessor func(interface{}) interface{}
-	Validator      func(interface{}) error
+	KeyProcessor        func(string) string
+	ValueProcessor      func(interface{}) interface{}
+	KeyByValueProcessor func(interface{}) string
+	Validator           func(interface{}) error
 }
 
 func replaceName(name string) func(string) string {
@@ -65,6 +66,9 @@ func applyProcessor(caps map[string]interface{}, processors map[string]*CapProce
 			if processor.ValueProcessor != nil {
 				newValue = processor.ValueProcessor(value)
 			}
+			if processor.KeyByValueProcessor != nil {
+				newKey = processor.KeyByValueProcessor(value)
+			}
 			if processor.Validator != nil {
 				err := processor.Validator(newValue)
 				if err != nil {
@@ -72,11 +76,14 @@ func applyProcessor(caps map[string]interface{}, processors map[string]*CapProce
 				}
 			}
 		}
-		
+
 		if newKey != name {
 			delete(caps, name)
 		}
-		caps[newKey] = newValue
+
+		if newKey != "" {
+			caps[newKey] = newValue
+		}
 	}
 	return nil
 }
@@ -111,6 +118,11 @@ func (c *RequestCaps) Process() error {
 		return err
 	}
 
+	err = processCaps(c.Capabilities.AlwaysMatch)
+	if err != nil {
+		return err
+	}
+
 	err = processOptions(c.Capabilities.AlwaysMatch)
 	if err != nil {
 		return err
@@ -127,26 +139,14 @@ func (c *RequestCaps) Process() error {
 			return err
 		}
 
-		err = processOptions(c.Capabilities.FirstMatch[index])
+		err = processCaps(c.Capabilities.FirstMatch[index])
 		if err != nil {
 			return err
 		}
-	}
 
-	if c.Capabilities.AlwaysMatch != nil && c.Capabilities.AlwaysMatch["browserName"] == "firefox" {
-		version, ok := c.Capabilities.AlwaysMatch["browserVersion"].(string)
-		version = strings.ToLower(version)
-		if ok && (version == "latest" || version == "null" || version == "") {
-			delete(c.Capabilities.AlwaysMatch, "browserVersion")
-		}
-	}
-
-	for _, fmCaps := range c.Capabilities.FirstMatch {
-		version, ok := fmCaps["browserVersion"].(string)
-		name := fmCaps["browserName"]
-		version = strings.ToLower(version)
-		if ok && name == "firefox" && (version == "latest" || version == "null" || version == "") {
-			delete(fmCaps, "browserVersion")
+		err = processOptions(c.Capabilities.FirstMatch[index])
+		if err != nil {
+			return err
 		}
 	}
 
@@ -165,6 +165,11 @@ func (c *RequestCaps) ProcessLegacy() error {
 		return err
 	}
 
+	err = processCaps(c.DesiredCapabilities)
+	if err != nil {
+		return err
+	}
+
 	err = processOptions(c.DesiredCapabilities)
 	if err != nil {
 		return err
@@ -173,6 +178,11 @@ func (c *RequestCaps) ProcessLegacy() error {
 	if c.Capabilities.AlwaysMatch != nil {
 		for k := range c.Capabilities.AlwaysMatch {
 			delete(c.DesiredCapabilities, k)
+		}
+
+		err = processCaps(c.Capabilities.AlwaysMatch)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -190,23 +200,10 @@ func (c *RequestCaps) ProcessLegacy() error {
 				fmCaps[name] = c.DesiredCapabilities[name]
 			}
 		}
-	}
-
-	// Replace latest version
-	if c.Capabilities.AlwaysMatch != nil && c.Capabilities.AlwaysMatch["browserName"] == "firefox" {
-		version, ok := c.Capabilities.AlwaysMatch["browserVersion"].(string)
-		version = strings.ToLower(version)
-		if ok && (version == "latest" || version == "null" || version == "") {
-			delete(c.Capabilities.AlwaysMatch, "browserVersion")
-		}
-	}
-
-	for _, fmCaps := range c.Capabilities.FirstMatch {
-		version, ok := fmCaps["browserVersion"].(string)
-		name := fmCaps["browserName"]
-		version = strings.ToLower(version)
-		if ok && name == "firefox" && (version == "latest" || version == "null" || version == "") {
-			delete(fmCaps, "browserVersion")
+		
+		err = processCaps(fmCaps)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -303,6 +300,30 @@ func processVendorCaps(caps map[string]interface{}) error {
 		processors[name] = &CapProcessor{
 			KeyProcessor: addPrefix(config.VendorPrefix),
 		}
+	}
+
+	err := applyProcessor(caps, processors)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func processCaps(caps map[string]interface{}) error {
+	processors := map[string]*CapProcessor{
+		"browserVersion": {
+			KeyByValueProcessor: func(value interface{}) string {
+				version, ok := value.(string)
+				if ok {
+					version = strings.ToLower(version)
+					if version == "latest" || version == "null" || version == "" {
+						return ""
+					}
+				}
+				return "browserVersion"
+			},
+		},
 	}
 
 	err := applyProcessor(caps, processors)
