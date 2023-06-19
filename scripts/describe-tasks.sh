@@ -7,11 +7,21 @@ BASEDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # get all tasks
 . $BASEDIR/list-tasks.sh
 
+# add region to command if present
+describeTasks="aws ecs describe-tasks --cluster $AWS_CLUSTER"
+describeContainerInstances="aws ecs describe-container-instances --cluster $AWS_CLUSTER"
+describeInstances="aws ec2 describe-instances"
+if [ ! -z "$AWS_REGION" ]; then
+  describeTasks="$describeTasks --region $AWS_REGION"
+  describeContainerInstances="$describeContainerInstances --region $AWS_REGION"
+  describeInstances="$describeInstances --region $AWS_REGION"
+fi
+
 describe() {
   local tasks=$1
   
   # describe tasks by passed taskIds
-  tasksDescriptionResponse=`aws ecs describe-tasks --cluster $AWS_CLUSTER --tasks $tasks | jq '.tasks[] | [[{ key:.taskArn, value:{containerInstanceArn, group,createdAt,desiredStatus,lastStatus,healthStatus, cpu, memory, containers: [.containers[] | (if .networkBindings != null and .networkBindings != [] then {name, lastStatus, networkBindings: [ .networkBindings[] | {containerPort, hostPort}]} else {name, lastStatus} end)]}}] | from_entries ]' | jq -s 'flatten(1)'`
+  tasksDescriptionResponse=`$describeTasks --tasks $tasks | jq '.tasks[] | [[{ key:.taskArn, value:{containerInstanceArn, group,createdAt,desiredStatus,lastStatus,healthStatus, cpu, memory, containers: [.containers[] | (if .networkBindings != null and .networkBindings != [] then {name, lastStatus, networkBindings: [ .networkBindings[] | {containerPort, hostPort}]} else {name, lastStatus} end)]}}] | from_entries ]' | jq -s 'flatten(1)'`
   
   # select unique containerInstanceArn from tasksDescriptionResponse and add them to array
   readarray -t containerInstanceIds < <(echo ${tasksDescriptionResponse} | jq -r '[.[][].containerInstanceArn] | unique | map(select(.!= null)) | .[]')
@@ -26,7 +36,7 @@ describe() {
   done
   
   # create map describe-container-instances call, where key - containerInstanceArn, value - ec2InstanceId
-  arnIdInstanceArrMap=`aws ecs describe-container-instances --cluster $AWS_CLUSTER --container-instances $containerInstances | jq ' .containerInstances[] | [{key:.containerInstanceArn, value: .ec2InstanceId}] | from_entries | [.]' | jq -s 'flatten(1)'`
+  arnIdInstanceArrMap=`$describeContainerInstances --container-instances $containerInstances | jq ' .containerInstances[] | [{key:.containerInstanceArn, value: .ec2InstanceId}] | from_entries | [.]' | jq -s 'flatten(1)'`
 
   # select all ec2InstanceId from arnIdInstanceArrMap and add them to array
   readarray -t instancesIds < <(echo ${arnIdInstanceArrMap} | jq -r '.[][]')
@@ -41,7 +51,7 @@ describe() {
   done
 
   # describe ec2Instances by cluster and parsed ec2 instance ids 
-  instancesDescriptionResponse=`aws ec2 describe-instances --instance-ids $instances | jq -j '.Reservations[].Instances[] | [ [{key:.InstanceId, value: {InstanceType, LaunchTime, Zone: .Placement.AvailabilityZone, PublicIpAddress, PrivateIpAddress, State:.State.Name, Architecture, }}]| from_entries ]' | jq -s 'flatten(1)'`
+  instancesDescriptionResponse=`$describeInstances --instance-ids $instances | jq -j '.Reservations[].Instances[] | [ [{key:.InstanceId, value: {InstanceType, LaunchTime, Zone: .Placement.AvailabilityZone, PublicIpAddress, PrivateIpAddress, State:.State.Name, Architecture, }}]| from_entries ]' | jq -s 'flatten(1)'`
 
   # iterate by every task description, so we can add information about instance
   echo "$tasksDescriptionResponse" | jq -c '.[]' | while read -r taskDescription; do
