@@ -7,10 +7,18 @@ BASEDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # get all instances and cluster
 . $BASEDIR/list-instances.sh
 
+# add region to commands if present
+describeContainerInstances="aws ecs describe-container-instances --cluster $AWS_CLUSTER"
+describeInstances="aws ec2 describe-instances"
+if [ ! -z "$AWS_REGION" ]; then
+  describeContainerInstances="$describeContainerInstances --region $AWS_REGION"
+  describeInstances="$describeInstances --region $AWS_REGION"
+fi
+
 describe() {
   local containerInstances=$1
   # describe container-instances by cluster and passed container-instances ids 
-  containerInstancesDescription=`aws ecs describe-container-instances --cluster $AWS_CLUSTER --container-instances $containerInstances  | jq '.containerInstances[] | [[{key:.containerInstanceArn, value: {ec2InstanceId, status, runningTasksCount, pendingTasksCount, agentConnected, remainingResources: [.remainingResources[] | select(.name == "CPU" or .name == "MEMORY") | {name:.name, integerValue: .integerValue}],registeredResources: [.registeredResources[] | select(.name == "CPU" or .name == "MEMORY") | {name:.name, integerValue: .integerValue}]}}] | from_entries ]' | jq -s 'flatten(1)'` 
+  containerInstancesDescription=`$describeContainerInstances --container-instances $containerInstances  | jq '.containerInstances[] | [[{key:.containerInstanceArn, value: {ec2InstanceId, status, runningTasksCount, pendingTasksCount, agentConnected, remainingResources: [.remainingResources[] | select(.name == "CPU" or .name == "MEMORY") | {name:.name, integerValue: .integerValue}],registeredResources: [.registeredResources[] | select(.name == "CPU" or .name == "MEMORY") | {name:.name, integerValue: .integerValue}]}}] | from_entries ]' | jq -s 'flatten(1)'` 
 
   # select unique ec2InstanceId from containerInstancesDescription and add them to array
   readarray -t instancesIds < <(echo ${containerInstancesDescription} | jq -r '[.[][].ec2InstanceId ] | unique | map(select(.!= null)) | .[]')
@@ -26,7 +34,7 @@ describe() {
   done
 
   # describe ec2Instances by cluster and parsed ec2 instance ids 
-  instancesArr=`aws ec2 describe-instances --instance-ids $instances | jq -j '.Reservations[].Instances[] | [[{key:.InstanceId, value: {InstanceType, LaunchTime, Zone: .Placement.AvailabilityZone, PublicIpAddress, PrivateIpAddress, State:.State.Name, Architecture, }}]| from_entries]' | jq -s 'flatten(1)'`
+  instancesArr=`$describeInstances --instance-ids $instances | jq -j '.Reservations[].Instances[] | [[{key:.InstanceId, value: {InstanceType, LaunchTime, Zone: .Placement.AvailabilityZone, PublicIpAddress, PrivateIpAddress, State:.State.Name, Architecture, }}]| from_entries]' | jq -s 'flatten(1)'`
 
   # iterate by every container instance description, so we can add information about instance
   echo "$containerInstancesDescription" | jq -c '.[]' | while read -r containerInstanceDescription; do

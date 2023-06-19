@@ -5,8 +5,14 @@
 BASEDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$BASEDIR/../router.env"
 
+# add region to command if present
+listInstances="aws ecs list-container-instances --cluster $AWS_CLUSTER"
+if [ ! -z "$AWS_REGION" ]; then
+  listInstances="$listInstances --region $AWS_REGION"
+fi
+
 #get all cluster's container instances
-CONTAINER_INSTANCES=`aws ecs list-container-instances --cluster $AWS_CLUSTER | jq -r '[.containerInstanceArns[]]'`
+CONTAINER_INSTANCES=`$listInstances | jq -r '[.containerInstanceArns[]]'`
 
 # parse Arns into array
 readarray -t containerInstancesArns < <(echo ${CONTAINER_INSTANCES} | jq -r '.[]')

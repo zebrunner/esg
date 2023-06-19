@@ -7,10 +7,16 @@ BASEDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # get all tasks
 . $BASEDIR/list-tasks.sh
 
+# add region to command if present
+describeTasks="aws ecs describe-tasks --cluster $AWS_CLUSTER"
+if [ ! -z "$AWS_REGION" ]; then
+  describeTasks="$describeTasks --region $AWS_REGION"
+fi
+
 describe() {
   local tasks=$1
 
-  aws ecs describe-tasks --cluster $AWS_CLUSTER --tasks $tasks | jq '.tasks[] | [ [{key:.taskArn, value:{containerInstanceArn, group,createdAt,desiredStatus,lastStatus,healthStatus, cpu, memory, containers: [.containers[] | {name,lastStatus}]}}] | from_entries ]'
+  $describeTasks --tasks $tasks | jq '.tasks[] | [ [{key:.taskArn, value:{containerInstanceArn, group,createdAt,desiredStatus,lastStatus,healthStatus, cpu, memory, containers: [.containers[] | {name,lastStatus}]}}] | from_entries ]'
 }
 
 # counter of concatenated tasks arns for describe-tasks command (max 100 per call)
