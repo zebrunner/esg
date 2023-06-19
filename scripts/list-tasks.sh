@@ -5,8 +5,14 @@
 BASEDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$BASEDIR/../router.env"
 
-#get all cluster's tasks
-TASKS=`aws ecs list-tasks --cluster $AWS_CLUSTER | jq -r '[.taskArns[]]'`
+# add region to command if present
+listTasks="aws ecs list-tasks --cluster $AWS_CLUSTER"
+if [ ! -z "$AWS_REGION" ]; then
+  listTasks="$listTasks --region $AWS_REGION"
+fi
+
+# get all cluster's tasks
+TASKS=`$listTasks | jq -r '[.taskArns[]]'`
 
 # parse Arns into array
 readarray -t tasksArns < <(echo ${TASKS} | jq -r '.[]')
