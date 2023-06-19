@@ -165,6 +165,11 @@ func (c *RequestCaps) ProcessLegacy() error {
 		return err
 	}
 
+	err = processCaps(c.DesiredCapabilities)
+	if err != nil {
+		return err
+	}
+
 	err = processOptions(c.DesiredCapabilities)
 	if err != nil {
 		return err
