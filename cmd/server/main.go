@@ -6,6 +6,7 @@ import (
 	"net/http/httputil"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/net/websocket"
@@ -109,6 +110,16 @@ func CreateRouter() *gin.Engine {
 	return r
 }
 
+func refreshIMDSV2Token(){	
+	for {
+		err := utils.RefreshIMDSV2Token()
+		if err != nil {
+			log.Error(err)
+		}
+		time.Sleep(4 * time.Hour)
+	}
+}
+
 func main() {
 	flag.Parse()
 
@@ -140,6 +151,8 @@ func main() {
 		os.Exit(1)
 	}
 	service.AwsSess = aws
+
+	go refreshIMDSV2Token()
 
 	router := CreateRouter()
 	log.Infof("Listening on %s", listen)
