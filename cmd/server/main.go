@@ -110,18 +110,13 @@ func CreateRouter() *gin.Engine {
 	return r
 }
 
-func refreshIMDSV2Token(){
-	err := utils.RefreshIMDSV2Token()
-	if err != nil {
-		log.Debug(err)
-	}
-	
+func refreshIMDSV2Token(){	
 	for {
-		time.Sleep(4 * time.Hour)
 		err := utils.RefreshIMDSV2Token()
 		if err != nil {
-			log.Debug(err)
+			log.Error(err)
 		}
+		time.Sleep(4 * time.Hour)
 	}
 }
 
