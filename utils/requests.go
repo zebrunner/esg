@@ -165,10 +165,5 @@ func RefreshIMDSV2Token() error {
 		return err
 	}
 
-	err = os.Setenv("TOKEN", token)
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
