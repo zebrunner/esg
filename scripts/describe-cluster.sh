@@ -5,4 +5,10 @@
 BASEDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$BASEDIR/../router.env"
 
-aws ecs describe-clusters --cluster $AWS_CLUSTER
+# add region to command if present
+describeCluster="aws ecs describe-clusters --cluster $AWS_CLUSTER"
+if [ ! -z "$AWS_REGION" ]; then
+  describeCluster="$describeCluster --region $AWS_REGION"
+fi
+
+$describeCluster
