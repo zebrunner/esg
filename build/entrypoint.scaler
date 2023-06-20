@@ -63,6 +63,16 @@ if [ ! -z ${SINGLE_TENANT} ]; then
   CMD_ARGS="${CMD_ARGS} -single-tenant ${SINGLE_TENANT}"
 fi
 
+generateToken()(
+  while true; do
+    TOKEN=`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"` > /dev/null 2>&1 \
+        && curl -H "X-aws-ec2-metadata-token: $TOKEN" -v http://169.254.169.254/latest/meta-data/
+    echo "Token generate status: $?"
+    sleep 14400
+  done
+)
+generateToken &
+
 echo "CMD_ARGS: $CMD_ARGS"
 
 ./management $CMD_ARGS
