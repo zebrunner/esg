@@ -26,13 +26,12 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 	entrypointDir := "/opt/entrypoint"
 	entrypointVolume := "entrypoint"
 
-	// for browsers images try to reuse Doensloads to be able to share this content via upload/downbloan endpoint
+	// for browsers images try to reuse Doensloads to be able to share this content via upload/download endpoint
 	logDir := "/home/selenium/Downloads"
 	logVolume := "log"
 
         shmDir := "/dev/shm"
         shmVolume := "shm"
-
 
 	tz, err := caps.GetTimeZone()
 	// Video recorder & artifacts uploader logic
@@ -42,24 +41,22 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 
 	//TODO: handle resolution and video screen size
 
-	taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
-
-	includeMitm := caps.Mitm
+	mitmIncluded := caps.Mitm
 	mitmCommand := "mitmdump --help || sleep infinity"
 	var mitmCpu int64 = 32
 	var mitmMemory int64 = 64 // minimal memory to start container
 
-	if includeMitm {
+	if mitmIncluded {
 		// --quiet is a must to run without interactive console
-		//to generate har we have to enable regular dump.mitm output by -w option and place it before har_dump.py!
-		mitmCommand = "mitmdump --scripts /har_dump.py -w " + logDir + "/dump.mitm --set hardump=" + logDir + "/dump.har"
+		// to generate har we have to enable regular dump.mitm output by -w option and place it before har_dump.py!
+		mitmCommand = "mitmdump --scripts /har_dump.py -w /tmp/dump.mitm --set hardump=/tmp/dump.har"
 		mitmCpu = 512
 		mitmMemory = 512
 		if caps.MitmArgs != "" {
 			//append args only if mitm=true
 			mitmCommand = mitmCommand + " " + caps.MitmArgs
 		}
-		mitmCommand = mitmCommand + " --quiet "
+		mitmCommand = mitmCommand + " --quiet"
 
 		//TODO: register such capabilities automatically: -Dproxy_host=mitm -Dproxy_port=8080
 	}
@@ -71,13 +68,14 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		Privileged: false,
 		Essential:  false,
 		Env: map[string]string{
+			"LOG_DIR": logDir,
 			"COMMAND": 	mitmCommand,
 		},
 		Ports: map[string]portMapping{
 			"fileserverPort": {fileserverPort, 0},
 		},
 		Mounts:     []string{logVolume},
-		Command: []string{"-c", "/entrypoint.sh" +  taskLogRedirect},
+		Command: []string{"-c", "/entrypoint.sh"},
 		EntryPoint: []string{"/bin/sh"},
 	}
 
@@ -95,6 +93,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
 	}
 
+        taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
 	// In future maybe there will be need to disable vnc
 	enableVNC := true
 	browserContainer := Container{
@@ -146,8 +145,9 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		Env: map[string]string{
                         "LOG_DIR": logDir,
 			"TASK_LOG": logDir + "/task.log",
-                        "LOG_FILE":             "session.log",
-			"ENABLE_VIDEO":         "true",
+                        "LOG_FILE": "session.log",
+			"ENABLE_VIDEO": "true",
+			"ENABLE_MITM": strconv.FormatBool(mitmIncluded),
 			"ENABLE_REALTIME_LOGS": "false",
 			"BASIC_AUTH":           "",
 		},
