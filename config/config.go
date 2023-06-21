@@ -105,7 +105,7 @@ func init() {
 	flag.StringVar(&Conf.ExcludeBrowsers, "exclude-browsers", "", "Pattern for excluding browsers from available images")
 
     flag.BoolVar(&Conf.SingleTenant, "single-tenant", false, "Single tenant mode")
-	flag.BoolVar(&Conf.Imdsv2Enabled, "imdsv2-enabled", false, "Session-oriented method")
+	flag.BoolVar(&Conf.Imdsv2Enabled, "imdsv2-enabled", true, "Session-oriented method")
 }
 
 func (c *Config) ParseLogLevel() logrus.Level {
