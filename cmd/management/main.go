@@ -353,9 +353,11 @@ func refreshIMDSV2Token(){
 	for {
 		err := utils.RefreshIMDSV2Token()
 		if err != nil {
-			log.Error(err)
+			log.WithError(err).Error("Failed to generate IMDSV2 token")
+		} else {
+			log.Debug("Successfully generated IMDSV2 token")
 		}
-		time.Sleep(4 * time.Hour)
+		time.Sleep(2 * time.Hour + 30 * time.Minute)
 	}
 }
 
@@ -393,7 +395,9 @@ func main() {
 
 	go AddTaskDefinitions()
 
-	go refreshIMDSV2Token()
+	if config.Conf.Imdsv2Enabled {
+		go refreshIMDSV2Token()
+	}
 
 	wg.Wait()
 	log.Fatal("Background worker stopped!")
