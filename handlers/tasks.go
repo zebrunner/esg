@@ -207,7 +207,7 @@ func Create(c *gin.Context) {
 		resp, err = selenium.StartSession(c.Request.Context(), c.Request.URL, c.Request.Header, requestBody)
 		if err != nil {
 			l.WithError(err).WithField("response", resp).Error("driver startup failed")
-			c.JSON(http.StatusInternalServerError, resp)
+			_ = c.Error(creationError("failed to create driver", err)).SetType(gin.ErrorTypePublic)
 			_, err = service.StopTask(env.TaskId, sessionmap.SessionStartupFailure)
 			if err != nil {
 				l.WithError(err).Error("Failed to stop the task")
