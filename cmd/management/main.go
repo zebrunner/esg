@@ -128,7 +128,7 @@ func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 				if session.Capabilities.MaxTimeout != 0 {
 					maxTimeout = time.Duration(session.Capabilities.MaxTimeout) * time.Second
 				}
-				l.Debug("maxTimeout: ", maxTimeout)
+				l.Trace("maxTimeout: ", maxTimeout)
 
 				if task.CreatedAt != nil && time.Since(*task.CreatedAt) > maxTimeout {
 					l.WithField("maxTimeout", maxTimeout).Warn("Aborting task due to the max timeout")
