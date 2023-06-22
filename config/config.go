@@ -44,6 +44,7 @@ type Config struct {
 	SessionStartupTimeout   time.Duration
 	SessionDeleteTimeout    time.Duration
 	ServiceStartupTimeout   time.Duration
+	DriverStartupTimeout    time.Duration
 	InstanceCooldownTimeout time.Duration
 	MaxTimeout              time.Duration
 
@@ -83,6 +84,7 @@ func init() {
 	flag.DurationVar(&Conf.SessionStartupTimeout, "session-startup-timeout", 180*time.Second, "Session startup timeout in time.Duration format")
 	flag.DurationVar(&Conf.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
 	flag.DurationVar(&Conf.ServiceStartupTimeout, "service-startup-timeout", 10*time.Minute, "Service startup timeout in time.Duration format")
+	flag.DurationVar(&Conf.DriverStartupTimeout, "driver-startup-timeout", 1*time.Minute, "Driver startup timeout in time.Duration format")
 	flag.DurationVar(&Conf.InstanceCooldownTimeout, "instance-cooldown-timeout", 4*time.Minute, "Time after instance start when shutdown is prohibited on scale down in time.Duration format")
 	flag.DurationVar(&Conf.MaxTimeout, "max-timeout", 24*time.Hour, "Maximum valid task/session timeout in time.Duration format")
 

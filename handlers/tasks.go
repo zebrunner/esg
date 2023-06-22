@@ -95,7 +95,7 @@ func Create(c *gin.Context) {
 		ResponseStatus: http.StatusBadRequest,
 		Message:        "Failed to process capabilities. ",
 	}
-	
+
 	if len(taskCaps.DesiredCapabilities) != 0 {
 		err = taskCaps.ProcessLegacy()
 	} else {
@@ -144,9 +144,6 @@ func Create(c *gin.Context) {
 	}
 
 	err = service.StartTask(ctx, env)
-	if err == context.DeadlineExceeded {
-		err = errors.New("Driver startup timed out")
-	}
 
 	if err != nil {
 		l.WithError(err).Error("Service startup failed")
@@ -187,6 +184,8 @@ func Create(c *gin.Context) {
 		json.Unmarshal([]byte(data), &resp)
 		l.WithFields(log.Fields{"resp": resp}).Debug("Response")
 	} else {
+		driverCtx, driverCtxCancel := context.WithTimeout(context.Background(), config.Conf.DriverStartupTimeout)
+		defer driverCtxCancel()
 		u, ok := env.Network.GetUrl("driver")
 		if !ok {
 			l.Error("failed to get url for `driver` service")
@@ -204,8 +203,11 @@ func Create(c *gin.Context) {
 		c.Request.URL.Host, c.Request.URL.Path = u.Host, path.Join(u.Path, c.Request.URL.Path)
 		c.Request.URL.Scheme = "http"
 		l.WithField("serviceUrl", u).Debug("driver starting")
-		resp, err = selenium.StartSession(c.Request.Context(), c.Request.URL, c.Request.Header, requestBody)
+		resp, err = selenium.StartSession(driverCtx, c.Request.URL, c.Request.Header, requestBody)
 		if err != nil {
+			if strings.Contains(err.Error(), context.DeadlineExceeded.Error()) {
+				err = errors.New("Driver startup timed out")
+			}
 			l.WithError(err).WithField("response", resp).Error("driver startup failed")
 			_ = c.Error(creationError("failed to create driver", err)).SetType(gin.ErrorTypePublic)
 			_, err = service.StopTask(env.TaskId, sessionmap.SessionStartupFailure)
@@ -285,12 +287,12 @@ func Proxy(c *gin.Context) {
 		},
 		ErrorHandler: defaultErrorHandler(c),
 		ModifyResponse: func(response *http.Response) error {
-            contentType := response.Header.Get("Content-Type")
-            if contentType != "application/json; charset=utf-8" && contentType != "" {
-                response.Header.Set("Content-Type", "application/json; charset=utf-8")
-            }
-            return nil
-        },
+			contentType := response.Header.Get("Content-Type")
+			if contentType != "application/json; charset=utf-8" && contentType != "" {
+				response.Header.Set("Content-Type", "application/json; charset=utf-8")
+			}
+			return nil
+		},
 	}).ServeHTTP(c.Writer, c.Request)
 }
 
