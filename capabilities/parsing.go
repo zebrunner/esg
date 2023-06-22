@@ -342,13 +342,12 @@ func processCaps(caps map[string]interface{}) error {
 
 func processProxy(caps map[string]interface{}) {
 	for key, value := range caps {
-		key = strings.ToLower(key)
-		if key == "zebrunner:mitm" {
+		if strings.ToLower(key) == "zebrunner:mitm" {
 			if enabled, ok:= value.(bool); !ok || !enabled {
 				return
 			}
-			
-			log.Debug("Found mitm cap")
+
+			log.Debug("Found mitm cap, overriding proxy capabilities object...")
 			// proxy:map[ftpProxy:mitm:8080 httpProxy:mitm:8080 proxyType:MANUAL]
 			caps["proxy"] = map[string]interface{}{
 				"ftpProxy":  "mitm:8080",
