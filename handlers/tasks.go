@@ -126,6 +126,8 @@ func Create(c *gin.Context) {
 		_ = c.Error(creationError("failed to start executor", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
+	env.RawCapabilities = &taskCaps
+	env.Workspace = workspace
 
 	l = log.WithFields(log.Fields{"remote": remote, "family": env.TaskDefinitionFamily})
 	if !config.Conf.SingleTenant {
@@ -143,44 +145,21 @@ func Create(c *gin.Context) {
 		}
 	}
 
-	err = service.StartTask(ctx, env)
-
+	taskSession, err := service.StartTask(ctx, env)
 	if err != nil {
 		l.WithError(err).Error("Service startup failed")
-		_ = c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
+		_ = c.Error(creationError("Failed to start task", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
 
-	l = l.WithField("_taskId", env.TaskId)
-
+	l = l.WithField("_taskId", taskSession.TaskID)
 	l.Info("task started")
-
-	// register session by TaskId to track resources
-	sess := sessionmap.Session{
-		ID:              env.TaskId,
-		RawCapabilities: taskCaps.ToMap(),
-		Capabilities:    *caps,
-		Network:         *env.Network,
-		StartedAt:       time.Now(),
-		AccessedAt:      time.Now(),
-		Status:          sessionmap.SessionQueued,
-		TaskID:          env.TaskId,
-		Workspace:       workspace,
-	}
-	err = sessionmap.Write(env.TaskId, &sess, 0)
-	if err != nil {
-		l.WithError(err).Error("Task not cached!")
-		service.StopTask(env.TaskId, sessionmap.SessionStartupFailure)
-		c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
-		return
-	}
-
 	var resp map[string]interface{}
 	if env.TaskDefinitionFamily == "generic" || strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
 		// TODO: delete status update when CloseSession() for generic tasks will be called
-		sess.Status = sessionmap.SessionGeneric
-		sessionmap.Write(env.TaskId, &sess, 0)
-		data := "{\"taskId\": \"" + env.TaskId + "\"}"
+		taskSession.Status = sessionmap.SessionGeneric
+		sessionmap.Write(taskSession.TaskID, taskSession, 0)
+		data := "{\"taskId\": \"" + taskSession.TaskID + "\"}"
 		json.Unmarshal([]byte(data), &resp)
 		l.WithFields(log.Fields{"resp": resp}).Debug("Response")
 	} else {
@@ -193,7 +172,7 @@ func Create(c *gin.Context) {
 			return
 		}
 
-		requestBody, err := json.Marshal(taskCaps)
+		requestBody, err := json.Marshal(env.RawCapabilities)
 		if err != nil {
 			l.WithError(err).Error("Failed to marshal request")
 			_ = c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
@@ -210,7 +189,7 @@ func Create(c *gin.Context) {
 			}
 			l.WithError(err).WithField("response", resp).Error("driver startup failed")
 			_ = c.Error(creationError("failed to create driver", err)).SetType(gin.ErrorTypePublic)
-			_, err = service.StopTask(env.TaskId, sessionmap.SessionStartupFailure)
+			_, err = service.StopTask(taskSession.TaskID, sessionmap.SessionStartupFailure)
 			if err != nil {
 				l.WithError(err).Error("Failed to stop the task")
 			}
@@ -230,30 +209,28 @@ func Create(c *gin.Context) {
 			return
 		}
 
-		sess := sessionmap.Session{
+		driverSession := sessionmap.Session{
 			ID:              sessionId,
-			RawCapabilities: taskCaps.ToMap(),
-			Capabilities:    *caps,
+			RawCapabilities: taskSession.RawCapabilities,
+			Capabilities:    taskSession.Capabilities,
 			Network:         *env.Network,
 			StartedAt:       time.Now(),
 			AccessedAt:      time.Now(),
 			Status:          sessionmap.SessionActive,
-			TaskID:          env.TaskId,
-			Workspace:       workspace,
+			TaskID:          taskSession.TaskID,
+			Workspace:       taskSession.Workspace,
 		}
-
-		err = sessionmap.Write(sess.ID, &sess, 0)
+		err = sessionmap.Write(driverSession.ID, &driverSession, 0)
 		if err != nil {
 			l.WithError(err).Error("Driver session not cached!")
 			_ = c.Error(creationError("failed to cache driver session", err)).SetType(gin.ErrorTypePublic)
-			_, err = service.StopTask(env.TaskId, sessionmap.SessionStartupFailure)
+			_, err = service.StopTask(driverSession.TaskID, sessionmap.SessionStartupFailure)
 			if err != nil {
 				l.WithError(err).Error("Failed to stop the task. Possible zombie task.")
 			}
 			return
 		}
-		l.WithField("sessionId", sess.ID).WithField("latency", util.SecondsSince(sessionStartTime)).Info("driver started")
-
+		l.WithField("sessionId", driverSession.ID).WithField("latency", util.SecondsSince(sessionStartTime)).Info("driver started")
 	}
 
 	c.JSON(http.StatusOK, resp)
