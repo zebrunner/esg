@@ -180,16 +180,12 @@ func StopLostTasks(keys []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 
 	for _, task := range tasks {
 		if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
-			sessStartup := config.Conf.SessionStartupTimeout.Seconds()
-			if task.CreatedAt != nil && time.Since(*task.CreatedAt).Seconds() > sessStartup {
-				taskId := strings.Split(*task.TaskArn, "/")[2]
-				l := log.WithField("_taskId", taskId)
-				l.WithField("sessionStartupTimeout", sessStartup).Warn("Unrecognized task detected! Aborting")
-
-				_, err := service.StopTask(taskId, sessionmap.SessionFinished)
-				if err != nil {
-					l.WithError(err).Error("Failed to stop the task")
-				}
+			taskId := strings.Split(*task.TaskArn, "/")[2]
+			l := log.WithField("_taskId", taskId)
+			l.Warn("Unrecognized task detected! Aborting")
+			_, err := service.StopTask(taskId, sessionmap.SessionFinished)
+			if err != nil {
+				l.WithError(err).Error("Failed to stop the task")
 			}
 		}
 	}
@@ -349,7 +345,7 @@ func AddTaskDefinitions() {
 	}
 }
 
-func refreshIMDSV2Token(){	
+func refreshIMDSV2Token() {
 	for {
 		err := utils.RefreshIMDSV2Token()
 		if err != nil {
@@ -357,10 +353,9 @@ func refreshIMDSV2Token(){
 		} else {
 			log.Debug("Successfully generated IMDSV2 token")
 		}
-		time.Sleep(2 * time.Hour + 30 * time.Minute)
+		time.Sleep(2*time.Hour + 30*time.Minute)
 	}
 }
-
 
 func main() {
 	flag.Parse()
