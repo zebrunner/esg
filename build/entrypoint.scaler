@@ -60,10 +60,10 @@ if [ ! -z ${EXCLUDE_BROWSERS} ]; then
   CMD_ARGS="${CMD_ARGS} -exclude-browsers ${EXCLUDE_BROWSERS}"
 fi
 if [ ! -z ${SINGLE_TENANT} ]; then
-  CMD_ARGS="${CMD_ARGS} -single-tenant ${SINGLE_TENANT}"
+  CMD_ARGS="${CMD_ARGS} -single-tenant=${SINGLE_TENANT}"
 fi
 if [ ! -z ${IMDSV2_ENABLED} ]; then
-  CMD_ARGS="${CMD_ARGS} -imdsv2-enabled ${IMDSV2_ENABLED}"
+  CMD_ARGS="${CMD_ARGS} -imdsv2-enabled=${IMDSV2_ENABLED}"
 fi
 
 echo "CMD_ARGS: $CMD_ARGS"
