@@ -348,9 +348,8 @@ func processProxy(caps map[string]interface{}) {
 			}
 
 			log.Debug("Found mitm cap, overriding proxy capabilities object...")
-			// proxy:map[ftpProxy:mitm:8080 httpProxy:mitm:8080 proxyType:MANUAL]
+			// proxy:map[sslProxy:mitm:8080 httpProxy:mitm:8080 proxyType:MANUAL]
 			caps["proxy"] = map[string]interface{}{
-				"ftpProxy":  "mitm:8080",
 				"httpProxy": "mitm:8080",
 				"sslProxy":  "mitm:8080",
 				"proxyType": "manual",
