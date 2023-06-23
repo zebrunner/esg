@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
+	"github.com/zebrunner/esg/utils"
 )
 
 var (
@@ -33,7 +34,7 @@ func getInstanceCount(svc *ecs.ECS) (int64, error) {
 	listInstancesInput := &ecs.ListContainerInstancesInput{
 		Cluster: &config.Conf.AwsCluster,
 	}
-	listInstancesOutput, err := svc.ListContainerInstances(listInstancesInput)
+	listInstancesOutput, err := utils.RetryThrottling(svc.ListContainerInstances)(listInstancesInput)
 	if err != nil {
 		return 0, err
 	}
@@ -51,7 +52,7 @@ func getInstanceResources() (*Resources, error) {
 	describeGroupInput := autoscaling.DescribeAutoScalingGroupsInput{
 		AutoScalingGroupNames: []*string{aws.String(config.Conf.AwsAutoScalingGroup)},
 	}
-	describeGroupOutput, err := autoscalingSvc.DescribeAutoScalingGroups(&describeGroupInput)
+	describeGroupOutput, err := utils.RetryThrottling(autoscalingSvc.DescribeAutoScalingGroups)(&describeGroupInput)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +61,7 @@ func getInstanceResources() (*Resources, error) {
 	describeLaunchConfigInput := autoscaling.DescribeLaunchConfigurationsInput{
 		LaunchConfigurationNames: []*string{launchConfiguration},
 	}
-	result, err := autoscalingSvc.DescribeLaunchConfigurations(&describeLaunchConfigInput)
+	result, err := utils.RetryThrottling(autoscalingSvc.DescribeLaunchConfigurations)(&describeLaunchConfigInput)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +71,7 @@ func getInstanceResources() (*Resources, error) {
 	describeInstanceTypeInput := ec2.DescribeInstanceTypesInput{
 		InstanceTypes: []*string{instanceType},
 	}
-	instanceTypesResult, err := ec2Svc.DescribeInstanceTypes(&describeInstanceTypeInput)
+	instanceTypesResult, err := utils.RetryThrottling(ec2Svc.DescribeInstanceTypes)(&describeInstanceTypeInput)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +101,7 @@ func setDesiredCapacity(autoscalingService *autoscaling.AutoScaling, newCapacity
 	describeAutoScalingGroupsInput := &autoscaling.DescribeAutoScalingGroupsInput{
 		AutoScalingGroupNames: []*string{&config.Conf.AwsAutoScalingGroup},
 	}
-	describeAutoScalingGroupsOutput, err := autoscalingService.DescribeAutoScalingGroups(describeAutoScalingGroupsInput)
+	describeAutoScalingGroupsOutput, err := utils.RetryThrottling(autoscalingService.DescribeAutoScalingGroups)(describeAutoScalingGroupsInput)
 	if err != nil {
 		log.WithError(err).Error("Failed to set desired capacity. Can't describe auto scaling group.")
 		return
@@ -132,7 +133,7 @@ func setDesiredCapacity(autoscalingService *autoscaling.AutoScaling, newCapacity
 		AutoScalingGroupName: autoScalingGroup.AutoScalingGroupName,
 		DesiredCapacity:      &newCapacity,
 	}
-	_, err = autoscalingService.UpdateAutoScalingGroup(updateGroupInput)
+	_, err = utils.RetryThrottling(autoscalingService.UpdateAutoScalingGroup)(updateGroupInput)
 	if err != nil {
 		log.WithError(err).Error("Failed to update auto scaling group")
 		return
@@ -270,7 +271,7 @@ func ScaleDown() {
 	describeAutoScalingGroupsInput := &autoscaling.DescribeAutoScalingGroupsInput{
 		AutoScalingGroupNames: []*string{&config.Conf.AwsAutoScalingGroup},
 	}
-	describeAutoScalingGroupsOutput, err := autoscalingSvc.DescribeAutoScalingGroups(describeAutoScalingGroupsInput)
+	describeAutoScalingGroupsOutput, err := utils.RetryThrottling(autoscalingSvc.DescribeAutoScalingGroups)(describeAutoScalingGroupsInput)
 	if err != nil {
 		log.WithError(err).Error("Can't describe auto scaling group.")
 		return
@@ -278,14 +279,14 @@ func ScaleDown() {
 	autoScalingGroup := describeAutoScalingGroupsOutput.AutoScalingGroups[0]
 	minSize := *autoScalingGroup.MinSize
 	desiredCapacity := *autoScalingGroup.DesiredCapacity
-        currentCapacity := desiredCapacity
+	currentCapacity := desiredCapacity
 
 	instances := []*ecs.ContainerInstance{}
 	listInstancesInput := ecs.ListContainerInstancesInput{
 		Cluster: &config.Conf.AwsCluster,
 	}
 	for {
-		listInstancesResult, err := svc.ListContainerInstances(&listInstancesInput)
+		listInstancesResult, err := utils.RetryThrottling(svc.ListContainerInstances)(&listInstancesInput)
 		if err != nil && len(listInstancesResult.ContainerInstanceArns) != 0 {
 			log.WithError(err).Debug("Failed to list instances")
 			return
@@ -309,7 +310,7 @@ func ScaleDown() {
 			Cluster:            &config.Conf.AwsCluster,
 			ContainerInstances: containerInstances,
 		}
-		describeInstancesResult, err := svc.DescribeContainerInstances(&describeInstancesInput)
+		describeInstancesResult, err := utils.RetryThrottling(svc.DescribeContainerInstances)(&describeInstancesInput)
 		if err != nil {
 			log.WithError(err).Error("Failed to describe instances")
 			break
@@ -351,7 +352,7 @@ func ScaleDown() {
 			InstanceId:                     instance.Ec2InstanceId,
 			ShouldDecrementDesiredCapacity: aws.Bool(true),
 		}
-		_, err := autoscalingSvc.TerminateInstanceInAutoScalingGroup(&stopInstanceInput)
+		_, err := utils.RetryThrottling(autoscalingSvc.TerminateInstanceInAutoScalingGroup)(&stopInstanceInput)
 		if err != nil {
 			l.WithError(err).Error("Failed to stop instance")
 		}

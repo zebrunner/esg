@@ -23,10 +23,10 @@ const (
 	uploaderImage   = imageRepo + "uploader:2.2"
 	mitmImage       = imageRepo + "mitmproxy:1.0"
 	recorderImage   = imageRepo + "recorder:1.1"
-        cypressRecorderImage = imageRepo + "cypress-recorder:1.0"
+        cypressRecorderImage = imageRepo + "cypress-recorder:1.1"
 	appiumImage     = imageRepo + "appium:1.4.10"
 	cloneImage      = imageRepo + "git:latest"
-	entrypointImage = imageRepo + "entrypoint:2.1"
+	entrypointImage = imageRepo + "entrypoint:2.2"
 	mavenImage      = imageRepo + "m2-repo-carina:1.4"
 )
 
@@ -61,9 +61,10 @@ type ExecutionEnvironment struct {
 	Endpoints            map[string]*Endpoint
 	Containers           []*Container
 	Capabilities         *capabilities.Capabilities
+	RawCapabilities		 *capabilities.RequestCaps
 	Volumes              map[string]volume
 	Network              *NetworkConfiguration
-	TaskId               string
+	Workspace			 string
 }
 
 func (e *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefinition {

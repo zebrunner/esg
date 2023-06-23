@@ -89,6 +89,13 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
                 },
 	}
 
+        // declare hardcoded vars without ability to override:
+        entrypointContainer.Env["CYPRESS"] = "true"
+	//TODO: move into func
+	if strings.EqualFold(conf.LogLevel, "debug") || strings.EqualFold( conf.LogLevel, "trace") {
+		entrypointContainer.Env["DEBUG"] = "true"
+	}
+
 	cypressContainer := Container{
 		Name:       "browser",
 		Image:      browserImage,
@@ -124,13 +131,15 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		},
 	}
 
-        //TODO: do we need sharing vars? it is required for the real time logs only (?!)
 	if caps.EnvVariables != nil {
 		for v, k := range caps.EnvVariables {
 			//fmt.Printf("var: %v; %v\n", v, k)
 			cypressContainer.Env[v] = k
 		}
 	}
+	// declare hardcoded vars without ability to override:
+	cypressContainer.Env["CYPRESS"] = "true"
+	cypressContainer.Env["CYPRESS_VIDEO"] = "false"
 
         //basic auth header for executor-logs service
         basicAuthHeader := "Authorization: Basic " + b64.StdEncoding.EncodeToString([]byte(conf.ZebrunnerIntegrationUser+":"+conf.ZebrunnerIntegrationPassword))
@@ -142,7 +151,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		Name:        "recorder",
 		Image:       cypressRecorderImage,
 		cpu:         recorderCpu,
-		memory:      recorderMemory,
+		memory:      2048,
 		Privileged:  false,
 		Essential:   false,
                 Env: map[string]string{

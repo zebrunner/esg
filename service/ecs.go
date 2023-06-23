@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
+
+	"math/rand"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/client"
@@ -18,7 +21,7 @@ import (
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
 	sessionmap "github.com/zebrunner/esg/sessinonmap"
-	"math/rand"
+	"github.com/zebrunner/esg/utils"
 )
 
 const (
@@ -54,14 +57,25 @@ func InitAws() (*awsSession.Session, error) {
 	return sess, nil
 }
 
+func getFamily(name string) string {
+	zbrEnv := os.Getenv("ZEBRUNNER_ENV")
+	if zbrEnv != "" {
+		name = zbrEnv + "-" + name
+		log.Debug("name: ", name)
+	}
+	return name
+}
+
 func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDefinition *ecs.TaskDefinition, err error) {
 	svc := ecs.New(AwsSess)
+
+	family := getFamily(environment.TaskDefinitionFamily)
 
 	networkMode := "bridge"
 	input := ecs.RegisterTaskDefinitionInput{
 		NetworkMode:          &networkMode,
 		ContainerDefinitions: environment.ContainerDefinitions(),
-		Family:               &environment.TaskDefinitionFamily,
+		Family:               &family,
 	}
 
 	volumes := []*ecs.Volume{}
@@ -86,7 +100,7 @@ func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDe
 
 	input.Volumes = volumes
 
-	resultTaskDefinition, err := svc.RegisterTaskDefinition(&input)
+	resultTaskDefinition, err := utils.RetryThrottling(svc.RegisterTaskDefinition)(&input)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create task definition: %v", err)
 	}
@@ -97,9 +111,10 @@ func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDe
 func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (taskArn string, returnErr error) {
 	svc := ecs.New(AwsSess)
 
+	family := getFamily(env.TaskDefinitionFamily)
 	runTaskInput := &ecs.RunTaskInput{
 		Cluster:        &config.Conf.AwsCluster,
-		TaskDefinition: &env.TaskDefinitionFamily,
+		TaskDefinition: &family,
 		Overrides:      &ecs.TaskOverride{ContainerOverrides: env.ContainerOverrides()},
 		PlacementStrategy: []*ecs.PlacementStrategy{
 			{
@@ -242,7 +257,7 @@ func DescribeTask(taskArn string) (*ecs.DescribeTasksOutput, error) {
 		},
 	}
 
-	result, err := svc.DescribeTasks(input)
+	result, err := utils.RetryThrottling(svc.DescribeTasks)(input)
 	return result, err
 }
 
@@ -258,7 +273,7 @@ func DescribeTasks(taskArns []string) ([]*ecs.Task, error) {
 			Tasks:   aws.StringSlice(tasks),
 		}
 
-		result, err := svc.DescribeTasks(input)
+		result, err := utils.RetryThrottling(svc.DescribeTasks)(input)
 		if err != nil {
 			return nil, err
 		}
@@ -325,7 +340,7 @@ func setEnvironmentNetwork(env *environment.ExecutionEnvironment, task *ecs.Task
 	return nil
 }
 
-func StartTask(ctx context.Context, env *environment.ExecutionEnvironment) error {
+func StartTask(ctx context.Context, env *environment.ExecutionEnvironment) (*sessionmap.Session, error) {
 	var outputErr error
 	startTime := time.Now()
 out:
@@ -350,18 +365,37 @@ out:
 		}
 
 		taskId := strings.Split(taskArn, "/")[2]
-		env.TaskId = taskId
-		l = l.WithField("_taskId", taskId)
+		// caching task as soon as possible
+		sess := sessionmap.Session{
+			ID:              taskId,
+			RawCapabilities: env.RawCapabilities.ToMap(),
+			Capabilities:    *env.Capabilities,
+			Network:         *env.Network,
+			StartedAt:       time.Now(),
+			AccessedAt:      time.Now(),
+			Status:          sessionmap.SessionQueued,
+			TaskID:          taskId,
+			Workspace:       env.Workspace,
+		}
+		l = l.WithField("_taskId", sess.TaskID)
+
+		err = sessionmap.Write(sess.TaskID, &sess, 0)
+		if err != nil {
+			outputErr = fmt.Errorf("task not cached!: %v", err)
+			l.WithError(outputErr).Error()
+			StopTask(sess.TaskID, sessionmap.SessionStartupFailure)
+			continue
+		}
+
 		if env.TaskDefinitionFamily == "generic" {
 			l.Debug("do not wait for generic task startup.")
-			outputErr = nil
-			return outputErr
+			return &sess, nil
 		}
 
 		req := taskWaiter.waitFor(ctx, taskArn)
 		select {
 		case err := <-req.errorChan:
-			StopTask(taskId, sessionmap.SessionStartupFailure)
+			StopTask(sess.TaskID, sessionmap.SessionStartupFailure)
 			l.WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to wait until Task is running and healthy")
 			outputErr = err
 			continue
@@ -369,41 +403,46 @@ out:
 			err = setEnvironmentNetwork(env, task)
 			l.Debug("setEnvironmentNetwork latency: ", time.Since(startTime))
 			if err != nil {
-				StopTask(taskId, sessionmap.SessionStartupFailure)
+				StopTask(sess.TaskID, sessionmap.SessionStartupFailure)
 				l.WithField("latency", time.Since(startTime)).WithError(err).Error("Failed to get service info.")
 				outputErr = fmt.Errorf("failed to get service info: %v", err)
 				continue
 			}
-
-			outputErr = nil
-			return outputErr
+			return &sess, nil
 		case <-req.ctx.Done():
 			outputErr = errors.New("failed to wait until task is running. context deadline")
-			StopTask(taskId, sessionmap.SessionStartupFailure)
+			StopTask(sess.TaskID, sessionmap.SessionStartupFailure)
 			taskWaiter.stopWait(taskArn)
 			l.WithField("latency", time.Since(startTime)).WithError(err).Warn("failed to wait until task is running")
 		}
 	}
 
-	return outputErr
+	return nil, outputErr
 }
 
 func GeneratePreSignedURL(key string) (string, error) {
-	//S3 connection information
-	s3Svc := s3.New(AwsSess)
-
 	conf := &config.Conf
-	if conf.S3AwsAccessKeyID != "" && conf.S3AwsSecretAccessKey != "" && conf.S3Region != "" {
+
+	s3Session := AwsSess
+	if conf.S3AwsAccessKeyID == "" && conf.S3AwsSecretAccessKey == "" && conf.S3Region != "" {
+		// only s3 region is provided
+		s3Session = awsSession.Must(awsSession.NewSession(&aws.Config{
+			Region: &conf.S3Region,
+		}))
+
+	} else if conf.S3AwsAccessKeyID != "" && conf.S3AwsSecretAccessKey != "" && conf.S3Region != "" {
 		creds := credentials.NewStaticCredentials(conf.S3AwsAccessKeyID, conf.S3AwsSecretAccessKey, "")
-		S3Sess := awsSession.Must(awsSession.NewSession(&aws.Config{
+		s3Session = awsSession.Must(awsSession.NewSession(&aws.Config{
 			Credentials: creds,
 			Region:      &conf.S3Region,
 		}))
-		s3Svc = s3.New(S3Sess)
 	}
 
+	//S3 connection information
+	s3Svc := s3.New(s3Session)
+
 	//ZEB-5145: ESG: return 404 when requested video/session or execution log is not available
-	res, err := s3Svc.ListObjectsV2(&s3.ListObjectsV2Input{
+	res, err := utils.RetryThrottling(s3Svc.ListObjectsV2)(&s3.ListObjectsV2Input{
 		Bucket: &config.Conf.S3Bucket,
 		Prefix: &key,
 	})
