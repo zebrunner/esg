@@ -61,9 +61,10 @@ type ExecutionEnvironment struct {
 	Endpoints            map[string]*Endpoint
 	Containers           []*Container
 	Capabilities         *capabilities.Capabilities
+	RawCapabilities		 *capabilities.RequestCaps
 	Volumes              map[string]volume
 	Network              *NetworkConfiguration
-	TaskId               string
+	Workspace			 string
 }
 
 func (e *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefinition {
