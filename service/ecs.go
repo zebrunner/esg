@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
-	"os"
 
 	"math/rand"
 
@@ -57,8 +57,8 @@ func InitAws() (*awsSession.Session, error) {
 	return sess, nil
 }
 
-func getFamily(name string) (string) {
-        zbrEnv := os.Getenv("ZEBRUNNER_ENV")
+func getFamily(name string) string {
+	zbrEnv := os.Getenv("ZEBRUNNER_ENV")
 	if zbrEnv != "" {
 		name = zbrEnv + "-" + name
 		log.Debug("name: ", name)
@@ -340,7 +340,7 @@ func setEnvironmentNetwork(env *environment.ExecutionEnvironment, task *ecs.Task
 	return nil
 }
 
-func StartTask(ctx context.Context, env *environment.ExecutionEnvironment) error {
+func StartTask(ctx context.Context, env *environment.ExecutionEnvironment) (*sessionmap.Session, error) {
 	var outputErr error
 	startTime := time.Now()
 out:
@@ -365,18 +365,37 @@ out:
 		}
 
 		taskId := strings.Split(taskArn, "/")[2]
-		env.TaskId = taskId
-		l = l.WithField("_taskId", taskId)
+		// caching task as soon as possible
+		sess := sessionmap.Session{
+			ID:              taskId,
+			RawCapabilities: env.RawCapabilities.ToMap(),
+			Capabilities:    *env.Capabilities,
+			Network:         *env.Network,
+			StartedAt:       time.Now(),
+			AccessedAt:      time.Now(),
+			Status:          sessionmap.SessionQueued,
+			TaskID:          taskId,
+			Workspace:       env.Workspace,
+		}
+		l = l.WithField("_taskId", sess.TaskID)
+
+		err = sessionmap.Write(sess.TaskID, &sess, 0)
+		if err != nil {
+			outputErr = fmt.Errorf("task not cached!: %v", err)
+			l.WithError(outputErr).Error()
+			StopTask(sess.TaskID, sessionmap.SessionStartupFailure)
+			continue
+		}
+
 		if env.TaskDefinitionFamily == "generic" {
 			l.Debug("do not wait for generic task startup.")
-			outputErr = nil
-			return outputErr
+			return &sess, nil
 		}
 
 		req := taskWaiter.waitFor(ctx, taskArn)
 		select {
 		case err := <-req.errorChan:
-			StopTask(taskId, sessionmap.SessionStartupFailure)
+			StopTask(sess.TaskID, sessionmap.SessionStartupFailure)
 			l.WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to wait until Task is running and healthy")
 			outputErr = err
 			continue
@@ -384,41 +403,39 @@ out:
 			err = setEnvironmentNetwork(env, task)
 			l.Debug("setEnvironmentNetwork latency: ", time.Since(startTime))
 			if err != nil {
-				StopTask(taskId, sessionmap.SessionStartupFailure)
+				StopTask(sess.TaskID, sessionmap.SessionStartupFailure)
 				l.WithField("latency", time.Since(startTime)).WithError(err).Error("Failed to get service info.")
 				outputErr = fmt.Errorf("failed to get service info: %v", err)
 				continue
 			}
-
-			outputErr = nil
-			return outputErr
+			return &sess, nil
 		case <-req.ctx.Done():
 			outputErr = errors.New("failed to wait until task is running. context deadline")
-			StopTask(taskId, sessionmap.SessionStartupFailure)
+			StopTask(sess.TaskID, sessionmap.SessionStartupFailure)
 			taskWaiter.stopWait(taskArn)
 			l.WithField("latency", time.Since(startTime)).WithError(err).Warn("failed to wait until task is running")
 		}
 	}
 
-	return outputErr
+	return nil, outputErr
 }
 
 func GeneratePreSignedURL(key string) (string, error) {
-        conf := &config.Conf
+	conf := &config.Conf
 
 	s3Session := AwsSess
 	if conf.S3AwsAccessKeyID == "" && conf.S3AwsSecretAccessKey == "" && conf.S3Region != "" {
 		// only s3 region is provided
-                s3Session = awsSession.Must(awsSession.NewSession(&aws.Config{
-                        Region:      &conf.S3Region,
-                }))
+		s3Session = awsSession.Must(awsSession.NewSession(&aws.Config{
+			Region: &conf.S3Region,
+		}))
 
 	} else if conf.S3AwsAccessKeyID != "" && conf.S3AwsSecretAccessKey != "" && conf.S3Region != "" {
-                creds := credentials.NewStaticCredentials(conf.S3AwsAccessKeyID, conf.S3AwsSecretAccessKey, "")
-                s3Session = awsSession.Must(awsSession.NewSession(&aws.Config{
-                        Credentials: creds,
-                        Region:      &conf.S3Region,
-                }))
+		creds := credentials.NewStaticCredentials(conf.S3AwsAccessKeyID, conf.S3AwsSecretAccessKey, "")
+		s3Session = awsSession.Must(awsSession.NewSession(&aws.Config{
+			Credentials: creds,
+			Region:      &conf.S3Region,
+		}))
 	}
 
 	//S3 connection information
