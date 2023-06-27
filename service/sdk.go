@@ -95,26 +95,14 @@ func GetSessionMapTasks(keys []string, svc *ecs.ECS) []*ecs.Task {
 	return tasks
 }
 
-func DescribeContainerInstances(svc *ecs.ECS) ([]*ecs.ContainerInstance, error) {
-	listInput := ecs.ListContainerInstancesInput{
-		Cluster: &config.Conf.AwsCluster,
-	}
-
+func DescribeContainerInstances(containerInstanceIdPtrs []*string, svc *ecs.ECS) ([]*ecs.ContainerInstance, error) {
+	pages := paginate(containerInstanceIdPtrs, 100)
 	containerInstances := make([]*ecs.ContainerInstance, 0)
-	for {
-		listResult, err := utils.RetryThrottling(svc.ListContainerInstances)(&listInput)
-		if err != nil {
-			log.WithField("list", listInput).WithField("error", err).Error("Failed to ListContainerInstances!")
-			return nil, err
-		}
 
-		if len(listResult.ContainerInstanceArns) == 0 {
-			return containerInstances, nil
-		}
-
+	for _, page := range pages {
 		describeInput := ecs.DescribeContainerInstancesInput{
 			Cluster:            &config.Conf.AwsCluster,
-			ContainerInstances: listResult.ContainerInstanceArns,
+			ContainerInstances: page,
 		}
 
 		describeResult, err := utils.RetryThrottling(svc.DescribeContainerInstances)(&describeInput)
@@ -123,13 +111,9 @@ func DescribeContainerInstances(svc *ecs.ECS) ([]*ecs.ContainerInstance, error) 
 			return nil, err
 		}
 
-		containerInstances = append(containerInstances, describeResult.ContainerInstances...)
+		log.Debug("DescribeContainerInstances failures: ", describeResult.Failures)
 
-		if listResult.NextToken != nil {
-			listInput.NextToken = listResult.NextToken
-		} else {
-			break
-		}
+		containerInstances = append(containerInstances, describeResult.ContainerInstances...)
 	}
 
 	return containerInstances, nil
