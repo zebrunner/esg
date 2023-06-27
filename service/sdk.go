@@ -146,10 +146,8 @@ func DescribeInstances(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) ([]*ec2.Ins
 	return ec2Instances, nil
 }
 
-// DescribeInstancesStatus returns healthyInstanceIdPtrs and unhealthyInstanceIdPtrs (where InstanceStatus or SystemStatus is SummaryStatusImpaired)
-// not implemented because of an error: "UnauthorizedOperation: You are not authorized to perform this operation.\n\tstatus code: 403
 func DescribeInstancesStatus(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) ([]*string, []*string, error) {
-	describeInput := ec2.DescribeInstanceStatusInput{
+	input := &ec2.DescribeInstanceStatusInput{
 		InstanceIds: ec2InstanceIdPtrs,
 	}
 
@@ -157,7 +155,7 @@ func DescribeInstancesStatus(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) ([]*s
 	unhealthyInstanceIdPtrs := make([]*string, 0)
 
 	for {
-		statusOutput, err := utils.RetryThrottling(ec2Svc.DescribeInstanceStatus)(&describeInput)
+		statusOutput, err := utils.RetryThrottling(ec2Svc.DescribeInstanceStatus)(input)
 		if err != nil {
 			log.WithField("error", err).Error("Failed to DescribeInstancesStatus!")
 			return nil, nil, err
@@ -176,7 +174,7 @@ func DescribeInstancesStatus(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) ([]*s
 		}
 
 		if statusOutput.NextToken != nil {
-			describeInput.NextToken = statusOutput.NextToken
+			input.NextToken = statusOutput.NextToken
 		} else {
 			break
 		}
@@ -186,7 +184,7 @@ func DescribeInstancesStatus(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) ([]*s
 	return healthyInstanceIdPtrs, unhealthyInstanceIdPtrs, nil
 }
 
-func StopInstances(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) error {
+func TerminateInstances(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) error {
 	// ec2 constraints: Up to 1000 instance IDs. We recommend breaking up this request into smaller batches
 	// paginating only up to 100 instance IDs
 	pages := paginate(ec2InstanceIdPtrs, 100)
@@ -194,8 +192,8 @@ func StopInstances(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) error {
 		input := &ec2.TerminateInstancesInput{
 			InstanceIds: page,
 		}
-		
-		_, err := ec2Svc.TerminateInstances(input)
+
+		_, err := utils.RetryThrottling(ec2Svc.TerminateInstances)(input)
 		if err != nil {
 			return err
 		}

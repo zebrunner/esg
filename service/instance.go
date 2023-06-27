@@ -69,7 +69,7 @@ func (w *instanceWatchWorker) start() {
 
 		containerInstances, err := DescribeContainerInstances(containerInstanceIdPtrs, svc)
 		if err != nil {
-			log.WithError(err).Error("instanceWatchWorker: couldn't describe container instances.")
+			log.WithError(err).Error("instanceWatchWorker: failed to describe container instances.")
 			continue
 		}
 
@@ -95,12 +95,19 @@ func (w *instanceWatchWorker) start() {
 
 		healthyInstanceIdPtrs, unhealthyInstanceIdPtrs, err := DescribeInstancesStatus(ec2InstanceIdPtrs, ec2Svc)
 		if err != nil {
-			log.WithError(err).Error("instanceWatchWorker couldn't describe instances status.")
+			log.WithError(err).Error("instanceWatchWorker: failed to describe instances status.")
+			if len(healthyInstanceIdPtrs) == 0 && len(unhealthyInstanceIdPtrs) == 0 {
+				continue
+			}
 		}
 
 		if len(unhealthyInstanceIdPtrs) != 0 {
 			// stop unhealthy instances
-			StopInstances(unhealthyInstanceIdPtrs, ec2Svc)
+			err := TerminateInstances(unhealthyInstanceIdPtrs, ec2Svc)
+			if err != nil {
+				log.WithError(err).Error("instanceWatchWorker: failed to terminate instances.")
+				break
+			}
 
 			// send err to errorChan, so new task on new instance could be recreated
 			for _, ec2InstanceId := range unhealthyInstanceIdPtrs {
@@ -109,7 +116,7 @@ func (w *instanceWatchWorker) start() {
 					taskArns := containerInstanceArnTaskArnMap[containerInstanceArn]
 					for _, taskArn := range taskArns {
 						req := w.requests[taskArn]
-						req.errorChan <- errors.New("failed to get instance. InstanceStatus - impaired")
+						req.errorChan <- errors.New("found unhealty instance. InstanceStatus - impaired")
 						close(req.errorChan)
 						close(req.responseChan)
 						delete(w.requests, taskArn)
