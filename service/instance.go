@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -92,21 +93,37 @@ func (w *instanceWatchWorker) start() {
 			continue
 		}
 
-		// healthyInstanceIdPtrs, unhealthyInstanceIdPtrs, err := DescribeInstancesStatus(ec2InstanceIdPtrs, ec2Svc)
-		// if err != nil {
-		// 	log.WithError(err).Error("instanceWatchWorker couldn't describe instances status.")
-		// }
+		healthyInstanceIdPtrs, unhealthyInstanceIdPtrs, err := DescribeInstancesStatus(ec2InstanceIdPtrs, ec2Svc)
+		if err != nil {
+			log.WithError(err).Error("instanceWatchWorker couldn't describe instances status.")
+		}
 
-		// if len(unhealthyInstanceIdPtrs) != 0{
-		//  stop unhealthy instances
-		// 	send err to errorChan, so new task on new instance could be recreated
-		// }
+		if len(unhealthyInstanceIdPtrs) != 0 {
+			// stop unhealthy instances
+			StopInstances(unhealthyInstanceIdPtrs, ec2Svc)
 
-		// if len(healthyInstanceIdPtrs) == 0 {
-		// 	continue
-		// }
+			// send err to errorChan, so new task on new instance could be recreated
+			for _, ec2InstanceId := range unhealthyInstanceIdPtrs {
+				containerInstanceArns := instanceIdTaskArnMap[*ec2InstanceId]
+				for _, containerInstanceArn := range containerInstanceArns {
+					taskArns := containerInstanceArnTaskArnMap[containerInstanceArn]
+					for _, taskArn := range taskArns {
+						req := w.requests[taskArn]
+						req.errorChan <- errors.New("failed to get instance. InstanceStatus - impaired")
+						close(req.errorChan)
+						close(req.responseChan)
+						delete(w.requests, taskArn)
+					}
+				}
+			}
+		}
+
+		if len(healthyInstanceIdPtrs) == 0 {
+			continue
+		}
+
 		// describing only healthy instances...
-		ec2Instances, err := DescribeInstances(ec2InstanceIdPtrs, ec2Svc)
+		ec2Instances, err := DescribeInstances(healthyInstanceIdPtrs, ec2Svc)
 		if err != nil {
 			log.Error("instanceWatchWorker: failed to describe ec2 instances")
 			continue
@@ -121,7 +138,7 @@ func (w *instanceWatchWorker) start() {
 					req.responseChan <- ec2Instance
 					close(req.errorChan)
 					close(req.responseChan)
-					delete(w.requests, taskArn)	
+					delete(w.requests, taskArn)
 				}
 			}
 		}

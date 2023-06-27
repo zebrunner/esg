@@ -186,6 +186,24 @@ func DescribeInstancesStatus(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) ([]*s
 	return healthyInstanceIdPtrs, unhealthyInstanceIdPtrs, nil
 }
 
+func StopInstances(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) error {
+	// ec2 constraints: Up to 1000 instance IDs. We recommend breaking up this request into smaller batches
+	// paginating only up to 100 instance IDs
+	pages := paginate(ec2InstanceIdPtrs, 100)
+	for _, page := range pages {
+		input := &ec2.TerminateInstancesInput{
+			InstanceIds: page,
+		}
+		
+		_, err := ec2Svc.TerminateInstances(input)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func paginate[T interface{}](l []T, size int) [][]T {
 	numPages := int(math.Ceil(float64(len(l)) / float64(size)))
 	pages := make([][]T, numPages)
