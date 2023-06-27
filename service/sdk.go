@@ -1,7 +1,10 @@
 package service
 
 import (
+	"math"
+
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
@@ -90,4 +93,126 @@ func GetSessionMapTasks(keys []string, svc *ecs.ECS) []*ecs.Task {
 	}
 
 	return tasks
+}
+
+func DescribeContainerInstances(svc *ecs.ECS) ([]*ecs.ContainerInstance, error) {
+	listInput := ecs.ListContainerInstancesInput{
+		Cluster: &config.Conf.AwsCluster,
+	}
+
+	containerInstances := make([]*ecs.ContainerInstance, 0)
+	for {
+		listResult, err := utils.RetryThrottling(svc.ListContainerInstances)(&listInput)
+		if err != nil {
+			log.WithField("list", listInput).WithField("error", err).Error("Failed to ListContainerInstances!")
+			return nil, err
+		}
+
+		if len(listResult.ContainerInstanceArns) == 0 {
+			return containerInstances, nil
+		}
+
+		describeInput := ecs.DescribeContainerInstancesInput{
+			Cluster:            &config.Conf.AwsCluster,
+			ContainerInstances: listResult.ContainerInstanceArns,
+		}
+
+		describeResult, err := utils.RetryThrottling(svc.DescribeContainerInstances)(&describeInput)
+		if err != nil {
+			log.WithField("describeResult", describeResult).WithField("error", err).Error("Failed to DescribeContainerInstances!")
+			return nil, err
+		}
+
+		containerInstances = append(containerInstances, describeResult.ContainerInstances...)
+
+		if listResult.NextToken != nil {
+			listInput.NextToken = listResult.NextToken
+		} else {
+			break
+		}
+	}
+
+	return containerInstances, nil
+}
+
+func DescribeInstances(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) ([]*ec2.Instance, error) {
+	var ec2Instances []*ec2.Instance
+	for {
+		input := ec2.DescribeInstancesInput{
+			InstanceIds: ec2InstanceIdPtrs,
+		}
+
+		ec2Result, err := utils.RetryThrottling(ec2Svc.DescribeInstances)(&input)
+		if err != nil {
+			log.WithField("error", err).Error("Failed to DescribeInstances!")
+			return nil, err
+		}
+
+		for _, reservation := range ec2Result.Reservations {
+			ec2Instances = append(ec2Instances, reservation.Instances...)
+		}
+
+		if ec2Result.NextToken != nil {
+			input.NextToken = ec2Result.NextToken
+		} else {
+			break
+		}
+	}
+
+	return ec2Instances, nil
+}
+
+// DescribeInstancesStatus returns healthyInstanceIdPtrs and unhealthyInstanceIdPtrs (where InstanceStatus or SystemStatus is SummaryStatusImpaired)
+// not implemented because of an error: "UnauthorizedOperation: You are not authorized to perform this operation.\n\tstatus code: 403
+func DescribeInstancesStatus(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) ([]*string, []*string, error) {
+	describeInput := ec2.DescribeInstanceStatusInput{
+		InstanceIds: ec2InstanceIdPtrs,
+	}
+
+	healthyInstanceIdPtrs := make([]*string, 0)
+	unhealthyInstanceIdPtrs := make([]*string, 0)
+
+	for {
+		statusOutput, err := utils.RetryThrottling(ec2Svc.DescribeInstanceStatus)(&describeInput)
+		if err != nil {
+			log.WithField("error", err).Error("Failed to DescribeInstancesStatus!")
+			return nil, nil, err
+		}
+
+		statuses := statusOutput.InstanceStatuses
+		for _, instanceStatus := range statuses {
+			log.Debug("instance statuses: ", *instanceStatus.InstanceStatus.Status, ", ", *instanceStatus.SystemStatus.Status)
+			if *instanceStatus.InstanceStatus.Status == ec2.SummaryStatusImpaired ||
+				*instanceStatus.SystemStatus.Status == ec2.SummaryStatusImpaired {
+				unhealthyInstanceIdPtrs = append(unhealthyInstanceIdPtrs, instanceStatus.InstanceId)
+				log.Debug("Found unhealthy instance: ", *instanceStatus.InstanceId)
+			} else {
+				healthyInstanceIdPtrs = append(unhealthyInstanceIdPtrs, instanceStatus.InstanceId)
+			}
+		}
+
+		if statusOutput.NextToken != nil {
+			describeInput.NextToken = statusOutput.NextToken
+		} else {
+			break
+		}
+
+	}
+
+	return healthyInstanceIdPtrs, unhealthyInstanceIdPtrs, nil
+}
+
+func paginate[T interface{}](l []T, size int) [][]T {
+	numPages := int(math.Ceil(float64(len(l)) / float64(size)))
+	pages := make([][]T, numPages)
+	for i := 0; i < numPages; i++ {
+		left := i * size
+		right := (i + 1) * size
+		if right > len(l) {
+			right = len(l)
+		}
+		pages[i] = l[left:right]
+	}
+
+	return pages
 }
