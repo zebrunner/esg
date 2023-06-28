@@ -46,6 +46,8 @@ func (w *waitWorker) start() {
 		for k, v := range w.requests {
 			select {
 			case <-v.ctx.Done():
+				close(v.responseChan)
+				close(v.errorChan)
 				delete(w.requests, k)
 			default:
 				continue
@@ -138,12 +140,4 @@ func (w *waitWorker) waitFor(ctx context.Context, taskId string) *waitRequest {
 	mutex.Unlock()
 
 	return &req
-}
-
-func (w *waitWorker) stopWait(taskId string) {
-	req := w.requests[taskId]
-	if req != nil {
-		close(req.responseChan)
-		delete(w.requests, taskId)
-	}
 }
