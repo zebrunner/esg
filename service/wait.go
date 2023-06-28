@@ -46,8 +46,6 @@ func (w *waitWorker) start() {
 		for k, v := range w.requests {
 			select {
 			case <-v.ctx.Done():
-				close(v.responseChan)
-				close(v.errorChan)
 				delete(w.requests, k)
 			default:
 				continue
@@ -99,8 +97,6 @@ func (w *waitWorker) start() {
 			if *task.LastStatus == "STOPPED" {
 				log.Error("Task stopped: ", *task)
 				req.errorChan <- errors.New("failed to start task: " + *task.StoppedReason)
-				close(req.responseChan)
-				close(req.errorChan)
 				delete(w.requests, *task.TaskArn)
 			}
 
@@ -113,13 +109,9 @@ func (w *waitWorker) start() {
 			case "UNHEALTHY":
 				log.Error("Task unhealthy: ", *task)
 				req.errorChan <- errors.New("failed to start task. HealthStatus - UNHEALTHY")
-				close(req.responseChan)
-				close(req.errorChan)
 				delete(w.requests, *task.TaskArn)
 			case "HEALTHY":
 				req.responseChan <- task
-				close(req.responseChan)
-				close(req.errorChan)
 				delete(w.requests, *task.TaskArn)
 			}
 		}
