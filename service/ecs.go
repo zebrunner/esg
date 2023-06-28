@@ -410,9 +410,10 @@ out:
 			}
 			return &sess, nil
 		case <-req.ctx.Done():
+			// don't close chans from receiver side
+			// https://go.dev/tour/concurrency/4#:~:text=Note%3A%20Only%20the%20sender%20should,to%20terminate%20a%20range%20loop.
 			outputErr = errors.New("failed to wait until task is running. context deadline")
 			StopTask(sess.TaskID, sessionmap.SessionStartupFailure)
-			taskWaiter.stopWait(taskArn)
 			l.WithField("latency", time.Since(startTime)).WithError(err).Warn("failed to wait until task is running")
 		}
 	}
