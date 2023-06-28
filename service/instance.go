@@ -43,8 +43,6 @@ func (w *instanceWatchWorker) start() {
 		for k, v := range w.requests {
 			select {
 			case <-v.ctx.Done():
-				close(v.errorChan)
-				close(v.responseChan)
 				delete(w.requests, k)
 			default:
 				continue
@@ -117,8 +115,6 @@ func (w *instanceWatchWorker) start() {
 					for _, taskArn := range taskArns {
 						req := w.requests[taskArn]
 						req.errorChan <- errors.New("found unhealty instance. InstanceStatus - impaired")
-						close(req.errorChan)
-						close(req.responseChan)
 						delete(w.requests, taskArn)
 					}
 				}
@@ -143,8 +139,6 @@ func (w *instanceWatchWorker) start() {
 				for _, taskArn := range taskArns {
 					req := w.requests[taskArn]
 					req.responseChan <- ec2Instance
-					close(req.errorChan)
-					close(req.responseChan)
 					delete(w.requests, taskArn)
 				}
 			}
