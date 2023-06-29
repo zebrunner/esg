@@ -29,8 +29,8 @@ func init() {
 
 func Ping(c *gin.Context) {
 	c.JSON(http.StatusOK, map[string]interface{}{
-		"uptime":  time.Since(startTime),
-		"version": "1.0.0", // TODO: Get current version for project
+		"uptime, seconds":  time.Since(startTime).Seconds(),
+		"version": Version,
 	})
 }
 

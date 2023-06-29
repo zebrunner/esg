@@ -10,9 +10,8 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/cachemaps/sessionmap"
 	"github.com/zebrunner/esg/config"
-
-	sessionmap "github.com/zebrunner/esg/sessinonmap"
 	//	"github.com/zebrunner/esg/zebrunner"
 )
 
@@ -69,7 +68,7 @@ func CloseSession(session *sessionmap.Session, stopReason sessionmap.StoppedReas
 	if !config.Conf.SingleTenant {
 		l = l.WithField("workspace", session.Workspace)
 	}
-	
+
 	conf := &config.Conf
 	client := http.Client{}
 	sessionUrl, ok := session.Network.GetUrl("driver")
