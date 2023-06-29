@@ -13,7 +13,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/zebrunner/esg/cachemaps/sessionmap"
 	"github.com/zebrunner/esg/cachemaps/taskmap"
 	"github.com/zebrunner/esg/config"
 )
@@ -116,7 +115,7 @@ func getStoppedReason(task ecs.Task) string {
 	return "Launch finished"
 }
 
-func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
+func AbortTask(taskCache *taskmap.Task, task *ecs.Task) {
 	automationRunId := getAutomationRunId(*task)
 	if automationRunId == "" {
 		return
@@ -136,7 +135,7 @@ func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
 	}
 	if !conf.SingleTenant {
 		// add workspace/tenant to the url
-		requestUrl.Host = sess.Workspace + "." + requestUrl.Host
+		requestUrl.Host = taskCache.Workspace + "." + requestUrl.Host
 	}
 
 	stopReason := getStoppedReason(*task)
@@ -172,9 +171,9 @@ func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
 		}).Error("Failed to abort task!")
 		return
 	} else {
-		l := log.WithFields(log.Fields{"sessionId": sess.ID, "_taskId": sess.TaskID, "comment": stopReason})
+		l := log.WithFields(log.Fields{"sessionId": taskCache.CurrentSessionID, "_taskId": taskCache.ID, "comment": stopReason})
 		if !conf.SingleTenant {
-			l = l.WithField("workspace", sess.Workspace)
+			l = l.WithField("workspace", taskCache.Workspace)
 		}
 		l.Trace("task aborted")
 	}

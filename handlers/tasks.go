@@ -295,8 +295,6 @@ func Proxy(c *gin.Context) {
 		},
 	}).ServeHTTP(c.Writer, c.Request)
 }
-
-// Which id is really passed? task's or session's
 func CloseSession(c *gin.Context) {
 	sessionId := c.Param("session")
 	sess, err := getSession(sessionId)
@@ -332,6 +330,7 @@ func AbortTask(c *gin.Context) {
 	if !config.Conf.SingleTenant {
 		l = l.WithField("workspace", task.Workspace)
 	}
+
 	err = service.StopTask(task.ID, taskmap.TaskAborted)
 	if err != nil {
 		l.WithError(err).Warn("Failed to stop task")

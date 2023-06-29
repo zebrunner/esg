@@ -43,6 +43,9 @@ func ClearTasks() {
 			continue
 		}
 
+		if len(taskIds) > 0 {
+			log.WithField("keys:", taskIds).Debug("cached task keys")
+		}
 		wg.Add(1)
 		go StopLostTasks(taskIds, svc, &wg)
 
@@ -56,53 +59,6 @@ func ClearTasks() {
 		}
 
 		wg.Wait()
-	}
-}
-
-func StopIdleTasks() {
-	for {
-		time.Sleep(30 * time.Second)
-
-		keys, err := sessionmap.Keys()
-		if err != nil {
-			log.WithError(err).Error("Failed to get list of sessionmap keys!")
-			continue
-		}
-
-		if len(keys) > 0 {
-			log.WithField("keys", keys).Trace("cached session keys")
-		}
-
-		for _, key := range keys {
-			session, _ := sessionmap.Find(key, false)
-
-			if session == nil {
-				log.WithField("session key", key).Warn("StopIdleTasks: Not found")
-				continue
-			}
-
-			if session.Status != sessionmap.SessionActive {
-				continue
-			}
-
-			l := log.WithFields(log.Fields{"_taskId": session.TaskID, "sessionId": session.ID})
-			if !config.Conf.SingleTenant {
-				l = l.WithField("workspace", session.Workspace)
-			}
-
-			l.Debug("StopIdleTasks: analyzing session for idleTimeout")
-
-			idleTime := time.Since(session.AccessedAt).Seconds()
-			if idleTime > session.IdleTimeout {
-				selenium.CloseSession(session, sessionmap.SessionIdleTimeout)
-				err := service.StopTask(session.TaskID, taskmap.TaskAborted)
-				if err != nil {
-					l.WithError(err).Error("Failed to stop idle driver task!")
-				} else {
-					l.Warn("task aborted due to the session idle timeout")
-				}
-			}
-		}
 	}
 }
 
@@ -213,22 +169,28 @@ func TrackResourceUsage(tasks []*ecs.Task, wg *sync.WaitGroup) {
 	// analyze tasks response
 	for _, task := range tasks {
 		taskId := strings.Split(*task.TaskArn, "/")[2]
+		l := log.WithFields(log.Fields{"_taskId": taskId})
 
-		// don't track tasks that:
-		// 1) are not cached;
-		// 2) already tracked;
-		// 3) don't have the stop or generic status, because later we'll need a stop reason
-		// 4) are not STOPPED
+		// tracking task only when execution is stopped
+		if *task.LastStatus != "STOPPED" {
+			continue
+		}
+
+		// for tracking task should be cached
 		taskCache, _ := taskmap.Find(taskId)
-		if taskCache != nil ||
-			taskCache.UsageTracked ||
-			(taskCache.Status != taskmap.TaskStopped && taskCache.Status != taskmap.TaskGeneric) ||
-			*task.LastStatus != "STOPPED" {
+		if taskCache == nil {
+			l.Debug("Can't find non tracked stopped task in cache")
+			continue
+		}
+
+		// for tracking task should be:
+		// 1) not tracked
+		// 2) with stop or generic(workaround) status, because later we'll need a stop reason
+		if taskCache.UsageTracked || !(taskCache.Status == taskmap.TaskStopped || taskCache.Status == taskmap.TaskGeneric) {
 			// TODO: delete taskCache.Status != taskmap.TaskGeneric when CloseGeneric() for generic tasks will be called
 			continue
 		}
 
-		l := log.WithFields(log.Fields{"_taskId": taskCache.ID})
 		if !config.Conf.SingleTenant {
 			l = l.WithField("workspace", taskCache.Workspace)
 		}
@@ -257,18 +219,61 @@ func TrackResourceUsage(tasks []*ecs.Task, wg *sync.WaitGroup) {
 			zebrunner.TrackResourcesUsage(taskCache, stoppedAt.Sub(startedAt))
 		}
 
-		if !strings.HasPrefix(taskCache.Capabilities.Image, "public.ecr.aws/zebrunner/cypress-") {
+		if !strings.HasPrefix(taskCache.Capabilities.Image, "public.ecr.aws/zebrunner/cypress-") && taskCache.Status == taskmap.TaskGeneric {
 			// #503: суpress tests aborted automatically
 			// automatic abort of the public.ecr.aws/zebrunner/cypress-* should be prohibited as execution is control by parent cyserver process
-			sessionCache, err := sessionmap.Find(taskCache.CurrentSessionID, true)
-			if err != nil {
-				l.WithError(err).Warn("TrackResourceUsage(): failed to find session cache for abort")
-			}
-			zebrunner.AbortTask(sessionCache, task)
+			zebrunner.AbortTask(taskCache, task)
 		}
 
 	}
 	wg.Done()
+}
+
+func StopIdleTasks() {
+	for {
+		time.Sleep(30 * time.Second)
+
+		keys, err := sessionmap.Keys()
+		if err != nil {
+			log.WithError(err).Error("Failed to get list of sessionmap keys!")
+			continue
+		}
+
+		if len(keys) > 0 {
+			log.WithField("keys", keys).Trace("cached session keys")
+		}
+
+		for _, key := range keys {
+			session, _ := sessionmap.Find(key, false)
+
+			if session == nil {
+				log.WithField("session key", key).Warn("StopIdleTasks: Not found")
+				continue
+			}
+
+			if session.Status != sessionmap.SessionActive {
+				continue
+			}
+
+			l := log.WithFields(log.Fields{"_taskId": session.TaskID, "sessionId": session.ID})
+			if !config.Conf.SingleTenant {
+				l = l.WithField("workspace", session.Workspace)
+			}
+
+			l.Debug("StopIdleTasks: analyzing session for idleTimeout")
+
+			idleTime := time.Since(session.AccessedAt).Seconds()
+			if idleTime > session.IdleTimeout {
+				selenium.CloseSession(session, sessionmap.SessionIdleTimeout)
+				err := service.StopTask(session.TaskID, taskmap.TaskAborted)
+				if err != nil {
+					l.WithError(err).Error("Failed to stop idle driver task!")
+				} else {
+					l.Warn("task aborted due to the session idle timeout")
+				}
+			}
+		}
+	}
 }
 
 func ScaleCluster() {
@@ -410,6 +415,8 @@ func main() {
 	go ScaleDownCluster()
 
 	go ClearTasks()
+
+	go StopIdleTasks()
 
 	go AddTaskDefinitions()
 
