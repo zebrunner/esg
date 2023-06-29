@@ -4,17 +4,18 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/aws/aws-sdk-go/service/ecs"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
-	log "github.com/sirupsen/logrus"
-	"github.com/zebrunner/esg/config"
+	"github.com/aws/aws-sdk-go/service/ecs"
 
-	sessionmap "github.com/zebrunner/esg/sessinonmap"
+	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/cachemaps/sessionmap"
+	"github.com/zebrunner/esg/cachemaps/taskmap"
+	"github.com/zebrunner/esg/config"
 )
 
 const (
@@ -22,7 +23,7 @@ const (
 	ABORT_API_PATH = "/api/reporting/api/project-test-runs/abort"
 )
 
-func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration) {
+func TrackResourcesUsage(taskCache *taskmap.Task, d time.Duration) {
 	conf := &config.Conf
 	if conf.ZebrunnerHost == "" {
 		// #527: don't write error message if zebrunner url is empty in the configuration
@@ -34,19 +35,19 @@ func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration) {
 		return
 	}
 
-	platformName := strings.ToLower(sess.Capabilities.PlatformName)
+	platformName := strings.ToLower(taskCache.Capabilities.PlatformName)
 	if platformName == "" || platformName == "generic" || platformName == "any" {
 		platformName = "linux"
 	}
 
 	if !conf.SingleTenant {
 		// add workspace/tenant to the url
-		requestUrl.Host = sess.Workspace + "." + requestUrl.Host
+		requestUrl.Host = taskCache.Workspace + "." + requestUrl.Host
 	}
 	requestUrl.Path = USAGE_API_PATH
 	requestBody := map[string]interface{}{
-		"cpu":      strconv.FormatInt(sess.Capabilities.Cpu, 10) + " millicores",
-		"memory":   strconv.FormatInt(sess.Capabilities.Memory, 10) + " MiB",
+		"cpu":      strconv.FormatInt(taskCache.Capabilities.Cpu, 10) + " millicores",
+		"memory":   strconv.FormatInt(taskCache.Capabilities.Memory, 10) + " MiB",
 		"instant":  time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 		"seconds":  d.Seconds(),
 		"platform": platformName,
@@ -85,9 +86,9 @@ func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration) {
 		}).Error("Failed to track task resource usage!")
 		return
 	} else {
-		l := log.WithFields(log.Fields{"sessionId": sess.ID, "_taskId": sess.TaskID, "request body": requestBody})
+		l := log.WithFields(log.Fields{"_taskId": taskCache.ID, "request body": requestBody})
 		if !conf.SingleTenant {
-			l = l.WithField("workspace", sess.Workspace)
+			l = l.WithField("workspace", taskCache.Workspace)
 		}
 		l.Info("shape recorded")
 	}

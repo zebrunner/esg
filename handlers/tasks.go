@@ -16,12 +16,13 @@ import (
 	"github.com/aerokube/util"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/cachemaps/sessionmap"
+	"github.com/zebrunner/esg/cachemaps/taskmap"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
 	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/service"
-	sessionmap "github.com/zebrunner/esg/sessinonmap"
 	"github.com/zebrunner/esg/utils"
 	"golang.org/x/net/websocket"
 )
@@ -47,6 +48,29 @@ func getSession(id string) (*sessionmap.Session, error) {
 	}
 
 	return session, nil
+}
+
+func getTask(id string) (*taskmap.Task, error) {
+	task, err := taskmap.Find(id)
+	if err != nil {
+		return nil, &utils.SeleniumError{
+			ResponseStatus: http.StatusNotFound,
+			SeleniumCode:   "invalid session id",
+			Message:        "Session not found",
+			Err:            err,
+		}
+	}
+
+	if task.Status == taskmap.TaskStopped {
+		return nil, &utils.SeleniumError{
+			ResponseStatus: http.StatusNotFound,
+			SeleniumCode:   "invalid session id",
+			Message:        string(task.StopReason),
+			Err:            err,
+		}
+	}
+
+	return task, nil
 }
 
 func Create(c *gin.Context) {
@@ -145,21 +169,24 @@ func Create(c *gin.Context) {
 		}
 	}
 
-	taskSession, err := service.StartTask(ctx, env)
+	taskCache, err := service.StartTask(ctx, env)
 	if err != nil {
 		l.WithError(err).Error("Service startup failed")
 		_ = c.Error(creationError("Failed to start task", err)).SetType(gin.ErrorTypePublic)
 		return
 	}
 
-	l = l.WithField("_taskId", taskSession.TaskID)
+	l = l.WithField("_taskId", taskCache.ID)
 	l.Info("task started")
 	var resp map[string]interface{}
 	if env.TaskDefinitionFamily == "generic" || strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
 		// TODO: delete status update when CloseSession() for generic tasks will be called
-		taskSession.Status = sessionmap.SessionGeneric
-		sessionmap.Write(taskSession.TaskID, taskSession, 0)
-		data := "{\"taskId\": \"" + taskSession.TaskID + "\"}"
+		taskCache.Status = taskmap.TaskGeneric
+		err := taskmap.Write(taskCache.ID, taskCache, 0)
+		if err != nil {
+			l.WithError(err).Error("Failed to update generic's status")
+		}
+		data := "{\"taskId\": \"" + taskCache.ID + "\"}"
 		json.Unmarshal([]byte(data), &resp)
 		l.WithFields(log.Fields{"resp": resp}).Debug("Response")
 	} else {
@@ -185,13 +212,13 @@ func Create(c *gin.Context) {
 		resp, err = selenium.StartSession(driverCtx, c.Request.URL, c.Request.Header, requestBody)
 		if err != nil {
 			if strings.Contains(err.Error(), context.DeadlineExceeded.Error()) {
-				err = errors.New("Driver startup timed out")
+				err = errors.New("driver startup timed out")
 			}
 			l.WithError(err).WithField("response", resp).Error("driver startup failed")
 			_ = c.Error(creationError("failed to create driver", err)).SetType(gin.ErrorTypePublic)
-			_, err = service.StopTask(taskSession.TaskID, sessionmap.SessionStartupFailure)
+			err = service.StopTask(taskCache.ID, taskmap.SessiongStartupFailure)
 			if err != nil {
-				l.WithError(err).Error("Failed to stop the task")
+				l.WithError(err).Warn("Failed to stop task")
 			}
 			return
 		}
@@ -200,37 +227,33 @@ func Create(c *gin.Context) {
 		if err != nil {
 			l.WithError(err).Error("Failed to get sessionId from driver response")
 			_ = c.Error(creationError("Failed to create driver", err)).SetType(gin.ErrorTypePublic)
+			err = service.StopTask(taskCache.ID, taskmap.SessiongStartupFailure)
+			if err != nil {
+				l.WithError(err).Warn("Failed to stop task")
+			}
 			return
 		}
 
 		if sessionId == "" {
 			l.WithError(err).Error("Failed to get sessionId from driver response. sessionId is empty")
 			_ = c.Error(creationError("failed to create driver", err)).SetType(gin.ErrorTypePublic)
-			return
-		}
-
-		driverSession := sessionmap.Session{
-			ID:              sessionId,
-			RawCapabilities: taskSession.RawCapabilities,
-			Capabilities:    taskSession.Capabilities,
-			Network:         *env.Network,
-			StartedAt:       time.Now(),
-			AccessedAt:      time.Now(),
-			Status:          sessionmap.SessionActive,
-			TaskID:          taskSession.TaskID,
-			Workspace:       taskSession.Workspace,
-		}
-		err = sessionmap.Write(driverSession.ID, &driverSession, 0)
-		if err != nil {
-			l.WithError(err).Error("Driver session not cached!")
-			_ = c.Error(creationError("failed to cache driver session", err)).SetType(gin.ErrorTypePublic)
-			_, err = service.StopTask(driverSession.TaskID, sessionmap.SessionStartupFailure)
+			err = service.StopTask(taskCache.ID, taskmap.SessiongStartupFailure)
 			if err != nil {
-				l.WithError(err).Error("Failed to stop the task. Possible zombie task.")
+				l.WithError(err).Warn("Failed to stop task")
 			}
 			return
 		}
-		l.WithField("sessionId", driverSession.ID).WithField("latency", util.SecondsSince(sessionStartTime)).Info("driver started")
+
+		sessionCache, err := sessionmap.CreateEntity(sessionId, env, taskCache)
+		if err != nil {
+			_ = c.Error(creationError("failed to cache session", err)).SetType(gin.ErrorTypePublic)
+			err = service.StopTask(taskCache.ID, taskmap.SessiongStartupFailure)
+			if err != nil {
+				l.WithError(err).Warn("Failed to stop task")
+			}
+			return
+		}
+		l.WithField("sessionId", sessionCache.ID).WithField("latency", util.SecondsSince(sessionStartTime)).Info("driver started")
 	}
 
 	c.JSON(http.StatusOK, resp)
@@ -273,6 +296,7 @@ func Proxy(c *gin.Context) {
 	}).ServeHTTP(c.Writer, c.Request)
 }
 
+// Which id is really passed? task's or session's
 func CloseSession(c *gin.Context) {
 	sessionId := c.Param("session")
 	sess, err := getSession(sessionId)
@@ -282,16 +306,13 @@ func CloseSession(c *gin.Context) {
 		return
 	}
 	l := log.WithField("_taskId", sess.TaskID)
-	// if session id were passed
-	if sess.ID != sess.TaskID {
-		selenium.CloseSession(sess, sessionmap.SessionFinished)
-		l = l.WithField("sessionId", sess.ID)
-	}
-	_, err = service.StopTask(sess.TaskID, sessionmap.SessionFinished)
+
+	selenium.CloseSession(sess, sessionmap.SessionFinished)
+	l = l.WithField("sessionId", sess.ID)
+
+	err = service.StopTask(sess.TaskID, taskmap.TaskFinished)
 	if err != nil {
-		l.WithError(err).Error("CloseSession: Failed to stop the task")
-		// _ = c.Error(err).SetType(gin.ErrorTypePublic)
-		// return
+		l.WithError(err).Warn("Failed to stop task")
 	}
 
 	l.Info("task closed")
@@ -299,29 +320,21 @@ func CloseSession(c *gin.Context) {
 }
 
 func AbortTask(c *gin.Context) {
-	sessionId := c.Param("task")
-	sess, err := getSession(sessionId)
+	taskId := c.Param("task")
+	task, err := getTask(taskId)
 	if err != nil {
-		log.WithField("id", sessionId).WithError(err).Warn("Task/Session not found!")
+		log.WithField("id", taskId).WithError(err).Warn("Task/Session not found!")
 		//there is no sense to proceed as task is already finished/removed and not present in the sessionmap
 		return
 	}
 
-	l := log.WithField("_taskId", sess.TaskID)
+	l := log.WithField("_taskId", task.ID)
 	if !config.Conf.SingleTenant {
-		l = l.WithField("workspace", sess.Workspace)
+		l = l.WithField("workspace", task.Workspace)
 	}
-
-	// if session id were passed
-	if sess.ID != sess.TaskID {
-		selenium.CloseSession(sess, sessionmap.SessionAborted)
-		l = l.WithField("sessionId", sess.ID)
-	}
-	_, err = service.StopTask(sess.TaskID, sessionmap.SessionAborted)
+	err = service.StopTask(task.ID, taskmap.TaskAborted)
 	if err != nil {
-		l.WithError(err).Error("AbortTask: Failed to stop the task")
-		// _ = c.Error(err).SetType(gin.ErrorTypePublic)
-		// return
+		l.WithError(err).Warn("Failed to stop task")
 	}
 
 	l.Info("task aborted")

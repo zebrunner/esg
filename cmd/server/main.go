@@ -110,7 +110,7 @@ func CreateRouter() *gin.Engine {
 	return r
 }
 
-func refreshIMDSV2Token(){	
+func refreshIMDSV2Token() {
 	for {
 		err := utils.RefreshIMDSV2Token()
 		if err != nil {
@@ -118,7 +118,7 @@ func refreshIMDSV2Token(){
 		} else {
 			log.Debug("Successfully generated IMDSV2 token")
 		}
-		time.Sleep(2 * time.Hour + 30 * time.Minute)
+		time.Sleep(2*time.Hour + 30*time.Minute)
 	}
 }
 
@@ -131,21 +131,22 @@ func main() {
 		DisableColors: true,
 	})
 
-	db, err := config.InitDBConnection(config.Conf.DbConnectionString)
+	err := config.InitDBConnection(config.Conf.DbConnectionString)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to init DB client! Stopping router...")
 		os.Exit(1)
 	}
-	config.DbConnection = db
-	defer db.Close()
 
-	rdb, err := config.InitCache()
+	defer config.DbConnection.Close()
+
+	err = config.InitCache()
 	if err != nil {
 		log.WithError(err).Fatal("Failed to init Redis client! Stopping router...")
 		os.Exit(1)
 	}
-	config.RedisConnection = rdb
-	defer rdb.Close()
+	
+	defer config.RedisSessionsConnection.Close()
+	defer config.RedisTasksConnection.Close()
 
 	aws, err := service.InitAws()
 	if err != nil {
