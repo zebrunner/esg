@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"net/http"
+	"fmt"
 	"os"
 	"strings"
 
@@ -12,6 +12,7 @@ import (
 )
 
 func APIError(c *gin.Context) {
+	log.Debug("triggered APIError handler")
 	c.Next()
 	if c.Errors.Last() == nil {
 		return
@@ -23,31 +24,33 @@ func APIError(c *gin.Context) {
 		}).WithError(err).Warn("API error received")
 	}
 
-	status := http.StatusInternalServerError
-	message := "Internal server error happened. All error details collected in logs"
-	var meta interface{}
+	var apiErr *utils.APIError
+
 	publicError := c.Errors.ByType(gin.ErrorTypePublic).Last()
 	if publicError != nil {
-		httpError, ok := publicError.Err.(*utils.HTTPError)
+		passedApiErr, ok := publicError.Err.(*utils.APIError)
 		if ok {
-			status = httpError.Status
-			message = httpError.Message
+			apiErr = passedApiErr
 		}
-		meta = publicError.Meta
 	}
+
+	if apiErr == nil {
+		log.Debug("APIError(): intercepted error is either not public or not Api Error type. Setting default values...")
+		apiErr = utils.UnknownApiErr("Internal server error happened. All error details collected in logs")
+	}
+
 	log.WithFields(log.Fields{
 		"client":   c.ClientIP(),
-		"status":   status,
-		"response": message,
+		"status":   apiErr.Status,
+		"response": apiErr.Message,
 	}).Warn("Error response response")
-	c.JSON(status, utils.APIErrorResponse{
-		Error:   message,
-		Payload: meta,
-	})
+
+	apiErr.SendEncodedResponse(c)
 }
 
 func SeleniumError(c *gin.Context) {
 	// Add sessionID to gin context for logging purposes
+	log.Debug("triggered SeleniumError handler")
 	path := c.Request.URL.Path
 	if strings.HasPrefix(path, "/wd/hub/session") && len(strings.Split(path, "/")) >= 3 {
 		sessionID := strings.Split(path, "/")[2]
@@ -67,68 +70,62 @@ func SeleniumError(c *gin.Context) {
 		l.Debug("Selenium error received")
 	}
 
-	status := http.StatusInternalServerError
-	message := "Internal server error happened. All error details collected in logs"
-	seleniumCode := "unknown error"
-	var meta interface{}
+	var seErr *utils.SeleniumError
 
 	publicError := c.Errors.ByType(gin.ErrorTypePublic).Last()
 	if publicError != nil {
-		seleniumErr, ok := publicError.Err.(*utils.SeleniumError)
+		passedSeErr, ok := publicError.Err.(*utils.SeleniumError)
 		if ok {
-			message = seleniumErr.Message
-			seleniumCode = seleniumErr.SeleniumCode
-			status = seleniumErr.ResponseStatus
+			seErr = passedSeErr
 		}
-		meta = publicError.Meta
+	}
+
+	if seErr == nil {
+		log.Debug("SeleniumError(): intercepted error is either not public or not Selenium Error type. Setting default values...")
+		seErr = utils.UnknownErr(fmt.Errorf("internal server error happened. All error details collected in logs"))
 	}
 
 	log.WithFields(log.Fields{
-		"status":        status,
-		"seleniumError": seleniumCode,
+		"status":  seErr.ResponseStatus,
+		"error":   seErr.Name,
+		"message": seErr.Err,
 	}).Warn("Error sent to selenium")
-	c.JSON(status, gin.H{
-		"value": gin.H{
-			"error":   seleniumCode,
-			"message": message,
-			"data":    meta,
-		},
-	})
+
+	seErr.SendEncodedResponse(c)
 }
 
-func Authentication(c *gin.Context) {
+func APIAuthentication(c *gin.Context) {
+	log.Debug("triggered APIAuthentication handler")
 	username, password, ok := c.Request.BasicAuth()
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"message": "Auth credentials not found",
-		})
 		log.WithField("client", c.ClientIP()).Warn("Auth credentials not found")
+
+		c.Error(utils.AuthApiErr("auth credentials not found")).SetType(gin.ErrorTypePublic)
 		c.Abort()
 		return
 	}
 
-	err := service.CheckAuth(username, password)
-	if err != nil {
-		log.WithError(err).WithFields(log.Fields{
+	apiErr := service.CheckAuth(username, password)
+	if apiErr != nil {
+		log.WithError(apiErr).WithFields(log.Fields{
 			"client":   c.ClientIP(),
 			"user":     username,
 			"password": password,
 		}).Warn("Failed to authenticate user")
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"message": "Provided credentials not valid",
-		})
+
+		c.Error(apiErr).SetType(gin.ErrorTypePublic)
 		c.Abort()
 		return
 	}
 }
 
-func APIAuthentication(c *gin.Context) {
+func LowLvlAuthentication(c *gin.Context) {
+	log.Debug("triggered LowLvlAuthentication handler")
 	username, password, ok := c.Request.BasicAuth()
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"message": "Auth credentials not found",
-		})
 		log.WithField("client", c.ClientIP()).Warn("Auth credentials not found")
+
+		c.Error(utils.AuthApiErr("auth credentials not found")).SetType(gin.ErrorTypePublic)
 		c.Abort()
 		return
 	}
@@ -139,9 +136,8 @@ func APIAuthentication(c *gin.Context) {
 			"user":     username,
 			"password": password,
 		}).Warn("Failed to authenticate user")
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"message": "Provided credentials not valid",
-		})
+
+		c.Error(utils.AuthApiErr("provided credentials not valid")).SetType(gin.ErrorTypePublic)
 		c.Abort()
 		return
 	}

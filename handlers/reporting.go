@@ -29,7 +29,7 @@ func init() {
 
 func Ping(c *gin.Context) {
 	c.JSON(http.StatusOK, map[string]interface{}{
-		"uptime, seconds":  time.Since(startTime).Seconds(),
+		"uptime":  time.Since(startTime),
 		"version": Version,
 	})
 }
@@ -58,7 +58,7 @@ func ListDrivers(c *gin.Context) {
 	images, err := utils.ListBrowsers()
 	if err != nil {
 		log.WithError(err).Warn("Failed to get browser list")
-		_ = c.Error(err).SetType(gin.ErrorTypePublic)
+		c.Error(utils.NotFoundApiErr("Failed to get browser list")).SetType(gin.ErrorTypePublic)
 		return
 	}
 

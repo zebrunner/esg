@@ -45,9 +45,7 @@ func CreateRouter() *gin.Engine {
 	r := gin.New()
 	r.Use(gin.LoggerWithFormatter(utils.TraceLogFromating), gin.Recovery())
 
-	api := r.Group("/api")
-	api.Use(handlers.APIError)
-	api.Use(handlers.APIAuthentication)
+	api := r.Group("/api", handlers.APIError, handlers.LowLvlAuthentication)
 	{
 		api.POST("/users", handlers.CreateUser)
 		api.DELETE("/users/:username", handlers.DeleteUser)
@@ -60,17 +58,10 @@ func CreateRouter() *gin.Engine {
 	}
 
 	hub := r.Group("/")
-	hub.Use(handlers.SeleniumError)
+	hub.Any("/wd/hub/*action", ReverseProxy())
 	{
 		hub.GET("/", handlers.Welcome)
-		hub.GET("/status", handlers.Authentication, handlers.ClusterStatus)
 		hub.GET("/ping", handlers.Ping)
-		hub.GET("/browsers", handlers.ListDrivers)
-
-		hub.Any("/wd/hub/*action", ReverseProxy())
-		hub.POST("/session", handlers.Create) // Auth logic moved to handler
-		hub.DELETE("/session/:session", handlers.CloseSession)
-		hub.Any("/session/:session/*action", handlers.Proxy)
 
 		hub.GET("/vnc/:session", func(c *gin.Context) {
 			handler := websocket.Handler(handlers.Vnc)
@@ -85,26 +76,35 @@ func CreateRouter() *gin.Engine {
 			log.WithField("request", c.Request).Debug("Vnc request")
 			handler.ServeHTTP(c.Writer, c.Request)
 		})
-
-		hub.GET("/download/:session/:file", handlers.Downloads)
-		hub.GET("/download/:session", handlers.Downloads)
-		hub.DELETE("/download/:session/:file", handlers.Downloads)
-		hub.HEAD("/download/:session/:file", handlers.Downloads)
-
-		hub.GET("/clipboard/:session", handlers.Clipboard)
-		hub.POST("/clipboard/:session", handlers.Clipboard)
-
-		hub.GET("/devtools/:session", handlers.Devtools)
-
-		hub.DELETE("/tasks/:task", handlers.AbortTask) // to be able to abort generic tasks by taskId
 	}
 
-	hub.Use(handlers.APIError)
+	seleniumHub := hub.Group("/", handlers.SeleniumError)
 	{
-		hub.GET("/logs/:session", handlers.Logs)
-		hub.GET("/video/:session", handlers.Video)
-		hub.GET("/tasks/:task/log", handlers.TaskLog)
-		hub.GET("/tasks/:task/status", handlers.TaskDescribe)
+		seleniumHub.POST("/session", handlers.Create) // Auth logic moved to handler
+		seleniumHub.DELETE("/session/:session", handlers.CloseSession)
+		seleniumHub.Any("/session/:session/*action", handlers.Proxy)
+
+		seleniumHub.GET("/download/:session/:file", handlers.Downloads)
+		seleniumHub.GET("/download/:session", handlers.Downloads)
+		seleniumHub.DELETE("/download/:session/:file", handlers.Downloads)
+		seleniumHub.HEAD("/download/:session/:file", handlers.Downloads)
+
+		seleniumHub.GET("/clipboard/:session", handlers.Clipboard)
+		seleniumHub.POST("/clipboard/:session", handlers.Clipboard)
+
+		seleniumHub.GET("/devtools/:session", handlers.Devtools)
+
+		seleniumHub.DELETE("/tasks/:task", handlers.AbortTask) // to be able to abort generic tasks by taskId
+	}
+
+	httpHub := hub.Group("/", handlers.APIError)
+	{
+		httpHub.GET("/status", handlers.APIAuthentication, handlers.ClusterStatus) 
+		httpHub.GET("/browsers", handlers.ListDrivers)                             
+		httpHub.GET("/logs/:session", handlers.Logs)                               
+		httpHub.GET("/video/:session", handlers.Video)                             
+		httpHub.GET("/tasks/:task/log", handlers.TaskLog)                          
+		httpHub.GET("/tasks/:task/status", handlers.TaskDescribe)                  
 	}
 
 	return r
@@ -144,7 +144,7 @@ func main() {
 		log.WithError(err).Fatal("Failed to init Redis client! Stopping router...")
 		os.Exit(1)
 	}
-	
+
 	defer config.RedisSessionsConnection.Close()
 	defer config.RedisTasksConnection.Close()
 
