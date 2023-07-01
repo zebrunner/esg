@@ -54,8 +54,8 @@ func TrackResourcesUsage(sess *sessionmap.Session, task *ecs.Task) {
 	duration := stoppingAt.Sub(startedAt)
 	healthAt := sess.HealthAt
 
-	healthSeconds := healthAt.Sub(startedAt) //diff between healthAt and startedAt provide task preparation time
-	l.Trace("healthSeconds: ", healthSeconds.Seconds())
+	provisioningSeconds := healthAt.Sub(startedAt) //diff between healthAt and startedAt provide task preparation time
+	l.Trace("provisioningSeconds: ", provisioningSeconds.Seconds())
 
 	platformName := strings.ToLower(sess.Capabilities.PlatformName)
 	if platformName == "" || platformName == "generic" || platformName == "any" {
@@ -71,7 +71,7 @@ func TrackResourcesUsage(sess *sessionmap.Session, task *ecs.Task) {
 		"cpu":      strconv.FormatInt(sess.Capabilities.Cpu, 10) + " millicores",
 		"memory":   strconv.FormatInt(sess.Capabilities.Memory, 10) + " MiB",
 		"instant":  time.Now().UTC().Format("2006-01-02T15:04:05Z"),
-		"seconds":  duration.Seconds() - healthSeconds.Seconds(), // register only net time without preparation steps
+		"seconds":  duration.Seconds() - provisioningSeconds.Seconds(), // register only net time without provisioning time
 		"platform": platformName,
 	}
 	log.Trace("request body to track resources: ", requestBody)
