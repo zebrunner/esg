@@ -22,7 +22,8 @@ const (
 	ABORT_API_PATH = "/api/reporting/api/project-test-runs/abort"
 )
 
-func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration) {
+func TrackResourcesUsage(sess *sessionmap.Session, task *ecs.Task) {
+	//log.Info("Task:", task)
 	conf := &config.Conf
 	if conf.ZebrunnerHost == "" {
 		// #527: don't write error message if zebrunner url is empty in the configuration
@@ -33,6 +34,28 @@ func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration) {
 		log.WithError(err).Error("Failed to parse zebrunner base url")
 		return
 	}
+
+	l := log.WithFields(log.Fields{"sessionId": sess.ID, "_taskId": sess.TaskID})
+	if task.StartedAt == nil || task.StoppingAt == nil {
+		// don't calculate timing for terminated tasks by AWS due to the missted StartedAt!
+		//      StopCode: \"TerminationNotice\"
+		//      StoppedReason: \"Host EC2 (instance i-03dba81187d65ce7e) terminated.\"
+		l.WithFields(log.Fields{"StartedAt": *task.StartedAt, "StoppingAt": *task.StoppingAt}).Warn("Unable to track resourse usage!")
+		return
+	}
+
+	l.Trace("StartedAt: ", *task.StartedAt)
+	l.Trace("StoppingAt: ", *task.StoppingAt)
+
+	l.Trace("HealthAt: ", sess.HealthAt)
+	startedAt := *task.StartedAt //local var needed to calculate difference via Sub(..)
+	stoppingAt := *task.StoppingAt
+
+	duration := stoppingAt.Sub(startedAt)
+	healthAt := sess.HealthAt
+
+	provisioningSeconds := healthAt.Sub(startedAt) //diff between healthAt and startedAt provide task preparation time
+	l.Trace("provisioningSeconds: ", provisioningSeconds.Seconds())
 
 	platformName := strings.ToLower(sess.Capabilities.PlatformName)
 	if platformName == "" || platformName == "generic" || platformName == "any" {
@@ -48,7 +71,7 @@ func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration) {
 		"cpu":      strconv.FormatInt(sess.Capabilities.Cpu, 10) + " millicores",
 		"memory":   strconv.FormatInt(sess.Capabilities.Memory, 10) + " MiB",
 		"instant":  time.Now().UTC().Format("2006-01-02T15:04:05Z"),
-		"seconds":  d.Seconds(),
+		"seconds":  duration.Seconds() - provisioningSeconds.Seconds(), // register only net time without provisioning time
 		"platform": platformName,
 	}
 	log.Trace("request body to track resources: ", requestBody)

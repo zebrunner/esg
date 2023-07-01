@@ -388,6 +388,9 @@ out:
 		}
 
 		if env.TaskDefinitionFamily == "generic" {
+			//TODO: remove HealthAt as only healthcheck integrated into the generic as well
+			sess.HealthAt = time.Now()
+			sessionmap.Write(sess.TaskID, &sess, 0)
 			l.Debug("do not wait for generic task startup.")
 			return &sess, nil
 		}
@@ -400,6 +403,11 @@ out:
 			outputErr = err
 			continue
 		case task := <-req.responseChan:
+			// timediff between HealthAt (current time) and task.startedAt should be cut during resources tracking to bill only actual (net) time
+			sess.HealthAt = time.Now()
+			sessionmap.Write(sess.TaskID, &sess, 0)
+			l.Debug("Healthcheck latency: ", time.Since(startTime))
+
 			err = setEnvironmentNetwork(env, task)
 			l.Debug("setEnvironmentNetwork latency: ", time.Since(startTime))
 			if err != nil {
@@ -408,6 +416,7 @@ out:
 				outputErr = fmt.Errorf("failed to get service info: %v", err)
 				continue
 			}
+
 			return &sess, nil
 		case <-req.ctx.Done():
 			outputErr = errors.New("failed to wait until task is running. context deadline")

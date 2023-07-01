@@ -40,6 +40,7 @@ type Session struct {
 	RawCapabilities map[string]interface{}
 	Network         environment.NetworkConfiguration
 	StartedAt       time.Time
+	HealthAt	time.Time
 	TaskID          string
 	Workspace       string
 	Status          SessionStatus

@@ -233,16 +233,7 @@ func TrackResourceUsage(tasks []*ecs.Task, wg *sync.WaitGroup) {
 			continue
 		}
 
-		if task.StartedAt != nil && task.StoppedAt != nil {
-			// don't calculate timing for terminated tasks by AWS due to the missted StartedAt!
-			//	StopCode: \"TerminationNotice\"
-			//	StoppedReason: \"Host EC2 (instance i-03dba81187d65ce7e) terminated.\"
-			l.Trace("StartedAt: ", *task.StartedAt)
-			l.Trace("StoppedAt: ", *task.StoppedAt)
-			startedAt := *task.StartedAt //local var needed to calculate difference via Sub(..)
-			stoppedAt := *task.StoppedAt
-			zebrunner.TrackResourcesUsage(session, stoppedAt.Sub(startedAt))
-		}
+		zebrunner.TrackResourcesUsage(session, task)
 
 		if !strings.HasPrefix(session.Capabilities.Image, "public.ecr.aws/zebrunner/cypress-") {
 			// #503: суpress tests aborted automatically
