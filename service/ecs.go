@@ -406,10 +406,10 @@ out:
 			// timediff between HealthAt (current time) and task.startedAt should be cut during resources tracking to bill only actual (net) time
 			sess.HealthAt = time.Now()
 			sessionmap.Write(sess.TaskID, &sess, 0)
+			l.Debug("Healthcheck latency: ", time.Since(startTime))
 
-			l.Info("Healthcheck latency: ", time.Since(startTime))
 			err = setEnvironmentNetwork(env, task)
-			l.Info("setEnvironmentNetwork latency: ", time.Since(startTime))
+			l.Debug("setEnvironmentNetwork latency: ", time.Since(startTime))
 			if err != nil {
 				StopTask(sess.TaskID, sessionmap.SessionStartupFailure)
 				l.WithField("latency", time.Since(startTime)).WithError(err).Error("Failed to get service info.")
