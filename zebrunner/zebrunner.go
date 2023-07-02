@@ -62,14 +62,22 @@ func TrackResourcesUsage(sess *sessionmap.Session, task *ecs.Task) {
 		platformName = "linux"
 	}
 
+	cpuUsage := sess.Capabilities.Cpu
+	memUsage := sess.Capabilities.Memory
+	if sess.Capabilities.Mitm {
+		// #579: track mitm container cpu and memory usage
+		cpuUsage += sess.Capabilities.MitmCpu
+		memUsage += sess.Capabilities.MitmMemory
+	}
+
 	if !conf.SingleTenant {
 		// add workspace/tenant to the url
 		requestUrl.Host = sess.Workspace + "." + requestUrl.Host
 	}
 	requestUrl.Path = USAGE_API_PATH
 	requestBody := map[string]interface{}{
-		"cpu":      strconv.FormatInt(sess.Capabilities.Cpu, 10) + " millicores",
-		"memory":   strconv.FormatInt(sess.Capabilities.Memory, 10) + " MiB",
+		"cpu":      strconv.FormatInt(cpuUsage, 10) + " millicores",
+		"memory":   strconv.FormatInt(memUsage, 10) + " MiB",
 		"instant":  time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 		"seconds":  duration.Seconds() - provisioningSeconds.Seconds(), // register only net time without provisioning time
 		"platform": platformName,

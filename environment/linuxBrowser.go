@@ -47,18 +47,29 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 	var mitmMemory int64 = 64 // minimal memory to start container
 
 	if mitmIncluded {
-		// --quiet is a must to run without interactive console
 		// to generate har we have to enable regular dump.mitm output by -w option and place it before har_dump.py!
 		mitmCommand = "mitmdump --scripts /har_dump.py -w /tmp/dump.mitm --set hardump=/tmp/dump.har"
+
 		mitmCpu = 512
+		if caps.MitmCpu != 0 {
+			mitmCpu = caps.MitmCpu
+		} else {
+			caps.MitmCpu = mitmCpu
+		}
+
 		mitmMemory = 512
+		if caps.MitmMemory != 0 {
+			mitmMemory = caps.MitmMemory
+		} else {
+			caps.MitmMemory = mitmMemory
+		}
+
 		if caps.MitmArgs != "" {
 			//append args only if mitm=true
 			mitmCommand = mitmCommand + " " + caps.MitmArgs
 		}
+		// --quiet is a must to run without interactive console
 		mitmCommand = mitmCommand + " --quiet"
-
-		//TODO: register such capabilities automatically: -Dproxy_host=mitm -Dproxy_port=8080
 	}
 	mitmContainer := Container{
 		Name:       "mitm",

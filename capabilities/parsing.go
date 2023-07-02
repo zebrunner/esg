@@ -300,6 +300,8 @@ func processVendorCaps(caps map[string]interface{}) error {
 		"dnsServers",
 		"mitm", "Mitm", //to support lower case and camel case
 		"mitmArgs", "MitmArgs", "mitmargs",
+		"mitmCpu", "MitmCpu", "mitmcpu",
+		"mitmMemory", "MitmMemory", "mitmmemory",
 	}
 	processors := map[string]*CapProcessor{}
 	for _, name := range vendorCapNames {
