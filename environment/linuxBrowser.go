@@ -50,8 +50,13 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		// to generate har we have to enable regular dump.mitm output by -w option and place it before har_dump.py!
 		mitmCommand = "mitmdump --scripts /har_dump.py -w /tmp/dump.mitm --set hardump=/tmp/dump.har"
 
+		//TODO: wrap into the functions during adding mitm support for other environments (generic, cypress, redroid etc)
 		mitmCpu = 512
 		if caps.MitmCpu != 0 {
+			if caps.MitmCpu > conf.MaxCpu {
+				// limit max cpu usage based on cluster configuration
+				caps.MitmCpu = conf.MaxCpu
+			}
 			mitmCpu = caps.MitmCpu
 		} else {
 			caps.MitmCpu = mitmCpu
@@ -59,6 +64,10 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 
 		mitmMemory = 512
 		if caps.MitmMemory != 0 {
+			if caps.MitmMemory > conf.MaxMemory {
+				// limit max memory usage based on cluster configuration
+				caps.MitmMemory = conf.MaxMemory
+			}
 			mitmMemory = caps.MitmMemory
 		} else {
 			caps.MitmMemory = mitmMemory
