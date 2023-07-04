@@ -1,6 +1,7 @@
 package service
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"sync"
@@ -71,7 +72,7 @@ func GetUser(name string) (*User, *utils.APIError) {
 	err := config.DbConnection.Get(&user, getQuery, name)
 	mutexDB.Unlock()
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if err == pgx.ErrNoRows || err == sql.ErrNoRows {
 			return nil, utils.NotFoundApiErr(fmt.Sprintf("user with name %s not found", name))
 		} else {
 			return nil, utils.UnknownApiErr(err.Error())
