@@ -29,15 +29,15 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 		// #527: don't write error message if zebrunner url is empty in the configuration
 		return
 	}
+	l := log.WithField("_taskId", cachedTask.ID)
+	if cachedTask.CurrentSessionID != "" {
+		l = l.WithField("sessionId", cachedTask.CurrentSessionID)
+	}
+	
 	requestUrl, err := url.ParseRequestURI(conf.ZebrunnerHost)
 	if err != nil {
 		log.WithError(err).Error("Failed to parse zebrunner base url")
 		return
-	}
-
-	l := log.WithField("_taskId", cachedTask.ID)
-	if cachedTask.CurrentSessionID != "" {
-		l = l.WithField("sessionId", cachedTask.CurrentSessionID)
 	}
 
 	if task.StartedAt == nil || task.StoppingAt == nil {
@@ -58,8 +58,8 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 	duration := stoppingAt.Sub(startedAt)
 	healthAt := cachedTask.HealthAt
 
-	provisioningSeconds := healthAt.Sub(startedAt) //diff between healthAt and startedAt provide task preparation time
-	l.Trace("provisioningSeconds: ", provisioningSeconds.Seconds())
+	provisioningTime := healthAt.Sub(startedAt) //diff between healthAt and startedAt provide task preparation time
+	l.Trace("provisioningSeconds: ", provisioningTime.Seconds())
 
 	platformName := strings.ToLower(cachedTask.Capabilities.PlatformName)
 	if platformName == "" || platformName == "generic" || platformName == "any" {
@@ -77,33 +77,34 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 	if !conf.SingleTenant {
 		// add workspace/tenant to the url
 		requestUrl.Host = cachedTask.Workspace + "." + requestUrl.Host
+		l = l.WithField("workspace", cachedTask.Workspace)
 	}
 	requestUrl.Path = USAGE_API_PATH
 	requestBody := map[string]interface{}{
 		"cpu":      strconv.FormatInt(cpuUsage, 10) + " millicores",
 		"memory":   strconv.FormatInt(memUsage, 10) + " MiB",
 		"instant":  time.Now().UTC().Format("2006-01-02T15:04:05Z"),
-		"seconds":  duration.Seconds() - provisioningSeconds.Seconds(), // register only net time without provisioning time
+		"seconds":  duration.Seconds() - provisioningTime.Seconds(), // register only net time without provisioning time
 		"platform": platformName,
 	}
-	log.Trace("request body to track resources: ", requestBody)
+	l.Trace("request body to track resources: ", requestBody)
 
 	body, err := json.Marshal(requestBody)
 	if err != nil {
-		log.WithError(err).Error("Failed to marshal request data")
+		l.WithError(err).Error("Failed to marshal request data")
 		return
 	}
 	req, err := http.NewRequest(http.MethodPost, requestUrl.String(), bytes.NewBuffer(body))
 	if err != nil {
-		log.WithError(err).Error("Failed to create request")
+		l.WithError(err).Error("Failed to create request")
 	}
 	req.SetBasicAuth(conf.ZebrunnerIntegrationUser, conf.ZebrunnerIntegrationPassword)
 	req.Header.Add("Content-Type", "application/json")
-	log.Trace("req: ", req)
+	l.Trace("req: ", req)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.WithError(err).Error("Failed to send request")
+		l.WithError(err).Error("Failed to send request")
 		return
 	}
 
@@ -112,19 +113,15 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 		err = json.NewDecoder(resp.Body).Decode(&data)
 
 		if err != nil {
-			log.WithError(err).Error("Failed to track task resource usage")
+			l.WithError(err).Error("Failed to track task resource usage")
 		}
-		log.WithFields(log.Fields{
+		l.WithFields(log.Fields{
 			"status":   resp.Status,
 			"response": data,
 		}).Error("Failed to track task resource usage!")
 		return
 	} else {
-		l := l.WithFields(log.Fields{"request body": requestBody})
-		if !conf.SingleTenant {
-			l = l.WithField("workspace", cachedTask.Workspace)
-		}
-		l.Info("shape recorded")
+		l.WithField("request body", requestBody).Info("shape recorded")
 	}
 }
 
