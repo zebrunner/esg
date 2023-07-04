@@ -16,38 +16,16 @@ import (
 	"github.com/aerokube/util"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/cachemaps/sessionmap"
+	"github.com/zebrunner/esg/cachemaps/taskmap"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
 	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/service"
-	sessionmap "github.com/zebrunner/esg/sessinonmap"
 	"github.com/zebrunner/esg/utils"
 	"golang.org/x/net/websocket"
 )
-
-func getSession(id string) (*sessionmap.Session, error) {
-	session, err := sessionmap.Find(id, true)
-	if err != nil {
-		return nil, &utils.SeleniumError{
-			ResponseStatus: http.StatusNotFound,
-			SeleniumCode:   "invalid session id",
-			Message:        "Session not found",
-			Err:            err,
-		}
-	}
-
-	if session.Status == sessionmap.SessionStopped {
-		return nil, &utils.SeleniumError{
-			ResponseStatus: http.StatusNotFound,
-			SeleniumCode:   "invalid session id",
-			Message:        string(session.StopReason),
-			Err:            err,
-		}
-	}
-
-	return session, nil
-}
 
 func Create(c *gin.Context) {
 	remote := c.ClientIP()
@@ -57,26 +35,20 @@ func Create(c *gin.Context) {
 		// Hotfix: Selenium java client don't send request with credentials without this sleep.
 		// Remove with full migration to Selenium 4.0
 		time.Sleep(500 * time.Millisecond)
-		_ = c.Error(&utils.SeleniumError{
-			SeleniumCode:   "session not created",
-			ResponseStatus: http.StatusUnauthorized,
-			Message:        "Session not created; Reason: Failed to get auth credentials.",
-		}).SetType(gin.ErrorTypePublic)
+
+		c.Error(utils.AuthErr(err)).SetType(gin.ErrorTypePublic)
 		return
 	}
 
-	err = service.CheckAuth(user, password)
-	if err != nil {
-		log.WithError(err).WithFields(log.Fields{
+	apiErr := service.CheckAuth(user, password)
+	if apiErr != nil {
+		log.WithError(apiErr).WithFields(log.Fields{
 			"client":   c.ClientIP(),
 			"user":     user,
 			"password": password,
 		}).Warn("Failed to authenticate user on session creation")
-		_ = c.Error(&utils.SeleniumError{
-			SeleniumCode:   "session not created",
-			ResponseStatus: http.StatusUnauthorized,
-			Message:        "Session not created; Reason: Invalid username or password",
-		}).SetType(gin.ErrorTypePublic)
+
+		c.Error(utils.AuthErr(errors.New("invalid username or password"))).SetType(gin.ErrorTypePublic)
 		return
 	}
 
@@ -86,14 +58,9 @@ func Create(c *gin.Context) {
 	err = c.BindJSON(&taskCaps)
 	if err != nil {
 		l.WithError(err).Error("Failed to bind json to browser struct")
-		_ = c.Error(creationError("Bad JSON format", err)).SetType(gin.ErrorTypePublic)
-		return
-	}
 
-	processingError := utils.SeleniumError{
-		SeleniumCode:   "invalid argument",
-		ResponseStatus: http.StatusBadRequest,
-		Message:        "Failed to process capabilities. ",
+		c.Error(utils.InvalidArgErr(fmt.Errorf("bad JSON format: %v", err))).SetType(gin.ErrorTypePublic)
+		return
 	}
 
 	if len(taskCaps.DesiredCapabilities) != 0 {
@@ -103,7 +70,8 @@ func Create(c *gin.Context) {
 	}
 	if err != nil {
 		l.WithError(err).Error("Failed to process capabilities")
-		_ = c.Error(&processingError).SetType(gin.ErrorTypePublic)
+
+		c.Error(utils.InvalidArgErr(fmt.Errorf("failed to process capabilities: %v", err))).SetType(gin.ErrorTypePublic)
 		return
 	}
 	log.Trace("Driver capabilitites: ", taskCaps.ToMap())
@@ -111,7 +79,8 @@ func Create(c *gin.Context) {
 	caps, err := taskCaps.GetContainerConfiguration()
 	if err != nil {
 		l.WithError(err).Error("Failed to get container config.Configuration")
-		_ = c.Error(&processingError).SetType(gin.ErrorTypePublic)
+
+		c.Error(utils.InvalidArgErr(fmt.Errorf("failed to process capabilities: %v", err))).SetType(gin.ErrorTypePublic)
 		return
 	}
 	log.Trace("caps: ", caps)
@@ -123,7 +92,8 @@ func Create(c *gin.Context) {
 	env, err := environment.Build(user, caps)
 	if err != nil {
 		log.WithError(err).Error("Failed to build execution environment")
-		_ = c.Error(creationError("failed to start executor", err)).SetType(gin.ErrorTypePublic)
+
+		c.Error(utils.CreationErr(fmt.Errorf("failed to start executor: %v", err))).SetType(gin.ErrorTypePublic)
 		return
 	}
 	env.RawCapabilities = &taskCaps
@@ -145,21 +115,26 @@ func Create(c *gin.Context) {
 		}
 	}
 
-	taskSession, err := service.StartTask(ctx, env)
+	taskCache, err := service.StartTask(ctx, env)
 	if err != nil {
-		l.WithError(err).Error("Service startup failed")
-		_ = c.Error(creationError("Failed to start task", err)).SetType(gin.ErrorTypePublic)
+		err = fmt.Errorf("service startup failed: %v", err)
+		l.Error(err)
+
+		c.Error(utils.CreationErr(err)).SetType(gin.ErrorTypePublic)
 		return
 	}
 
-	l = l.WithField("_taskId", taskSession.TaskID)
+	l = l.WithField("_taskId", taskCache.ID)
 	l.Info("task started")
 	var resp map[string]interface{}
 	if env.TaskDefinitionFamily == "generic" || strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
 		// TODO: delete status update when CloseSession() for generic tasks will be called
-		taskSession.Status = sessionmap.SessionGeneric
-		sessionmap.Write(taskSession.TaskID, taskSession, 0)
-		data := "{\"taskId\": \"" + taskSession.TaskID + "\"}"
+		taskCache.Status = taskmap.TaskGeneric
+		err := taskmap.Write(taskCache.ID, taskCache, 0)
+		if err != nil {
+			l.WithError(err).Error("Failed to update generic's status")
+		}
+		data := "{\"taskId\": \"" + taskCache.ID + "\"}"
 		json.Unmarshal([]byte(data), &resp)
 		l.WithFields(log.Fields{"resp": resp}).Debug("Response")
 	} else {
@@ -168,89 +143,82 @@ func Create(c *gin.Context) {
 		u, ok := env.Network.GetUrl("driver")
 		if !ok {
 			l.Error("failed to get url for `driver` service")
-			_ = c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
+
+			c.Error(utils.CreationErr(fmt.Errorf("failed to start driver: %v", err))).SetType(gin.ErrorTypePublic)
 			return
 		}
 
 		requestBody, err := json.Marshal(env.RawCapabilities)
 		if err != nil {
 			l.WithError(err).Error("Failed to marshal request")
-			_ = c.Error(creationError("Failed to start driver", err)).SetType(gin.ErrorTypePublic)
+
+			c.Error(utils.UnknownErr(fmt.Errorf("failed to marshal capabilities: %v", err))).SetType(gin.ErrorTypePublic)
 			return
 		}
 
 		c.Request.URL.Host, c.Request.URL.Path = u.Host, path.Join(u.Path, c.Request.URL.Path)
 		c.Request.URL.Scheme = "http"
 		l.WithField("serviceUrl", u).Debug("driver starting")
+
 		resp, err = selenium.StartSession(driverCtx, c.Request.URL, c.Request.Header, requestBody)
 		if err != nil {
 			if strings.Contains(err.Error(), context.DeadlineExceeded.Error()) {
-				err = errors.New("Driver startup timed out")
+				err = errors.New("driver startup timed out")
 			}
 			l.WithError(err).WithField("response", resp).Error("driver startup failed")
-			_ = c.Error(creationError("failed to create driver", err)).SetType(gin.ErrorTypePublic)
-			_, err = service.StopTask(taskSession.TaskID, sessionmap.SessionStartupFailure)
+
+			c.Error(utils.CreationErr(fmt.Errorf("failed to start driver: %v", err))).SetType(gin.ErrorTypePublic)
+
+			err = service.StopTask(taskCache.ID, taskmap.SessiongStartupFailure)
 			if err != nil {
-				l.WithError(err).Error("Failed to stop the task")
+				l.WithError(err).Warn("Failed to stop task")
 			}
 			return
 		}
 
 		sessionId, err := getSessionId(resp)
-		if err != nil {
-			l.WithError(err).Error("Failed to get sessionId from driver response")
-			_ = c.Error(creationError("Failed to create driver", err)).SetType(gin.ErrorTypePublic)
-			return
-		}
-
 		if sessionId == "" {
-			l.WithError(err).Error("Failed to get sessionId from driver response. sessionId is empty")
-			_ = c.Error(creationError("failed to create driver", err)).SetType(gin.ErrorTypePublic)
-			return
-		}
+			if err == nil {
+				err = errors.New("session id in driver response is empty")
+			}
+			l.WithError(err).Error("Failed to get sessionId")
 
-		driverSession := sessionmap.Session{
-			ID:              sessionId,
-			RawCapabilities: taskSession.RawCapabilities,
-			Capabilities:    taskSession.Capabilities,
-			Network:         *env.Network,
-			StartedAt:       time.Now(),
-			AccessedAt:      time.Now(),
-			Status:          sessionmap.SessionActive,
-			TaskID:          taskSession.TaskID,
-			Workspace:       taskSession.Workspace,
-		}
-		err = sessionmap.Write(driverSession.ID, &driverSession, 0)
-		if err != nil {
-			l.WithError(err).Error("Driver session not cached!")
-			_ = c.Error(creationError("failed to cache driver session", err)).SetType(gin.ErrorTypePublic)
-			_, err = service.StopTask(driverSession.TaskID, sessionmap.SessionStartupFailure)
+			c.Error(utils.CreationErr(fmt.Errorf("failed to create driver: %v", err))).SetType(gin.ErrorTypePublic)
+
+			err = service.StopTask(taskCache.ID, taskmap.SessiongStartupFailure)
 			if err != nil {
-				l.WithError(err).Error("Failed to stop the task. Possible zombie task.")
+				l.WithError(err).Warn("Failed to stop task")
 			}
 			return
 		}
-		l.WithField("sessionId", driverSession.ID).WithField("latency", util.SecondsSince(sessionStartTime)).Info("driver started")
+
+		sessionCache, err := sessionmap.CreateEntity(sessionId, env, taskCache)
+		if err != nil {
+			l.WithError(err).Error("Failed to cache driver session")
+
+			c.Error(utils.UnknownErr(fmt.Errorf("failed to cache driver session: %v", err))).SetType(gin.ErrorTypePublic)
+
+			err = service.StopTask(taskCache.ID, taskmap.SessiongStartupFailure)
+			if err != nil {
+				l.WithError(err).Warn("Failed to stop task")
+			}
+			return
+		}
+		l.WithField("sessionId", sessionCache.ID).WithField("latency", util.SecondsSince(sessionStartTime)).Info("driver started")
 	}
 
 	c.JSON(http.StatusOK, resp)
 }
 
 func Proxy(c *gin.Context) {
-	sessionID := c.Param("session")
-	sess, err := getSession(sessionID)
-	if err != nil {
-		log.WithError(err).WithField("sessionId", sessionID).Error("Cant find session")
-		_ = c.Error(err).SetType(gin.ErrorTypePublic)
-		return
-	}
+	sess := c.MustGet(sessionContextKey).(*sessionmap.Session)
 
 	(&httputil.ReverseProxy{
 		Director: func(r *http.Request) {
 			url, ok := sess.Network.GetUrl("driver")
 			if !ok {
 				log.Error("failed to get `driver` url from session")
-				_ = c.Error(fmt.Errorf("internal error")).SetType(gin.ErrorTypePublic)
+				c.Error(utils.UnknownErr(fmt.Errorf("failed to get `driver` url from session"))).SetType(gin.ErrorTypePublic)
 			}
 
 			// fix for file upload using selenium 4
@@ -272,26 +240,17 @@ func Proxy(c *gin.Context) {
 		},
 	}).ServeHTTP(c.Writer, c.Request)
 }
-
 func CloseSession(c *gin.Context) {
-	sessionId := c.Param("session")
-	sess, err := getSession(sessionId)
-	if err != nil {
-		log.WithError(err).WithField("sessionId", sessionId).Error("Can't find session!")
-		_ = c.Error(err).SetType(gin.ErrorTypePublic)
-		return
-	}
+	sess := c.MustGet(sessionContextKey).(*sessionmap.Session)
+
 	l := log.WithField("_taskId", sess.TaskID)
-	// if session id were passed
-	if sess.ID != sess.TaskID {
-		selenium.CloseSession(sess, sessionmap.SessionFinished)
-		l = l.WithField("sessionId", sess.ID)
-	}
-	_, err = service.StopTask(sess.TaskID, sessionmap.SessionFinished)
+
+	selenium.CloseSession(sess, sessionmap.SessionFinished)
+	l = l.WithField("sessionId", sess.ID)
+
+	err := service.StopTask(sess.TaskID, taskmap.TaskFinished)
 	if err != nil {
-		l.WithError(err).Error("CloseSession: Failed to stop the task")
-		// _ = c.Error(err).SetType(gin.ErrorTypePublic)
-		// return
+		l.WithError(err).Warn("Failed to stop task")
 	}
 
 	l.Info("task closed")
@@ -299,29 +258,17 @@ func CloseSession(c *gin.Context) {
 }
 
 func AbortTask(c *gin.Context) {
-	sessionId := c.Param("task")
-	sess, err := getSession(sessionId)
-	if err != nil {
-		log.WithField("id", sessionId).WithError(err).Warn("Task/Session not found!")
-		//there is no sense to proceed as task is already finished/removed and not present in the sessionmap
-		return
-	}
+	task := c.MustGet(taskContextKey).(*taskmap.Task)
 
-	l := log.WithField("_taskId", sess.TaskID)
+	l := log.WithField("_taskId", task.ID)
+
 	if !config.Conf.SingleTenant {
-		l = l.WithField("workspace", sess.Workspace)
+		l = l.WithField("workspace", task.Workspace)
 	}
 
-	// if session id were passed
-	if sess.ID != sess.TaskID {
-		selenium.CloseSession(sess, sessionmap.SessionAborted)
-		l = l.WithField("sessionId", sess.ID)
-	}
-	_, err = service.StopTask(sess.TaskID, sessionmap.SessionAborted)
+	err := service.StopTask(task.ID, taskmap.TaskAborted)
 	if err != nil {
-		l.WithError(err).Error("AbortTask: Failed to stop the task")
-		// _ = c.Error(err).SetType(gin.ErrorTypePublic)
-		// return
+		l.WithError(err).Warn("Failed to stop task")
 	}
 
 	l.Info("task aborted")
@@ -333,10 +280,10 @@ func Vnc(wsconn *websocket.Conn) {
 	fragments := strings.Split(wsconn.Request().URL.Path, "/")
 	sid := fragments[len(fragments)-1]
 	l := log.WithField("sessionId", sid)
-	sess, err := getSession(sid)
 
-	if err != nil {
-		l.WithError(err).Error("Session not found")
+	sess, seErr := getSession(sid)
+	if seErr != nil {
+		l.WithError(seErr).Error("Vnc(): can't access session")
 		return
 	}
 	log.Debug("sess.Network: ", sess.Network)
@@ -373,34 +320,30 @@ func Vnc(wsconn *websocket.Conn) {
 
 func Logs(c *gin.Context) {
 	user, _, ok := c.Request.BasicAuth()
-
 	if !ok {
-		_ = c.Error(&utils.HTTPError{
-			Status:  http.StatusBadRequest,
-			Message: "Auth data not provided"},
-		).SetType(gin.ErrorTypePublic)
+		c.Error(utils.AuthApiErr("auth data not provided")).SetType(gin.ErrorTypePublic)
 		return
 	}
+
 	sessionID := c.Param("session")
 	logFile := strings.Join([]string{user, "artifacts", "test-sessions", sessionID, "session.log"}, "/")
 	presignedUrl, err := service.GeneratePreSignedURL(logFile)
 	if err != nil {
 		log.Printf("[URL GENERATION FAILED] %v", err)
-		c.JSON(http.StatusNotFound, gin.H{"message": "Resource Not Found"})
+		c.Error(utils.NotFoundApiErr("resource not found")).SetType(gin.ErrorTypePublic)
 		return
 	}
+
 	c.Redirect(http.StatusFound, presignedUrl)
 }
 
 func Video(c *gin.Context) {
 	user, _, ok := c.Request.BasicAuth()
 	if !ok {
-		_ = c.Error(&utils.HTTPError{
-			Status:  http.StatusBadRequest,
-			Message: "Auth data not provided"},
-		).SetType(gin.ErrorTypePublic)
+		c.Error(utils.AuthApiErr("auth data not provided")).SetType(gin.ErrorTypePublic)
 		return
 	}
+
 	sessionID := c.Param("session")
 	videoFile := strings.Join([]string{user, "artifacts", "test-sessions", sessionID, "video.mp4"}, "/")
 	presignedUrl, err := service.GeneratePreSignedURL(videoFile)
@@ -410,65 +353,57 @@ func Video(c *gin.Context) {
 			"remote":    c.ClientIP(),
 			"sessionId": sessionID,
 		}).Error("Failed to create pre signed url to session video")
-		_ = c.Error(err)
-		c.JSON(http.StatusNotFound, gin.H{"message": "Resource Not Found"})
+
+		c.Error(utils.NotFoundApiErr("resource not found")).SetType(gin.ErrorTypePublic)
 		return
 	}
+
 	c.Redirect(http.StatusFound, presignedUrl)
 }
 
 func TaskLog(c *gin.Context) {
 	user, _, ok := c.Request.BasicAuth()
-
 	if !ok {
-		_ = c.Error(&utils.HTTPError{
-			Status:  http.StatusBadRequest,
-			Message: "Auth data not provided"},
-		).SetType(gin.ErrorTypePublic)
+		c.Error(utils.AuthApiErr("auth data not provided")).SetType(gin.ErrorTypePublic)
 		return
 	}
+
 	taskID := c.Param("task")
 	logFile := strings.Join([]string{user, "artifacts", "launches", taskID, "console.log"}, "/")
 	presignedUrl, err := service.GeneratePreSignedURL(logFile)
 	if err != nil {
 		log.Printf("[URL GENERATION FAILED] %v", err)
-		c.JSON(http.StatusNotFound, gin.H{"message": "Resource Not Found"})
+		c.Error(utils.NotFoundApiErr("resource not found")).SetType(gin.ErrorTypePublic)
 		return
 	}
+
 	c.Redirect(http.StatusFound, presignedUrl)
 }
 
 func TaskDescribe(c *gin.Context) {
 	user, _, ok := c.Request.BasicAuth()
-
 	if !ok {
-		_ = c.Error(&utils.HTTPError{
-			Status:  http.StatusBadRequest,
-			Message: "Auth data not provided"},
-		).SetType(gin.ErrorTypePublic)
+		c.Error(utils.AuthApiErr("auth data not provided")).SetType(gin.ErrorTypePublic)
 		return
 	}
+
 	taskId := c.Param("task")
 	l := log.WithField("user", user).WithField("_taskId", taskId)
 	l.Debug("Get task status")
 	result, err := service.DescribeTask(taskId)
 	if err != nil {
 		l.Error("Failed to get task status")
-		_ = c.Error(err).SetType(gin.ErrorTypePublic)
+		c.Error(utils.UnknownApiErr(fmt.Sprintf("failed to get task status: %v", err.Error()))).
+			SetType(gin.ErrorTypePublic)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"status": result.Tasks[0].LastStatus})
 
+	c.JSON(http.StatusOK, gin.H{"status": result.Tasks[0].LastStatus})
 }
 
 func Downloads(c *gin.Context) {
-	sessionID := c.Param("session")
 	filename := c.Param("file")
-	sess, err := getSession(sessionID)
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
+	sess := c.MustGet(sessionContextKey).(*sessionmap.Session)
 
 	director := func(req *http.Request) {
 		req.URL.Scheme = "http"
@@ -485,12 +420,7 @@ func Downloads(c *gin.Context) {
 }
 
 func Clipboard(c *gin.Context) {
-	sessionID := c.Param("session")
-	sess, err := getSession(sessionID)
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
+	sess := c.MustGet(sessionContextKey).(*sessionmap.Session)
 
 	director := func(req *http.Request) {
 		req.URL.Scheme = "http"
@@ -503,12 +433,7 @@ func Clipboard(c *gin.Context) {
 }
 
 func Devtools(c *gin.Context) {
-	sessionID := c.Param("session")
-	sess, err := getSession(sessionID)
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
+	sess := c.MustGet(sessionContextKey).(*sessionmap.Session)
 
 	director := func(req *http.Request) {
 		req.URL.Scheme = "http"
@@ -536,14 +461,6 @@ func defaultErrorHandler(с *gin.Context) func(http.ResponseWriter, *http.Reques
 			},
 		}
 		_ = json.NewEncoder(w).Encode(driverError)
-	}
-}
-
-func creationError(msg string, err error) *utils.SeleniumError {
-	return &utils.SeleniumError{
-		SeleniumCode:   "session not created",
-		ResponseStatus: http.StatusInternalServerError,
-		Message:        fmt.Sprintf("Session not created; Reason: %s; InternalError: %v", msg, err),
 	}
 }
 

@@ -68,15 +68,14 @@ func GetClusterTasksArn(svc *ecs.ECS) ([]*string, error) {
 	return taskArns, nil
 }
 
-func GetSessionMapTasks(keys []string, svc *ecs.ECS) []*ecs.Task {
-	// Construct pages of *string with 100 or fewer elements for requests. 100 is an AWS limitation for Describe* requests
-	pages := paginate(aws.StringSlice(keys), 100)
+func GetTasksByTaskIds(taskIds []string, svc *ecs.ECS) []*ecs.Task {
 	tasks := make([]*ecs.Task, 0)
+
+	// Construct pages of *string with 100 or fewer elements for requests. 100 is an AWS limitation for Describe* requests
+	pages := paginate(aws.StringSlice(taskIds), 100)
+
 	// Send DescribeTasks requests and save response tasks into array
 	for _, tasksPage := range pages {
-		if len(tasksPage) == 0 {
-			break
-		}
 
 		describeTasksInput := ecs.DescribeTasksInput{
 			Cluster: &config.Conf.AwsCluster,

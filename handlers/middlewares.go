@@ -1,14 +1,21 @@
 package handlers
 
 import (
-	"net/http"
+	"errors"
+	"fmt"
 	"os"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/cachemaps/sessionmap"
+	"github.com/zebrunner/esg/cachemaps/taskmap"
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
+)
+
+var (
+	taskContextKey    = "taskCache"
+	sessionContextKey = "sessionCache"
 )
 
 func APIError(c *gin.Context) {
@@ -23,112 +30,149 @@ func APIError(c *gin.Context) {
 		}).WithError(err).Warn("API error received")
 	}
 
-	status := http.StatusInternalServerError
-	message := "Internal server error happened. All error details collected in logs"
-	var meta interface{}
+	var apiErr *utils.APIError
+
 	publicError := c.Errors.ByType(gin.ErrorTypePublic).Last()
 	if publicError != nil {
-		httpError, ok := publicError.Err.(*utils.HTTPError)
+		passedApiErr, ok := publicError.Err.(*utils.APIError)
 		if ok {
-			status = httpError.Status
-			message = httpError.Message
+			apiErr = passedApiErr
 		}
-		meta = publicError.Meta
 	}
+
+	if apiErr == nil {
+		log.Debug("APIError(): intercepted error is either not public or not Api Error type. Setting default values...")
+		apiErr = utils.UnknownApiErr("internal server error")
+	}
+
 	log.WithFields(log.Fields{
 		"client":   c.ClientIP(),
-		"status":   status,
-		"response": message,
+		"status":   apiErr.Status,
+		"response": apiErr.Message,
 	}).Warn("Error response response")
-	c.JSON(status, utils.APIErrorResponse{
-		Error:   message,
-		Payload: meta,
-	})
+
+	apiErr.SendEncodedResponse(c)
 }
 
 func SeleniumError(c *gin.Context) {
 	// Add sessionID to gin context for logging purposes
-	path := c.Request.URL.Path
-	if strings.HasPrefix(path, "/wd/hub/session") && len(strings.Split(path, "/")) >= 3 {
-		sessionID := strings.Split(path, "/")[2]
-		c.Set("sessionID", sessionID)
+	l := log.NewEntry(log.StandardLogger())
+	sessionId := c.Param("session")
+	if sessionId != "" {
+		l = l.WithField("sessionId", sessionId)
+		sess, seErr := getSession(sessionId)
+		if seErr != nil {
+			l.WithError(seErr).Error("can't access session")
+			c.Error(seErr).SetType(gin.ErrorTypePublic)
+			c.Abort()
+		} else {
+			c.Set(sessionContextKey, sess)
+		}
+	}
+
+	taskId := c.Param("task")
+	if taskId != "" {
+		l = l.WithField("_taskId", taskId)
+		task, seErr := getTask(taskId)
+		if seErr != nil {
+			l.WithError(seErr).Error("can't access task")
+			c.Error(seErr).SetType(gin.ErrorTypePublic)
+			c.Abort()
+		} else {
+			c.Set(taskContextKey, task)
+		}
 	}
 
 	c.Next()
+
 	if c.Errors.Last() == nil {
 		return
 	}
 
 	for _, err := range c.Errors {
-		l := log.WithError(err)
-		if sess, ok := c.Get("sessionID"); ok {
-			l.WithField("sessionId", sess)
-		}
-		l.Debug("Selenium error received")
+		l.WithError(err).Debug("Selenium error received")
 	}
 
-	status := http.StatusInternalServerError
-	message := "Internal server error happened. All error details collected in logs"
-	seleniumCode := "unknown error"
-	var meta interface{}
+	var seErr *utils.SeleniumError
 
 	publicError := c.Errors.ByType(gin.ErrorTypePublic).Last()
 	if publicError != nil {
-		seleniumErr, ok := publicError.Err.(*utils.SeleniumError)
+		passedSeErr, ok := publicError.Err.(*utils.SeleniumError)
 		if ok {
-			message = seleniumErr.Message
-			seleniumCode = seleniumErr.SeleniumCode
-			status = seleniumErr.ResponseStatus
+			seErr = passedSeErr
 		}
-		meta = publicError.Meta
 	}
 
-	log.WithFields(log.Fields{
-		"status":        status,
-		"seleniumError": seleniumCode,
+	if seErr == nil {
+		l.Debug("SeleniumError(): intercepted error is either not public or not Selenium Error type. Setting default values...")
+		seErr = utils.UnknownErr(fmt.Errorf("internal server error"))
+	}
+
+	l.WithFields(log.Fields{
+		"status":  seErr.ResponseStatus,
+		"error":   seErr.Name,
+		"message": seErr.Err,
 	}).Warn("Error sent to selenium")
-	c.JSON(status, gin.H{
-		"value": gin.H{
-			"error":   seleniumCode,
-			"message": message,
-			"data":    meta,
-		},
-	})
+
+	seErr.SendEncodedResponse(c)
 }
 
-func Authentication(c *gin.Context) {
-	username, password, ok := c.Request.BasicAuth()
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"message": "Auth credentials not found",
-		})
-		log.WithField("client", c.ClientIP()).Warn("Auth credentials not found")
-		c.Abort()
-		return
+func getSession(id string) (*sessionmap.Session, *utils.SeleniumError) {
+	session, _ := sessionmap.Find(id, true)
+	if session == nil {
+		return nil, utils.NoSuchSessionErr(errors.New("session timed out or not found"))
 	}
 
-	err := service.CheckAuth(username, password)
-	if err != nil {
-		log.WithError(err).WithFields(log.Fields{
-			"client":   c.ClientIP(),
-			"user":     username,
-			"password": password,
-		}).Warn("Failed to authenticate user")
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"message": "Provided credentials not valid",
-		})
-		c.Abort()
-		return
+	if session.Status == sessionmap.SessionStopped {
+		return nil, utils.SessionStoppedErr(errors.New(string(session.StopReason)))
 	}
+
+	return session, nil
+}
+
+func getTask(id string) (*taskmap.Task, *utils.SeleniumError) {
+	task, _ := taskmap.Find(id)
+	if task == nil {
+		return nil, utils.NoSuchTaskErr(errors.New("task timed out or not found"))
+	}
+
+	if task.Status == taskmap.TaskStopped {
+		return nil, utils.TaskStoppedErr(errors.New(string(task.StopReason)))
+	}
+
+	return task, nil
 }
 
 func APIAuthentication(c *gin.Context) {
 	username, password, ok := c.Request.BasicAuth()
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"message": "Auth credentials not found",
-		})
 		log.WithField("client", c.ClientIP()).Warn("Auth credentials not found")
+
+		c.Error(utils.AuthApiErr("auth credentials not found")).SetType(gin.ErrorTypePublic)
+		c.Abort()
+		return
+	}
+
+	apiErr := service.CheckAuth(username, password)
+	if apiErr != nil {
+		log.WithError(apiErr).WithFields(log.Fields{
+			"client":   c.ClientIP(),
+			"user":     username,
+			"password": password,
+		}).Warn("Failed to authenticate user")
+
+		c.Error(apiErr).SetType(gin.ErrorTypePublic)
+		c.Abort()
+		return
+	}
+}
+
+func LowLvlAuthentication(c *gin.Context) {
+	username, password, ok := c.Request.BasicAuth()
+	if !ok {
+		log.WithField("client", c.ClientIP()).Warn("Auth credentials not found")
+
+		c.Error(utils.AuthApiErr("auth credentials not found")).SetType(gin.ErrorTypePublic)
 		c.Abort()
 		return
 	}
@@ -139,9 +183,8 @@ func APIAuthentication(c *gin.Context) {
 			"user":     username,
 			"password": password,
 		}).Warn("Failed to authenticate user")
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"message": "Provided credentials not valid",
-		})
+
+		c.Error(utils.AuthApiErr("provided credentials not valid")).SetType(gin.ErrorTypePublic)
 		c.Abort()
 		return
 	}

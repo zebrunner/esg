@@ -4,17 +4,17 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/aws/aws-sdk-go/service/ecs"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
-	log "github.com/sirupsen/logrus"
-	"github.com/zebrunner/esg/config"
+	"github.com/aws/aws-sdk-go/service/ecs"
 
-	sessionmap "github.com/zebrunner/esg/sessinonmap"
+	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/cachemaps/taskmap"
+	"github.com/zebrunner/esg/config"
 )
 
 const (
@@ -22,7 +22,7 @@ const (
 	ABORT_API_PATH = "/api/reporting/api/project-test-runs/abort"
 )
 
-func TrackResourcesUsage(sess *sessionmap.Session, task *ecs.Task) {
+func TrackResourcesUsage(sess *taskmap.Task, task *ecs.Task) {
 	//log.Info("Task:", task)
 	conf := &config.Conf
 	if conf.ZebrunnerHost == "" {
@@ -35,7 +35,11 @@ func TrackResourcesUsage(sess *sessionmap.Session, task *ecs.Task) {
 		return
 	}
 
-	l := log.WithFields(log.Fields{"sessionId": sess.ID, "_taskId": sess.TaskID})
+	l := log.WithField("_taskId", sess.ID)
+	if sess.CurrentSessionID != "" {
+		l = l.WithField("sessionId", sess.CurrentSessionID)
+	}
+
 	if task.StartedAt == nil || task.StoppingAt == nil {
 		// don't calculate timing for terminated tasks by AWS due to the missted StartedAt!
 		//      StopCode: \"TerminationNotice\"
@@ -116,7 +120,7 @@ func TrackResourcesUsage(sess *sessionmap.Session, task *ecs.Task) {
 		}).Error("Failed to track task resource usage!")
 		return
 	} else {
-		l := log.WithFields(log.Fields{"sessionId": sess.ID, "_taskId": sess.TaskID, "request body": requestBody})
+		l := l.WithFields(log.Fields{"request body": requestBody})
 		if !conf.SingleTenant {
 			l = l.WithField("workspace", sess.Workspace)
 		}
@@ -146,7 +150,7 @@ func getStoppedReason(task ecs.Task) string {
 	return "Launch finished"
 }
 
-func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
+func AbortTask(taskCache *taskmap.Task, task *ecs.Task) {
 	automationRunId := getAutomationRunId(*task)
 	if automationRunId == "" {
 		return
@@ -166,7 +170,7 @@ func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
 	}
 	if !conf.SingleTenant {
 		// add workspace/tenant to the url
-		requestUrl.Host = sess.Workspace + "." + requestUrl.Host
+		requestUrl.Host = taskCache.Workspace + "." + requestUrl.Host
 	}
 
 	stopReason := getStoppedReason(*task)
@@ -202,9 +206,9 @@ func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
 		}).Error("Failed to abort task!")
 		return
 	} else {
-		l := log.WithFields(log.Fields{"sessionId": sess.ID, "_taskId": sess.TaskID, "comment": stopReason})
+		l := log.WithFields(log.Fields{"sessionId": taskCache.CurrentSessionID, "_taskId": taskCache.ID, "comment": stopReason})
 		if !conf.SingleTenant {
-			l = l.WithField("workspace", sess.Workspace)
+			l = l.WithField("workspace", taskCache.Workspace)
 		}
 		l.Trace("task aborted")
 	}
