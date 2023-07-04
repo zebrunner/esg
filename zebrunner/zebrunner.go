@@ -28,9 +28,18 @@ func TrackResourcesUsage(taskCache *taskmap.Task, d time.Duration) {
 		// #527: don't write error message if zebrunner url is empty in the configuration
 		return
 	}
+
+	l := log.WithField("_taskId", taskCache.ID)
+	if taskCache.CurrentSessionID != "" {
+		l = l.WithField("sessionId", taskCache.CurrentSessionID)
+	}
+	if !conf.SingleTenant {
+		l = l.WithField("workspace", taskCache.Workspace)
+	}
+
 	requestUrl, err := url.ParseRequestURI(conf.ZebrunnerHost)
 	if err != nil {
-		log.WithError(err).Error("Failed to parse zebrunner base url")
+		l.WithError(err).Error("Failed to parse zebrunner base url")
 		return
 	}
 
@@ -51,24 +60,24 @@ func TrackResourcesUsage(taskCache *taskmap.Task, d time.Duration) {
 		"seconds":  d.Seconds(),
 		"platform": platformName,
 	}
-	log.Trace("request body to track resources: ", requestBody)
+	l.Trace("request body to track resources: ", requestBody)
 
 	body, err := json.Marshal(requestBody)
 	if err != nil {
-		log.WithError(err).Error("Failed to marshal request data")
+		l.WithError(err).Error("Failed to marshal request data")
 		return
 	}
 	req, err := http.NewRequest(http.MethodPost, requestUrl.String(), bytes.NewBuffer(body))
 	if err != nil {
-		log.WithError(err).Error("Failed to create request")
+		l.WithError(err).Error("Failed to create request")
 	}
 	req.SetBasicAuth(conf.ZebrunnerIntegrationUser, conf.ZebrunnerIntegrationPassword)
 	req.Header.Add("Content-Type", "application/json")
-	log.Trace("req: ", req)
+	l.Trace("req: ", req)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.WithError(err).Error("Failed to send request")
+		l.WithError(err).Error("Failed to send request")
 		return
 	}
 
@@ -77,19 +86,15 @@ func TrackResourcesUsage(taskCache *taskmap.Task, d time.Duration) {
 		err = json.NewDecoder(resp.Body).Decode(&data)
 
 		if err != nil {
-			log.WithError(err).Error("Failed to track task resource usage")
+			l.WithError(err).Error("Failed to track task resource usage")
 		}
-		log.WithFields(log.Fields{
+		l.WithFields(log.Fields{
 			"status":   resp.Status,
 			"response": data,
 		}).Error("Failed to track task resource usage!")
 		return
 	} else {
-		l := log.WithFields(log.Fields{"_taskId": taskCache.ID, "request body": requestBody})
-		if !conf.SingleTenant {
-			l = l.WithField("workspace", taskCache.Workspace)
-		}
-		l.Info("shape recorded")
+		l.WithField("request body", requestBody).Info("shape recorded")
 	}
 }
 
