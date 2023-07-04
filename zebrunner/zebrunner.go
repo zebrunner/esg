@@ -22,7 +22,7 @@ const (
 	ABORT_API_PATH = "/api/reporting/api/project-test-runs/abort"
 )
 
-func TrackResourcesUsage(sess *taskmap.Task, task *ecs.Task) {
+func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 	//log.Info("Task:", task)
 	conf := &config.Conf
 	if conf.ZebrunnerHost == "" {
@@ -35,9 +35,9 @@ func TrackResourcesUsage(sess *taskmap.Task, task *ecs.Task) {
 		return
 	}
 
-	l := log.WithField("_taskId", sess.ID)
-	if sess.CurrentSessionID != "" {
-		l = l.WithField("sessionId", sess.CurrentSessionID)
+	l := log.WithField("_taskId", cachedTask.ID)
+	if cachedTask.CurrentSessionID != "" {
+		l = l.WithField("sessionId", cachedTask.CurrentSessionID)
 	}
 
 	if task.StartedAt == nil || task.StoppingAt == nil {
@@ -51,32 +51,32 @@ func TrackResourcesUsage(sess *taskmap.Task, task *ecs.Task) {
 	l.Trace("StartedAt: ", *task.StartedAt)
 	l.Trace("StoppingAt: ", *task.StoppingAt)
 
-	l.Trace("HealthAt: ", sess.HealthAt)
+	l.Trace("HealthAt: ", cachedTask.HealthAt)
 	startedAt := *task.StartedAt //local var needed to calculate difference via Sub(..)
 	stoppingAt := *task.StoppingAt
 
 	duration := stoppingAt.Sub(startedAt)
-	healthAt := sess.HealthAt
+	healthAt := cachedTask.HealthAt
 
 	provisioningSeconds := healthAt.Sub(startedAt) //diff between healthAt and startedAt provide task preparation time
 	l.Trace("provisioningSeconds: ", provisioningSeconds.Seconds())
 
-	platformName := strings.ToLower(sess.Capabilities.PlatformName)
+	platformName := strings.ToLower(cachedTask.Capabilities.PlatformName)
 	if platformName == "" || platformName == "generic" || platformName == "any" {
 		platformName = "linux"
 	}
 
-	cpuUsage := sess.Capabilities.Cpu
-	memUsage := sess.Capabilities.Memory
-	if sess.Capabilities.Mitm {
+	cpuUsage := cachedTask.Capabilities.Cpu
+	memUsage := cachedTask.Capabilities.Memory
+	if cachedTask.Capabilities.Mitm {
 		// #579: track mitm container cpu and memory usage
-		cpuUsage += sess.Capabilities.MitmCpu
-		memUsage += sess.Capabilities.MitmMemory
+		cpuUsage += cachedTask.Capabilities.MitmCpu
+		memUsage += cachedTask.Capabilities.MitmMemory
 	}
 
 	if !conf.SingleTenant {
 		// add workspace/tenant to the url
-		requestUrl.Host = sess.Workspace + "." + requestUrl.Host
+		requestUrl.Host = cachedTask.Workspace + "." + requestUrl.Host
 	}
 	requestUrl.Path = USAGE_API_PATH
 	requestBody := map[string]interface{}{
@@ -122,7 +122,7 @@ func TrackResourcesUsage(sess *taskmap.Task, task *ecs.Task) {
 	} else {
 		l := l.WithFields(log.Fields{"request body": requestBody})
 		if !conf.SingleTenant {
-			l = l.WithField("workspace", sess.Workspace)
+			l = l.WithField("workspace", cachedTask.Workspace)
 		}
 		l.Info("shape recorded")
 	}
@@ -150,7 +150,7 @@ func getStoppedReason(task ecs.Task) string {
 	return "Launch finished"
 }
 
-func AbortTask(taskCache *taskmap.Task, task *ecs.Task) {
+func AbortTask(cachedTask *taskmap.Task, task *ecs.Task) {
 	automationRunId := getAutomationRunId(*task)
 	if automationRunId == "" {
 		return
@@ -170,7 +170,7 @@ func AbortTask(taskCache *taskmap.Task, task *ecs.Task) {
 	}
 	if !conf.SingleTenant {
 		// add workspace/tenant to the url
-		requestUrl.Host = taskCache.Workspace + "." + requestUrl.Host
+		requestUrl.Host = cachedTask.Workspace + "." + requestUrl.Host
 	}
 
 	stopReason := getStoppedReason(*task)
@@ -206,9 +206,9 @@ func AbortTask(taskCache *taskmap.Task, task *ecs.Task) {
 		}).Error("Failed to abort task!")
 		return
 	} else {
-		l := log.WithFields(log.Fields{"sessionId": taskCache.CurrentSessionID, "_taskId": taskCache.ID, "comment": stopReason})
+		l := log.WithFields(log.Fields{"sessionId": cachedTask.CurrentSessionID, "_taskId": cachedTask.ID, "comment": stopReason})
 		if !conf.SingleTenant {
-			l = l.WithField("workspace", taskCache.Workspace)
+			l = l.WithField("workspace", cachedTask.Workspace)
 		}
 		l.Trace("task aborted")
 	}

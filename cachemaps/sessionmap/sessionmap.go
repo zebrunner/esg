@@ -39,7 +39,7 @@ type Session struct {
 	Workspace   string
 }
 
-func CreateEntity(id string, env *environment.ExecutionEnvironment, taskCache *taskmap.Task) (*Session, error) {
+func CreateEntity(id string, env *environment.ExecutionEnvironment, task *taskmap.Task) (*Session, error) {
 	idleTimeout := float64(env.Capabilities.IdleTimeout)
 	if idleTimeout == 0 {
 		idleTimeout = config.Conf.IdleTimeout.Seconds()
@@ -51,9 +51,9 @@ func CreateEntity(id string, env *environment.ExecutionEnvironment, taskCache *t
 		AccessedAt:  time.Now(),
 		IdleTimeout: idleTimeout,
 		Network:     *env.Network,
-		TaskID:      taskCache.ID,
+		TaskID:      task.ID,
 		Status:      SessionActive,
-		Workspace:   taskCache.Workspace,
+		Workspace:   task.Workspace,
 	}
 
 	err := Write(sessionCache.ID, sessionCache, 0)
@@ -62,8 +62,8 @@ func CreateEntity(id string, env *environment.ExecutionEnvironment, taskCache *t
 		return nil, err
 	}
 
-	taskCache.CurrentSessionID = id
-	err = taskmap.Write(taskCache.ID, taskCache, 0)
+	task.CurrentSessionID = id
+	err = taskmap.Write(task.ID, task, 0)
 	if err != nil {
 		log.WithError(err).Error("Session id not cached for task!")
 		return nil, err

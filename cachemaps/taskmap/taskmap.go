@@ -46,20 +46,20 @@ type Task struct {
 }
 
 func CreateEntity(id string, env *environment.ExecutionEnvironment) (*Task, error) {
-	taskCache := &Task{
+	cachedTask := &Task{
 		ID:           id,
 		Capabilities: env.Capabilities,
 		Status:       TaskQueued,
 		Workspace:    env.Workspace,
 	}
 
-	err := Write(taskCache.ID, taskCache, 0)
+	err := Write(cachedTask.ID, cachedTask, 0)
 	if err != nil {
 		log.WithError(err).Error("Task not cached!")
 		return nil, err
 	}
 
-	return taskCache, nil
+	return cachedTask, nil
 }
 
 func Find(id string) (*Task, error) {

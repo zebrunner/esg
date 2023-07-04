@@ -66,33 +66,33 @@ func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 	for _, task := range tasks {
 		taskId := strings.Split(*task.TaskArn, "/")[2]
 
-		taskCache, err := taskmap.Find(taskId)
+		cachedTask, err := taskmap.Find(taskId)
 		if err != nil {
 			log.WithError(err).Debug("StopUnhealthyTasks(): failed to get task's cache for: ", taskId)
 			continue
 		}
 
-		l := log.WithField("_taskId", taskCache.ID)
+		l := log.WithField("_taskId", cachedTask.ID)
 
 		// stop zombie and UNHEALTHY tasks that are not pending for stop.
 		// resource usage register and taskId mark for removal is performed only for stopped tasks
 		if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
 			if *task.HealthStatus == "UNHEALTHY" {
 				l.Warn("Aborting task due to UNHEALTHY HealthStatus")
-				err := service.StopTask(taskCache.ID, taskmap.TaskUnhealthy)
+				err := service.StopTask(cachedTask.ID, taskmap.TaskUnhealthy)
 				if err != nil {
 					l.WithError(err).Error("Failed to stop the task")
 				}
 			} else {
 				maxTimeout := config.Conf.MaxTimeout
-				if taskCache.Capabilities.MaxTimeout != 0 {
-					maxTimeout = time.Duration(taskCache.Capabilities.MaxTimeout) * time.Second
+				if cachedTask.Capabilities.MaxTimeout != 0 {
+					maxTimeout = time.Duration(cachedTask.Capabilities.MaxTimeout) * time.Second
 				}
 				l.Trace("maxTimeout: ", maxTimeout)
 
 				if task.CreatedAt != nil && time.Since(*task.CreatedAt) > maxTimeout {
 					l.WithField("maxTimeout", maxTimeout).Warn("Aborting task due to the max timeout")
-					err := service.StopTask(taskCache.ID, taskmap.TaskMaxTimeout)
+					err := service.StopTask(cachedTask.ID, taskmap.TaskMaxTimeout)
 					if err != nil {
 						l.WithError(err).Error("Failed to stop the task")
 					}
@@ -147,14 +147,14 @@ func StopLostTasks(keys []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 				l := log.WithField("_taskId", taskId)
 				l.WithField("sessionStartupTimeout", sessStartup).Warn("Unrecognized task detected! Aborting")
 
-				taskCache := &taskmap.Task{
+				cachedTask := &taskmap.Task{
 					ID:     taskId,
 					Status: taskmap.TaskActive,
 				}
 				// maybe we can track lost task's session and restore lost cache
-				taskmap.Write(taskCache.ID, taskCache, 0)
+				taskmap.Write(cachedTask.ID, cachedTask, 0)
 
-				err := service.StopTask(taskCache.ID, taskmap.TaskLost)
+				err := service.StopTask(cachedTask.ID, taskmap.TaskLost)
 				if err != nil {
 					l.WithError(err).Error("Failed to stop the task")
 				}
@@ -177,8 +177,8 @@ func TrackResourceUsage(tasks []*ecs.Task, wg *sync.WaitGroup) {
 		}
 
 		// for tracking task should be cached
-		taskCache, _ := taskmap.Find(taskId)
-		if taskCache == nil {
+		cachedTask, _ := taskmap.Find(taskId)
+		if cachedTask == nil {
 			l.Debug("Can't find non tracked stopped task in cache")
 			continue
 		}
@@ -186,34 +186,34 @@ func TrackResourceUsage(tasks []*ecs.Task, wg *sync.WaitGroup) {
 		// for tracking task should be:
 		// 1) not tracked
 		// 2) with stop or generic(workaround) status, because later we'll need a stop reason
-		if taskCache.UsageTracked || !(taskCache.Status == taskmap.TaskStopped || taskCache.Status == taskmap.TaskGeneric) {
-			// TODO: delete taskCache.Status != taskmap.TaskGeneric when CloseGeneric() for generic tasks will be called
+		if cachedTask.UsageTracked || !(cachedTask.Status == taskmap.TaskStopped || cachedTask.Status == taskmap.TaskGeneric) {
+			// TODO: delete cachedTask.Status != taskmap.TaskGeneric when CloseGeneric() for generic tasks will be called
 			continue
 		}
 
 		if !config.Conf.SingleTenant {
-			l = l.WithField("workspace", taskCache.Workspace)
+			l = l.WithField("workspace", cachedTask.Workspace)
 		}
 
 		// track resources usage for STOPPED tasks
 		// Set tracked status and expiration time 5 minutes to be able to return taskId and stop reason for task
-		taskCache.UsageTracked = true
-		taskmap.Write(taskId, taskCache, 5*time.Minute)
+		cachedTask.UsageTracked = true
+		taskmap.Write(taskId, cachedTask, 5*time.Minute)
 
 		// Don't track Unhealthy and StartupFailure tasks
-		if taskCache.StopReason == taskmap.TaskStartupFailure ||
-			taskCache.StopReason == taskmap.TaskUnhealthy ||
-			taskCache.StopReason == taskmap.TaskLost {
-			l.Info("Not tracking task with stop reason:", taskCache.StopReason)
+		if cachedTask.StopReason == taskmap.TaskStartupFailure ||
+			cachedTask.StopReason == taskmap.TaskUnhealthy ||
+			cachedTask.StopReason == taskmap.TaskLost {
+			l.Info("Not tracking task with stop reason:", cachedTask.StopReason)
 			continue
 		}
 
-		zebrunner.TrackResourcesUsage(taskCache, task)
+		zebrunner.TrackResourcesUsage(cachedTask, task)
 
-		if !strings.HasPrefix(taskCache.Capabilities.Image, "public.ecr.aws/zebrunner/cypress-") && taskCache.Status == taskmap.TaskGeneric {
+		if !strings.HasPrefix(cachedTask.Capabilities.Image, "public.ecr.aws/zebrunner/cypress-") && cachedTask.Status == taskmap.TaskGeneric {
 			// #503: суpress tests aborted automatically
 			// automatic abort of the public.ecr.aws/zebrunner/cypress-* should be prohibited as execution is control by parent cyserver process
-			zebrunner.AbortTask(taskCache, task)
+			zebrunner.AbortTask(cachedTask, task)
 		}
 
 	}
