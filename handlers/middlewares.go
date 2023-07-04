@@ -85,7 +85,7 @@ func SeleniumError(c *gin.Context) {
 
 	c.Next()
 
-	if c.Errors.Last() == nil ю{
+	if c.Errors.Last() == nil {
 		return
 	}
 
