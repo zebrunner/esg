@@ -42,7 +42,7 @@ type Task struct {
 	StopReason       StoppedReason `json:",omitempty"`
 	UsageTracked     bool
 	Workspace        string
-	HealthAt         time.Time
+	HealthAt         time.Time `json:",omitempty"`
 }
 
 func CreateEntity(id string, env *environment.ExecutionEnvironment) (*Task, error) {

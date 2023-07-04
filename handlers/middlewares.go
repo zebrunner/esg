@@ -14,8 +14,8 @@ import (
 )
 
 var (
-	taskContextKey    = "taskCache"
-	sessionContextKey = "sessionCache"
+	taskContextKey    = "cachedTaskKey"
+	sessionContextKey = "cachedSessionKey"
 )
 
 func APIError(c *gin.Context) {

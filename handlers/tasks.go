@@ -192,7 +192,7 @@ func Create(c *gin.Context) {
 			return
 		}
 
-		sessionCache, err := sessionmap.CreateEntity(sessionId, env, cachedTask)
+		cachedSession, err := sessionmap.CreateEntity(sessionId, env, cachedTask)
 		if err != nil {
 			l.WithError(err).Error("Failed to cache driver session")
 
@@ -204,7 +204,7 @@ func Create(c *gin.Context) {
 			}
 			return
 		}
-		l.WithField("sessionId", sessionCache.ID).WithField("latency", util.SecondsSince(sessionStartTime)).Info("driver started")
+		l.WithField("sessionId", cachedSession.ID).WithField("latency", util.SecondsSince(sessionStartTime)).Info("driver started")
 	}
 
 	c.JSON(http.StatusOK, resp)

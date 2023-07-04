@@ -45,7 +45,7 @@ func CreateEntity(id string, env *environment.ExecutionEnvironment, task *taskma
 		idleTimeout = config.Conf.IdleTimeout.Seconds()
 	}
 
-	sessionCache := &Session{
+	cachedSession := &Session{
 		ID:          id,
 		StartedAt:   time.Now(),
 		AccessedAt:  time.Now(),
@@ -56,7 +56,7 @@ func CreateEntity(id string, env *environment.ExecutionEnvironment, task *taskma
 		Workspace:   task.Workspace,
 	}
 
-	err := Write(sessionCache.ID, sessionCache, 0)
+	err := Write(cachedSession.ID, cachedSession, 0)
 	if err != nil {
 		log.WithError(err).Error("Session not cached!")
 		return nil, err
@@ -69,7 +69,7 @@ func CreateEntity(id string, env *environment.ExecutionEnvironment, task *taskma
 		return nil, err
 	}
 
-	return sessionCache, nil
+	return cachedSession, nil
 }
 
 func Find(id string, rewriteAccessTime bool) (*Session, error) {
