@@ -27,32 +27,6 @@ import (
 	"golang.org/x/net/websocket"
 )
 
-func getSession(id string) (*sessionmap.Session, *utils.SeleniumError) {
-	session, _ := sessionmap.Find(id, true)
-	if session == nil {
-		return nil, utils.NoSuchSessionErr(errors.New("session timed out or not found"))
-	}
-
-	if session.Status == sessionmap.SessionStopped {
-		return nil, utils.SessionStoppedErr(errors.New(string(session.StopReason)))
-	}
-
-	return session, nil
-}
-
-func getTask(id string) (*taskmap.Task, *utils.SeleniumError) {
-	task, _ := taskmap.Find(id)
-	if task == nil {
-		return nil, utils.NoSuchTaskErr(errors.New("task timed out or not found"))
-	}
-
-	if task.Status == taskmap.TaskStopped {
-		return nil, utils.TaskStoppedErr(errors.New(string(task.StopReason)))
-	}
-
-	return task, nil
-}
-
 func Create(c *gin.Context) {
 	remote := c.ClientIP()
 	user, password, _ := c.Request.BasicAuth()
@@ -237,13 +211,7 @@ func Create(c *gin.Context) {
 }
 
 func Proxy(c *gin.Context) {
-	sessionID := c.Param("session")
-	sess, seErr := getSession(sessionID)
-	if seErr != nil {
-		log.WithError(seErr).WithField("sessionId", sessionID).Error("Proxy(): can't access session")
-		c.Error(seErr).SetType(gin.ErrorTypePublic)
-		return
-	}
+	sess := c.MustGet(sessionContextKey).(*sessionmap.Session)
 
 	(&httputil.ReverseProxy{
 		Director: func(r *http.Request) {
@@ -273,13 +241,8 @@ func Proxy(c *gin.Context) {
 	}).ServeHTTP(c.Writer, c.Request)
 }
 func CloseSession(c *gin.Context) {
-	sessionId := c.Param("session")
-	sess, seErr := getSession(sessionId)
-	if seErr != nil {
-		log.WithError(seErr).WithField("sessionId", sessionId).Error("CloseSession(): can't access session")
-		c.Error(seErr).SetType(gin.ErrorTypePublic)
-		return
-	}
+	sess := c.MustGet(sessionContextKey).(*sessionmap.Session)
+
 	l := log.WithField("_taskId", sess.TaskID)
 
 	selenium.CloseSession(sess, sessionmap.SessionFinished)
@@ -295,15 +258,9 @@ func CloseSession(c *gin.Context) {
 }
 
 func AbortTask(c *gin.Context) {
-	taskId := c.Param("task")
-	l := log.WithField("_taskId", taskId)
+	task := c.MustGet(taskContextKey).(*taskmap.Task)
 
-	task, seErr := getTask(taskId)
-	if seErr != nil {
-		l.WithError(seErr).Error("AbortTask(): can't access task")
-		c.Error(seErr).SetType(gin.ErrorTypePublic)
-		return
-	}
+	l := log.WithField("_taskId", task.ID)
 
 	if !config.Conf.SingleTenant {
 		l = l.WithField("workspace", task.Workspace)
@@ -445,14 +402,8 @@ func TaskDescribe(c *gin.Context) {
 }
 
 func Downloads(c *gin.Context) {
-	sessionID := c.Param("session")
 	filename := c.Param("file")
-	sess, seErr := getSession(sessionID)
-	if seErr != nil {
-		log.WithError(seErr).WithField("sessionId", sessionID).Error("Downloads(): can't access session")
-		c.Error(seErr).SetType(gin.ErrorTypePublic)
-		return
-	}
+	sess := c.MustGet(sessionContextKey).(*sessionmap.Session)
 
 	director := func(req *http.Request) {
 		req.URL.Scheme = "http"
@@ -469,13 +420,8 @@ func Downloads(c *gin.Context) {
 }
 
 func Clipboard(c *gin.Context) {
-	sessionID := c.Param("session")
-	sess, seErr := getSession(sessionID)
-	if seErr != nil {
-		log.WithError(seErr).WithField("sessionId", sessionID).Error("Clipboard(): can't access session")
-		_ = c.Error(seErr).SetType(gin.ErrorTypePublic)
-		return
-	}
+	sess := c.MustGet(sessionContextKey).(*sessionmap.Session)
+
 	director := func(req *http.Request) {
 		req.URL.Scheme = "http"
 		url, _ := sess.Network.GetUrl("clipboard")
@@ -487,13 +433,7 @@ func Clipboard(c *gin.Context) {
 }
 
 func Devtools(c *gin.Context) {
-	sessionID := c.Param("session")
-	sess, seErr := getSession(sessionID)
-	if seErr != nil {
-		log.WithError(seErr).WithField("sessionId", sessionID).Error("Devtools(): can't access session")
-		_ = c.Error(seErr).SetType(gin.ErrorTypePublic)
-		return
-	}
+	sess := c.MustGet(sessionContextKey).(*sessionmap.Session)
 
 	director := func(req *http.Request) {
 		req.URL.Scheme = "http"
