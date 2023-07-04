@@ -389,13 +389,13 @@ out:
 			return taskCache, nil
 		}
 
+		l.Debug("Waiting for the task to start")
 		req := taskWaiter.waitFor(ctx, taskArn)
 		select {
 		case <-req.ctx.Done():
 			// don't close chans from receiver side
 			// https://go.dev/tour/concurrency/4#:~:text=Note%3A%20Only%20the%20sender%20should,to%20terminate%20a%20range%20loop.
-			outputErr = errors.New("failed to wait until task is running. context deadline")
-			l.WithField("latency", time.Since(startTime)).WithError(outputErr).Warn("failed to wait until task is running")
+			l.WithField("latency", time.Since(startTime)).Warn("failed to wait until task is running. context deadline")
 
 		case err := <-req.errorChan:
 			outputErr = fmt.Errorf("failed to wait until Task is running and healthy!: %v", err)

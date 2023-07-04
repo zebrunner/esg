@@ -3,7 +3,6 @@ package service
 import (
 	"errors"
 	"fmt"
-	"net/http"
 	"sync"
 
 	"github.com/zebrunner/esg/config"
@@ -38,13 +37,10 @@ func generatePassword() (string, error) {
 	return password.Generate(passwordLength, digitCount, symbolCount, noUpper, allowRepeat)
 }
 
-func CreateUser(name string, password *string) (string, error) {
+func CreateUser(name string, password *string) (string, *utils.APIError) {
 	dbUser, _ := GetUser(name)
 	if dbUser != nil {
-		return "", &utils.HTTPError{
-			Message: "User with this name already exists",
-			Status:  http.StatusBadRequest,
-		}
+		return "", utils.InvalidApiRequestErr("user with this name already exists")
 	}
 
 	pwd, err := generatePassword()
@@ -55,20 +51,20 @@ func CreateUser(name string, password *string) (string, error) {
 
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(pwd), bcrypt.DefaultCost)
 	if err != nil {
-		return "", err
+		return "", utils.UnknownApiErr(err.Error())
 	}
 
 	createQuery := `INSERT INTO users (name, password) VALUES ($1, $2)`
 	_, err = config.DbConnection.Exec(createQuery, name, string(passwordHash))
 	if err != nil {
-		return "", err
+		return "", utils.UnknownApiErr(err.Error())
 	}
 
 	log.WithField("user", name).Debug("User created successfully")
 	return pwd, nil
 }
 
-func GetUser(name string) (*User, error) {
+func GetUser(name string) (*User, *utils.APIError) {
 	getQuery := `SELECT id, name, password, is_active FROM users WHERE is_deleted = false AND name = $1`
 	user := User{}
 	mutexDB.Lock()
@@ -76,41 +72,42 @@ func GetUser(name string) (*User, error) {
 	mutexDB.Unlock()
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return nil, &utils.HTTPError{
-				Status:  http.StatusNotFound,
-				Message: fmt.Sprintf("User with name %s not found", name),
-			}
+			return nil, utils.NotFoundApiErr(fmt.Sprintf("user with name %s not found", name))
 		} else {
-			return nil, err
+			return nil, utils.UnknownApiErr(err.Error())
 		}
 	}
 
 	return &user, nil
 }
 
-func ActivationUser(name string, isActive bool) error {
-	user, err := GetUser(name)
-	if err != nil {
-		return err
+func ActivationUser(name string, isActive bool) *utils.APIError {
+	user, apiErr := GetUser(name)
+	if apiErr != nil {
+		return apiErr
 	}
+
 	invalidateQuery := `UPDATE users SET is_active = $1, updated_at = now() WHERE users.id = $2`
-	_, err = config.DbConnection.Exec(invalidateQuery, isActive, user.ID)
+	_, err := config.DbConnection.Exec(invalidateQuery, isActive, user.ID)
 	if err != nil {
-		return err
+		return utils.UnknownApiErr(err.Error())
 	}
+
 	return nil
 }
 
-func RefreshToken(name string, pwd *string) (string, error) {
-	user, err := GetUser(name)
-	if err != nil {
-		return "", err
+func RefreshToken(name string, pwd *string) (string, *utils.APIError) {
+	user, apiErr := GetUser(name)
+	if apiErr != nil {
+		return "", apiErr
 	}
+
 	password := ""
 	if pwd == nil {
+		var err error
 		password, err = generatePassword()
 		if err != nil {
-			return "", err
+			return "", utils.UnknownApiErr(err.Error())
 		}
 	} else {
 		password = *pwd
@@ -118,26 +115,30 @@ func RefreshToken(name string, pwd *string) (string, error) {
 
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return "", err
+		return "", utils.UnknownApiErr(err.Error())
 	}
+
 	refreshQuery := `UPDATE users SET password = $1, updated_at = now() WHERE id = $2`
 	_, err = config.DbConnection.Exec(refreshQuery, passwordHash, user.ID)
 	if err != nil {
-		return "", err
+		return "", utils.UnknownApiErr(err.Error())
 	}
+
 	return password, nil
 }
 
-func DeleteUser(name string) error {
-	user, err := GetUser(name)
-	if err != nil {
-		return err
+func DeleteUser(name string) *utils.APIError {
+	user, apiErr := GetUser(name)
+	if apiErr != nil {
+		return apiErr
 	}
+
 	deleteQuery := `UPDATE users SET is_deleted=true WHERE id = $1`
-	_, err = config.DbConnection.Exec(deleteQuery, user.ID)
+	_, err := config.DbConnection.Exec(deleteQuery, user.ID)
 	if err != nil {
-		return err
+		return utils.UnknownApiErr(err.Error())
 	}
+
 	return nil
 }
 
@@ -148,28 +149,22 @@ func GetWorkspace(name string) (string, error) {
 	return name, nil
 }
 
-func CheckAuth(name, password string) error {
-	authenticationError := utils.HTTPError{
-		Status:  http.StatusUnauthorized,
-		Message: "Invalid username or password",
-	}
-
+func CheckAuth(name, password string) *utils.APIError {
 	if name == "" || password == "" {
-		authenticationError.Message = "Failed to get auth credentials"
-		return &authenticationError
+		return utils.AuthApiErr("failed to get auth credentials")
 	}
 
-	user, err := GetUser(name)
-	if err != nil {
-		return &authenticationError
+	user, apiErr := GetUser(name)
+	if apiErr != nil {
+		return apiErr
 	}
-	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
+
+	err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	if err != nil {
-		return &authenticationError
+		return utils.AuthApiErr("provided credentials not valid")
 	}
 	if !user.IsActive {
-		authenticationError.Message = "User deactivated, authorization not allowed."
-		return &authenticationError
+		return utils.AuthApiErr("user deactivated, authorization not allowed")
 	}
 	return nil
 }

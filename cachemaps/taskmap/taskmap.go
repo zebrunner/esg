@@ -25,13 +25,13 @@ const (
 type StoppedReason string
 
 const (
-	TaskStartupFailure     StoppedReason = "Task startup failure"
-	SessiongStartupFailure StoppedReason = "Healthy task failed to start session"
-	TaskUnhealthy          StoppedReason = "Task aborted due to unhealthy status"
-	TaskMaxTimeout         StoppedReason = "Task aborted due to the max timeout"
-	TaskAborted            StoppedReason = "Task aborted"
-	TaskFinished           StoppedReason = "Task finished"
-	TaskLost               StoppedReason = "Task aborted due to it loss in cache"
+	TaskStartupFailure     StoppedReason = "task startup failure"
+	SessiongStartupFailure StoppedReason = "healthy task failed to start session"
+	TaskUnhealthy          StoppedReason = "task aborted due to unhealthy status"
+	TaskMaxTimeout         StoppedReason = "task aborted due to the max timeout"
+	TaskAborted            StoppedReason = "task aborted"
+	TaskFinished           StoppedReason = "task finished"
+	TaskLost               StoppedReason = "task aborted as it wasn't found in cache"
 )
 
 type Task struct {

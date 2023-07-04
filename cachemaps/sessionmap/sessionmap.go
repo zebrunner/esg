@@ -21,10 +21,10 @@ const (
 type StoppedReason string
 
 const (
-	SessionIdleTimeout StoppedReason = "Session stopped due IDLE timeout"
-	SessionMaxTimeout  StoppedReason = "Session aborted due to the max timeout"
-	SessionAborted     StoppedReason = "Session aborted"
-	SessionFinished    StoppedReason = "Session finished"
+	SessionIdleTimeout StoppedReason = "session stopped due IDLE timeout"
+	SessionMaxTimeout  StoppedReason = "session aborted due to the max timeout"
+	SessionAborted     StoppedReason = "session aborted"
+	SessionFinished    StoppedReason = "session finished"
 )
 
 type Session struct {

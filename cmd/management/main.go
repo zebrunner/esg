@@ -44,7 +44,7 @@ func ClearTasks() {
 		}
 
 		if len(taskIds) > 0 {
-			log.WithField("keys:", taskIds).Debug("cached task keys")
+			log.WithField("keys:", taskIds).Trace("cached task keys")
 		}
 		wg.Add(1)
 		go StopLostTasks(taskIds, svc, &wg)
