@@ -115,7 +115,7 @@ func Create(c *gin.Context) {
 		}
 	}
 
-	taskCache, err := service.StartTask(ctx, env)
+	cachedTask, err := service.StartTask(ctx, env)
 	if err != nil {
 		err = fmt.Errorf("service startup failed: %v", err)
 		l.Error(err)
@@ -124,17 +124,17 @@ func Create(c *gin.Context) {
 		return
 	}
 
-	l = l.WithField("_taskId", taskCache.ID)
+	l = l.WithField("_taskId", cachedTask.ID)
 	l.Info("task started")
 	var resp map[string]interface{}
 	if env.TaskDefinitionFamily == "generic" || strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
 		// TODO: delete status update when CloseSession() for generic tasks will be called
-		taskCache.Status = taskmap.TaskGeneric
-		err := taskmap.Write(taskCache.ID, taskCache, 0)
+		cachedTask.Status = taskmap.TaskGeneric
+		err := taskmap.Write(cachedTask.ID, cachedTask, 0)
 		if err != nil {
 			l.WithError(err).Error("Failed to update generic's status")
 		}
-		data := "{\"taskId\": \"" + taskCache.ID + "\"}"
+		data := "{\"taskId\": \"" + cachedTask.ID + "\"}"
 		json.Unmarshal([]byte(data), &resp)
 		l.WithFields(log.Fields{"resp": resp}).Debug("Response")
 	} else {
@@ -169,7 +169,7 @@ func Create(c *gin.Context) {
 
 			c.Error(utils.CreationErr(fmt.Errorf("failed to start driver: %v", err))).SetType(gin.ErrorTypePublic)
 
-			err = service.StopTask(taskCache.ID, taskmap.SessiongStartupFailure)
+			err = service.StopTask(cachedTask.ID, taskmap.SessiongStartupFailure)
 			if err != nil {
 				l.WithError(err).Warn("Failed to stop task")
 			}
@@ -185,20 +185,20 @@ func Create(c *gin.Context) {
 
 			c.Error(utils.CreationErr(fmt.Errorf("failed to create driver: %v", err))).SetType(gin.ErrorTypePublic)
 
-			err = service.StopTask(taskCache.ID, taskmap.SessiongStartupFailure)
+			err = service.StopTask(cachedTask.ID, taskmap.SessiongStartupFailure)
 			if err != nil {
 				l.WithError(err).Warn("Failed to stop task")
 			}
 			return
 		}
 
-		sessionCache, err := sessionmap.CreateEntity(sessionId, env, taskCache)
+		sessionCache, err := sessionmap.CreateEntity(sessionId, env, cachedTask)
 		if err != nil {
 			l.WithError(err).Error("Failed to cache driver session")
 
 			c.Error(utils.UnknownErr(fmt.Errorf("failed to cache driver session: %v", err))).SetType(gin.ErrorTypePublic)
 
-			err = service.StopTask(taskCache.ID, taskmap.SessiongStartupFailure)
+			err = service.StopTask(cachedTask.ID, taskmap.SessiongStartupFailure)
 			if err != nil {
 				l.WithError(err).Warn("Failed to stop task")
 			}

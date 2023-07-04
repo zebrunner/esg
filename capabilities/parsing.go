@@ -128,6 +128,8 @@ func (c *RequestCaps) Process() error {
 		return err
 	}
 
+	processProxy(c.Capabilities.AlwaysMatch)
+
 	for index := range c.Capabilities.FirstMatch {
 		err = processLegacyCaps(c.Capabilities.FirstMatch[index])
 		if err != nil {
@@ -148,6 +150,8 @@ func (c *RequestCaps) Process() error {
 		if err != nil {
 			return err
 		}
+
+		processProxy(c.Capabilities.FirstMatch[index])
 	}
 
 	return nil
@@ -194,13 +198,15 @@ func (c *RequestCaps) ProcessLegacy() error {
 			}
 		}
 
+		processProxy(fmCaps)
+
 		renamedLegacy := []string{"browserName", "platformName", "browserVersion"}
 		for _, name := range renamedLegacy {
 			if fmCaps[name] == nil && c.DesiredCapabilities[name] != nil {
 				fmCaps[name] = c.DesiredCapabilities[name]
 			}
 		}
-		
+
 		err = processCaps(fmCaps)
 		if err != nil {
 			return err
@@ -294,6 +300,8 @@ func processVendorCaps(caps map[string]interface{}) error {
 		"dnsServers",
 		"mitm", "Mitm", //to support lower case and camel case
 		"mitmArgs", "MitmArgs", "mitmargs",
+		"mitmCpu", "MitmCpu", "mitmcpu",
+		"mitmMemory", "MitmMemory", "mitmmemory",
 	}
 	processors := map[string]*CapProcessor{}
 	for _, name := range vendorCapNames {
@@ -332,6 +340,25 @@ func processCaps(caps map[string]interface{}) error {
 	}
 
 	return nil
+}
+
+func processProxy(caps map[string]interface{}) {
+	for key, value := range caps {
+		if strings.ToLower(key) == "zebrunner:mitm" {
+			if enabled, ok:= value.(bool); !ok || !enabled {
+				return
+			}
+
+			log.Debug("Found mitm cap, overriding proxy capabilities object...")
+			// proxy:map[sslProxy:mitm:8080 httpProxy:mitm:8080 proxyType:MANUAL]
+			caps["proxy"] = map[string]interface{}{
+				"httpProxy": "mitm:8080",
+				"sslProxy":  "mitm:8080",
+				"proxyType": "manual",
+			}
+			return
+		}
+	}
 }
 
 func processOptions(caps map[string]interface{}) error {

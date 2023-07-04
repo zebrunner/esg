@@ -39,6 +39,8 @@ type Capabilities struct {
 	//Mitm proxy caps
 	Mitm     bool   //enabl mitm with har dump and output generation for mitmweb
 	MitmArgs string // list of arguments for mitmdump command. Important: --verbose and --quiet will be appended forcibly
+	MitmCpu int64 `json:"mitmCpu,string,omitempty"`
+	MitmMemory int64 `json:"mitmMemory,string,omitempty"`
 
 	// generic launcher caps
 	RepositoryUrl string

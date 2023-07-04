@@ -199,17 +199,17 @@ func StopTask(taskId string, stopReason taskmap.StoppedReason) error {
 
 	l := log.WithField("_taskId", taskId)
 
-	taskCache, _ := taskmap.Find(taskId)
+	cachedTask, _ := taskmap.Find(taskId)
 	var oldTaskStatus taskmap.TaskStatus
-	if taskCache != nil {
-		if taskCache.Status == taskmap.TaskStopped || taskCache.Status == taskmap.TaskPendingToStop {
+	if cachedTask != nil {
+		if cachedTask.Status == taskmap.TaskStopped || cachedTask.Status == taskmap.TaskPendingToStop {
 			err := errors.New("StopTask() call for stopped/pending to stop task")
 			return err
 		} else {
 			// Set pendingToStop status so no new StopTask() call for current task would be performed
-			oldTaskStatus = taskCache.Status
-			taskCache.Status = taskmap.TaskPendingToStop
-			taskmap.Write(taskId, taskCache, 0)
+			oldTaskStatus = cachedTask.Status
+			cachedTask.Status = taskmap.TaskPendingToStop
+			taskmap.Write(taskId, cachedTask, 0)
 		}
 	}
 
@@ -228,10 +228,10 @@ func StopTask(taskId string, stopReason taskmap.StoppedReason) error {
 			l.Info("task stopped")
 
 			// Set stopped status and expiration time 10 minutes to be able to track task's usage
-			if taskCache != nil {
-				taskCache.Status = taskmap.TaskStopped
-				taskCache.StopReason = stopReason
-				taskmap.Write(taskId, taskCache, 10*time.Minute)
+			if cachedTask != nil {
+				cachedTask.Status = taskmap.TaskStopped
+				cachedTask.StopReason = stopReason
+				taskmap.Write(taskId, cachedTask, 10*time.Minute)
 			}
 
 			// break out of the loop
@@ -242,9 +242,9 @@ func StopTask(taskId string, stopReason taskmap.StoppedReason) error {
 	if err != nil {
 		l.WithError(err).Error("Failed to stop task")
 		// revert old status because of a stop failure
-		if taskCache != nil {
-			taskCache.Status = oldTaskStatus
-			taskmap.Write(taskId, taskCache, 0)
+		if cachedTask != nil {
+			cachedTask.Status = oldTaskStatus
+			taskmap.Write(taskId, cachedTask, 0)
 		}
 	}
 
@@ -372,21 +372,24 @@ out:
 		}
 
 		// caching task as soon as possible
-		taskCache, err := taskmap.CreateEntity(strings.Split(taskArn, "/")[2], env)
+		cachedTask, err := taskmap.CreateEntity(strings.Split(taskArn, "/")[2], env)
 		if err != nil {
 			outputErr = fmt.Errorf("task not cached!: %v", err)
 			l.WithError(outputErr).Warn()
-			err := StopTask(taskCache.ID, taskmap.TaskStartupFailure)
+			err := StopTask(cachedTask.ID, taskmap.TaskStartupFailure)
 			if err != nil {
 				l.WithError(err).Warn("Failed to stop task")
 			}
 			continue
 		}
-		l = l.WithField("_taskId", taskCache.ID)
+		l = l.WithField("_taskId", cachedTask.ID)
 
 		if env.TaskDefinitionFamily == "generic" {
+			//TODO: remove HealthAt as only healthcheck integrated into the generic as well
+			cachedTask.HealthAt = time.Now()
+			taskmap.Write(cachedTask.ID, cachedTask, 0)
 			l.Debug("do not wait for generic task startup.")
-			return taskCache, nil
+			return cachedTask, nil
 		}
 
 		l.Debug("Waiting for the task to start")
@@ -396,30 +399,32 @@ out:
 			// don't close chans from receiver side
 			// https://go.dev/tour/concurrency/4#:~:text=Note%3A%20Only%20the%20sender%20should,to%20terminate%20a%20range%20loop.
 			l.WithField("latency", time.Since(startTime)).Warn("failed to wait until task is running. context deadline")
-
 		case err := <-req.errorChan:
 			outputErr = fmt.Errorf("failed to wait until Task is running and healthy!: %v", err)
 			l.WithField("latency", time.Since(startTime)).WithError(outputErr).Warn()
-
 		case task := <-req.responseChan:
+			// timediff between HealthAt (current time) and task.startedAt should be cut during resources tracking to bill only actual (net) time
+                        cachedTask.HealthAt = time.Now()
+                        taskmap.Write(cachedTask.ID, cachedTask, 0)
+			l.Debug("Healthcheck latency: ", time.Since(startTime))
+
 			err = setEnvironmentNetwork(env, task)
 			l.Debug("setEnvironmentNetwork latency: ", time.Since(startTime))
 			if err != nil {
 				outputErr = fmt.Errorf("failed to get network info: %v", err)
 				l.WithField("latency", time.Since(startTime)).WithError(outputErr).Warn()
 			} else {
-				taskCache.Status = taskmap.TaskActive
-				err = taskmap.Write(taskCache.ID, taskCache, 0)
+				cachedTask.Status = taskmap.TaskActive
+				err = taskmap.Write(cachedTask.ID, cachedTask, 0)
 				if err != nil {
 					l.WithError(fmt.Errorf("task not recached after network set!: %v", err))
 				}
-
-				return taskCache, nil
+				return cachedTask, nil
 			}
 		}
 		// will be called only for unsuccess task startup
 		// as on success startup we return from func in switch select
-		err = StopTask(taskCache.ID, taskmap.TaskStartupFailure)
+		err = StopTask(cachedTask.ID, taskmap.TaskStartupFailure)
 		if err != nil {
 			l.WithError(err).Warn("Failed to stop task")
 		}
