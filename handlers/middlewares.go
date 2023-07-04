@@ -3,7 +3,6 @@ package handlers
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
@@ -12,7 +11,6 @@ import (
 )
 
 func APIError(c *gin.Context) {
-	log.Debug("triggered APIError handler")
 	c.Next()
 	if c.Errors.Last() == nil {
 		return
@@ -36,7 +34,7 @@ func APIError(c *gin.Context) {
 
 	if apiErr == nil {
 		log.Debug("APIError(): intercepted error is either not public or not Api Error type. Setting default values...")
-		apiErr = utils.UnknownApiErr("Internal server error happened. All error details collected in logs")
+		apiErr = utils.UnknownApiErr("internal server error happened. All error details collected in logs")
 	}
 
 	log.WithFields(log.Fields{
@@ -50,24 +48,25 @@ func APIError(c *gin.Context) {
 
 func SeleniumError(c *gin.Context) {
 	// Add sessionID to gin context for logging purposes
-	log.Debug("triggered SeleniumError handler")
-	path := c.Request.URL.Path
-	if strings.HasPrefix(path, "/wd/hub/session") && len(strings.Split(path, "/")) >= 3 {
-		sessionID := strings.Split(path, "/")[2]
-		c.Set("sessionID", sessionID)
+	l := log.NewEntry(log.StandardLogger())
+	sessionId := c.Param("session")
+	if sessionId != "" {
+		l = l.WithField("sessionId", sessionId)
+	}
+
+	taskId := c.Param("task")
+	if taskId != "" {
+		l = l.WithField("_taskId", taskId)
 	}
 
 	c.Next()
+
 	if c.Errors.Last() == nil {
 		return
 	}
 
 	for _, err := range c.Errors {
-		l := log.WithError(err)
-		if sess, ok := c.Get("sessionID"); ok {
-			l.WithField("sessionId", sess)
-		}
-		l.Debug("Selenium error received")
+		l.WithError(err).Debug("Selenium error received")
 	}
 
 	var seErr *utils.SeleniumError
@@ -81,11 +80,11 @@ func SeleniumError(c *gin.Context) {
 	}
 
 	if seErr == nil {
-		log.Debug("SeleniumError(): intercepted error is either not public or not Selenium Error type. Setting default values...")
+		l.Debug("SeleniumError(): intercepted error is either not public or not Selenium Error type. Setting default values...")
 		seErr = utils.UnknownErr(fmt.Errorf("internal server error happened. All error details collected in logs"))
 	}
 
-	log.WithFields(log.Fields{
+	l.WithFields(log.Fields{
 		"status":  seErr.ResponseStatus,
 		"error":   seErr.Name,
 		"message": seErr.Err,
@@ -95,7 +94,6 @@ func SeleniumError(c *gin.Context) {
 }
 
 func APIAuthentication(c *gin.Context) {
-	log.Debug("triggered APIAuthentication handler")
 	username, password, ok := c.Request.BasicAuth()
 	if !ok {
 		log.WithField("client", c.ClientIP()).Warn("Auth credentials not found")
@@ -120,7 +118,6 @@ func APIAuthentication(c *gin.Context) {
 }
 
 func LowLvlAuthentication(c *gin.Context) {
-	log.Debug("triggered LowLvlAuthentication handler")
 	username, password, ok := c.Request.BasicAuth()
 	if !ok {
 		log.WithField("client", c.ClientIP()).Warn("Auth credentials not found")

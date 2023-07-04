@@ -31,7 +31,7 @@ const (
 	TaskMaxTimeout         StoppedReason = "task aborted due to the max timeout"
 	TaskAborted            StoppedReason = "task aborted"
 	TaskFinished           StoppedReason = "task finished"
-	TaskLost               StoppedReason = "task aborted due to it loss in cache"
+	TaskLost               StoppedReason = "task aborted as it wasn't found in cache"
 )
 
 type Task struct {

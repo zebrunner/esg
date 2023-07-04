@@ -58,7 +58,7 @@ func ListDrivers(c *gin.Context) {
 	images, err := utils.ListBrowsers()
 	if err != nil {
 		log.WithError(err).Warn("Failed to get browser list")
-		c.Error(utils.NotFoundApiErr("Failed to get browser list")).SetType(gin.ErrorTypePublic)
+		c.Error(utils.NotFoundApiErr("failed to get browser list")).SetType(gin.ErrorTypePublic)
 		return
 	}
 

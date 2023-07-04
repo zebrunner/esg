@@ -57,7 +57,7 @@ type SeleniumError struct {
 }
 
 func (seErr *SeleniumError) Error() string {
-	return fmt.Sprintf("Error: %s. Message: %s", seErr.Name, seErr.Err.Error())
+	return fmt.Sprintf("%s: %s", seErr.Name, seErr.Err.Error())
 }
 
 func (seErr *SeleniumError) SendEncodedResponse(c *gin.Context) {

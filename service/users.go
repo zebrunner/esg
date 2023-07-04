@@ -72,7 +72,7 @@ func GetUser(name string) (*User, *utils.APIError) {
 	mutexDB.Unlock()
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return nil, utils.NotFoundApiErr(fmt.Sprintf("User with name %s not found", name))
+			return nil, utils.NotFoundApiErr(fmt.Sprintf("user with name %s not found", name))
 		} else {
 			return nil, utils.UnknownApiErr(err.Error())
 		}

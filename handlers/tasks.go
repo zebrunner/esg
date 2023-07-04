@@ -43,11 +43,11 @@ func getSession(id string) (*sessionmap.Session, *utils.SeleniumError) {
 func getTask(id string) (*taskmap.Task, *utils.SeleniumError) {
 	task, _ := taskmap.Find(id)
 	if task == nil {
-		return nil, utils.NoSuchSessionErr(errors.New("task timed out or not found"))
+		return nil, utils.NoSuchTaskErr(errors.New("task timed out or not found"))
 	}
 
 	if task.Status == taskmap.TaskStopped {
-		return nil, utils.SessionStoppedErr(errors.New(string(task.StopReason)))
+		return nil, utils.TaskStoppedErr(errors.New(string(task.StopReason)))
 	}
 
 	return task, nil
@@ -66,9 +66,9 @@ func Create(c *gin.Context) {
 		return
 	}
 
-	err = service.CheckAuth(user, password)
-	if err != nil {
-		log.WithError(err).WithFields(log.Fields{
+	apiErr := service.CheckAuth(user, password)
+	if apiErr != nil {
+		log.WithError(apiErr).WithFields(log.Fields{
 			"client":   c.ClientIP(),
 			"user":     user,
 			"password": password,
@@ -144,7 +144,7 @@ func Create(c *gin.Context) {
 	taskCache, err := service.StartTask(ctx, env)
 	if err != nil {
 		err = fmt.Errorf("service startup failed: %v", err)
-		l.WithError(err).Error()
+		l.Error(err)
 
 		c.Error(utils.CreationErr(err)).SetType(gin.ErrorTypePublic)
 		return
@@ -240,7 +240,7 @@ func Proxy(c *gin.Context) {
 	sessionID := c.Param("session")
 	sess, seErr := getSession(sessionID)
 	if seErr != nil {
-		log.WithError(seErr).WithField("sessionId", sessionID).Error("Cant find session")
+		log.WithError(seErr).WithField("sessionId", sessionID).Error("Proxy(): can't access session")
 		c.Error(seErr).SetType(gin.ErrorTypePublic)
 		return
 	}
@@ -276,7 +276,7 @@ func CloseSession(c *gin.Context) {
 	sessionId := c.Param("session")
 	sess, seErr := getSession(sessionId)
 	if seErr != nil {
-		log.WithError(seErr).WithField("sessionId", sessionId).Error("Can't find session!")
+		log.WithError(seErr).WithField("sessionId", sessionId).Error("CloseSession(): can't access session")
 		c.Error(seErr).SetType(gin.ErrorTypePublic)
 		return
 	}
@@ -296,14 +296,15 @@ func CloseSession(c *gin.Context) {
 
 func AbortTask(c *gin.Context) {
 	taskId := c.Param("task")
+	l := log.WithField("_taskId", taskId)
+
 	task, seErr := getTask(taskId)
 	if seErr != nil {
-		log.WithField("id", taskId).WithError(seErr).Warn("Task not found!")
+		l.WithError(seErr).Error("AbortTask(): can't access task")
 		c.Error(seErr).SetType(gin.ErrorTypePublic)
 		return
 	}
 
-	l := log.WithField("_taskId", task.ID)
 	if !config.Conf.SingleTenant {
 		l = l.WithField("workspace", task.Workspace)
 	}
@@ -322,10 +323,10 @@ func Vnc(wsconn *websocket.Conn) {
 	fragments := strings.Split(wsconn.Request().URL.Path, "/")
 	sid := fragments[len(fragments)-1]
 	l := log.WithField("sessionId", sid)
-	sess, seErr := getSession(sid)
 
+	sess, seErr := getSession(sid)
 	if seErr != nil {
-		l.WithError(seErr).Error("Session not found")
+		l.WithError(seErr).Error("Vnc(): can't access session")
 		return
 	}
 	log.Debug("sess.Network: ", sess.Network)
@@ -372,7 +373,7 @@ func Logs(c *gin.Context) {
 	presignedUrl, err := service.GeneratePreSignedURL(logFile)
 	if err != nil {
 		log.Printf("[URL GENERATION FAILED] %v", err)
-		c.Error(utils.NotFoundApiErr("Resource Not Found")).SetType(gin.ErrorTypePublic)
+		c.Error(utils.NotFoundApiErr("resource not found")).SetType(gin.ErrorTypePublic)
 		return
 	}
 
@@ -396,7 +397,7 @@ func Video(c *gin.Context) {
 			"sessionId": sessionID,
 		}).Error("Failed to create pre signed url to session video")
 
-		c.Error(utils.NotFoundApiErr("Resource Not Found")).SetType(gin.ErrorTypePublic)
+		c.Error(utils.NotFoundApiErr("resource not found")).SetType(gin.ErrorTypePublic)
 		return
 	}
 
@@ -415,7 +416,7 @@ func TaskLog(c *gin.Context) {
 	presignedUrl, err := service.GeneratePreSignedURL(logFile)
 	if err != nil {
 		log.Printf("[URL GENERATION FAILED] %v", err)
-		c.Error(utils.NotFoundApiErr("Resource Not Found")).SetType(gin.ErrorTypePublic)
+		c.Error(utils.NotFoundApiErr("resource not found")).SetType(gin.ErrorTypePublic)
 		return
 	}
 
@@ -435,7 +436,7 @@ func TaskDescribe(c *gin.Context) {
 	result, err := service.DescribeTask(taskId)
 	if err != nil {
 		l.Error("Failed to get task status")
-		c.Error(utils.UnknownApiErr(fmt.Sprintf("Failed to get task status: %v", err.Error()))).
+		c.Error(utils.UnknownApiErr(fmt.Sprintf("failed to get task status: %v", err.Error()))).
 			SetType(gin.ErrorTypePublic)
 		return
 	}
@@ -448,6 +449,7 @@ func Downloads(c *gin.Context) {
 	filename := c.Param("file")
 	sess, seErr := getSession(sessionID)
 	if seErr != nil {
+		log.WithError(seErr).WithField("sessionId", sessionID).Error("Downloads(): can't access session")
 		c.Error(seErr).SetType(gin.ErrorTypePublic)
 		return
 	}
@@ -470,6 +472,7 @@ func Clipboard(c *gin.Context) {
 	sessionID := c.Param("session")
 	sess, seErr := getSession(sessionID)
 	if seErr != nil {
+		log.WithError(seErr).WithField("sessionId", sessionID).Error("Clipboard(): can't access session")
 		_ = c.Error(seErr).SetType(gin.ErrorTypePublic)
 		return
 	}
@@ -487,6 +490,7 @@ func Devtools(c *gin.Context) {
 	sessionID := c.Param("session")
 	sess, seErr := getSession(sessionID)
 	if seErr != nil {
+		log.WithError(seErr).WithField("sessionId", sessionID).Error("Devtools(): can't access session")
 		_ = c.Error(seErr).SetType(gin.ErrorTypePublic)
 		return
 	}
