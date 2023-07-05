@@ -44,7 +44,19 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 		// don't calculate timing for terminated tasks by AWS due to the missted StartedAt!
 		//      StopCode: \"TerminationNotice\"
 		//      StoppedReason: \"Host EC2 (instance i-03dba81187d65ce7e) terminated.\"
-		l.WithFields(log.Fields{"StartedAt": *task.StartedAt, "StoppingAt": *task.StoppingAt}).Warn("Unable to track resourse usage!")
+		if task.StartedAt == nil {
+			l = l.WithField("StartedAt", task.StartedAt) // nil
+		} else {
+			l = l.WithField("StartedAt", *task.StartedAt) //time
+		}
+
+		if task.StoppingAt == nil {
+			l = l.WithField("StartedAt", task.StoppingAt) // nil
+		} else {
+			l = l.WithField("StartedAt", *task.StoppingAt) //time
+		}
+		
+		l.Warn("Unable to track resourse usage!")
 		return
 	}
 
