@@ -197,8 +197,6 @@ func StopTask(taskId string, stopReason taskmap.StoppedReason) error {
 		Task:    aws.String(taskId),
 	}
 
-	l := log.WithField("_taskId", taskId)
-
 	cachedTask, _ := taskmap.Find(taskId)
 	var oldTaskStatus taskmap.TaskStatus
 	if cachedTask != nil {
@@ -214,7 +212,7 @@ func StopTask(taskId string, stopReason taskmap.StoppedReason) error {
 	}
 
 	i := 0
-	l = l.WithField("StopTask: retry", i)
+	l := log.WithField("_taskId", taskId).WithField("retry", i)
 	var err error
 	var result *ecs.StopTaskOutput
 	for i < 5 {
