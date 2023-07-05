@@ -140,10 +140,10 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		EntryPoint: []string{"/bin/sh"},
 		HealthCheck: &ecs.HealthCheck{
 			Command:     []*string{aws.String("CMD-SHELL"), aws.String("curl -f localhost:4444/status || exit 1")},
-			Interval:    aws.Int64(10),
+			Interval:    aws.Int64(5),
 			Retries:     aws.Int64(3),
-			Timeout:     aws.Int64(10),
-			StartPeriod: aws.Int64(5),
+			Timeout:     aws.Int64(2),
+			StartPeriod: aws.Int64(0),
 		},
 		DependsOn: []*ecs.ContainerDependency{
 			&ecs.ContainerDependency{
@@ -176,12 +176,12 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		Command:     []string{"-c", "/entrypoint.sh" + ">>" + logDir + "/video.log 2>&1"},
 		EntryPoint:  []string{"/bin/sh"},
 		HealthCheck: nil,
-		DependsOn: []*ecs.ContainerDependency{
-			&ecs.ContainerDependency{
-				ContainerName: aws.String("browser"),
-				Condition:     aws.String("START"),
-			},
-		},
+//		DependsOn: []*ecs.ContainerDependency{
+//			&ecs.ContainerDependency{
+//				ContainerName: aws.String("browser"),
+//				Condition:     aws.String("START"),
+//			},
+//		},
 	}
 	if caps.EnvVariables != nil {
 		for v, k := range caps.EnvVariables {
