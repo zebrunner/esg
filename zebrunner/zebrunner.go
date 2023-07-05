@@ -33,7 +33,7 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 	if cachedTask.CurrentSessionID != "" {
 		l = l.WithField("sessionId", cachedTask.CurrentSessionID)
 	}
-	
+
 	requestUrl, err := url.ParseRequestURI(conf.ZebrunnerHost)
 	if err != nil {
 		log.WithError(err).Error("Failed to parse zebrunner base url")
@@ -55,7 +55,7 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 		} else {
 			l = l.WithField("StartedAt", *task.StoppingAt) //time
 		}
-		
+
 		l.Warn("Unable to track resourse usage!")
 		return
 	}
