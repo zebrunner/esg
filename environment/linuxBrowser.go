@@ -23,9 +23,6 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 
 	log.Trace("caps: ", caps)
 
-	entrypointDir := "/opt/entrypoint"
-	entrypointVolume := "entrypoint"
-
 	// for browsers images try to reuse Doensloads to be able to share this content via upload/download endpoint
 	logDir := "/home/selenium/Downloads"
 	logVolume := "log"
@@ -99,20 +96,6 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		EntryPoint: []string{"/bin/sh"},
 	}
 
-	entrypointContainer := Container{
-		Name:       "entrypoint",
-		Image:      entrypointImage,
-		cpu:        16,
-		memory:     16,
-		Privileged: false,
-		Essential:  false,
-                Env: map[string]string{
-                        "LOG_DIR": logDir,
-                },
-		Mounts:     []string{entrypointVolume, logVolume},
-		EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
-	}
-
         taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
 	// In future maybe there will be need to disable vnc
 	enableVNC := true
@@ -145,12 +128,6 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			Timeout:     aws.Int64(2),
 			StartPeriod: aws.Int64(0),
 		},
-		DependsOn: []*ecs.ContainerDependency{
-			&ecs.ContainerDependency{
-				ContainerName: aws.String("entrypoint"),
-				Condition:     aws.String("COMPLETE"),
-			},
-		},
 	}
 	browserContainer.SetCpu(caps, 1024, conf.MaxCpu)
 	browserContainer.SetMemory(caps, 1024, conf.MaxMemory)
@@ -176,12 +153,6 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		Command:     []string{"-c", "/entrypoint.sh" + ">>" + logDir + "/video.log 2>&1"},
 		EntryPoint:  []string{"/bin/sh"},
 		HealthCheck: nil,
-//		DependsOn: []*ecs.ContainerDependency{
-//			&ecs.ContainerDependency{
-//				ContainerName: aws.String("browser"),
-//				Condition:     aws.String("START"),
-//			},
-//		},
 	}
 	if caps.EnvVariables != nil {
 		for v, k := range caps.EnvVariables {
@@ -210,10 +181,9 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
-		Containers:           []*Container{&entrypointContainer, &mitmContainer, &browserContainer, &recorderContainer, &uploaderContainer},
+		Containers:           []*Container{&mitmContainer, &browserContainer, &recorderContainer, &uploaderContainer},
 		Capabilities:         caps,
 		Volumes: map[string]volume{
-			entrypointVolume: {ContainerPath: entrypointDir, Driver: "local", Scope: "task", ReadOnly: false},
 			logVolume:        {ContainerPath: logDir, Driver: "local", Scope: "task", ReadOnly: false},
 			shmVolume:        {ContainerPath: shmDir, HostPath: shmDir, ReadOnly: false}, // no way to reuse local task volume due to the reset of permissions on browser container start
 		},
