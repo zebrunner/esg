@@ -111,7 +111,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			"clipboardPort":  {clipboardPort, 0},
 		},
 		Env: map[string]string{
-			"VERBOSE":       "1",
+			"DRIVER_ARGS":   "--log-level=INFO", // --log-level=LEVEL               set log level: ALL, DEBUG, INFO, WARNING, SEVERE, OFF
 			"ENABLE_VNC":    strconv.FormatBool(enableVNC),
 			"DNS_SERVERS":   strings.Join(caps.DNSServers, " "),
 			"HOSTS_ENTRIES": strings.Join(caps.HostsEntries, " "),
@@ -124,8 +124,8 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		HealthCheck: &ecs.HealthCheck{
 			Command:     []*string{aws.String("CMD-SHELL"), aws.String("curl -f localhost:4444/status || exit 1")},
 			Interval:    aws.Int64(5),
-			Retries:     aws.Int64(3),
-			Timeout:     aws.Int64(2),
+			Retries:     aws.Int64(4),
+			Timeout:     aws.Int64(5),
 			StartPeriod: aws.Int64(0),
 		},
 	}
