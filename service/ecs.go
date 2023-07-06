@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -25,7 +24,6 @@ import (
 )
 
 const (
-	browsersRepository = "659932254483"
 	presignUrlTimeout  = 15 * time.Minute
 )
 
@@ -57,25 +55,14 @@ func InitAws() (*awsSession.Session, error) {
 	return sess, nil
 }
 
-func getFamily(name string) string {
-	zbrEnv := os.Getenv("ZEBRUNNER_ENV")
-	if zbrEnv != "" {
-		name = zbrEnv + "-" + name
-		log.Debug("name: ", name)
-	}
-	return name
-}
-
 func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDefinition *ecs.TaskDefinition, err error) {
 	svc := ecs.New(AwsSess)
-
-	family := getFamily(environment.TaskDefinitionFamily)
 
 	networkMode := "bridge"
 	input := ecs.RegisterTaskDefinitionInput{
 		NetworkMode:          &networkMode,
 		ContainerDefinitions: environment.ContainerDefinitions(),
-		Family:               &family,
+		Family:               &environment.TaskDefinitionFamily,
 	}
 
 	volumes := []*ecs.Volume{}
@@ -111,10 +98,9 @@ func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDe
 func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (taskArn string, returnErr error) {
 	svc := ecs.New(AwsSess)
 
-	family := getFamily(env.TaskDefinitionFamily)
 	runTaskInput := &ecs.RunTaskInput{
 		Cluster:        &config.Conf.AwsCluster,
-		TaskDefinition: &family,
+		TaskDefinition: &env.TaskDefinitionFamily,
 		Overrides:      &ecs.TaskOverride{ContainerOverrides: env.ContainerOverrides()},
 		PlacementStrategy: []*ecs.PlacementStrategy{
 			{

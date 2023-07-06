@@ -33,12 +33,12 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 	}
 
 	if caps.RepositoryUrl == "" {
-		return nil, fmt.Errorf("Executor repository is not specified! RepositoryUrl='%s'", caps.RepositoryUrl)
+		return nil, fmt.Errorf("executor repository is not specified! RepositoryUrl='%s'", caps.RepositoryUrl)
 	}
 
 	//executorImage := "maven:3.8-openjdk-11"
 	if caps.Image == "" {
-		return nil, fmt.Errorf("Executor container image is not specified! Image='%s'", caps.Image)
+		return nil, fmt.Errorf("executor container image is not specified! Image='%s'", caps.Image)
 	}
 	executorImage := caps.Image
 	//fmt.Printf("executorImage: %s\n", executorImage)
@@ -86,7 +86,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 	}
 
 	if caps.LaunchCommand == "" {
-		return nil, fmt.Errorf("Executor container launch command is not specified! LaunchCommand='%s'", caps.LaunchCommand)
+		return nil, fmt.Errorf("executor container launch command is not specified! LaunchCommand='%s'", caps.LaunchCommand)
 	}
 	launchCommand := caps.LaunchCommand
 
@@ -188,23 +188,20 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 		HealthCheck: nil,
 	}
 
-	containers := make([]*Container, 0)
 	volumes := make(map[string]volume, 0)
-
 	volumes[entrypointVolume] = volume{Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false}
 	volumes[taskVolume] = volume{Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false}
 	volumes[logVolume] = volume{Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false}
 
-	containers = []*Container{&cloneContainer, &entrypointContainer, &recorderContainer, &uploaderContainer}
-
+	containers := []*Container{&cloneContainer, &entrypointContainer, &recorderContainer, &uploaderContainer, &executorContainer}
 	if includeMaven {
 		containers = append(containers, mavenContainer)
 		volumes[mavenVolume] = volume{Driver: "local", Scope: "task", ContainerPath: mavenDir, ReadOnly: false}
 	}
-	containers = append(containers, &executorContainer)
 
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
+		Schema:               buildSchema(containers),
 		Containers:           containers,
 		Capabilities:         caps,
 		Volumes:              volumes,

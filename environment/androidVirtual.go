@@ -72,9 +72,11 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities) (*Exe
 		},
 	}
 
+	containers := []*Container{&deviceContainer, &appiumContainer}
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
-		Containers:           []*Container{&deviceContainer, &appiumContainer},
+		Schema:				  buildSchema(containers),
+		Containers:           containers,
 		Capabilities:         caps,
 		Volumes: map[string]volume{
 			taskVolume:    {ContainerPath: sharedFolder, Driver: "local", Scope: "task", ReadOnly: false},

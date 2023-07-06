@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/zebrunner/esg/service"
+	"github.com/zebrunner/esg/db"
 	"github.com/zebrunner/esg/utils"
 )
 
@@ -29,7 +29,7 @@ func CreateUser(c *gin.Context) {
 		return
 	}
 
-	password, apiErr := service.CreateUser(body.Username, body.Password)
+	password, apiErr := db.CreateUser(body.Username, body.Password)
 	if apiErr != nil {
 		_ = c.Error(apiErr).SetType(gin.ErrorTypePublic)
 		return
@@ -42,7 +42,7 @@ func CreateUser(c *gin.Context) {
 
 func DeleteUser(c *gin.Context) {
 	username := c.Param("username")
-	apiErr := service.DeleteUser(username)
+	apiErr := db.DeleteUser(username)
 	if apiErr != nil {
 		c.Error(apiErr).SetType(gin.ErrorTypePublic)
 		return
@@ -60,7 +60,7 @@ func RefreshToken(c *gin.Context) {
 		return
 	}
 
-	password, apiErr := service.RefreshToken(user, body.Password)
+	password, apiErr := db.RefreshToken(user, body.Password)
 	if apiErr != nil {
 		c.Error(apiErr).SetType(gin.ErrorTypePublic)
 		return
@@ -81,9 +81,9 @@ func UserActivation(c *gin.Context) {
 		return
 	}
 
-	err = service.ActivationUser(user, body.IsActive)
-	if err != nil {
-		c.Error(err).SetType(gin.ErrorTypePublic)
+	apiErr := db.ActivationUser(user, body.IsActive)
+	if apiErr != nil {
+		c.Error(apiErr).SetType(gin.ErrorTypePublic)
 		return
 	}
 

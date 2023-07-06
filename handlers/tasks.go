@@ -20,6 +20,7 @@ import (
 	"github.com/zebrunner/esg/cachemaps/taskmap"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
+	"github.com/zebrunner/esg/db"
 	"github.com/zebrunner/esg/environment"
 	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/service"
@@ -30,7 +31,7 @@ import (
 func Create(c *gin.Context) {
 	remote := c.ClientIP()
 	user, password, _ := c.Request.BasicAuth()
-	workspace, err := service.GetWorkspace(user)
+	workspace, err := db.GetWorkspace(user)
 	if err != nil {
 		// Hotfix: Selenium java client don't send request with credentials without this sleep.
 		// Remove with full migration to Selenium 4.0
@@ -40,7 +41,7 @@ func Create(c *gin.Context) {
 		return
 	}
 
-	apiErr := service.CheckAuth(user, password)
+	apiErr := db.CheckAuth(user, password)
 	if apiErr != nil {
 		log.WithError(apiErr).WithFields(log.Fields{
 			"client":   c.ClientIP(),

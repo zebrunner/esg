@@ -3,12 +3,15 @@ package environment
 import (
 	"fmt"
 	"net/url"
+	"os"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/zebrunner/esg/capabilities"
+	"github.com/zebrunner/esg/utils"
 )
 
 const (
@@ -19,15 +22,15 @@ const (
 	genericPlatform = "generic"
 	cypressPlatform = "cypress"
 
-	imageRepo       = "public.ecr.aws/zebrunner/" //public zebrunner ECR docker registry
-	uploaderImage   = imageRepo + "uploader:2.2"
-	mitmImage       = imageRepo + "mitmproxy:1.0"
-	recorderImage   = imageRepo + "recorder:1.2"
-        cypressRecorderImage = imageRepo + "cypress-recorder:1.1"
-	appiumImage     = imageRepo + "appium:1.4.10"
-	cloneImage      = imageRepo + "git:latest"
-	entrypointImage = imageRepo + "entrypoint:2.2"
-	mavenImage      = imageRepo + "m2-repo-carina:1.4"
+	imageRepo            = "public.ecr.aws/zebrunner/" //public zebrunner ECR docker registry
+	uploaderImage        = imageRepo + "uploader:2.2"
+	mitmImage            = imageRepo + "mitmproxy:1.0"
+	recorderImage        = imageRepo + "recorder:1.2"
+	cypressRecorderImage = imageRepo + "cypress-recorder:1.1"
+	appiumImage          = imageRepo + "appium:1.4.10"
+	cloneImage           = imageRepo + "git:latest"
+	entrypointImage      = imageRepo + "entrypoint:2.2"
+	mavenImage           = imageRepo + "m2-repo-carina:1.4"
 )
 
 const (
@@ -58,13 +61,13 @@ type Endpoint struct {
 
 type ExecutionEnvironment struct {
 	TaskDefinitionFamily string
-	Endpoints            map[string]*Endpoint
+	Schema               string
 	Containers           []*Container
 	Capabilities         *capabilities.Capabilities
-	RawCapabilities		 *capabilities.RequestCaps
+	RawCapabilities      *capabilities.RequestCaps
 	Volumes              map[string]volume
 	Network              *NetworkConfiguration
-	Workspace			 string
+	Workspace            string
 }
 
 func (e *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefinition {
@@ -175,6 +178,34 @@ func (e *ExecutionEnvironment) ContainerOverrides() []*ecs.ContainerOverride {
 	return overrides
 }
 
+func (e *ExecutionEnvironment) HashDefinition() (string, string) {
+	registerEnvToHash := &ExecutionEnvironment{
+		Containers: e.Containers,
+		Volumes:    e.Volumes,
+	}
+	registerHash := utils.EncodeToHash(registerEnvToHash)
+
+	overrideContainers := make([]*Container, 0)
+	for _, container := range e.Containers {
+		overrideContainers = append(overrideContainers, &Container{
+			Name:             container.Name,
+			Image:            container.Image,
+			Essential:        container.Essential,
+			Privileged:       container.Privileged,
+			Ports:            container.Ports,
+			Mounts:           container.Mounts,
+			Links:            container.Links,
+			EntryPoint:       container.EntryPoint,
+			WorkingDirectory: container.WorkingDirectory,
+			HealthCheck:      container.HealthCheck,
+			DependsOn:        container.DependsOn,
+		})
+	}
+	overrideHash := utils.EncodeToHash(overrideContainers)
+
+	return registerHash, overrideHash
+}
+
 func Build(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
 	platform := strings.ToLower(caps.PlatformName)
 	if platform == androidPlatform {
@@ -191,6 +222,16 @@ func Build(workspace string, caps *capabilities.Capabilities) (*ExecutionEnviron
 	}
 
 	return nil, fmt.Errorf("platform is not supported. platformName=%s", caps.PlatformName)
+}
+
+func buildSchema(Containers []*Container) string {
+	namesArr := make([]string, 0)
+	for _, container := range Containers {
+		namesArr = append(namesArr, container.Name)
+	}
+	sort.Strings(namesArr)
+
+	return strings.Join(namesArr, "-")
 }
 
 func (e *ExecutionEnvironment) GetPorts() map[string]portMapping {
@@ -282,7 +323,14 @@ func buildTaskDefinitionFamily(caps *capabilities.Capabilities) string {
 		familyParts = append(familyParts, browserVersion)
 	}
 
-	return strings.Join(familyParts, "-")
+	taskDefFamily := strings.Join(familyParts, "-")
+
+	zbrEnv := os.Getenv("ZEBRUNNER_ENV")
+	if zbrEnv != "" {
+		taskDefFamily = zbrEnv + "-" + taskDefFamily
+	}
+
+	return taskDefFamily
 }
 
 func remapName(name string) string {

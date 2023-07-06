@@ -23,8 +23,8 @@ type portMapping struct {
 type Container struct {
 	Name   string
 	Image  string
-	cpu    int64
-	memory int64
+	cpu    int64 // -
+	memory int64 // -
 
 	Essential  bool
 	Privileged bool
@@ -32,8 +32,8 @@ type Container struct {
 	Ports            map[string]portMapping
 	Mounts           []string // List of volume names
 	Links            []string // List of linked containers
-	Command          []string // Comma separated container startup command
-	Env              envVariables
+	Command          []string // Comma separated container startup command -
+	Env              envVariables //-
 	EntryPoint       []string
 	WorkingDirectory string
 

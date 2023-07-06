@@ -1,6 +1,8 @@
 package environment
 
 import (
+	"os"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
 
@@ -10,8 +12,9 @@ import (
 	"fmt"
 	"strings"
 
+	b64 "encoding/base64"
+
 	log "github.com/sirupsen/logrus"
-        b64 "encoding/base64"
 )
 
 func buildCypress(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
@@ -97,7 +100,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 	}
 
 	cypressContainer := Container{
-		Name:       "browser",
+		Name:       "executor",
 		Image:      browserImage,
 		Privileged: false,
 		Essential:  true,
@@ -161,7 +164,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
                         "LOG_FILE":              "session.log",
                 },
 		Mounts:      []string{logVolume},
-		Links:       []string{"browser"},
+		Links:       []string{"executor"},
 		Command:     []string{"-c", "/entrypoint.sh" + ">>" + logDir + "/video.log 2>&1"},
 		EntryPoint:  []string{"/bin/sh"},
 		HealthCheck: nil,
@@ -175,7 +178,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
                                 Condition:     aws.String("SUCCESS"),
                         },
 			&ecs.ContainerDependency{
-				ContainerName: aws.String("browser"),
+				ContainerName: aws.String("executor"),
 				Condition:     aws.String("START"),
 			},
 		},
@@ -210,16 +213,22 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 	familyDefinition := strings.Replace(browserImage, imageRepo, "", -1)
 	familyDefinition = strings.Replace(familyDefinition, ":", "-", -1)
 	familyDefinition = strings.Replace(familyDefinition, ".", "-", -1)
+	zbrEnv := os.Getenv("ZEBRUNNER_ENV")
+	if zbrEnv != "" {
+		familyDefinition = zbrEnv + "-" + familyDefinition
+	} 
 	log.Debug("Overidden TaskDefinitionFamily for cypress: " + familyDefinition)
 
+	containers := []*Container{&cloneContainer, &entrypointContainer, &cypressContainer, &recorderContainer, &uploaderContainer}
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: familyDefinition,
-		Containers:           []*Container{&cloneContainer, &entrypointContainer, &cypressContainer, &recorderContainer, &uploaderContainer},
+		Schema: 			  buildSchema(containers),
+		Containers:           containers,
 		Capabilities:         caps,
 		Volumes: map[string]volume{
 			taskVolume:       {Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false},
 			logVolume:        {Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false},
-                        cypressVolume:    {Driver: "local", Scope: "task", ContainerPath: cypressDir, ReadOnly: false},
+			cypressVolume:    {Driver: "local", Scope: "task", ContainerPath: cypressDir, ReadOnly: false},
 			entrypointVolume: {Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false},
 			shmVolume:        {ContainerPath: shmDir, HostPath: shmDir, ReadOnly: false}, // no way to reuse local task volume due to the reset of permissions on browser container start
 		},

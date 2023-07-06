@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"flag"
 	"os"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/zebrunner/esg/cachemaps/sessionmap"
 	"github.com/zebrunner/esg/cachemaps/taskmap"
 	"github.com/zebrunner/esg/capabilities"
+	"github.com/zebrunner/esg/db"
 	"github.com/zebrunner/esg/environment"
 	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/service"
@@ -282,23 +284,51 @@ func ScaleDownCluster() {
 }
 
 func RefreshTaskDefinition(image string) error {
-	caps, err := capabilities.FromImage(image)
+	capsList, err := capabilities.FromImage(image)
 	l := log.WithField("image", image)
 	if err != nil {
 		l.WithError(err).Error("Failed to build capabilities for image!")
 		return err
 	}
 
-	env, err := environment.Build("", caps)
-	if err != nil {
-		l.WithError(err).Error("Failed to build execution environment!")
-		return err
-	}
+	for _, caps := range capsList {
+		env, err := environment.Build("", caps)
+		if err != nil {
+			l.WithError(err).Error("Failed to build execution environment!")
+			return err
+		}
 
-	_, err = service.CreateTaskDefinition(env)
-	if err != nil {
-		l.WithError(err).Error("Failed to create task definition!")
-		return err
+		registerHash, overrideHash := env.HashDefinition()
+		dbDefinition, err := db.GetDefinition(env.TaskDefinitionFamily, env.Schema)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				taskDef, err := service.CreateTaskDefinition(env)
+				if err != nil {
+					return err
+				}
+
+				dbDefinition.Tag = *taskDef.Revision
+				dbDefinition.Family = env.TaskDefinitionFamily
+				dbDefinition.Schema = env.Schema
+				dbDefinition.RegisteredDefinitionHash = registerHash
+				dbDefinition.OverriddenDefinitionHash = overrideHash
+				db.CreateDefinition(dbDefinition)
+				continue
+			} else {
+				return err
+			}
+		}
+
+		if registerHash != dbDefinition.RegisteredDefinitionHash {
+			taskDef, err := service.CreateTaskDefinition(env)
+			if err != nil {
+				return err
+			}
+
+			dbDefinition.Tag = *taskDef.Revision
+			db.RefreshTag(dbDefinition)
+			continue
+		}
 	}
 
 	return nil

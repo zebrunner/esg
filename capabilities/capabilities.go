@@ -37,10 +37,10 @@ type Capabilities struct {
 	Cpu    int64 `json:"cpu,string,omitempty"`
 	Memory int64 `json:"memory,string,omitempty"`
 	//Mitm proxy caps
-	Mitm     bool   //enabl mitm with har dump and output generation for mitmweb
-	MitmArgs string // list of arguments for mitmdump command. Important: --verbose and --quiet will be appended forcibly
-	MitmCpu int64 `json:"mitmCpu,string,omitempty"`
-	MitmMemory int64 `json:"mitmMemory,string,omitempty"`
+	Mitm       bool   //enabl mitm with har dump and output generation for mitmweb
+	MitmArgs   string // list of arguments for mitmdump command. Important: --verbose and --quiet will be appended forcibly
+	MitmCpu    int64  `json:"mitmCpu,string,omitempty"`
+	MitmMemory int64  `json:"mitmMemory,string,omitempty"`
 
 	// generic launcher caps
 	RepositoryUrl string
@@ -74,7 +74,7 @@ func in(image string, images []string) bool {
 	return false
 }
 
-func FromImage(image string) (*Capabilities, error) {
+func FromImage(image string) ([]*Capabilities, error) {
 	platforms := map[string][]string{
 		"android": {"redroid"},
 		"linux":   {"chrome", "firefox", "edge"},
@@ -89,24 +89,37 @@ func FromImage(image string) (*Capabilities, error) {
 	executor := parts[0]
 	version := parts[1]
 
+	capsList := make([]*Capabilities, 0)
 	if executor == "redroid" {
-		return &Capabilities{
+		capsList = append(capsList, &Capabilities{
 			PlatformName:    "android",
 			DeviceName:      "redroid",
 			PlatformVersion: version,
-		}, nil
+		})
+		return capsList, nil
 	} else if in(executor, platforms["linux"]) {
-		return &Capabilities{
+		capsList = append(capsList, &Capabilities{
 			PlatformName:   "linux",
 			BrowserName:    executor,
 			BrowserVersion: version,
-		}, nil
+			Mitm:           false,
+		})
+
+		capsList = append(capsList, &Capabilities{
+			PlatformName:   "linux",
+			BrowserName:    executor,
+			BrowserVersion: version,
+			Mitm:           true,
+		})
+
+		return capsList, nil
 	} else if in(executor, platforms["cypress"]) {
-		return &Capabilities{
+		capsList = append(capsList, &Capabilities{
 			PlatformName:   "cypress",
 			BrowserName:    executor,
 			BrowserVersion: version,
-		}, nil
+		})
+		return capsList, nil
 	} else {
 		return nil, fmt.Errorf("failed to build capabilities from unknown image. image=%s", image)
 	}
