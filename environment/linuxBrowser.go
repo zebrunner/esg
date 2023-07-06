@@ -39,13 +39,13 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 	//TODO: handle resolution and video screen size
 
 	mitmIncluded := caps.Mitm
-	mitmCommand := "mitmdump --help || sleep infinity"
+	mitmCommand := ""
 	var mitmCpu int64 = 32
 	var mitmMemory int64 = 64 // minimal memory to start container
 
 	if mitmIncluded {
 		// to generate har we have to enable regular dump.mitm output by -w option and place it before har_dump.py!
-		mitmCommand = "mitmdump --scripts /har_dump.py -w /tmp/dump.mitm --set hardump=/tmp/dump.har"
+		mitmCommand = "mitmdump -w " + logDir + "/dump.mitm"
 
 		//TODO: wrap into the functions during adding mitm support for other environments (generic, cypress, redroid etc)
 		mitmCpu = 512
@@ -86,7 +86,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		Essential:  false,
 		Env: map[string]string{
 			"LOG_DIR": logDir,
-			"COMMAND": 	mitmCommand,
+			"COMMAND": mitmCommand,
 		},
 		Ports: map[string]portMapping{
 			"fileserverPort": {fileserverPort, 0},
@@ -99,6 +99,14 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
         taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
 	// In future maybe there will be need to disable vnc
 	enableVNC := true
+
+	// firefox: --log <LEVEL>                 Set Gecko log level [possible values: fatal, error, warn, info, config, debug, trace]
+	// chrome --log-level=LEVEL               set log level: ALL, DEBUG, INFO, WARNING, SEVERE, OFF
+	driverArgs := "--log-level=INFO" // Chrome and MicrosoftEdge case to define log level
+	if caps.BrowserName == "firefox" {
+		// geckodriver case to define log level
+		driverArgs = ", \"--log=info\""
+	}
 	browserContainer := Container{
 		Name:      "browser",
 		Image:     browserImage,
@@ -111,7 +119,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			"clipboardPort":  {clipboardPort, 0},
 		},
 		Env: map[string]string{
-			"DRIVER_ARGS":   "--log-level=INFO", // --log-level=LEVEL               set log level: ALL, DEBUG, INFO, WARNING, SEVERE, OFF
+			"DRIVER_ARGS":   driverArgs,
 			"ENABLE_VNC":    strconv.FormatBool(enableVNC),
 			"DNS_SERVERS":   strings.Join(caps.DNSServers, " "),
 			"HOSTS_ENTRIES": strings.Join(caps.HostsEntries, " "),
@@ -144,7 +152,6 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			"TASK_LOG": logDir + "/task.log",
                         "LOG_FILE": "session.log",
 			"ENABLE_VIDEO": "true",
-			"ENABLE_MITM": strconv.FormatBool(mitmIncluded),
 			"ENABLE_REALTIME_LOGS": "false",
 			"BASIC_AUTH":           "",
 		},
@@ -165,7 +172,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		Name:       "uploader",
 		Image:      uploaderImage,
 		cpu:        64, // with 32  uploading is aborted
-		memory:     64,
+		memory:     256, // 64 works for single thread. for backgroud copying it is not enough
 		Privileged: false,
 		Essential:  false,
 		Env: map[string]string{
