@@ -125,10 +125,12 @@ func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (t
 		default:
 		}
 		// Random sleep to fix problems with parallel 100+ threads startup. Not applicable for generic tasks!
-		if env.TaskDefinitionFamily != "generic" {
+		//TODO: uncomment before release!
+/*		if env.TaskDefinitionFamily != "generic" {
 			sleep := time.Duration(rand.Intn(30)) * time.Second
 			time.Sleep(sleep)
 		}
+*/
 
 		var resultRunTask *ecs.RunTaskOutput
 		resultRunTask, err := svc.RunTask(runTaskInput)
@@ -390,7 +392,7 @@ out:
 			// timediff between HealthAt (current time) and task.startedAt should be cut during resources tracking to bill only actual (net) time
                         cachedTask.HealthAt = time.Now()
                         taskmap.Write(cachedTask.ID, cachedTask, 0)
-			l.Debug("Healthcheck latency: ", time.Since(startTime))
+			l.Info("healthcheck latency: ", time.Since(startTime))
 
 			err = setEnvironmentNetwork(env, task)
 			l.Debug("setEnvironmentNetwork latency: ", time.Since(startTime))

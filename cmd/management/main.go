@@ -143,23 +143,20 @@ func StopLostTasks(keys []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 
 	for _, task := range tasks {
 		if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
-			sessStartup := config.Conf.SessionStartupTimeout.Seconds()
-			if task.CreatedAt != nil && time.Since(*task.CreatedAt).Seconds() > sessStartup {
-				taskId := strings.Split(*task.TaskArn, "/")[2]
-				l := log.WithField("_taskId", taskId)
-				l.WithField("sessionStartupTimeout", sessStartup).Warn("Unrecognized task detected! Aborting")
+			taskId := strings.Split(*task.TaskArn, "/")[2]
+			l := log.WithField("_taskId", taskId)
+			l.Warn("Unrecognized task detected! Aborting")
 
-				cachedTask := &taskmap.Task{
-					ID:     taskId,
-					Status: taskmap.TaskActive,
-				}
-				// maybe we can track lost task's session and restore lost cache
-				taskmap.Write(cachedTask.ID, cachedTask, 0)
+			cachedTask := &taskmap.Task{
+				ID:     taskId,
+				Status: taskmap.TaskActive,
+			}
+			// maybe we can track lost task's session and restore lost cache
+			taskmap.Write(cachedTask.ID, cachedTask, 0)
 
-				err := service.StopTask(cachedTask.ID, taskmap.TaskLost)
-				if err != nil {
-					l.WithError(err).Error("Failed to stop the task")
-				}
+			err := service.StopTask(taskId, taskmap.TaskLost)
+			if err != nil {
+				l.WithError(err).Error("Failed to stop the task")
 			}
 		}
 	}

@@ -131,6 +131,7 @@ func Create(c *gin.Context) {
 	if env.TaskDefinitionFamily == "generic" || strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
 		// TODO: delete status update when CloseSession() for generic tasks will be called
 		cachedTask.Status = taskmap.TaskGeneric
+		cachedTask.Network = *env.Network
 		err := taskmap.Write(cachedTask.ID, cachedTask, 0)
 		if err != nil {
 			l.WithError(err).Error("Failed to update generic's status")
@@ -279,17 +280,27 @@ func AbortTask(c *gin.Context) {
 func Vnc(wsconn *websocket.Conn) {
 	defer wsconn.Close()
 	fragments := strings.Split(wsconn.Request().URL.Path, "/")
-	sid := fragments[len(fragments)-1]
-	l := log.WithField("sessionId", sid)
+	id := fragments[len(fragments)-1]
+	l := log.NewEntry(log.StandardLogger())
 
-	sess, seErr := getSession(sid)
+	var network environment.NetworkConfiguration
+
+	sess, seErr := getSession(id)
 	if seErr != nil {
-		l.WithError(seErr).Error("Vnc(): can't access session")
-		return
+		task, taskErr := getTask(id)
+		if taskErr != nil {
+			l.WithError(seErr).WithError(taskErr).WithField("id", id).Error("Vnc(): can't access session")
+			return
+		}
+		l = l.WithField("_taskId", id)
+		network = task.Network
+	} else {
+		l = l.WithField("sessionId", id)
+		network = sess.Network
 	}
-	log.Debug("sess.Network: ", sess.Network)
+	l.Debug("network: ", network)
 
-	vncUrl, ok := sess.Network.GetUrl("vnc")
+	vncUrl, ok := network.GetUrl("vnc")
 	if !ok {
 		l.Warn("Vnc url is not available: ", vncUrl)
 		return
