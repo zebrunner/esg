@@ -20,7 +20,7 @@ const (
 	cypressPlatform = "cypress"
 
 	imageRepo       = "public.ecr.aws/zebrunner/" //public zebrunner ECR docker registry
-	uploaderImage   = imageRepo + "uploader:3.1-beta2"
+	uploaderImage   = imageRepo + "uploader:3.1"
 	mitmImage       = imageRepo + "mitmproxy:1.1-beta8"
 	recorderImage   = imageRepo + "recorder:1.2"
         cypressRecorderImage = imageRepo + "cypress-recorder:1.1"
