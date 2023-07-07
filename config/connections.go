@@ -2,41 +2,58 @@ package config
 
 import (
 	"context"
-
 	redis "github.com/go-redis/redis/v8"
 	"github.com/jmoiron/sqlx"
+	log "github.com/sirupsen/logrus"
 )
 
 var (
-	RedisConnection *redis.Client
-	DbConnection    *sqlx.DB
+	RedisSessionsConnection *redis.Client
+	RedisTasksConnection    *redis.Client
+	DbConnection            *sqlx.DB
 )
 
-func InitCache() (*redis.Client, error) {
-	client := redis.NewClient(&redis.Options{
+func InitCache() error {
+	// DB 0 - for sessions
+	RedisSessionsConnection = redis.NewClient(&redis.Options{
 		Addr:     Conf.RedisConnectionString,
 		Password: "",
 		DB:       0,
 	})
 
-	_, err := client.Ping(context.Background()).Result()
+	_, err := RedisSessionsConnection.Ping(context.Background()).Result()
 	if err != nil {
-		return nil, err
+		log.WithError(err).Error("Failed to ping redis sessions connection")
+		return err
 	}
 
-	return client, nil
+	// DB 1 - for tasks
+	RedisTasksConnection = redis.NewClient(&redis.Options{
+		Addr:     Conf.RedisConnectionString,
+		Password: "",
+		DB:       1,
+	})
+
+	_, err = RedisTasksConnection.Ping(context.Background()).Result()
+	if err != nil {
+		log.WithError(err).Error("Failed to ping redis tasks connection")
+		return err
+	}
+
+	return nil
 }
 
-func InitDBConnection(connectionString string) (*sqlx.DB, error) {
-	client, err := sqlx.Open("pgx", connectionString)
+func InitDBConnection(connectionString string) error {
+	var err error
+	DbConnection, err = sqlx.Open("pgx", connectionString)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	err = client.Ping()
+	err = DbConnection.Ping()
 	if err != nil {
-		client.Close()
-		return nil, err
+		DbConnection.Close()
+		return err
 	}
-	return client, nil
+	return nil
 }

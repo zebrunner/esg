@@ -82,7 +82,7 @@ func init() {
 
 	flag.DurationVar(&Conf.IdleTimeout, "idle-timeout", 60*time.Second, "Session idle timeout in time.Duration format")
 	flag.DurationVar(&Conf.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
-	flag.DurationVar(&Conf.ServiceStartupTimeout, "service-startup-timeout", 10*time.Minute, "Service startup timeout in time.Duration format")
+	flag.DurationVar(&Conf.ServiceStartupTimeout, "service-startup-timeout", 9*time.Minute, "Service startup timeout in time.Duration format")
 	flag.DurationVar(&Conf.DriverStartupTimeout, "driver-startup-timeout", 1*time.Minute, "Driver startup timeout in time.Duration format")
 	flag.DurationVar(&Conf.InstanceCooldownTimeout, "instance-cooldown-timeout", 4*time.Minute, "Time after instance start when shutdown is prohibited on scale down in time.Duration format")
 	flag.DurationVar(&Conf.MaxTimeout, "max-timeout", 24*time.Hour, "Maximum valid task/session timeout in time.Duration format")
@@ -104,8 +104,8 @@ func init() {
 
 	flag.StringVar(&Conf.ExcludeBrowsers, "exclude-browsers", "", "Pattern for excluding browsers from available images")
 
-    flag.BoolVar(&Conf.SingleTenant, "single-tenant", false, "Single tenant mode")
-	flag.BoolVar(&Conf.Imdsv2Enabled, "imdsv2-enabled", true, "Session-oriented method")
+	flag.BoolVar(&Conf.SingleTenant, "single-tenant", false, "Single tenant mode")
+	flag.BoolVar(&Conf.Imdsv2Enabled, "imdsv2-enabled", false, "Session-oriented method")
 }
 
 func (c *Config) ParseLogLevel() logrus.Level {

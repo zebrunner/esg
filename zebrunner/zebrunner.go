@@ -4,17 +4,17 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/aws/aws-sdk-go/service/ecs"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
-	log "github.com/sirupsen/logrus"
-	"github.com/zebrunner/esg/config"
+	"github.com/aws/aws-sdk-go/service/ecs"
 
-	sessionmap "github.com/zebrunner/esg/sessinonmap"
+	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/cachemaps/taskmap"
+	"github.com/zebrunner/esg/config"
 )
 
 const (
@@ -22,53 +22,101 @@ const (
 	ABORT_API_PATH = "/api/reporting/api/project-test-runs/abort"
 )
 
-func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration) {
+func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
+	//log.Info("Task:", task)
 	conf := &config.Conf
 	if conf.ZebrunnerHost == "" {
 		// #527: don't write error message if zebrunner url is empty in the configuration
 		return
 	}
+	l := log.WithField("_taskId", cachedTask.ID)
+	if cachedTask.CurrentSessionID != "" {
+		l = l.WithField("sessionId", cachedTask.CurrentSessionID)
+	}
+
 	requestUrl, err := url.ParseRequestURI(conf.ZebrunnerHost)
 	if err != nil {
 		log.WithError(err).Error("Failed to parse zebrunner base url")
 		return
 	}
 
-	platformName := strings.ToLower(sess.Capabilities.PlatformName)
+	if task.StartedAt == nil || task.StoppingAt == nil {
+		// don't calculate timing for terminated tasks by AWS due to the missted StartedAt!
+		//      StopCode: \"TerminationNotice\"
+		//      StoppedReason: \"Host EC2 (instance i-03dba81187d65ce7e) terminated.\"
+		if task.StartedAt == nil {
+			l = l.WithField("StartedAt", task.StartedAt) // nil
+		} else {
+			l = l.WithField("StartedAt", *task.StartedAt) //time
+		}
+
+		if task.StoppingAt == nil {
+			l = l.WithField("StartedAt", task.StoppingAt) // nil
+		} else {
+			l = l.WithField("StartedAt", *task.StoppingAt) //time
+		}
+
+		l.Warn("Unable to track resourse usage!")
+		return
+	}
+
+	l.Trace("StartedAt: ", *task.StartedAt)
+	l.Trace("StoppingAt: ", *task.StoppingAt)
+
+	l.Trace("HealthAt: ", cachedTask.HealthAt)
+	startedAt := *task.StartedAt //local var needed to calculate difference via Sub(..)
+	stoppingAt := *task.StoppingAt
+
+	duration := stoppingAt.Sub(startedAt)
+	healthAt := cachedTask.HealthAt
+
+	provisioningTime := healthAt.Sub(startedAt) //diff between healthAt and startedAt provide task preparation time
+	l.Trace("provisioningSeconds: ", provisioningTime.Seconds())
+
+	platformName := strings.ToLower(cachedTask.Capabilities.PlatformName)
 	if platformName == "" || platformName == "generic" || platformName == "any" {
 		platformName = "linux"
 	}
 
+	cpuUsage := cachedTask.Capabilities.Cpu
+	memUsage := cachedTask.Capabilities.Memory
+	if cachedTask.Capabilities.Mitm {
+		// #579: track mitm container cpu and memory usage
+		cpuUsage += cachedTask.Capabilities.MitmCpu
+		memUsage += cachedTask.Capabilities.MitmMemory
+	}
+
 	if !conf.SingleTenant {
 		// add workspace/tenant to the url
-		requestUrl.Host = sess.Workspace + "." + requestUrl.Host
+		requestUrl.Host = cachedTask.Workspace + "." + requestUrl.Host
+		l = l.WithField("workspace", cachedTask.Workspace)
 	}
 	requestUrl.Path = USAGE_API_PATH
 	requestBody := map[string]interface{}{
-		"cpu":      strconv.FormatInt(sess.Capabilities.Cpu, 10) + " millicores",
-		"memory":   strconv.FormatInt(sess.Capabilities.Memory, 10) + " MiB",
+		"cpu":      strconv.FormatInt(cpuUsage, 10) + " millicores",
+		"memory":   strconv.FormatInt(memUsage, 10) + " MiB",
 		"instant":  time.Now().UTC().Format("2006-01-02T15:04:05Z"),
-		"seconds":  d.Seconds(),
+		"seconds":  duration.Seconds() - provisioningTime.Seconds(), // register only net time without provisioning time
 		"platform": platformName,
 	}
-	log.Trace("request body to track resources: ", requestBody)
+	l.Trace("request body to track resources: ", requestBody)
 
 	body, err := json.Marshal(requestBody)
 	if err != nil {
-		log.WithError(err).Error("Failed to marshal request data")
+		l.WithError(err).Error("Failed to marshal request data")
 		return
 	}
 	req, err := http.NewRequest(http.MethodPost, requestUrl.String(), bytes.NewBuffer(body))
 	if err != nil {
-		log.WithError(err).Error("Failed to create request")
+		l.WithError(err).Error("Failed to create request")
 	}
 	req.SetBasicAuth(conf.ZebrunnerIntegrationUser, conf.ZebrunnerIntegrationPassword)
 	req.Header.Add("Content-Type", "application/json")
-	log.Trace("req: ", req)
+	l.Trace("req: ", req)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.WithError(err).Error("Failed to send request")
+		l.WithError(err).Error("Failed to send request")
 		return
 	}
 
@@ -77,19 +125,15 @@ func TrackResourcesUsage(sess *sessionmap.Session, d time.Duration) {
 		err = json.NewDecoder(resp.Body).Decode(&data)
 
 		if err != nil {
-			log.WithError(err).Error("Failed to track task resource usage")
+			l.WithError(err).Error("Failed to track task resource usage")
 		}
-		log.WithFields(log.Fields{
+		l.WithFields(log.Fields{
 			"status":   resp.Status,
 			"response": data,
 		}).Error("Failed to track task resource usage!")
 		return
 	} else {
-		l := log.WithFields(log.Fields{"sessionId": sess.ID, "_taskId": sess.TaskID, "request body": requestBody})
-		if !conf.SingleTenant {
-			l = l.WithField("workspace", sess.Workspace)
-		}
-		l.Info("shape recorded")
+		l.WithField("request body", requestBody).Info("shape recorded")
 	}
 }
 
@@ -115,7 +159,7 @@ func getStoppedReason(task ecs.Task) string {
 	return "Launch finished"
 }
 
-func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
+func AbortTask(cachedTask *taskmap.Task, task *ecs.Task) {
 	automationRunId := getAutomationRunId(*task)
 	if automationRunId == "" {
 		return
@@ -135,7 +179,7 @@ func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
 	}
 	if !conf.SingleTenant {
 		// add workspace/tenant to the url
-		requestUrl.Host = sess.Workspace + "." + requestUrl.Host
+		requestUrl.Host = cachedTask.Workspace + "." + requestUrl.Host
 	}
 
 	stopReason := getStoppedReason(*task)
@@ -171,9 +215,9 @@ func AbortTask(sess *sessionmap.Session, task *ecs.Task) {
 		}).Error("Failed to abort task!")
 		return
 	} else {
-		l := log.WithFields(log.Fields{"sessionId": sess.ID, "_taskId": sess.TaskID, "comment": stopReason})
+		l := log.WithFields(log.Fields{"sessionId": cachedTask.CurrentSessionID, "_taskId": cachedTask.ID, "comment": stopReason})
 		if !conf.SingleTenant {
-			l = l.WithField("workspace", sess.Workspace)
+			l = l.WithField("workspace", cachedTask.Workspace)
 		}
 		l.Trace("task aborted")
 	}
