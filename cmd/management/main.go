@@ -120,7 +120,7 @@ func StopLostTasks(keys []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 				break
 			}
 		}
-dsa
+
 		if !isFound {
 			tasksToDescribe = append(tasksToDescribe, *taskArn)
 		}
