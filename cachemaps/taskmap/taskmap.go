@@ -38,11 +38,12 @@ type Task struct {
 	ID               string
 	Capabilities     *capabilities.Capabilities
 	Status           TaskStatus
-	CurrentSessionID string        `json:",omitempty"`
-	StopReason       StoppedReason `json:",omitempty"`
 	UsageTracked     bool
 	Workspace        string
-	HealthAt         time.Time `json:",omitempty"`
+	CurrentSessionID string                           `json:",omitempty"`
+	StopReason       StoppedReason                    `json:",omitempty"`
+	HealthAt         time.Time                        `json:",omitempty"`
+	Network          environment.NetworkConfiguration `json:",omitempty"`
 }
 
 func CreateEntity(id string, env *environment.ExecutionEnvironment) (*Task, error) {
