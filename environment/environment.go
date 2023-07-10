@@ -22,15 +22,15 @@ const (
 	genericPlatform = "generic"
 	cypressPlatform = "cypress"
 
-	imageRepo       = "public.ecr.aws/zebrunner/" //public zebrunner ECR docker registry
-	uploaderImage   = imageRepo + "uploader:3.1"
-	mitmImage       = imageRepo + "mitmproxy:1.1-beta8"
-	recorderImage   = imageRepo + "recorder:1.2"
-    cypressRecorderImage = imageRepo + "cypress-recorder:1.1"
-	appiumImage     = imageRepo + "appium:1.4.10"
-	cloneImage      = imageRepo + "git:latest"
-	entrypointImage = imageRepo + "entrypoint:2.2"
-	mavenImage      = imageRepo + "m2-repo-carina:1.4"
+	imageRepo            = "public.ecr.aws/zebrunner/" //public zebrunner ECR docker registry
+	uploaderImage        = imageRepo + "uploader:3.1"
+	mitmImage            = imageRepo + "mitmproxy:1.1-beta8"
+	recorderImage        = imageRepo + "recorder:1.2"
+	cypressRecorderImage = imageRepo + "cypress-recorder:1.1"
+	appiumImage          = imageRepo + "appium:1.4.10"
+	cloneImage           = imageRepo + "git:latest"
+	entrypointImage      = imageRepo + "entrypoint:2.2"
+	mavenImage           = imageRepo + "m2-repo-carina:1.4"
 )
 
 const (
@@ -44,8 +44,8 @@ const (
 	recorderMemory int64 = 1024
 
 	genericPort int64 = 22
-	minCpu            = 128
-	minMemory         = 256
+	minCpu      int64 = 128
+	minMemory   int64 = 256
 )
 
 type NetworkConfiguration struct {
@@ -178,16 +178,10 @@ func (e *ExecutionEnvironment) ContainerOverrides() []*ecs.ContainerOverride {
 	return overrides
 }
 
-func (e *ExecutionEnvironment) HashDefinition() (string, string) {
-	registerEnvToHash := &ExecutionEnvironment{
-		Containers: e.Containers,
-		Volumes:    e.Volumes,
-	}
-	registerHash := utils.EncodeToHash(registerEnvToHash)
-
-	overrideContainers := make([]*Container, 0)
+func (e *ExecutionEnvironment) HashOvverideDefinition() string {
+	overrideDefinitionData := make([]*Container, 0)
 	for _, container := range e.Containers {
-		overrideContainers = append(overrideContainers, &Container{
+		overrideDefinitionData = append(overrideDefinitionData, &Container{
 			Name:             container.Name,
 			Image:            container.Image,
 			Essential:        container.Essential,
@@ -201,9 +195,19 @@ func (e *ExecutionEnvironment) HashDefinition() (string, string) {
 			DependsOn:        container.DependsOn,
 		})
 	}
-	overrideHash := utils.EncodeToHash(overrideContainers)
+	overrideDefinitionHash := utils.EncodeToHash(overrideDefinitionData)
 
-	return registerHash, overrideHash
+	return overrideDefinitionHash
+}
+
+func (e *ExecutionEnvironment) HashRegisterDefinition() string {
+	registerDefinitionData := &ExecutionEnvironment{
+		Containers: e.Containers,
+		Volumes:    e.Volumes,
+	}
+	registerDefinitionHash := utils.EncodeToHash(registerDefinitionData)
+
+	return registerDefinitionHash
 }
 
 func Build(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {

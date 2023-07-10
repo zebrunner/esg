@@ -1,9 +1,10 @@
 package environment
 
 import (
+	"strings"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
-	"strings"
 
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
@@ -143,8 +144,8 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 		}
 	}
 
-	executorContainer.SetCpu(caps, 1024, conf.MaxCpu)
-	executorContainer.SetMemory(caps, 1024, conf.MaxMemory)
+	executorContainer.SetCpu(caps.Cpu, 1024, conf.MaxCpu)
+	executorContainer.SetMemory(caps.Memory, 1024, conf.MaxMemory)
 
         recorderContainer := Container{
                 Name:        "recorder",

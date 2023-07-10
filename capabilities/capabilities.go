@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -34,13 +35,13 @@ type Capabilities struct {
 	DNSServers       []string
 
 	//Vendor caps
-	Cpu    int64 `json:"cpu,string,omitempty"`
-	Memory int64 `json:"memory,string,omitempty"`
+	Cpu    *int64 `json:"cpu,string,omitempty"`
+	Memory *int64 `json:"memory,string,omitempty"`
 	//Mitm proxy caps
 	Mitm       bool   //enabl mitm with har dump and output generation for mitmweb
 	MitmArgs   string // list of arguments for mitmdump command. Important: --verbose and --quiet will be appended forcibly
-	MitmCpu    int64  `json:"mitmCpu,string,omitempty"`
-	MitmMemory int64  `json:"mitmMemory,string,omitempty"`
+	MitmCpu    *int64 `json:"mitmCpu,string,omitempty"`
+	MitmMemory *int64 `json:"mitmMemory,string,omitempty"`
 
 	// generic launcher caps
 	RepositoryUrl string
@@ -96,7 +97,6 @@ func FromImage(image string) ([]*Capabilities, error) {
 			DeviceName:      "redroid",
 			PlatformVersion: version,
 		})
-		return capsList, nil
 	} else if in(executor, platforms["linux"]) {
 		capsList = append(capsList, &Capabilities{
 			PlatformName:   "linux",
@@ -111,18 +111,24 @@ func FromImage(image string) ([]*Capabilities, error) {
 			BrowserVersion: version,
 			Mitm:           true,
 		})
-
-		return capsList, nil
 	} else if in(executor, platforms["cypress"]) {
 		capsList = append(capsList, &Capabilities{
 			PlatformName:   "cypress",
 			BrowserName:    executor,
 			BrowserVersion: version,
 		})
-		return capsList, nil
 	} else {
 		return nil, fmt.Errorf("failed to build capabilities from unknown image. image=%s", image)
 	}
+
+	for i := 0; i < len(capsList); i++ {
+		capsList[i].Cpu = aws.Int64(0)
+		capsList[i].Memory = aws.Int64(0)
+		capsList[i].MitmCpu = aws.Int64(0)
+		capsList[i].MitmMemory = aws.Int64(0)
+	}	
+
+	return capsList, nil
 }
 
 func (c *Capabilities) GetScreenResolution() (string, error) {

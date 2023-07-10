@@ -17,6 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/aws/aws-sdk-go/service/s3"
 	log "github.com/sirupsen/logrus"
+	defenitionmap "github.com/zebrunner/esg/cachemaps/definitionmap"
 	"github.com/zebrunner/esg/cachemaps/taskmap"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
@@ -24,7 +25,7 @@ import (
 )
 
 const (
-	presignUrlTimeout  = 15 * time.Minute
+	presignUrlTimeout = 15 * time.Minute
 )
 
 var (
@@ -97,10 +98,15 @@ func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDe
 
 func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (taskArn string, returnErr error) {
 	svc := ecs.New(AwsSess)
+	tag, err := defenitionmap.FindRevision(env.HashOvverideDefinition())
+	if err != nil {
+		return "", fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily)
+	}
 
+	fullFamily := fmt.Sprint(&env.TaskDefinitionFamily, ":", tag)
 	runTaskInput := &ecs.RunTaskInput{
 		Cluster:        &config.Conf.AwsCluster,
-		TaskDefinition: &env.TaskDefinitionFamily,
+		TaskDefinition: &fullFamily,
 		Overrides:      &ecs.TaskOverride{ContainerOverrides: env.ContainerOverrides()},
 		PlacementStrategy: []*ecs.PlacementStrategy{
 			{
@@ -126,11 +132,11 @@ func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (t
 		}
 		// Random sleep to fix problems with parallel 100+ threads startup. Not applicable for generic tasks!
 		//TODO: uncomment before release!
-/*		if env.TaskDefinitionFamily != "generic" {
-			sleep := time.Duration(rand.Intn(30)) * time.Second
-			time.Sleep(sleep)
-		}
-*/
+		/*		if env.TaskDefinitionFamily != "generic" {
+					sleep := time.Duration(rand.Intn(30)) * time.Second
+					time.Sleep(sleep)
+				}
+		*/
 
 		var resultRunTask *ecs.RunTaskOutput
 		resultRunTask, err := svc.RunTask(runTaskInput)
@@ -345,6 +351,7 @@ out:
 		default:
 		}
 
+		//!!! revision check
 		taskArn, err := RegisterTask(ctx, env)
 
 		if err != nil {
@@ -390,8 +397,8 @@ out:
 			l.WithField("latency", time.Since(startTime)).WithError(outputErr).Warn()
 		case task := <-req.responseChan:
 			// timediff between HealthAt (current time) and task.startedAt should be cut during resources tracking to bill only actual (net) time
-                        cachedTask.HealthAt = time.Now()
-                        taskmap.Write(cachedTask.ID, cachedTask, 0)
+			cachedTask.HealthAt = time.Now()
+			taskmap.Write(cachedTask.ID, cachedTask, 0)
 			l.Info("healthcheck latency: ", time.Since(startTime))
 
 			err = setEnvironmentNetwork(env, task)

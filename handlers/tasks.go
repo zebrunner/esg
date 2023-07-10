@@ -84,7 +84,7 @@ func Create(c *gin.Context) {
 		c.Error(utils.InvalidArgErr(fmt.Errorf("failed to process capabilities: %v", err))).SetType(gin.ErrorTypePublic)
 		return
 	}
-	log.Trace("caps: ", caps)
+	log.Debug("caps: ", caps)
 
 	sessionStartTime := time.Now()
 	ctx, ctxCancel := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout)

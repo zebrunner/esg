@@ -36,8 +36,8 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities) (*Exe
 		},
 		Mounts: []string{taskVolume},
 	}
-	deviceContainer.SetCpu(caps, 2048, conf.MaxCpu)
-	deviceContainer.SetMemory(caps, 2048, conf.MaxMemory)
+	deviceContainer.SetCpu(caps.Cpu, 2048, conf.MaxCpu)
+	deviceContainer.SetMemory(caps.Memory, 2048, conf.MaxMemory)
 
 	appiumContainer := Container{
 		Name:       "appium",
@@ -75,7 +75,7 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities) (*Exe
 	containers := []*Container{&deviceContainer, &appiumContainer}
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
-		Schema:				  buildSchema(containers),
+		Schema:               buildSchema(containers),
 		Containers:           containers,
 		Capabilities:         caps,
 		Volumes: map[string]volume{

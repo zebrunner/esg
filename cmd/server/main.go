@@ -12,6 +12,7 @@ import (
 	"golang.org/x/net/websocket"
 
 	log "github.com/sirupsen/logrus"
+	defenitionmap "github.com/zebrunner/esg/cachemaps/definitionmap"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/handlers"
 	"github.com/zebrunner/esg/service"
@@ -156,6 +157,14 @@ func main() {
 	}
 
 	router := CreateRouter()
+
+	for {
+		if defenitionmap.IsRefreshDone() {
+			break
+		}
+		time.Sleep(5 * time.Second)
+	}
+	
 	log.Infof("Listening on %s", listen)
 	err = router.Run(listen)
 	if err != nil {

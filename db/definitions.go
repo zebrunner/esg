@@ -1,67 +1,117 @@
 package db
 
 import (
-	// "database/sql"
+	"database/sql"
+	"time"
 
-	// "github.com/zebrunner/esg/config"
-	"github.com/zebrunner/esg/utils"
-
-	"github.com/jackc/pgtype"
-	// pgx "github.com/jackc/pgx/v4"
 	_ "github.com/jackc/pgx/v4/stdlib"
+	"github.com/zebrunner/esg/config"
 )
 
 type TaskDefinition struct {
-	Family                   string           `db:"task_family"`
-	Schema                   string           `db:"schema"`
-	RegisteredDefinitionHash string           `db:"registered_task_hash"`
-	Tag                      int64            `db:"tag"`
-	UpdatedAt                pgtype.Timestamp `db:"updated_at"`
-	OverriddenDefinitionHash string           `db:"overridden_task_hash"`
+	Family                 string    `db:"task_family"`
+	Schema                 string    `db:"schema"`
+	RegisterDefinitionHash string    `db:"register_definition_hash"`
+	RevisionTag            int64     `db:"revision_tag"`
+	UpdatedAt              time.Time `db:"updated_at"`
+	OverrideDefinitionHash string    `db:"override_definition_hash"`
 }
 
-func CreateDefinition(td *TaskDefinition) (string, *utils.APIError) {
-	// 	BEGIN TRANSACTION
-	//     DECLARE @famiylyId INTEGER
-	//     if (SELECT count(family_id) FROM families f WHERE f.task_family = 'linux-chrome-latest') = 0
-	//         INSERT INTO families (task_family) VALUES ('linux-chrome-latest')
-	//         SET @famiylyId = LAST_INSERT_ID()
-	//     ELSE
-	//         SET @famiylyId = SELECT family_id FROM families WHERE families.task_family = 'linux-chrome-latest'
+func CreateDefinition(td *TaskDefinition) error {
+	tx, err := config.DbConnection.Beginx()
+	if err != nil {
+		return err
+	}
 
-	//     DECLARE @schemaId INTEGER
-	//     if (SELECT count(schema_id) FROM schemas s WHERE s.schema = 'mitm-executor-uploader-recorder') = 0
-	//         INSERT INTO families (task_family) VALUES ('mitm-executor-uploader-recorder')
-	//         SET @schemaId = LAST_INSERT_ID()
-	//     ELSE
-	//         SET @schemaId = SELECT schema_id FROM schemas WHERE schemas.schema = 'mitm-executor-uploader-recorder'
+	getFamilyIdQuery := `SELECT family_id FROM families WHERE families.task_family = $1`
+	familyId := -1
+	err = tx.Get(&familyId, getFamilyIdQuery, td.Family)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			creatFamilyQuery := `INSERT INTO families (task_family) VALUES ($1) RETURNING family_id`
+			err = tx.Get(&familyId, creatFamilyQuery, td.Family)
+			if err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+	}
 
-	//     if (SELECT count(*) FROM familiesSchemas fs WHERE fs.family_id = @famiylyId AND fs.schema_id = @schemaId) = 0
-	//         INSERT INTO familiesSchemas (family_id, schema_id) VALUES (@famiylyId, @schemaId)
+	getSchemaIdQuery := `SELECT schema_id FROM schemas WHERE schemas.schema = $1`
+	schemaId := -1
+	err = tx.Get(&schemaId, getSchemaIdQuery, td.Schema)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			creatSchemaQuery := `INSERT INTO schemas (schema) VALUES ($1) RETURNING schema_id`
+			err = tx.Get(&schemaId, creatSchemaQuery, td.Schema)
+			if err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+	}
 
-	//     INSERT INTO definitions (register_hash, tag, updated_at, full_hash, schema_id) VALUES ("hash1", "latest", "time", "hash2", @schemaId)
-	// COMMIT
-	return "", nil
+	getRelationsQuery := `SELECT count(*) FROM familiesSchemas fs WHERE fs.family_id = $1 AND fs.schema_id = $2`
+	count := -1
+	err = tx.Get(&count, getRelationsQuery, familyId, schemaId)
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		creatRelationsQuery := `INSERT INTO familiesSchemas (family_id, schema_id) VALUES ($1, $2)`
+		_, err = tx.Exec(creatRelationsQuery, familyId, schemaId)
+		if err != nil {
+			return err
+		}
+	}
+
+	createQuery := `INSERT INTO definitions (register_definition_hash, revision_tag, updated_at, override_definition_hash, schema_id) VALUES ($1, $2, $3, $4, $5)`
+	_, err = tx.Exec(createQuery, td.RegisterDefinitionHash, td.RevisionTag, time.Now(), td.OverrideDefinitionHash, schemaId)
+	if err != nil {
+		return err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func GetDefinition(family string, schema string) (*TaskDefinition, error) {
-	// SELECT
-	//     d.register_hash, d.override_hash
-	// FROM families f
-	// INNER JOIN familiesSchemas fs ON f.family_id = fs.family_id
-	// INNER JOIN schemas s ON fs.schema_id = s.schema_id
-	// INNER JOIN definitions d ON s.schema_id = d.schema_id;
-	// WHERE f.task_family = "" AND s.schema = ""
+	getDefinitionQuery := `SELECT f.task_family, s.schema, d.register_definition_hash, d.revision_tag, d.updated_at, d.override_definition_hash
+		FROM families f
+		INNER JOIN familiesSchemas fs ON f.family_id = fs.family_id
+		INNER JOIN schemas s ON fs.schema_id = s.schema_id
+		INNER JOIN definitions d ON s.schema_id = d.schema_id
+		WHERE f.task_family = $1 AND s.schema = $2
+	`
 
-	// if err != nil {
-	// if err == pgx.ErrNoRows || err == sql.ErrNoRows {
-	// return "", nil
-	// }
-	// return "", err
-	// }
-	return nil, nil
+	td := &TaskDefinition{}
+	err := config.DbConnection.Get(td, getDefinitionQuery, family, schema)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return td, nil
 }
 
-func RefreshTag(td *TaskDefinition) (string, error) {
-	return "", nil
+func RefreshTag(registerHashToAlter string, newTd *TaskDefinition) error {
+	updateQuery := `UPDATE definitions
+		SET register_definition_hash = $1,
+		revision_tag = $2,
+		updated_at = $3,
+		override_definition_hash = $4
+		WHERE register_definition_hash = $5
+	`
+	_, err := config.DbConnection.Exec(updateQuery, newTd.RegisterDefinitionHash, newTd.RevisionTag, time.Now(), newTd.OverrideDefinitionHash, registerHashToAlter)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

@@ -249,6 +249,23 @@ func (c *RequestCaps) GetContainerConfiguration() (*Capabilities, error) {
 		}
 	}
 
+	if conf.Cpu == nil {
+		defValue := int64(0)
+		conf.Cpu = &defValue
+	}
+	if conf.Memory == nil {
+		defValue := int64(0)
+		conf.Memory = &defValue
+	}
+	if conf.MitmCpu == nil {
+		defValue := int64(0)
+		conf.MitmCpu = &defValue
+	}
+	if conf.MitmMemory == nil {
+		defValue := int64(0)
+		conf.MitmMemory = &defValue
+	}
+
 	return &conf, nil
 }
 
@@ -345,7 +362,7 @@ func processCaps(caps map[string]interface{}) error {
 func processProxy(caps map[string]interface{}) {
 	for key, value := range caps {
 		if strings.ToLower(key) == "zebrunner:mitm" {
-			if enabled, ok:= value.(bool); !ok || !enabled {
+			if enabled, ok := value.(bool); !ok || !enabled {
 				return
 			}
 
