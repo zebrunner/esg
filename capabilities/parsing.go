@@ -10,6 +10,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/imdario/mergo"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
@@ -219,6 +220,12 @@ func (c *RequestCaps) ProcessLegacy() error {
 func (c *RequestCaps) GetContainerConfiguration() (*Capabilities, error) {
 	conf := Capabilities{}
 	validationErr := errors.New("wrong capabilities format")
+	
+	// init pointers with default value
+	conf.Cpu = aws.Int64(0)
+	conf.Memory = aws.Int64(0)
+	conf.MitmCpu = aws.Int64(0)
+	conf.MitmMemory = aws.Int64(0)
 
 	amCaps := RemovePrefix(c.Capabilities.AlwaysMatch, config.VendorPrefix)
 	amCaps = RemovePrefix(amCaps, "appium")
@@ -247,23 +254,6 @@ func (c *RequestCaps) GetContainerConfiguration() (*Capabilities, error) {
 		if err != nil {
 			return nil, validationErr
 		}
-	}
-
-	if conf.Cpu == nil {
-		defValue := int64(0)
-		conf.Cpu = &defValue
-	}
-	if conf.Memory == nil {
-		defValue := int64(0)
-		conf.Memory = &defValue
-	}
-	if conf.MitmCpu == nil {
-		defValue := int64(0)
-		conf.MitmCpu = &defValue
-	}
-	if conf.MitmMemory == nil {
-		defValue := int64(0)
-		conf.MitmMemory = &defValue
 	}
 
 	return &conf, nil

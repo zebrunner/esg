@@ -121,6 +121,7 @@ func FromImage(image string) ([]*Capabilities, error) {
 		return nil, fmt.Errorf("failed to build capabilities from unknown image. image=%s", image)
 	}
 
+	// init pointers with default value
 	for i := 0; i < len(capsList); i++ {
 		capsList[i].Cpu = aws.Int64(0)
 		capsList[i].Memory = aws.Int64(0)

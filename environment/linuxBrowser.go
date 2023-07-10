@@ -66,7 +66,6 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			"TZ":            tz.String(),
 		},
 		Mounts:     []string{shmVolume, logVolume},
-		Links:      []string{"mitm"},
 		Command:    []string{"-c", "/entrypoint.sh" + taskLogRedirect},
 		EntryPoint: []string{"/bin/sh"},
 		HealthCheck: &ecs.HealthCheck{
@@ -158,6 +157,8 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		mitmContainer.SetMemory(caps.MitmCpu, 512, conf.MaxMemory)
 
 		containers = append(containers, &mitmContainer)
+	
+		browserContainer.Links = []string{"mitm"}
 	}
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),

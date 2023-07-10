@@ -144,6 +144,7 @@ func main() {
 
 	defer config.RedisSessionsConnection.Close()
 	defer config.RedisTasksConnection.Close()
+	defer config.RedisDefinitionConnection.Close()
 
 	aws, err := service.InitAws()
 	if err != nil {

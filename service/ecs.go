@@ -98,12 +98,16 @@ func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDe
 
 func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (taskArn string, returnErr error) {
 	svc := ecs.New(AwsSess)
-	tag, err := defenitionmap.FindRevision(env.HashOvverideDefinition())
-	if err != nil {
-		return "", fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily)
+
+	fullFamily := "generic"
+	if !strings.Contains(env.TaskDefinitionFamily, fullFamily) {
+		tag, err := defenitionmap.FindRevision(env.HashOvverideDefinition())
+		if err != nil {
+			return "", fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily)
+		}
+		fullFamily = fmt.Sprint(&env.TaskDefinitionFamily, ":", tag)
 	}
 
-	fullFamily := fmt.Sprint(&env.TaskDefinitionFamily, ":", tag)
 	runTaskInput := &ecs.RunTaskInput{
 		Cluster:        &config.Conf.AwsCluster,
 		TaskDefinition: &fullFamily,
@@ -351,7 +355,6 @@ out:
 		default:
 		}
 
-		//!!! revision check
 		taskArn, err := RegisterTask(ctx, env)
 
 		if err != nil {

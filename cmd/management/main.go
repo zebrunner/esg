@@ -308,6 +308,8 @@ func RefreshTaskDefinition(image string) error {
 				if err != nil {
 					return err
 				}
+				// pause after aws call
+				time.Sleep(1 * time.Second)
 
 				dbDefinition = &db.TaskDefinition{
 					RevisionTag:            *taskDef.Revision,
@@ -326,6 +328,8 @@ func RefreshTaskDefinition(image string) error {
 			if err != nil {
 				return err
 			}
+			// pause after aws call
+			time.Sleep(1 * time.Second)
 			l.Debug("Altering record...")
 
 			dbDefinition.RevisionTag = *taskDef.Revision
@@ -428,6 +432,14 @@ func main() {
 		os.Exit(1)
 	}
 	service.AwsSess = awsSess
+
+	err = config.InitDBConnection(config.Conf.DbConnectionString)
+	if err != nil {
+		log.WithError(err).Fatal("Failed to init DB client! Stopping router...")
+		os.Exit(1)
+	}
+
+	defer config.DbConnection.Close()
 
 	err = config.InitCache()
 	if err != nil {
