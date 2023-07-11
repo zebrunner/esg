@@ -123,8 +123,9 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 		},
 		Mounts:           mounts,
 		WorkingDirectory: workDir,
-		Command:          []string{"-c", entrypointDir + "/entrypoint.sh" + taskLogRedirect},
-		EntryPoint:       []string{"/bin/sh"},
+		// we can't redirect logs from this place to support SIGTERM detection on trap
+		// actual redirection happens inside entrypoint container: https://github.com/zebrunner/entrypoint/issues/51
+		EntryPoint:       []string{entrypointDir + "/entrypoint.sh"},
 		//TODO: what about verification for PID=1 among the processes?
                 HealthCheck: &ecs.HealthCheck{
                         Command:     []*string{aws.String("CMD-SHELL"), aws.String("exit 0")}, // Healthy as container started
