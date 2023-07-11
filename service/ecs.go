@@ -17,7 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/aws/aws-sdk-go/service/s3"
 	log "github.com/sirupsen/logrus"
-	defenitionmap "github.com/zebrunner/esg/cachemaps/definitionmap"
+	"github.com/zebrunner/esg/cachemaps/definitionmap"
 	"github.com/zebrunner/esg/cachemaps/taskmap"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
@@ -99,19 +99,20 @@ func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDe
 func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (taskArn string, returnErr error) {
 	svc := ecs.New(AwsSess)
 
-	fullFamily := "generic"
-	if !strings.Contains(env.TaskDefinitionFamily, fullFamily) {
-		tag, err := defenitionmap.FindRevision(env.HashOvverideDefinition())
+	family := "generic"
+	//used Contains() as task definition family could be org-generic/dev-generic etc.
+	if !strings.Contains(env.TaskDefinitionFamily, "generic") {
+		tag, err := definitionmap.FindRevision(env.HashOvverideDefinition())
 		if err != nil {
 			return "", fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily)
 		}
-		fullFamily = fmt.Sprint(env.TaskDefinitionFamily, ":", tag)
+		family = fmt.Sprint(env.TaskDefinitionFamily, ":", tag)
 	}
-	l := log.WithField("family", fullFamily)
+	l := log.WithField("family", family)
 
 	runTaskInput := &ecs.RunTaskInput{
 		Cluster:        &config.Conf.AwsCluster,
-		TaskDefinition: &fullFamily,
+		TaskDefinition: &family,
 		Overrides:      &ecs.TaskOverride{ContainerOverrides: env.ContainerOverrides()},
 		PlacementStrategy: []*ecs.PlacementStrategy{
 			{

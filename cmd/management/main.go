@@ -10,7 +10,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
-	defenitionmap "github.com/zebrunner/esg/cachemaps/definitionmap"
+	"github.com/zebrunner/esg/cachemaps/definitionmap"
 	"github.com/zebrunner/esg/cachemaps/sessionmap"
 	"github.com/zebrunner/esg/cachemaps/taskmap"
 	"github.com/zebrunner/esg/capabilities"
@@ -299,11 +299,10 @@ func RefreshTaskDefinition(image string) error {
 		l = l.WithField("schema", env.Schema).WithField("family", env.TaskDefinitionFamily)
 
 		registerDefinitionHash := env.HashRegisterDefinition()
-		overrideDefinitionHash := env.HashOvverideDefinition()
 		dbDefinition, err := db.GetDefinition(env.TaskDefinitionFamily, env.Schema)
 		if err != nil {
 			if err == sql.ErrNoRows {
-				l.Debug("Creating new record...")
+				l.Info("Creating new record")
 				taskDef, err := service.CreateTaskDefinition(env)
 				if err != nil {
 					return err
@@ -311,41 +310,66 @@ func RefreshTaskDefinition(image string) error {
 				// pause after aws call
 				time.Sleep(1 * time.Second)
 
-				dbDefinition = &db.TaskDefinition{
+				newDefinition := &db.TaskDefinition{
 					RevisionTag:            *taskDef.Revision,
 					Family:                 env.TaskDefinitionFamily,
 					Schema:                 env.Schema,
 					RegisterDefinitionHash: registerDefinitionHash,
-					OverrideDefinitionHash: overrideDefinitionHash,
+					OverrideDefinitionHash: env.HashOvverideDefinition(),
 				}
 
-				db.CreateDefinition(dbDefinition)
+				err = db.CreateDefinition(newDefinition)
+				if err != nil {
+					return err
+				}
+
+				err = definitionmap.AddDefinition(newDefinition.OverrideDefinitionHash, newDefinition.RevisionTag)
+				if err != nil {
+					return err
+				}
+
+				continue
 			} else {
 				return err
 			}
-		} else if dbDefinition.RegisterDefinitionHash != registerDefinitionHash {
-			l = l.WithFields(log.Fields{"dbHash": dbDefinition.RegisterDefinitionHash, "envCurrentHash": registerDefinitionHash})
+		}
+
+		if dbDefinition.RegisterDefinitionHash != registerDefinitionHash {
+			l.WithFields(log.Fields{"stored hash": dbDefinition.RegisterDefinitionHash, "new hash": registerDefinitionHash}).Info("Updating definition record")
 			taskDef, err := service.CreateTaskDefinition(env)
 			if err != nil {
 				return err
 			}
 			// pause after aws call
 			time.Sleep(1 * time.Second)
-			l.Debug("Altering record...")
 
-			dbDefinition.RevisionTag = *taskDef.Revision
-			oldRegisterHash := dbDefinition.RegisterDefinitionHash
-			dbDefinition.RegisterDefinitionHash = registerDefinitionHash
-			dbDefinition.OverrideDefinitionHash = overrideDefinitionHash
-			err = db.RefreshTag(oldRegisterHash, dbDefinition)
+			updatedDefinition := &db.TaskDefinition{
+				RevisionTag:            *taskDef.Revision,
+				Family:                 env.TaskDefinitionFamily,
+				Schema:                 env.Schema,
+				RegisterDefinitionHash: registerDefinitionHash,
+				OverrideDefinitionHash: env.HashOvverideDefinition(),
+			}
+
+			err = db.RefreshTag(dbDefinition.RegisterDefinitionHash, updatedDefinition)
 			if err != nil {
 				return err
 			}
-		} else {
-			l.Debug("Record is up-to-date")
+
+			err = definitionmap.AddDefinition(updatedDefinition.OverrideDefinitionHash, updatedDefinition.RevisionTag)
+			if err != nil {
+				return err
+			}
+
+			continue
 		}
 
-		defenitionmap.AddDefinition(dbDefinition.OverrideDefinitionHash, dbDefinition.RevisionTag)
+		l.Trace("Definition record is up-to-date")
+		err = definitionmap.AddDefinition(dbDefinition.OverrideDefinitionHash, dbDefinition.RevisionTag)
+		if err != nil {
+			return err
+		}
+
 	}
 
 	return nil
@@ -364,7 +388,7 @@ func RefreshTaskDefinitions() {
 	}
 
 	log.Info("Task definitions updates finished")
-	defenitionmap.SetRefreshDone()
+	definitionmap.SetRefreshDone()
 }
 
 func getImageList() []string {

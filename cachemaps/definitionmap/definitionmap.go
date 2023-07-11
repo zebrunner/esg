@@ -1,4 +1,4 @@
-package defenitionmap
+package definitionmap
 
 import (
 	"context"
