@@ -63,12 +63,8 @@ func CreateRouter() *gin.Engine {
 		hub.GET("/", handlers.Welcome)
 		hub.GET("/ping", handlers.Ping)
 
-		hub.GET("/vnc/:session", func(c *gin.Context) {
-			handler := websocket.Handler(handlers.Vnc)
-			log.WithField("request", c.Request).Debug("Vnc request")
-			handler.ServeHTTP(c.Writer, c.Request)
-		})
-		hub.GET("/ws/vnc/:session", func(c *gin.Context) {
+		// sessionId passed for linux browsers and redroid session. taskId passed for cypress
+		hub.GET("/ws/vnc/:id", func(c *gin.Context) {
 			handler := websocket.Handler(handlers.Vnc)
 			c.Request.Header.Add("Access-Control-Allow-Origin", "*")
 			c.Request.Header.Add("X-Real-IP", c.Request.RemoteAddr)
