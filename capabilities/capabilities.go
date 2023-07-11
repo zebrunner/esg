@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -120,14 +119,6 @@ func FromImage(image string) ([]*Capabilities, error) {
 	} else {
 		return nil, fmt.Errorf("failed to build capabilities from unknown image. image=%s", image)
 	}
-
-	// init pointers with default value
-	for i := 0; i < len(capsList); i++ {
-		capsList[i].Cpu = aws.Int64(0)
-		capsList[i].Memory = aws.Int64(0)
-		capsList[i].MitmCpu = aws.Int64(0)
-		capsList[i].MitmMemory = aws.Int64(0)
-	}	
 
 	return capsList, nil
 }

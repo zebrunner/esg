@@ -105,8 +105,9 @@ func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (t
 		if err != nil {
 			return "", fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily)
 		}
-		fullFamily = fmt.Sprint(&env.TaskDefinitionFamily, ":", tag)
+		fullFamily = fmt.Sprint(env.TaskDefinitionFamily, ":", tag)
 	}
+	l := log.WithField("family", fullFamily)
 
 	runTaskInput := &ecs.RunTaskInput{
 		Cluster:        &config.Conf.AwsCluster,
@@ -127,7 +128,7 @@ func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (t
 	var outputErr error
 	for i := 0; i < 25; i++ {
 
-		l := log.WithField("retry", i)
+		l = l.WithField("retry", i)
 
 		select {
 		case <-ctx.Done():

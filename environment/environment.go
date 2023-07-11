@@ -181,6 +181,30 @@ func (e *ExecutionEnvironment) ContainerOverrides() []*ecs.ContainerOverride {
 func (e *ExecutionEnvironment) HashOvverideDefinition() string {
 	overrideDefinitionData := make([]*Container, 0)
 	for _, container := range e.Containers {
+		dependsOn := make([]*ecs.ContainerDependency, 0)
+		if container.DependsOn != nil {
+			for _, dependency := range container.DependsOn {
+				if dependency == nil {
+					continue
+				}
+				dependsOn = append(dependsOn, &ecs.ContainerDependency{
+					Condition:     dependency.Condition,
+					ContainerName: dependency.ContainerName,
+				})
+			}
+		}
+
+		var healthCheck *ecs.HealthCheck
+		if container.HealthCheck != nil {
+			healthCheck = &ecs.HealthCheck{
+				Command:     container.HealthCheck.Command,
+				Interval:    container.HealthCheck.Interval,
+				Retries:     container.HealthCheck.Retries,
+				StartPeriod: container.HealthCheck.StartPeriod,
+				Timeout:     container.HealthCheck.Timeout,
+			}
+		}
+
 		overrideDefinitionData = append(overrideDefinitionData, &Container{
 			Name:             container.Name,
 			Image:            container.Image,
@@ -191,8 +215,8 @@ func (e *ExecutionEnvironment) HashOvverideDefinition() string {
 			Links:            container.Links,
 			EntryPoint:       container.EntryPoint,
 			WorkingDirectory: container.WorkingDirectory,
-			HealthCheck:      container.HealthCheck,
-			DependsOn:        container.DependsOn,
+			HealthCheck:      healthCheck,
+			DependsOn:        dependsOn,
 		})
 	}
 	overrideDefinitionHash := utils.EncodeToHash(overrideDefinitionData)
@@ -201,8 +225,53 @@ func (e *ExecutionEnvironment) HashOvverideDefinition() string {
 }
 
 func (e *ExecutionEnvironment) HashRegisterDefinition() string {
+	containers := make([]*Container, 0)
+	for _, container := range e.Containers {
+		dependsOn := make([]*ecs.ContainerDependency, 0)
+		if container.DependsOn != nil {
+			for _, dependency := range container.DependsOn {
+				if dependency == nil {
+					continue
+				}
+				dependsOn = append(dependsOn, &ecs.ContainerDependency{
+					Condition:     dependency.Condition,
+					ContainerName: dependency.ContainerName,
+				})
+			}
+		}
+
+		var healthCheck *ecs.HealthCheck
+		if container.HealthCheck != nil {
+			healthCheck = &ecs.HealthCheck{
+				Command:     container.HealthCheck.Command,
+				Interval:    container.HealthCheck.Interval,
+				Retries:     container.HealthCheck.Retries,
+				StartPeriod: container.HealthCheck.StartPeriod,
+				Timeout:     container.HealthCheck.Timeout,
+			}
+		}
+
+		containers = append(containers, &Container{
+			Name:             container.Name,
+			Image:            container.Image,
+			cpu:              container.cpu,
+			memory:           container.memory,
+			Essential:        container.Essential,
+			Privileged:       container.Privileged,
+			Ports:            container.Ports,
+			Mounts:           container.Mounts,
+			Links:            container.Links,
+			Command:          container.Command,
+			Env:              container.Env,
+			EntryPoint:       container.EntryPoint,
+			WorkingDirectory: container.WorkingDirectory,
+			HealthCheck:      healthCheck,
+			DependsOn:        dependsOn,
+		})
+	}
+
 	registerDefinitionData := &ExecutionEnvironment{
-		Containers: e.Containers,
+		Containers: containers,
 		Volumes:    e.Volumes,
 	}
 	registerDefinitionHash := utils.EncodeToHash(registerDefinitionData)
@@ -314,7 +383,10 @@ func buildTaskDefinitionFamily(caps *capabilities.Capabilities) string {
 	if deviceName != "" {
 		familyParts = append(familyParts, deviceName)
 		if deviceName == "redroid" {
-			familyParts = append(familyParts, "11")
+			platformVersion := strings.ToLower(caps.PlatformVersion)
+			platformVersion = remapVersion(platformVersion)
+			platformVersion = strings.Replace(platformVersion, ".", "-", -1)
+			familyParts = append(familyParts, platformVersion)
 		}
 	}
 

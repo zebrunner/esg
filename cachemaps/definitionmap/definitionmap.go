@@ -2,45 +2,22 @@ package defenitionmap
 
 import (
 	"context"
-	"encoding/json"
-
 	"github.com/zebrunner/esg/config"
 )
 
 var taskDefenititonRefreshDone = "done"
 
-type defenitionRevision struct {
-	OverrideDefinitionHash string
-	Revision               int64
-}
-
 func FindRevision(hash string) (int64, error) {
-	sessionData, err := config.RedisTasksConnection.Get(context.Background(), hash).Result()
+	revision, err := config.RedisDefinitionConnection.Get(context.Background(), hash).Int64()
 	if err != nil {
 		return -1, err
 	}
 
-	var dr defenitionRevision
-	err = json.Unmarshal([]byte(sessionData), &dr)
-	if err != nil {
-		return -1, err
-	}
-
-	return dr.Revision, nil
+	return revision, nil
 }
 
 func AddDefinition(overrideDefenititonHash string, revision int64) error {
-	dr := &defenitionRevision{
-		OverrideDefinitionHash: overrideDefenititonHash,
-		Revision:               revision,
-	}
-
-	data, err := json.Marshal(dr)
-	if err != nil {
-		return err
-	}
-
-	err = config.RedisTasksConnection.Set(context.Background(), dr.OverrideDefinitionHash, data, 0).Err()
+	err := config.RedisDefinitionConnection.Set(context.Background(), overrideDefenititonHash, revision, 0).Err()
 	if err != nil {
 		return err
 	}
@@ -49,7 +26,7 @@ func AddDefinition(overrideDefenititonHash string, revision int64) error {
 }
 
 func SetRefreshDone() error {
-	err := config.RedisTasksConnection.Set(context.Background(), taskDefenititonRefreshDone, true, 0).Err()
+	err := config.RedisDefinitionConnection.Set(context.Background(), taskDefenititonRefreshDone, taskDefenititonRefreshDone, 0).Err()
 	if err != nil {
 		return err
 	}
@@ -57,7 +34,10 @@ func SetRefreshDone() error {
 }
 
 func IsRefreshDone() bool {
-	_, err := config.RedisTasksConnection.Get(context.Background(), taskDefenititonRefreshDone).Result()
+	exists, err := config.RedisDefinitionConnection.Exists(context.Background(), taskDefenititonRefreshDone).Result()
+	if err != nil {
+		return false
+	}
 
-	return err == nil
+	return exists != 0
 }

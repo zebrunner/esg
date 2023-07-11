@@ -296,7 +296,7 @@ func RefreshTaskDefinition(image string) error {
 			return err
 		}
 
-		l = l.WithField("schema", env.Schema)
+		l = l.WithField("schema", env.Schema).WithField("family", env.TaskDefinitionFamily)
 
 		registerDefinitionHash := env.HashRegisterDefinition()
 		overrideDefinitionHash := env.HashOvverideDefinition()
@@ -324,6 +324,7 @@ func RefreshTaskDefinition(image string) error {
 				return err
 			}
 		} else if dbDefinition.RegisterDefinitionHash != registerDefinitionHash {
+			l = l.WithFields(log.Fields{"dbHash": dbDefinition.RegisterDefinitionHash, "envCurrentHash": registerDefinitionHash})
 			taskDef, err := service.CreateTaskDefinition(env)
 			if err != nil {
 				return err
@@ -344,7 +345,7 @@ func RefreshTaskDefinition(image string) error {
 			l.Debug("Record is up-to-date")
 		}
 
-		defenitionmap.AddDefinition(dbDefinition.RegisterDefinitionHash, dbDefinition.RevisionTag)
+		defenitionmap.AddDefinition(dbDefinition.OverrideDefinitionHash, dbDefinition.RevisionTag)
 	}
 
 	return nil
@@ -362,6 +363,7 @@ func RefreshTaskDefinitions() {
 		}
 	}
 
+	log.Info("Task definitions updates finished")
 	defenitionmap.SetRefreshDone()
 }
 
@@ -452,7 +454,6 @@ func main() {
 	defer config.RedisDefinitionConnection.Close()
 
 	RefreshTaskDefinitions()
-	log.Info("Task definitions updates finished")
 
 	var wg sync.WaitGroup
 	wg.Add(1)

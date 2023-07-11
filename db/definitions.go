@@ -53,22 +53,8 @@ func CreateDefinition(td *TaskDefinition) error {
 		}
 	}
 
-	getRelationsQuery := `SELECT count(*) FROM familiesSchemas fs WHERE fs.family_id = $1 AND fs.schema_id = $2`
-	count := -1
-	err = tx.Get(&count, getRelationsQuery, familyId, schemaId)
-	if err != nil {
-		return err
-	}
-	if count == 0 {
-		creatRelationsQuery := `INSERT INTO familiesSchemas (family_id, schema_id) VALUES ($1, $2)`
-		_, err = tx.Exec(creatRelationsQuery, familyId, schemaId)
-		if err != nil {
-			return err
-		}
-	}
-
-	createQuery := `INSERT INTO definitions (register_definition_hash, revision_tag, updated_at, override_definition_hash, schema_id) VALUES ($1, $2, $3, $4, $5)`
-	_, err = tx.Exec(createQuery, td.RegisterDefinitionHash, td.RevisionTag, time.Now(), td.OverrideDefinitionHash, schemaId)
+	createQuery := `INSERT INTO definitions (register_definition_hash, revision_tag, updated_at, override_definition_hash, family_id, schema_id) VALUES ($1, $2, $3, $4, $5, $6)`
+	_, err = tx.Exec(createQuery, td.RegisterDefinitionHash, td.RevisionTag, time.Now(), td.OverrideDefinitionHash, familyId, schemaId)
 	if err != nil {
 		return err
 	}
@@ -83,10 +69,9 @@ func CreateDefinition(td *TaskDefinition) error {
 
 func GetDefinition(family string, schema string) (*TaskDefinition, error) {
 	getDefinitionQuery := `SELECT f.task_family, s.schema, d.register_definition_hash, d.revision_tag, d.updated_at, d.override_definition_hash
-		FROM families f
-		INNER JOIN familiesSchemas fs ON f.family_id = fs.family_id
-		INNER JOIN schemas s ON fs.schema_id = s.schema_id
-		INNER JOIN definitions d ON s.schema_id = d.schema_id
+		FROM definitions d
+		INNER JOIN schemas s ON d.schema_id = s.schema_id
+		INNER JOIN families f ON d.family_id = f.family_id
 		WHERE f.task_family = $1 AND s.schema = $2
 	`
 

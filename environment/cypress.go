@@ -147,8 +147,8 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 	//basic auth header for executor-logs service
 	basicAuthHeader := "Authorization: Basic " + b64.StdEncoding.EncodeToString([]byte(conf.ZebrunnerIntegrationUser+":"+conf.ZebrunnerIntegrationPassword))
 
-	cypressContainer.SetCpu(caps.Cpu, 1024, conf.MaxCpu)
-	cypressContainer.SetMemory(caps.Memory, 2048, conf.MaxMemory) // 2Gb RAM is minimal for cypress due to the potential memory leaks
+	cypressContainer.SetCpu(&caps.Cpu, 1024, conf.MaxCpu)
+	cypressContainer.SetMemory(&caps.Memory, 2048, conf.MaxMemory) // 2Gb RAM is minimal for cypress due to the potential memory leaks
 
 	recorderContainer := Container{
 		Name:       "recorder",

@@ -76,8 +76,8 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			StartPeriod: aws.Int64(0),
 		},
 	}
-	browserContainer.SetCpu(caps.Cpu, 1024, conf.MaxCpu)
-	browserContainer.SetMemory(caps.Memory, 1024, conf.MaxMemory)
+	browserContainer.SetCpu(&caps.Cpu, 1024, conf.MaxCpu)
+	browserContainer.SetMemory(&caps.Memory, 1024, conf.MaxMemory)
 
 	recorderContainer := Container{
 		Name:       "recorder",
@@ -153,8 +153,8 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			Command:    []string{"-c", "/entrypoint.sh"},
 			EntryPoint: []string{"/bin/sh"},
 		}
-		mitmContainer.SetCpu(caps.MitmCpu, 512, conf.MaxCpu)
-		mitmContainer.SetMemory(caps.MitmCpu, 512, conf.MaxMemory)
+		mitmContainer.SetCpu(&caps.MitmCpu, 512, conf.MaxCpu)
+		mitmContainer.SetMemory(&caps.MitmMemory, 512, conf.MaxMemory)
 
 		containers = append(containers, &mitmContainer)
 	

@@ -144,8 +144,8 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 		}
 	}
 
-	executorContainer.SetCpu(caps.Cpu, 1024, conf.MaxCpu)
-	executorContainer.SetMemory(caps.Memory, 1024, conf.MaxMemory)
+	executorContainer.SetCpu(&caps.Cpu, 1024, conf.MaxCpu)
+	executorContainer.SetMemory(&caps.Memory, 1024, conf.MaxMemory)
 
         recorderContainer := Container{
                 Name:        "recorder",

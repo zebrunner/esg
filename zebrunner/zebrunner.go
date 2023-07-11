@@ -130,6 +130,8 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 		l.WithFields(log.Fields{
 			"status":   resp.Status,
 			"response": data,
+			"cpu":      strconv.FormatInt(cpuUsage, 10) + " millicores",
+			"memory":   strconv.FormatInt(memUsage, 10) + " MiB",
 		}).Error("Failed to track task resource usage!")
 		return
 	} else {
