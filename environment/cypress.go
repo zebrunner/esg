@@ -100,7 +100,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 	}
 
 	cypressContainer := Container{
-		Name:       "executor",
+		Name:       "browser",
 		Image:      browserImage,
 		Privileged: false,
 		Essential:  true,
@@ -164,7 +164,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 			"LOG_FILE":             "session.log",
 		},
 		Mounts:      []string{logVolume},
-		Links:       []string{"executor"},
+		Links:       []string{"browser"},
 		Command:     []string{"-c", "/entrypoint.sh" + ">>" + logDir + "/video.log 2>&1"},
 		EntryPoint:  []string{"/bin/sh"},
 		HealthCheck: nil,
@@ -178,7 +178,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 				Condition:     aws.String("SUCCESS"),
 			},
 			{
-				ContainerName: aws.String("executor"),
+				ContainerName: aws.String("browser"),
 				Condition:     aws.String("START"),
 			},
 		},

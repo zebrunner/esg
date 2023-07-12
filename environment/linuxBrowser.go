@@ -48,7 +48,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		driverArgs = ", \"--log=info\""
 	}
 	browserContainer := Container{
-		Name:      "executor",
+		Name:      "browser",
 		Image:     browserImage,
 		Essential: true,
 		Ports: map[string]portMapping{
@@ -95,7 +95,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			"BASIC_AUTH":           "",
 		},
 		Mounts:      []string{logVolume},
-		Links:       []string{"executor"},
+		Links:       []string{"browser"},
 		Command:     []string{"-c", "/entrypoint.sh" + ">>" + logDir + "/video.log 2>&1"},
 		EntryPoint:  []string{"/bin/sh"},
 		HealthCheck: nil,
