@@ -211,12 +211,12 @@ func StopTask(taskId string, stopReason taskmap.StoppedReason) error {
 		}
 	}
 
-	i := 0
-	l := log.WithField("_taskId", taskId).WithField("retry", i)
+	l := log.WithField("_taskId", taskId)
 	var err error
 	var result *ecs.StopTaskOutput
-	for i < 5 {
-		i++
+	for i := 0; i < 5; i++ {
+		l = l.WithField("retry", i)
+		
 		result, err = utils.RetryThrottling(svc.StopTask)(stopTaskInput)
 		if err != nil {
 			l.WithError(err).Debug("Failed to stop task")
@@ -345,10 +345,8 @@ func StartTask(ctx context.Context, env *environment.ExecutionEnvironment) (*tas
 	var outputErr error
 	startTime := time.Now()
 	// retry attempt counter
-	i := 0
 out:
-	for {
-		i++
+	for i := 0; true; i++ {
 		l := log.WithField("attempt", i)
 		select {
 		case <-ctx.Done():
