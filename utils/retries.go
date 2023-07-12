@@ -19,7 +19,7 @@ func RetryThrottling[T, R interface{}](executeFunc func(T) (R, error)) func(T) (
 
 		retryCount := 10
 		var i int
-		for i = 1; i <= retryCount; i++ {
+		for i = 0; i < retryCount; i++ {
 			result, err = executeFunc(arg)
 			if err != nil {
 				if strings.Contains(err.Error(), "ThrottlingException") {
@@ -36,7 +36,7 @@ func RetryThrottling[T, R interface{}](executeFunc func(T) (R, error)) func(T) (
 			}
 		}
 
-		l.WithError(err).Errorf("RetryThrottling: performed %d retries", i-1)
+		l.WithError(err).Debugf("RetryThrottling: performed %d retries", i-1)
 		return result, err
 	}
 }
