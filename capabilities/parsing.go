@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 
@@ -225,13 +226,13 @@ func (c *RequestCaps) GetContainerConfiguration() (*Capabilities, error) {
 	amConf, err := MapConfig(amCaps)
 	if err != nil {
 		log.WithError(err).Warn("Failed to map config")
-		return nil, validationErr
+		return nil, fmt.Errorf("%v: %v", validationErr, err)
 	}
 
 	err = mergo.Merge(&conf, amConf)
 	if err != nil {
 		log.WithError(err).Warn("Failed to map config")
-		return nil, validationErr
+		return nil, fmt.Errorf("%v: %v", validationErr, err)
 	}
 
 	for _, fmCaps := range c.Capabilities.FirstMatch {
@@ -240,12 +241,11 @@ func (c *RequestCaps) GetContainerConfiguration() (*Capabilities, error) {
 
 		fmConf, err := MapConfig(caps)
 		if err != nil {
-
-			return nil, validationErr
+			return nil, fmt.Errorf("%v: %v", validationErr, err)
 		}
 		err = mergo.Merge(&conf, fmConf)
 		if err != nil {
-			return nil, validationErr
+			return nil, fmt.Errorf("%v: %v", validationErr, err)
 		}
 	}
 
