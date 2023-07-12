@@ -78,12 +78,12 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 		platformName = "linux"
 	}
 
-	cpuUsage := cachedTask.Capabilities.Cpu
-	memUsage := cachedTask.Capabilities.Memory
+	cpuUsage := *cachedTask.Capabilities.Cpu
+	memUsage := *cachedTask.Capabilities.Memory
 	if cachedTask.Capabilities.Mitm {
 		// #579: track mitm container cpu and memory usage
-		cpuUsage += cachedTask.Capabilities.MitmCpu
-		memUsage += cachedTask.Capabilities.MitmMemory
+		cpuUsage += *cachedTask.Capabilities.MitmCpu
+		memUsage += *cachedTask.Capabilities.MitmMemory
 	}
 
 	if !conf.SingleTenant {

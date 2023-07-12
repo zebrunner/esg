@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"flag"
 	"os"
 	"strings"
@@ -9,9 +10,11 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
+	"github.com/zebrunner/esg/cachemaps/definitionmap"
 	"github.com/zebrunner/esg/cachemaps/sessionmap"
 	"github.com/zebrunner/esg/cachemaps/taskmap"
 	"github.com/zebrunner/esg/capabilities"
+	"github.com/zebrunner/esg/db"
 	"github.com/zebrunner/esg/environment"
 	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/service"
@@ -279,23 +282,94 @@ func ScaleDownCluster() {
 }
 
 func RefreshTaskDefinition(image string) error {
-	caps, err := capabilities.FromImage(image)
+	capsList, err := capabilities.FromImage(image)
 	l := log.WithField("image", image)
 	if err != nil {
 		l.WithError(err).Error("Failed to build capabilities for image!")
 		return err
 	}
 
-	env, err := environment.Build("", caps)
-	if err != nil {
-		l.WithError(err).Error("Failed to build execution environment!")
-		return err
-	}
+	for _, caps := range capsList {
+		env, err := environment.Build("", caps)
+		if err != nil {
+			l.WithError(err).Error("Failed to build execution environment!")
+			return err
+		}
 
-	_, err = service.CreateTaskDefinition(env)
-	if err != nil {
-		l.WithError(err).Error("Failed to create task definition!")
-		return err
+		l = l.WithField("schema", env.Schema).WithField("family", env.TaskDefinitionFamily)
+
+		registerDefinitionHash := env.HashRegisterDefinition()
+		dbDefinition, err := db.GetDefinition(env.TaskDefinitionFamily, env.Schema)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				l.Info("Creating new record")
+				taskDef, err := service.CreateTaskDefinition(env)
+				if err != nil {
+					return err
+				}
+				// pause after aws call
+				time.Sleep(1 * time.Second)
+
+				newDefinition := &db.TaskDefinition{
+					RevisionTag:            *taskDef.Revision,
+					Family:                 env.TaskDefinitionFamily,
+					Schema:                 env.Schema,
+					RegisterDefinitionHash: registerDefinitionHash,
+					OverrideDefinitionHash: env.HashOvverideDefinition(),
+				}
+
+				err = db.CreateDefinition(newDefinition)
+				if err != nil {
+					return err
+				}
+
+				err = definitionmap.AddDefinition(newDefinition.OverrideDefinitionHash, newDefinition.RevisionTag)
+				if err != nil {
+					return err
+				}
+
+				continue
+			} else {
+				return err
+			}
+		}
+
+		if dbDefinition.RegisterDefinitionHash != registerDefinitionHash {
+			l.WithFields(log.Fields{"stored hash": dbDefinition.RegisterDefinitionHash, "new hash": registerDefinitionHash}).Info("Updating definition record")
+			taskDef, err := service.CreateTaskDefinition(env)
+			if err != nil {
+				return err
+			}
+			// pause after aws call
+			time.Sleep(1 * time.Second)
+
+			updatedDefinition := &db.TaskDefinition{
+				RevisionTag:            *taskDef.Revision,
+				Family:                 env.TaskDefinitionFamily,
+				Schema:                 env.Schema,
+				RegisterDefinitionHash: registerDefinitionHash,
+				OverrideDefinitionHash: env.HashOvverideDefinition(),
+			}
+
+			err = db.RefreshTag(dbDefinition.RegisterDefinitionHash, updatedDefinition)
+			if err != nil {
+				return err
+			}
+
+			err = definitionmap.AddDefinition(updatedDefinition.OverrideDefinitionHash, updatedDefinition.RevisionTag)
+			if err != nil {
+				return err
+			}
+
+			continue
+		}
+
+		l.Trace("Definition record is up-to-date")
+		err = definitionmap.AddDefinition(dbDefinition.OverrideDefinitionHash, dbDefinition.RevisionTag)
+		if err != nil {
+			return err
+		}
+
 	}
 
 	return nil
@@ -311,8 +385,10 @@ func RefreshTaskDefinitions() {
 			l.WithError(err).Error("Couldn't create task defenition. Stopping scaler...")
 			os.Exit(1)
 		}
-		time.Sleep(1 * time.Second)
 	}
+
+	log.Info("Task definitions updates finished")
+	definitionmap.SetRefreshDone()
 }
 
 func getImageList() []string {
@@ -383,6 +459,14 @@ func main() {
 	}
 	service.AwsSess = awsSess
 
+	err = config.InitDBConnection(config.Conf.DbConnectionString)
+	if err != nil {
+		log.WithError(err).Fatal("Failed to init DB client! Stopping router...")
+		os.Exit(1)
+	}
+
+	defer config.DbConnection.Close()
+
 	err = config.InitCache()
 	if err != nil {
 		log.WithError(err).Fatal("Failed to init redis connection! Stopping scaler...")
@@ -391,9 +475,9 @@ func main() {
 
 	defer config.RedisSessionsConnection.Close()
 	defer config.RedisTasksConnection.Close()
+	defer config.RedisDefinitionConnection.Close()
 
 	RefreshTaskDefinitions()
-	log.Info("Task definitions updates finished")
 
 	var wg sync.WaitGroup
 	wg.Add(1)

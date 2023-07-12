@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -18,6 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/aws/aws-sdk-go/service/s3"
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/cachemaps/definitionmap"
 	"github.com/zebrunner/esg/cachemaps/taskmap"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
@@ -25,8 +25,7 @@ import (
 )
 
 const (
-	browsersRepository = "659932254483"
-	presignUrlTimeout  = 15 * time.Minute
+	presignUrlTimeout = 15 * time.Minute
 )
 
 var (
@@ -57,25 +56,14 @@ func InitAws() (*awsSession.Session, error) {
 	return sess, nil
 }
 
-func getFamily(name string) string {
-	zbrEnv := os.Getenv("ZEBRUNNER_ENV")
-	if zbrEnv != "" {
-		name = zbrEnv + "-" + name
-		log.Debug("name: ", name)
-	}
-	return name
-}
-
 func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDefinition *ecs.TaskDefinition, err error) {
 	svc := ecs.New(AwsSess)
-
-	family := getFamily(environment.TaskDefinitionFamily)
 
 	networkMode := "bridge"
 	input := ecs.RegisterTaskDefinitionInput{
 		NetworkMode:          &networkMode,
 		ContainerDefinitions: environment.ContainerDefinitions(),
-		Family:               &family,
+		Family:               &environment.TaskDefinitionFamily,
 	}
 
 	volumes := []*ecs.Volume{}
@@ -111,7 +99,17 @@ func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDe
 func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (taskArn string, returnErr error) {
 	svc := ecs.New(AwsSess)
 
-	family := getFamily(env.TaskDefinitionFamily)
+	family := "generic"
+	//used Contains() as task definition family could be org-generic/dev-generic etc.
+	if !strings.Contains(env.TaskDefinitionFamily, "generic") {
+		tag, err := definitionmap.FindRevision(env.HashOvverideDefinition())
+		if err != nil {
+			return "", fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily)
+		}
+		family = fmt.Sprint(env.TaskDefinitionFamily, ":", tag)
+	}
+	l := log.WithField("family", family)
+
 	runTaskInput := &ecs.RunTaskInput{
 		Cluster:        &config.Conf.AwsCluster,
 		TaskDefinition: &family,
@@ -131,7 +129,7 @@ func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (t
 	var outputErr error
 	for i := 0; i < 25; i++ {
 
-		l := log.WithField("retry", i)
+		l = l.WithField("retry", i)
 
 		select {
 		case <-ctx.Done():
@@ -140,11 +138,11 @@ func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (t
 		}
 		// Random sleep to fix problems with parallel 100+ threads startup. Not applicable for generic tasks!
 		//TODO: uncomment before release!
-/*		if env.TaskDefinitionFamily != "generic" {
-			sleep := time.Duration(rand.Intn(30)) * time.Second
-			time.Sleep(sleep)
-		}
-*/
+		/*		if env.TaskDefinitionFamily != "generic" {
+					sleep := time.Duration(rand.Intn(30)) * time.Second
+					time.Sleep(sleep)
+				}
+		*/
 
 		var resultRunTask *ecs.RunTaskOutput
 		resultRunTask, err := svc.RunTask(runTaskInput)
@@ -404,8 +402,8 @@ out:
 			l.WithField("latency", time.Since(startTime)).WithError(outputErr).Warn()
 		case task := <-req.responseChan:
 			// timediff between HealthAt (current time) and task.startedAt should be cut during resources tracking to bill only actual (net) time
-                        cachedTask.HealthAt = time.Now()
-                        taskmap.Write(cachedTask.ID, cachedTask, 0)
+			cachedTask.HealthAt = time.Now()
+			taskmap.Write(cachedTask.ID, cachedTask, 0)
 			l.Info("healthcheck latency: ", time.Since(startTime))
 
 			err = setEnvironmentNetwork(env, task)

@@ -345,7 +345,7 @@ func processCaps(caps map[string]interface{}) error {
 func processProxy(caps map[string]interface{}) {
 	for key, value := range caps {
 		if strings.ToLower(key) == "zebrunner:mitm" {
-			if enabled, ok:= value.(bool); !ok || !enabled {
+			if enabled, ok := value.(bool); !ok || !enabled {
 				return
 			}
 

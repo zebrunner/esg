@@ -8,9 +8,10 @@ import (
 )
 
 var (
-	RedisSessionsConnection *redis.Client
-	RedisTasksConnection    *redis.Client
-	DbConnection            *sqlx.DB
+	RedisSessionsConnection   *redis.Client
+	RedisTasksConnection      *redis.Client
+	RedisDefinitionConnection *redis.Client
+	DbConnection              *sqlx.DB
 )
 
 func InitCache() error {
@@ -37,6 +38,19 @@ func InitCache() error {
 	_, err = RedisTasksConnection.Ping(context.Background()).Result()
 	if err != nil {
 		log.WithError(err).Error("Failed to ping redis tasks connection")
+		return err
+	}
+
+	// DB 2 - for definitions
+	RedisDefinitionConnection = redis.NewClient(&redis.Options{
+		Addr:     Conf.RedisConnectionString,
+		Password: "",
+		DB:       2,
+	})
+
+	_, err = RedisDefinitionConnection.Ping(context.Background()).Result()
+	if err != nil {
+		log.WithError(err).Error("Failed to ping redis definitions connection")
 		return err
 	}
 

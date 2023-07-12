@@ -27,8 +27,8 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 	logDir := "/home/selenium/Downloads"
 	logVolume := "log"
 
-        shmDir := "/dev/shm"
-        shmVolume := "shm"
+	shmDir := "/dev/shm"
+	shmVolume := "shm"
 
 	tz, err := caps.GetTimeZone()
 	// Video recorder & artifacts uploader logic
@@ -36,67 +36,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		return nil, fmt.Errorf("failed to parse timezone. error=%s", err)
 	}
 
-	//TODO: handle resolution and video screen size
-
-	mitmIncluded := caps.Mitm
-	mitmCommand := ""
-	var mitmCpu int64 = 32
-	var mitmMemory int64 = 64 // minimal memory to start container
-
-	if mitmIncluded {
-		// to generate har we have to enable regular dump.mitm output by -w option and place it before har_dump.py!
-		mitmCommand = "mitmdump -w " + logDir + "/dump.mitm"
-
-		//TODO: wrap into the functions during adding mitm support for other environments (generic, cypress, redroid etc)
-		mitmCpu = 512
-		if caps.MitmCpu != 0 {
-			if caps.MitmCpu > conf.MaxCpu {
-				// limit max cpu usage based on cluster configuration
-				caps.MitmCpu = conf.MaxCpu
-			}
-			mitmCpu = caps.MitmCpu
-		} else {
-			caps.MitmCpu = mitmCpu
-		}
-
-		mitmMemory = 512
-		if caps.MitmMemory != 0 {
-			if caps.MitmMemory > conf.MaxMemory {
-				// limit max memory usage based on cluster configuration
-				caps.MitmMemory = conf.MaxMemory
-			}
-			mitmMemory = caps.MitmMemory
-		} else {
-			caps.MitmMemory = mitmMemory
-		}
-
-		if caps.MitmArgs != "" {
-			//append args only if mitm=true
-			mitmCommand = mitmCommand + " " + caps.MitmArgs
-		}
-		// --quiet is a must to run without interactive console
-		mitmCommand = mitmCommand + " --quiet"
-	}
-	mitmContainer := Container{
-		Name:       "mitm",
-		Image:      mitmImage,
-		cpu:        mitmCpu,
-		memory:     mitmMemory,
-		Privileged: false,
-		Essential:  false,
-		Env: map[string]string{
-			"LOG_DIR": logDir,
-			"COMMAND": mitmCommand,
-		},
-		Ports: map[string]portMapping{
-			"fileserverPort": {fileserverPort, 0},
-		},
-		Mounts:     []string{logVolume},
-		Command: []string{"-c", "/entrypoint.sh"},
-		EntryPoint: []string{"/bin/sh"},
-	}
-
-        taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
+	taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
 	// In future maybe there will be need to disable vnc
 	enableVNC := true
 
@@ -125,8 +65,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			"HOSTS_ENTRIES": strings.Join(caps.HostsEntries, " "),
 			"TZ":            tz.String(),
 		},
-		Mounts: []string{shmVolume, logVolume},
-		Links:      []string{"mitm"},
+		Mounts:     []string{shmVolume, logVolume},
 		Command:    []string{"-c", "/entrypoint.sh" + taskLogRedirect},
 		EntryPoint: []string{"/bin/sh"},
 		HealthCheck: &ecs.HealthCheck{
@@ -137,8 +76,8 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			StartPeriod: aws.Int64(0),
 		},
 	}
-	browserContainer.SetCpu(caps, 1024, conf.MaxCpu)
-	browserContainer.SetMemory(caps, 1024, conf.MaxMemory)
+	browserContainer.SetCpu(&caps.Cpu, 1024, conf.MaxCpu)
+	browserContainer.SetMemory(&caps.Memory, 1024, conf.MaxMemory)
 
 	recorderContainer := Container{
 		Name:       "recorder",
@@ -148,10 +87,10 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		Privileged: false,
 		Essential:  false,
 		Env: map[string]string{
-                        "LOG_DIR": logDir,
-			"TASK_LOG": logDir + "/task.log",
-                        "LOG_FILE": "session.log",
-			"ENABLE_VIDEO": "true",
+			"LOG_DIR":              logDir,
+			"TASK_LOG":             logDir + "/task.log",
+			"LOG_FILE":             "session.log",
+			"ENABLE_VIDEO":         "true",
 			"ENABLE_REALTIME_LOGS": "false",
 			"BASIC_AUTH":           "",
 		},
@@ -171,12 +110,12 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 	uploaderContainer := Container{
 		Name:       "uploader",
 		Image:      uploaderImage,
-		cpu:        64, // with 32  uploading is aborted
+		cpu:        64,  // with 32  uploading is aborted
 		memory:     256, // 64 works for single thread. for backgroud copying it is not enough
 		Privileged: false,
 		Essential:  false,
 		Env: map[string]string{
-                        "LOG_DIR": logDir,
+			"LOG_DIR":               logDir,
 			"S3_KEY_PATTERN":        fmt.Sprintf("s3://%s/%s/artifacts/test-sessions", conf.S3Bucket, workspace),
 			"AWS_ACCESS_KEY_ID":     conf.S3AwsAccessKeyID,
 			"AWS_SECRET_ACCESS_KEY": conf.S3AwsSecretAccessKey,
@@ -186,13 +125,49 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		HealthCheck: nil,
 	}
 
+	containers := []*Container{&browserContainer, &recorderContainer, &uploaderContainer}
+	if caps.Mitm {
+		//TODO: handle resolution and video screen size
+		// to generate har we have to enable regular dump.mitm output by -w option and place it before har_dump.py!
+		mitmCommand := "mitmdump -w " + logDir + "/dump.mitm"
+		if caps.MitmArgs != "" {
+			//append args only if mitm=true
+			mitmCommand = mitmCommand + " " + caps.MitmArgs
+		}
+		// --quiet is a must to run without interactive console
+		mitmCommand = mitmCommand + " --quiet"
+
+		mitmContainer := Container{
+			Name:       "mitm",
+			Image:      mitmImage,
+			Privileged: false,
+			Essential:  false,
+			Env: map[string]string{
+				"LOG_DIR": logDir,
+				"COMMAND": mitmCommand,
+			},
+			Ports: map[string]portMapping{
+				"fileserverPort": {fileserverPort, 0},
+			},
+			Mounts:     []string{logVolume},
+			Command:    []string{"-c", "/entrypoint.sh"},
+			EntryPoint: []string{"/bin/sh"},
+		}
+		mitmContainer.SetCpu(&caps.MitmCpu, 512, conf.MaxCpu)
+		mitmContainer.SetMemory(&caps.MitmMemory, 512, conf.MaxMemory)
+
+		containers = append(containers, &mitmContainer)
+	
+		browserContainer.Links = []string{"mitm"}
+	}
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
-		Containers:           []*Container{&mitmContainer, &browserContainer, &recorderContainer, &uploaderContainer},
+		Schema:               buildSchema(containers),
+		Containers:           containers,
 		Capabilities:         caps,
 		Volumes: map[string]volume{
-			logVolume:        {ContainerPath: logDir, Driver: "local", Scope: "task", ReadOnly: false},
-			shmVolume:        {ContainerPath: shmDir, HostPath: shmDir, ReadOnly: false}, // no way to reuse local task volume due to the reset of permissions on browser container start
+			logVolume: {ContainerPath: logDir, Driver: "local", Scope: "task", ReadOnly: false},
+			shmVolume: {ContainerPath: shmDir, HostPath: shmDir, ReadOnly: false}, // no way to reuse local task volume due to the reset of permissions on browser container start
 		},
 		Network: &NetworkConfiguration{
 			IP: "",

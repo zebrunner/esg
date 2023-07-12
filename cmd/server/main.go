@@ -12,6 +12,7 @@ import (
 	"golang.org/x/net/websocket"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/cachemaps/definitionmap"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/handlers"
 	"github.com/zebrunner/esg/service"
@@ -143,6 +144,7 @@ func main() {
 
 	defer config.RedisSessionsConnection.Close()
 	defer config.RedisTasksConnection.Close()
+	defer config.RedisDefinitionConnection.Close()
 
 	aws, err := service.InitAws()
 	if err != nil {
@@ -156,6 +158,14 @@ func main() {
 	}
 
 	router := CreateRouter()
+
+	for {
+		if definitionmap.IsRefreshDone() {
+			break
+		}
+		time.Sleep(5 * time.Second)
+	}
+	
 	log.Infof("Listening on %s", listen)
 	err = router.Run(listen)
 	if err != nil {

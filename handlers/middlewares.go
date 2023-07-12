@@ -9,7 +9,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps/sessionmap"
 	"github.com/zebrunner/esg/cachemaps/taskmap"
-	"github.com/zebrunner/esg/service"
+	"github.com/zebrunner/esg/db"
 	"github.com/zebrunner/esg/utils"
 )
 
@@ -153,7 +153,7 @@ func APIAuthentication(c *gin.Context) {
 		return
 	}
 
-	apiErr := service.CheckAuth(username, password)
+	apiErr := db.CheckAuth(username, password)
 	if apiErr != nil {
 		log.WithError(apiErr).WithFields(log.Fields{
 			"client":   c.ClientIP(),
