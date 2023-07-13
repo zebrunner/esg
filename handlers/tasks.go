@@ -108,7 +108,7 @@ func Create(c *gin.Context) {
 	l.Info("new request")
 	l.WithField("env", env).Debug("Env details")
 
-	if env.TaskDefinitionFamily == "generic" {
+	if strings.Contains(env.TaskDefinitionFamily, "generic") {
 		_, err = service.CreateTaskDefinition(env)
 		if err != nil {
 			log.WithError(err).Error("Failed to create task definition")
@@ -128,7 +128,7 @@ func Create(c *gin.Context) {
 	l = l.WithField("_taskId", cachedTask.ID)
 	l.Info("task started")
 	var resp map[string]interface{}
-	if env.TaskDefinitionFamily == "generic" || strings.HasPrefix(env.TaskDefinitionFamily, "cypress") {
+	if strings.Contains(env.TaskDefinitionFamily, "generic") || strings.Contains(env.TaskDefinitionFamily, "cypress") {
 		// TODO: delete status update when CloseSession() for generic tasks will be called
 		cachedTask.Status = taskmap.TaskGeneric
 		cachedTask.Network = *env.Network

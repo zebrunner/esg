@@ -99,14 +99,14 @@ func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDe
 func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (taskArn string, returnErr error) {
 	svc := ecs.New(AwsSess)
 
-	family := "generic"
+	family := env.TaskDefinitionFamily
 	//used Contains() as task definition family could be org-generic/dev-generic etc.
-	if !strings.Contains(env.TaskDefinitionFamily, "generic") {
+	if !strings.Contains(family, "generic") {
 		tag, err := definitionmap.FindRevision(env.HashOvverideDefinition())
 		if err != nil {
 			return "", fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily)
 		}
-		family = fmt.Sprint(env.TaskDefinitionFamily, ":", tag)
+		family = fmt.Sprint(family, ":", tag)
 	}
 	l := log.WithField("family", family)
 
@@ -380,7 +380,7 @@ out:
 		}
 		l = l.WithField("_taskId", cachedTask.ID)
 
-		if env.TaskDefinitionFamily == "generic" {
+		if strings.Contains(env.TaskDefinitionFamily, "generic") {
 			//TODO: remove HealthAt as only healthcheck integrated into the generic as well
 			cachedTask.HealthAt = time.Now()
 			taskmap.Write(cachedTask.ID, cachedTask, 0)
