@@ -412,7 +412,6 @@ func processOptions(caps map[string]interface{}) error {
 		return err
 	}
 
-	origin := strings.Replace(config.Conf.ZebrunnerHost, "https://", "http://engine.", 1)
 	argsProcessors := map[string]*CapProcessor{
 		"goog:chromeOptions": {
 			ValueProcessor: func(options interface{}) interface{} {
@@ -421,11 +420,11 @@ func processOptions(caps map[string]interface{}) error {
 						for i, v := range args {
 							argStr := v.(string)
 							if strings.Contains(argStr, "--remote-allow-origins") {
-								args[i] = fmt.Sprintf("--remote-allow-origins=%s", origin)
+								args[i] = "--remote-allow-origins=*"
 								return options
 							}
 						}
-						optionsMap["args"] = append(args, fmt.Sprintf("--remote-allow-origins=%s", origin))
+						optionsMap["args"] = append(args, "--remote-allow-origins=*")
 					}
 				}
 				return options
