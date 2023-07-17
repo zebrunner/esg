@@ -310,6 +310,16 @@ func processVendorCaps(caps map[string]interface{}) error {
 		}
 	}
 
+	//overrided vendor caps by existing w3c caps
+	if zebrunnerOptions, ok := caps["zebrunner:options"].(map[string]interface{}); ok {
+		for k, v := range zebrunnerOptions {
+			caps[k] = v
+			processors[k] = &CapProcessor{
+				KeyProcessor: addPrefix(config.VendorPrefix),
+			}
+		}
+	}
+
 	err := applyProcessor(caps, processors)
 	if err != nil {
 		return err
