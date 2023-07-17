@@ -452,13 +452,12 @@ func Devtools(c *gin.Context) {
 		url, _ := sess.Network.GetUrl("devtools")
 		req.URL.Host = url.Host
 		req.Host = url.Host
-		req.Header.Set("Access-Control-Allow-Origin", "*")
 	}
 	proxy := &httputil.ReverseProxy{Director: director}
 	proxy.ServeHTTP(c.Writer, c.Request)
 }
 
-func defaultErrorHandler(с *gin.Context) func(http.ResponseWriter, *http.Request, error) {
+func defaultErrorHandler(c *gin.Context) func(http.ResponseWriter, *http.Request, error) {
 	return func(w http.ResponseWriter, r *http.Request, err error) {
 		user, remote := util.RequestInfo(r)
 		log.WithError(err).WithFields(log.Fields{

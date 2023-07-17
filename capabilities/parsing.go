@@ -362,7 +362,7 @@ func processProxy(caps map[string]interface{}) {
 }
 
 func processOptions(caps map[string]interface{}) error {
-	optionProcessors := map[string]*CapProcessor{
+	downloadOptionProcessors := map[string]*CapProcessor{
 		"goog:chromeOptions": {
 			ValueProcessor: deletePref("download.default_directory"),
 		},
@@ -407,7 +407,33 @@ func processOptions(caps map[string]interface{}) error {
 		},
 	}
 
-	err := applyProcessor(caps, optionProcessors)
+	err := applyProcessor(caps, downloadOptionProcessors)
+	if err != nil {
+		return err
+	}
+
+	origin := strings.Replace(config.Conf.ZebrunnerHost, "https://", "http://engine.", 1)
+	argsProcessors := map[string]*CapProcessor{
+		"goog:chromeOptions": {
+			ValueProcessor: func(options interface{}) interface{} {
+				if optionsMap, ok := options.(map[string]interface{}); ok {
+					if args, ok := optionsMap["args"].([]interface{}); ok {
+						for i, v := range args {
+							argStr := v.(string)
+							if strings.Contains(argStr, "--remote-allow-origins") {
+								args[i] = fmt.Sprintf("--remote-allow-origins=%s", origin)
+								return options
+							}
+						}
+						optionsMap["args"] = append(args, fmt.Sprintf("--remote-allow-origins=%s", origin))
+					}
+				}
+				return options
+			},
+		},
+	}
+
+	err = applyProcessor(caps, argsProcessors)
 	if err != nil {
 		return err
 	}
