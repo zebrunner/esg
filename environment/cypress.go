@@ -196,7 +196,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 		Name:       "uploader",
 		Image:      uploaderImage,
 		cpu:        64, // with 32  uploading is aborted
-		memory:     64,
+		memory:     256, // 64 works for single thread. for backgroud copying it is not enough
 		Privileged: false,
 		Essential:  false,
 		Env: map[string]string{
