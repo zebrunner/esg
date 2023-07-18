@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"flag"
 	"os"
 	"strings"
@@ -9,11 +10,14 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
+	"github.com/zebrunner/esg/cachemaps/definitionmap"
+	"github.com/zebrunner/esg/cachemaps/sessionmap"
+	"github.com/zebrunner/esg/cachemaps/taskmap"
 	"github.com/zebrunner/esg/capabilities"
+	"github.com/zebrunner/esg/db"
 	"github.com/zebrunner/esg/environment"
 	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/service"
-	sessionmap "github.com/zebrunner/esg/sessinonmap"
 	"github.com/zebrunner/esg/utils"
 
 	awsSession "github.com/aws/aws-sdk-go/aws/session"
@@ -36,103 +40,62 @@ func ClearTasks() {
 	for {
 		time.Sleep(1 * time.Minute)
 
-		keys, err := sessionmap.Keys()
+		taskIds, err := taskmap.Keys()
 		if err != nil {
-			log.WithError(err).Error("Failed to get list of keys!")
+			log.WithError(err).Error("Failed to get list of taskmap keys!")
 			continue
 		}
 
-		if len(keys) > 0 {
-			log.WithField("keys", keys).Trace("cached session keys")
+		if len(taskIds) > 0 {
+			log.WithField("keys:", taskIds).Trace("cached task keys")
 		}
-
-		tasks := service.GetSessionMapTasks(keys, svc)
-
 		wg.Add(1)
-		go StopIdleTasks(keys, &wg)
+		go StopLostTasks(taskIds, svc, &wg)
 
-		wg.Add(1)
-		go StopUnhealthyTasks(tasks, &wg)
+		tasks := service.GetTasksByTaskIds(taskIds, svc)
+		if len(tasks) != 0 {
+			wg.Add(1)
+			go StopUnhealthyTasks(tasks, &wg)
 
-		wg.Add(1)
-		go StopLostTasks(keys, svc, &wg)
-
-		wg.Add(1)
-		go TrackResourceUsage(tasks, &wg)
+			wg.Add(1)
+			go TrackResourceUsage(tasks, &wg)
+		}
 
 		wg.Wait()
 	}
 }
 
-func StopIdleTasks(keys []string, wg *sync.WaitGroup) {
-	for _, key := range keys {
-		session, _ := sessionmap.Find(key, false)
-
-		if session == nil {
-			log.WithField("session key", key).Debug("StopIdleTasks: Not found")
-			continue
-		}
-
-		if session.Status != sessionmap.SessionActive {
-			continue
-		}
-
-		l := log.WithFields(log.Fields{"_taskId": session.TaskID, "sessionId": session.ID})
-		if !config.Conf.SingleTenant {
-			l = l.WithField("workspace", session.Workspace)
-		}
-
-		l.Debug("StopIdleTasks: analyzing session for idleTimeout")
-
-		idleTimeout := float64(session.Capabilities.IdleTimeout)
-		if idleTimeout == 0 {
-			idleTimeout = config.Conf.IdleTimeout.Seconds()
-		}
-
-		idleTime := time.Since(session.AccessedAt).Seconds()
-		if idleTime > idleTimeout {
-			selenium.CloseSession(session, sessionmap.SessionIdleTimeout)
-			_, err := service.StopTask(session.TaskID, sessionmap.SessionIdleTimeout)
-			if err != nil {
-				l.WithError(err).Error("Failed to stop idle driver task!")
-			} else {
-				l.Warn("task aborted due to the session idle timeout")
-			}
-		}
-	}
-
-	wg.Done()
-}
-
 func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 	for _, task := range tasks {
 		taskId := strings.Split(*task.TaskArn, "/")[2]
-		l := log.WithField("_taskId", taskId)
 
-		session, err := sessionmap.Find(taskId, false)
+		cachedTask, err := taskmap.Find(taskId)
 		if err != nil {
+			log.WithError(err).Debug("StopUnhealthyTasks(): failed to get task's cache for: ", taskId)
 			continue
 		}
+
+		l := log.WithField("_taskId", cachedTask.ID)
 
 		// stop zombie and UNHEALTHY tasks that are not pending for stop.
 		// resource usage register and taskId mark for removal is performed only for stopped tasks
 		if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
 			if *task.HealthStatus == "UNHEALTHY" {
 				l.Warn("Aborting task due to UNHEALTHY HealthStatus")
-				_, err := service.StopTask(taskId, sessionmap.SessionUnhealthy)
+				err := service.StopTask(cachedTask.ID, taskmap.TaskUnhealthy)
 				if err != nil {
 					l.WithError(err).Error("Failed to stop the task")
 				}
 			} else {
 				maxTimeout := config.Conf.MaxTimeout
-				if session.Capabilities.MaxTimeout != 0 {
-					maxTimeout = time.Duration(session.Capabilities.MaxTimeout) * time.Second
+				if cachedTask.Capabilities.MaxTimeout != 0 {
+					maxTimeout = time.Duration(cachedTask.Capabilities.MaxTimeout) * time.Second
 				}
-				l.Debug("maxTimeout: ", maxTimeout)
+				l.Trace("maxTimeout: ", maxTimeout)
 
 				if task.CreatedAt != nil && time.Since(*task.CreatedAt) > maxTimeout {
 					l.WithField("maxTimeout", maxTimeout).Warn("Aborting task due to the max timeout")
-					_, err := service.StopTask(taskId, sessionmap.SessionMaxTimeout)
+					err := service.StopTask(cachedTask.ID, taskmap.TaskMaxTimeout)
 					if err != nil {
 						l.WithError(err).Error("Failed to stop the task")
 					}
@@ -174,22 +137,27 @@ func StopLostTasks(keys []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 
 	tasks, err := service.DescribeTasks(tasksToDescribe)
 	if err != nil {
+		log.WithError(err).Warn("StopLostTasks(): failed to describe lost tasks")
 		wg.Done()
 		return
 	}
 
 	for _, task := range tasks {
 		if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
-			sessStartup := config.Conf.SessionStartupTimeout.Seconds()
-			if task.CreatedAt != nil && time.Since(*task.CreatedAt).Seconds() > sessStartup {
-				taskId := strings.Split(*task.TaskArn, "/")[2]
-				l := log.WithField("_taskId", taskId)
-				l.WithField("sessionStartupTimeout", sessStartup).Warn("Unrecognized task detected! Aborting")
+			taskId := strings.Split(*task.TaskArn, "/")[2]
+			l := log.WithField("_taskId", taskId)
+			l.Warn("Unrecognized task detected! Aborting")
 
-				_, err := service.StopTask(taskId, sessionmap.SessionFinished)
-				if err != nil {
-					l.WithError(err).Error("Failed to stop the task")
-				}
+			cachedTask := &taskmap.Task{
+				ID:     taskId,
+				Status: taskmap.TaskActive,
+			}
+			// maybe we can track lost task's session and restore lost cache
+			taskmap.Write(cachedTask.ID, cachedTask, 0)
+
+			err := service.StopTask(taskId, taskmap.TaskLost)
+			if err != nil {
+				l.WithError(err).Error("Failed to stop the task")
 			}
 		}
 	}
@@ -201,57 +169,102 @@ func TrackResourceUsage(tasks []*ecs.Task, wg *sync.WaitGroup) {
 	// analyze tasks response
 	for _, task := range tasks {
 		taskId := strings.Split(*task.TaskArn, "/")[2]
+		l := log.WithFields(log.Fields{"_taskId": taskId})
 
-		// don't track tasks that:
-		// 1) are not cached;
-		// 2) already tracked;
-		// 3) don't have the stop or generic status, because later we'll need a stop reason
-		// 4) are not STOPPED
-		session, err := sessionmap.Find(taskId, false)
-		if err != nil ||
-			session.UsageTracked ||
-			(session.Status != sessionmap.SessionStopped && session.Status != sessionmap.SessionGeneric) ||
-			*task.LastStatus != "STOPPED" {
-			// TODO: delete session.Status != sessionmap.SessionGeneric when CloseSession() for generic tasks will be called
+		// tracking task only when execution is stopped
+		if *task.LastStatus != "STOPPED" {
 			continue
 		}
 
-		l := log.WithFields(log.Fields{"_taskId": taskId})
+		// for tracking task should be cached
+		cachedTask, _ := taskmap.Find(taskId)
+		if cachedTask == nil {
+			l.Debug("Can't find non tracked stopped task in cache")
+			continue
+		}
+
+		// for tracking task should be:
+		// 1) not tracked
+		// 2) with stop or generic(workaround) status, because later we'll need a stop reason
+		if cachedTask.UsageTracked || !(cachedTask.Status == taskmap.TaskStopped || cachedTask.Status == taskmap.TaskGeneric) {
+			// TODO: delete cachedTask.Status != taskmap.TaskGeneric when CloseGeneric() for generic tasks will be called
+			continue
+		}
+
 		if !config.Conf.SingleTenant {
-			l = l.WithField("workspace", session.Workspace)
+			l = l.WithField("workspace", cachedTask.Workspace)
 		}
 
 		// track resources usage for STOPPED tasks
-
 		// Set tracked status and expiration time 5 minutes to be able to return taskId and stop reason for task
-		session.UsageTracked = true
-		sessionmap.Write(taskId, session, 5*time.Minute)
+		cachedTask.UsageTracked = true
+		taskmap.Write(taskId, cachedTask, 5*time.Minute)
 
 		// Don't track Unhealthy and StartupFailure tasks
-		if session.StopReason == sessionmap.SessionUnhealthy || session.StopReason == sessionmap.SessionStartupFailure {
-			l.Info("Not tracking task with stop reason:", session.StopReason)
+		if cachedTask.StopReason == taskmap.TaskStartupFailure ||
+			cachedTask.StopReason == taskmap.TaskUnhealthy ||
+			cachedTask.StopReason == taskmap.TaskLost {
+			l.Info("Not tracking task with stop reason:", cachedTask.StopReason)
 			continue
 		}
 
-		if task.StartedAt != nil && task.StoppedAt != nil {
-			// don't calculate timing for terminated tasks by AWS due to the missted StartedAt!
-			//	StopCode: \"TerminationNotice\"
-			//	StoppedReason: \"Host EC2 (instance i-03dba81187d65ce7e) terminated.\"
-			l.Trace("StartedAt: ", *task.StartedAt)
-			l.Trace("StoppedAt: ", *task.StoppedAt)
-			startedAt := *task.StartedAt //local var needed to calculate difference via Sub(..)
-			stoppedAt := *task.StoppedAt
-			zebrunner.TrackResourcesUsage(session, stoppedAt.Sub(startedAt))
-		}
+		zebrunner.TrackResourcesUsage(cachedTask, task)
 
-		if !strings.HasPrefix(session.Capabilities.Image, "public.ecr.aws/zebrunner/cypress-") {
+		if !strings.HasPrefix(cachedTask.Capabilities.Image, "public.ecr.aws/zebrunner/cypress-") && cachedTask.Status == taskmap.TaskGeneric {
 			// #503: суpress tests aborted automatically
 			// automatic abort of the public.ecr.aws/zebrunner/cypress-* should be prohibited as execution is control by parent cyserver process
-			zebrunner.AbortTask(session, task)
+			zebrunner.AbortTask(cachedTask, task)
 		}
 
 	}
 	wg.Done()
+}
+
+func StopIdleTasks() {
+	for {
+		time.Sleep(30 * time.Second)
+
+		keys, err := sessionmap.Keys()
+		if err != nil {
+			log.WithError(err).Error("Failed to get list of sessionmap keys!")
+			continue
+		}
+
+		if len(keys) > 0 {
+			log.WithField("keys", keys).Trace("cached session keys")
+		}
+
+		for _, key := range keys {
+			session, _ := sessionmap.Find(key, false)
+
+			if session == nil {
+				log.WithField("session key", key).Warn("StopIdleTasks: Not found")
+				continue
+			}
+
+			if session.Status != sessionmap.SessionActive {
+				continue
+			}
+
+			l := log.WithFields(log.Fields{"_taskId": session.TaskID, "sessionId": session.ID})
+			if !config.Conf.SingleTenant {
+				l = l.WithField("workspace", session.Workspace)
+			}
+
+			l.Debug("StopIdleTasks: analyzing session for idleTimeout")
+
+			idleTime := time.Since(session.AccessedAt).Seconds()
+			if idleTime > session.IdleTimeout {
+				selenium.CloseSession(session, sessionmap.SessionIdleTimeout)
+				err := service.StopTask(session.TaskID, taskmap.TaskAborted)
+				if err != nil {
+					l.WithError(err).Error("Failed to stop idle driver task!")
+				} else {
+					l.Warn("task aborted due to the session idle timeout")
+				}
+			}
+		}
+	}
 }
 
 func ScaleCluster() {
@@ -269,23 +282,94 @@ func ScaleDownCluster() {
 }
 
 func RefreshTaskDefinition(image string) error {
-	caps, err := capabilities.FromImage(image)
+	capsList, err := capabilities.FromImage(image)
 	l := log.WithField("image", image)
 	if err != nil {
 		l.WithError(err).Error("Failed to build capabilities for image!")
 		return err
 	}
 
-	env, err := environment.Build("", caps)
-	if err != nil {
-		l.WithError(err).Error("Failed to build execution environment!")
-		return err
-	}
+	for _, caps := range capsList {
+		env, err := environment.Build("", caps)
+		if err != nil {
+			l.WithError(err).Error("Failed to build execution environment!")
+			return err
+		}
 
-	_, err = service.CreateTaskDefinition(env)
-	if err != nil {
-		l.WithError(err).Error("Failed to create task definition!")
-		return err
+		l = l.WithField("schema", env.Schema).WithField("family", env.TaskDefinitionFamily)
+
+		registerDefinitionHash := env.HashRegisterDefinition()
+		dbDefinition, err := db.GetDefinition(env.TaskDefinitionFamily, env.Schema)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				l.Info("Creating new record")
+				taskDef, err := service.CreateTaskDefinition(env)
+				if err != nil {
+					return err
+				}
+				// pause after aws call
+				time.Sleep(1 * time.Second)
+
+				newDefinition := &db.TaskDefinition{
+					RevisionTag:            *taskDef.Revision,
+					Family:                 env.TaskDefinitionFamily,
+					Schema:                 env.Schema,
+					RegisterDefinitionHash: registerDefinitionHash,
+					OverrideDefinitionHash: env.HashOvverideDefinition(),
+				}
+
+				err = db.CreateDefinition(newDefinition)
+				if err != nil {
+					return err
+				}
+
+				err = definitionmap.AddDefinition(newDefinition.OverrideDefinitionHash, newDefinition.RevisionTag)
+				if err != nil {
+					return err
+				}
+
+				continue
+			} else {
+				return err
+			}
+		}
+
+		if dbDefinition.RegisterDefinitionHash != registerDefinitionHash {
+			l.WithFields(log.Fields{"stored hash": dbDefinition.RegisterDefinitionHash, "new hash": registerDefinitionHash}).Info("Updating definition record")
+			taskDef, err := service.CreateTaskDefinition(env)
+			if err != nil {
+				return err
+			}
+			// pause after aws call
+			time.Sleep(1 * time.Second)
+
+			updatedDefinition := &db.TaskDefinition{
+				RevisionTag:            *taskDef.Revision,
+				Family:                 env.TaskDefinitionFamily,
+				Schema:                 env.Schema,
+				RegisterDefinitionHash: registerDefinitionHash,
+				OverrideDefinitionHash: env.HashOvverideDefinition(),
+			}
+
+			err = db.RefreshTag(dbDefinition.RegisterDefinitionHash, updatedDefinition)
+			if err != nil {
+				return err
+			}
+
+			err = definitionmap.AddDefinition(updatedDefinition.OverrideDefinitionHash, updatedDefinition.RevisionTag)
+			if err != nil {
+				return err
+			}
+
+			continue
+		}
+
+		l.Trace("Definition record is up-to-date")
+		err = definitionmap.AddDefinition(dbDefinition.OverrideDefinitionHash, dbDefinition.RevisionTag)
+		if err != nil {
+			return err
+		}
+
 	}
 
 	return nil
@@ -301,8 +385,10 @@ func RefreshTaskDefinitions() {
 			l.WithError(err).Error("Couldn't create task defenition. Stopping scaler...")
 			os.Exit(1)
 		}
-		time.Sleep(1 * time.Second)
 	}
+
+	log.Info("Task definitions updates finished")
+	definitionmap.SetRefreshDone()
 }
 
 func getImageList() []string {
@@ -349,7 +435,7 @@ func AddTaskDefinitions() {
 	}
 }
 
-func refreshIMDSV2Token(){	
+func refreshIMDSV2Token() {
 	for {
 		err := utils.RefreshIMDSV2Token()
 		if err != nil {
@@ -357,10 +443,9 @@ func refreshIMDSV2Token(){
 		} else {
 			log.Debug("Successfully generated IMDSV2 token")
 		}
-		time.Sleep(2 * time.Hour + 30 * time.Minute)
+		time.Sleep(2*time.Hour + 30*time.Minute)
 	}
 }
-
 
 func main() {
 	flag.Parse()
@@ -374,15 +459,25 @@ func main() {
 	}
 	service.AwsSess = awsSess
 
-	rdb, err := config.InitCache()
+	err = config.InitDBConnection(config.Conf.DbConnectionString)
+	if err != nil {
+		log.WithError(err).Fatal("Failed to init DB client! Stopping router...")
+		os.Exit(1)
+	}
+
+	defer config.DbConnection.Close()
+
+	err = config.InitCache()
 	if err != nil {
 		log.WithError(err).Fatal("Failed to init redis connection! Stopping scaler...")
 		os.Exit(1)
 	}
-	config.RedisConnection = rdb
+
+	defer config.RedisSessionsConnection.Close()
+	defer config.RedisTasksConnection.Close()
+	defer config.RedisDefinitionConnection.Close()
 
 	RefreshTaskDefinitions()
-	log.Info("Task definitions updates finished")
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -392,6 +487,8 @@ func main() {
 	go ScaleDownCluster()
 
 	go ClearTasks()
+
+	go StopIdleTasks()
 
 	go AddTaskDefinitions()
 

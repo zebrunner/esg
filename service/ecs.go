@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -17,15 +16,15 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/aws/aws-sdk-go/service/s3"
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/cachemaps/definitionmap"
+	"github.com/zebrunner/esg/cachemaps/taskmap"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
-	sessionmap "github.com/zebrunner/esg/sessinonmap"
 	"github.com/zebrunner/esg/utils"
 )
 
 const (
-	browsersRepository = "659932254483"
-	presignUrlTimeout  = 15 * time.Minute
+	presignUrlTimeout = 15 * time.Minute
 )
 
 var (
@@ -56,25 +55,14 @@ func InitAws() (*awsSession.Session, error) {
 	return sess, nil
 }
 
-func getFamily(name string) string {
-	zbrEnv := os.Getenv("ZEBRUNNER_ENV")
-	if zbrEnv != "" {
-		name = zbrEnv + "-" + name
-		log.Debug("name: ", name)
-	}
-	return name
-}
-
 func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDefinition *ecs.TaskDefinition, err error) {
 	svc := ecs.New(AwsSess)
-
-	family := getFamily(environment.TaskDefinitionFamily)
 
 	networkMode := "bridge"
 	input := ecs.RegisterTaskDefinitionInput{
 		NetworkMode:          &networkMode,
 		ContainerDefinitions: environment.ContainerDefinitions(),
-		Family:               &family,
+		Family:               &environment.TaskDefinitionFamily,
 	}
 
 	volumes := []*ecs.Volume{}
@@ -110,7 +98,17 @@ func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDe
 func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (taskArn string, returnErr error) {
 	svc := ecs.New(AwsSess)
 
-	family := getFamily(env.TaskDefinitionFamily)
+	family := env.TaskDefinitionFamily
+	//used Contains() as task definition family could be org-generic/dev-generic etc.
+	if !strings.Contains(family, "generic") {
+		tag, err := definitionmap.FindRevision(env.HashOvverideDefinition())
+		if err != nil {
+			return "", fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily)
+		}
+		family = fmt.Sprint(family, ":", tag)
+	}
+	l := log.WithField("family", family)
+
 	runTaskInput := &ecs.RunTaskInput{
 		Cluster:        &config.Conf.AwsCluster,
 		TaskDefinition: &family,
@@ -130,7 +128,7 @@ func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (t
 	var outputErr error
 	for i := 0; i < 25; i++ {
 
-		l := log.WithField("retry", i)
+		l = l.WithField("retry", i)
 
 		select {
 		case <-ctx.Done():
@@ -138,10 +136,12 @@ func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (t
 		default:
 		}
 		// Random sleep to fix problems with parallel 100+ threads startup. Not applicable for generic tasks!
-		if env.TaskDefinitionFamily != "generic" {
-			sleep := time.Duration(rand.Intn(30)) * time.Second
-			time.Sleep(sleep)
-		}
+		//TODO: uncomment before release!
+		/*		if env.TaskDefinitionFamily != "generic" {
+					sleep := time.Duration(rand.Intn(30)) * time.Second
+					time.Sleep(sleep)
+				}
+		*/
 
 		var resultRunTask *ecs.RunTaskOutput
 		resultRunTask, err := svc.RunTask(runTaskInput)
@@ -187,64 +187,65 @@ func ConstDelay(t time.Duration) func(int) time.Duration {
 	}
 }
 
-func StopTask(taskId string, stopReason sessionmap.StoppedReason) (*ecs.StopTaskOutput, error) {
+func StopTask(taskId string, stopReason taskmap.StoppedReason) error {
 	svc := ecs.New(AwsSess)
 
 	stopTaskInput := &ecs.StopTaskInput{
 		Cluster: &config.Conf.AwsCluster,
-		Reason:  aws.String("Cancel"),
+		Reason:  aws.String(string(stopReason)),
 		Task:    aws.String(taskId),
 	}
 
-	l := log.WithField("_taskId", taskId)
-
-	session, _ := sessionmap.Find(taskId, true)
-	var oldSessStatus sessionmap.SessionStatus
-	if session != nil {
-		if session.Status == sessionmap.SessionStopped || session.Status == sessionmap.SessionPendingToStop {
-			err := errors.New("StopTask() call for already stopped task")
-			return nil, err
+	cachedTask, _ := taskmap.Find(taskId)
+	var oldTaskStatus taskmap.TaskStatus
+	if cachedTask != nil {
+		if cachedTask.Status == taskmap.TaskStopped || cachedTask.Status == taskmap.TaskPendingToStop {
+			err := errors.New("StopTask() call for stopped/pending to stop task")
+			return err
 		} else {
 			// Set pendingToStop status so no new StopTask() call for current task would be performed
-			oldSessStatus = session.Status
-			session.Status = sessionmap.SessionPendingToStop
-			sessionmap.Write(taskId, session, 0)
+			oldTaskStatus = cachedTask.Status
+			cachedTask.Status = taskmap.TaskPendingToStop
+			taskmap.Write(taskId, cachedTask, 0)
 		}
 	}
 
-	i := 0
-	result, err := svc.StopTask(stopTaskInput)
-	for i < 25 {
-		l := l.WithField("retry", i)
-		if err == nil { // the condition stops matching
+	l := log.WithField("_taskId", taskId)
+	var err error
+	var result *ecs.StopTaskOutput
+	for i := 0; i < 5; i++ {
+		l = l.WithField("retry", i)
+		
+		result, err = utils.RetryThrottling(svc.StopTask)(stopTaskInput)
+		if err != nil {
+			l.WithError(err).Debug("Failed to stop task")
+			time.Sleep(time.Duration(rand.Intn(30)) * time.Second)
+		} else {
 			l.WithField("result", result).Trace("task stopped")
 			l.Info("task stopped")
-			if session != nil {
-				// Set stopped status and expiration time 10 minutes to be able to track task's usage
-				session.Status = sessionmap.SessionStopped
-				session.StopReason = stopReason
-				sessionmap.Write(taskId, session, 10*time.Minute)
+
+			// Set stopped status and expiration time 10 minutes to be able to track task's usage
+			if cachedTask != nil {
+				cachedTask.Status = taskmap.TaskStopped
+				cachedTask.StopReason = stopReason
+				taskmap.Write(taskId, cachedTask, 10*time.Minute)
 			}
+
 			// break out of the loop
 			break
-		} else {
-			time.Sleep(time.Duration(rand.Intn(30)) * time.Second)
-			i = i + 1
-			l.WithError(err).Debug("Failed to stop task")
-			result, err = svc.StopTask(stopTaskInput)
 		}
 	}
 
 	if err != nil {
 		l.WithError(err).Error("Failed to stop task")
 		// revert old status because of a stop failure
-		if session != nil {
-			session.Status = oldSessStatus
-			sessionmap.Write(taskId, session, 0)
+		if cachedTask != nil {
+			cachedTask.Status = oldTaskStatus
+			taskmap.Write(taskId, cachedTask, 0)
 		}
 	}
 
-	return result, err
+	return err
 }
 
 func DescribeTask(taskArn string) (*ecs.DescribeTasksOutput, error) {
@@ -333,11 +334,12 @@ func setEnvironmentNetwork(ctx context.Context, env *environment.ExecutionEnviro
 	return nil
 }
 
-func StartTask(ctx context.Context, env *environment.ExecutionEnvironment) (*sessionmap.Session, error) {
+func StartTask(ctx context.Context, env *environment.ExecutionEnvironment) (*taskmap.Task, error) {
 	var outputErr error
 	startTime := time.Now()
+	// retry attempt counter
 out:
-	for i := 0; i < 100; i++ { //TODO: 100 is almost unlimited but think about do while...
+	for i := 0; true; i++ {
 		l := log.WithField("attempt", i)
 		select {
 		case <-ctx.Done():
@@ -349,63 +351,71 @@ out:
 		taskArn, err := RegisterTask(ctx, env)
 
 		if err != nil {
-			l.WithError(err).WithField("attempt", i).WithField("latency", time.Since(startTime)).Warn("Failed to run task")
 			outputErr = fmt.Errorf("failed to run task: %v", err)
+			l.WithError(outputErr).WithField("latency", time.Since(startTime)).Warn()
+
 			if strings.HasPrefix(err.Error(), "image not found: ") || strings.HasPrefix(err.Error(), "InvalidParameterException") { //#366 disable retries for InvalidParameterException
 				break out
 			}
 			continue
 		}
 
-		taskId := strings.Split(taskArn, "/")[2]
 		// caching task as soon as possible
-		sess := sessionmap.Session{
-			ID:              taskId,
-			RawCapabilities: env.RawCapabilities.ToMap(),
-			Capabilities:    *env.Capabilities,
-			Network:         *env.Network,
-			StartedAt:       time.Now(),
-			AccessedAt:      time.Now(),
-			Status:          sessionmap.SessionQueued,
-			TaskID:          taskId,
-			Workspace:       env.Workspace,
-		}
-		l = l.WithField("_taskId", sess.TaskID)
-
-		err = sessionmap.Write(sess.TaskID, &sess, 0)
+		cachedTask, err := taskmap.CreateEntity(strings.Split(taskArn, "/")[2], env)
 		if err != nil {
 			outputErr = fmt.Errorf("task not cached!: %v", err)
-			l.WithError(outputErr).Error()
-			StopTask(sess.TaskID, sessionmap.SessionStartupFailure)
+			l.WithError(outputErr).Warn()
+			err := StopTask(cachedTask.ID, taskmap.TaskStartupFailure)
+			if err != nil {
+				l.WithError(err).Warn("Failed to stop task")
+			}
 			continue
 		}
+		l = l.WithField("_taskId", cachedTask.ID)
 
-		if env.TaskDefinitionFamily == "generic" {
+		if strings.Contains(env.TaskDefinitionFamily, "generic") {
+			//TODO: remove HealthAt as only healthcheck integrated into the generic as well
+			cachedTask.HealthAt = time.Now()
+			taskmap.Write(cachedTask.ID, cachedTask, 0)
 			l.Debug("do not wait for generic task startup.")
-			return &sess, nil
+			return cachedTask, nil
 		}
 
+		l.Debug("Waiting for the task to start")
 		req := taskWaiter.waitFor(ctx, taskArn)
 		select {
+		case <-req.ctx.Done():
+			// don't close chans from receiver side
+			// https://go.dev/tour/concurrency/4#:~:text=Note%3A%20Only%20the%20sender%20should,to%20terminate%20a%20range%20loop.
+			l.WithField("latency", time.Since(startTime)).Warn("failed to wait until task is running. context deadline")
 		case err := <-req.errorChan:
-			StopTask(sess.TaskID, sessionmap.SessionStartupFailure)
-			l.WithField("latency", time.Since(startTime)).WithError(err).Warn("Failed to wait until Task is running and healthy")
-			outputErr = err
+			outputErr = fmt.Errorf("failed to wait until Task is running and healthy!: %v", err)
+			l.WithField("latency", time.Since(startTime)).WithError(outputErr).Warn()
 		case task := <-req.responseChan:
+			// timediff between HealthAt (current time) and task.startedAt should be cut during resources tracking to bill only actual (net) time
+			cachedTask.HealthAt = time.Now()
+			taskmap.Write(cachedTask.ID, cachedTask, 0)
+			l.Info("healthcheck latency: ", time.Since(startTime))
+
 			err = setEnvironmentNetwork(ctx, env, task)
 			l.Debug("setEnvironmentNetwork latency: ", time.Since(startTime))
 			if err != nil {
-				StopTask(sess.TaskID, sessionmap.SessionStartupFailure)
-				l.WithField("latency", time.Since(startTime)).WithError(err).Error("Failed to get service info.")
-				outputErr = fmt.Errorf("failed to get service info: %v", err)
-				continue
+				outputErr = fmt.Errorf("failed to get network info: %v", err)
+				l.WithField("latency", time.Since(startTime)).WithError(outputErr).Warn()
+			} else {
+				cachedTask.Status = taskmap.TaskActive
+				err = taskmap.Write(cachedTask.ID, cachedTask, 0)
+				if err != nil {
+					l.WithError(fmt.Errorf("task not recached after network set!: %v", err))
+				}
+				return cachedTask, nil
 			}
-			return &sess, nil
-		case <-req.ctx.Done():
-			outputErr = errors.New("failed to wait until task is running. context deadline")
-			StopTask(sess.TaskID, sessionmap.SessionStartupFailure)
-			taskWaiter.stopWait(taskArn)
-			l.WithField("latency", time.Since(startTime)).WithError(err).Warn("failed to wait until task is running")
+		}
+		// will be called only for unsuccess task startup
+		// as on success startup we return from func in switch select
+		err = StopTask(cachedTask.ID, taskmap.TaskStartupFailure)
+		if err != nil {
+			l.WithError(err).Warn("Failed to stop task")
 		}
 	}
 

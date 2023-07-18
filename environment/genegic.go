@@ -1,9 +1,10 @@
 package environment
 
 import (
+	"strings"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
-	"strings"
 
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
@@ -33,12 +34,12 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 	}
 
 	if caps.RepositoryUrl == "" {
-		return nil, fmt.Errorf("Executor repository is not specified! RepositoryUrl='%s'", caps.RepositoryUrl)
+		return nil, fmt.Errorf("executor repository is not specified! RepositoryUrl='%s'", caps.RepositoryUrl)
 	}
 
 	//executorImage := "maven:3.8-openjdk-11"
 	if caps.Image == "" {
-		return nil, fmt.Errorf("Executor container image is not specified! Image='%s'", caps.Image)
+		return nil, fmt.Errorf("executor container image is not specified! Image='%s'", caps.Image)
 	}
 	executorImage := caps.Image
 	//fmt.Printf("executorImage: %s\n", executorImage)
@@ -86,7 +87,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 	}
 
 	if caps.LaunchCommand == "" {
-		return nil, fmt.Errorf("Executor container launch command is not specified! LaunchCommand='%s'", caps.LaunchCommand)
+		return nil, fmt.Errorf("executor container launch command is not specified! LaunchCommand='%s'", caps.LaunchCommand)
 	}
 	launchCommand := caps.LaunchCommand
 
@@ -123,9 +124,9 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 		},
 		Mounts:           mounts,
 		WorkingDirectory: workDir,
-		Command:          []string{"-c", entrypointDir + "/entrypoint.sh" + taskLogRedirect},
-		EntryPoint:       []string{"/bin/sh"},
-		//TODO: what about verification for PID=1 among the processes?
+		// we can't redirect logs from this place to support SIGTERM detection on trap
+		// actual redirection happens inside entrypoint container: https://github.com/zebrunner/entrypoint/issues/51
+		Command:     []string{entrypointDir + "/entrypoint.sh"},
                 HealthCheck: &ecs.HealthCheck{
                         Command:     []*string{aws.String("CMD-SHELL"), aws.String("exit 0")}, // Healthy as container started
                         Interval:    aws.Int64(5),
@@ -143,8 +144,8 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 		}
 	}
 
-	executorContainer.SetCpu(caps, 1024, conf.MaxCpu)
-	executorContainer.SetMemory(caps, 1024, conf.MaxMemory)
+	executorContainer.SetCpu(&caps.Cpu, 1024, conf.MaxCpu)
+	executorContainer.SetMemory(&caps.Memory, 1024, conf.MaxMemory)
 
         recorderContainer := Container{
                 Name:        "recorder",
@@ -188,23 +189,20 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 		HealthCheck: nil,
 	}
 
-	containers := make([]*Container, 0)
 	volumes := make(map[string]volume, 0)
-
 	volumes[entrypointVolume] = volume{Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false}
 	volumes[taskVolume] = volume{Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false}
 	volumes[logVolume] = volume{Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false}
 
-	containers = []*Container{&cloneContainer, &entrypointContainer, &recorderContainer, &uploaderContainer}
-
+	containers := []*Container{&cloneContainer, &entrypointContainer, &recorderContainer, &uploaderContainer, &executorContainer}
 	if includeMaven {
 		containers = append(containers, mavenContainer)
 		volumes[mavenVolume] = volume{Driver: "local", Scope: "task", ContainerPath: mavenDir, ReadOnly: false}
 	}
-	containers = append(containers, &executorContainer)
 
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
+		Schema:               buildSchema(containers),
 		Containers:           containers,
 		Capabilities:         caps,
 		Volumes:              volumes,
