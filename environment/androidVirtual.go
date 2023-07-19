@@ -1,6 +1,7 @@
 package environment
 
 import (
+	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/zebrunner/esg/capabilities"
@@ -15,9 +16,10 @@ const (
 )
 
 func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
-	sharedFolder := "/opt/zebrunner"
-	taskVolume := "data"
 	browserVolume := "browser"
+
+	logDir := "/tmp/log"
+	logVolume := "log"
 
 	conf := &config.Conf
 
@@ -34,7 +36,6 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities) (*Exe
 		Env: map[string]string{
 			"VERBOSE": "1",
 		},
-		Mounts: []string{taskVolume},
 	}
 	deviceContainer.SetCpu(&caps.Cpu, 2048, conf.MaxCpu)
 	deviceContainer.SetMemory(&caps.Memory, 2048, conf.MaxMemory)
@@ -50,19 +51,15 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities) (*Exe
 			"driver": {appiumPort, 0},
 		},
 		Env: map[string]string{
-			"VERBOSE":               "1",
-			"RETAIN_TASK":           "false",
-			"DEVICE_NAME":           "ReDroid",
-			"ANDROID_DEVICES":       "device:5555",
-			"REMOTE_ADB":            "true",
-			"MCLOUD":                "true",
-			"BUCKET":                conf.S3Bucket,
-			"TENANT":                workspace,
-			"AWS_ACCESS_KEY_ID":     conf.S3AwsAccessKeyID,
-			"AWS_SECRET_ACCESS_KEY": conf.S3AwsSecretAccessKey,
-			"AWS_DEFAULT_REGION":    conf.S3Region,
+			"RETAIN_TASK": 		"false",
+			"DEVICE_NAME": 		"ReDroid",
+			"ANDROID_DEVICES": 	"device:5555",
+			"REMOTE_ADB": 		"true",
+			"MCLOUD": 		"true", //candidate for removal
+			"LOG_DIR": 		logDir,
+			"TASK_LOG": 		logDir + "/appium.log",
 		},
-		Mounts: []string{taskVolume, browserVolume},
+		Mounts: []string{browserVolume, logVolume},
 		Links:  []string{"device"},
 		HealthCheck: &ecs.HealthCheck{
 			Command:     []*string{aws.String("CMD-SHELL"), aws.String("healthcheck")},
@@ -72,15 +69,34 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities) (*Exe
 		},
 	}
 
-	containers := []*Container{&deviceContainer, &appiumContainer}
+	uploaderContainer := Container{
+		Name:       "uploader",
+		Image:      uploaderImage,
+		cpu:        64,  // with 32  uploading is aborted
+		memory:     256, // 64 works for single thread. for background copying it is not enough
+		Privileged: false,
+		Essential:  false,
+		Env: map[string]string{
+			"LOG_DIR": 		logDir,
+			"S3_KEY_PATTERN": 	fmt.Sprintf("s3://%s/%s/artifacts/test-sessions", conf.S3Bucket, workspace),
+			"AWS_ACCESS_KEY_ID": 	conf.S3AwsAccessKeyID,
+			"AWS_SECRET_ACCESS_KEY": conf.S3AwsSecretAccessKey,
+			"AWS_DEFAULT_REGION": 	conf.S3Region,
+		},
+		Mounts:      []string{logVolume},
+		HealthCheck: nil,
+	}
+
+
+	containers := []*Container{&deviceContainer, &appiumContainer, &uploaderContainer}
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
 		Schema:               buildSchema(containers),
 		Containers:           containers,
 		Capabilities:         caps,
 		Volumes: map[string]volume{
-			taskVolume:    {ContainerPath: sharedFolder, Driver: "local", Scope: "task", ReadOnly: false},
-			browserVolume: {ContainerPath: "/tmp/zebrunner/chrome", HostPath: "/opt/zebrunner/chrome", ReadOnly: false}, //TODO: think about path unification on hos and inside container
+			logVolume: {ContainerPath: logDir, Driver: "local", Scope: "task", ReadOnly: false},
+			browserVolume: {ContainerPath: "/tmp/zebrunner/chrome", HostPath: "/opt/zebrunner/chrome", ReadOnly: false}, //TODO: think about path unification on host and inside container
 		},
 		Network: &NetworkConfiguration{
 			IP: "",
