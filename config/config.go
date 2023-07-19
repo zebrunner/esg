@@ -22,10 +22,6 @@ var (
 	Conf         = Config{}
 )
 
-func init() {
-
-}
-
 type Config struct {
 	// AWS settings
 	AwsRegion           string

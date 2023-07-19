@@ -96,12 +96,12 @@ func CreateRouter() *gin.Engine {
 
 	httpHub := hub.Group("/", handlers.APIError)
 	{
-		httpHub.GET("/status", handlers.APIAuthentication, handlers.ClusterStatus) 
-		httpHub.GET("/browsers", handlers.ListDrivers)                             
-		httpHub.GET("/logs/:session", handlers.Logs)                               
-		httpHub.GET("/video/:session", handlers.Video)                             
-		httpHub.GET("/tasks/:task/log", handlers.TaskLog)                          
-		httpHub.GET("/tasks/:task/status", handlers.TaskDescribe)                  
+		httpHub.GET("/status", handlers.APIAuthentication, handlers.ClusterStatus)
+		httpHub.GET("/browsers", handlers.ListDrivers)
+		httpHub.GET("/logs/:session", handlers.Logs)
+		httpHub.GET("/video/:session", handlers.Video)
+		httpHub.GET("/tasks/:task/log", handlers.TaskLog)
+		httpHub.GET("/tasks/:task/status", handlers.TaskDescribe)
 	}
 
 	return r
@@ -165,7 +165,10 @@ func main() {
 		}
 		time.Sleep(5 * time.Second)
 	}
-	
+
+	service.InitInstanceWorker()
+	service.InitWaitWorker()
+
 	log.Infof("Listening on %s", listen)
 	err = router.Run(listen)
 	if err != nil {

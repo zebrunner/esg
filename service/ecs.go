@@ -13,7 +13,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	awsSession "github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/aws/aws-sdk-go/service/s3"
 	log "github.com/sirupsen/logrus"
@@ -296,35 +295,29 @@ func searchHostPort(task *ecs.Task, containerPort int64) (port int64, ok bool) {
 	return 0, false
 }
 
-func getTaskIp(task *ecs.Task) (string, error) {
-	containerInstanceArn := *task.ContainerInstanceArn
-	// TODO: use better wait mechanism
-	var ec2Instance *ec2.Instance
-	for i := 0; i < 6; i++ {
-		instance, ok := instanceWorker.getInstanceByContainerInstance(containerInstanceArn)
-		if ok {
-			ec2Instance = instance
-			break
+func getTaskIp(ctx context.Context, task *ecs.Task) (string, error) {
+	var ipAddress string
+
+	req := instanceWorker.waitForInstance(ctx, task)
+	select {
+	case err := <-req.errorChan:
+		log.WithError(err).Warn("Failed to get ip from instance")
+		return "", err
+	case instance := <-req.responseChan:
+		if config.Conf.UsePublicIp {
+			ipAddress = *instance.PublicIpAddress
+		} else {
+			ipAddress = *instance.PrivateIpAddress
 		}
-		time.Sleep(10 * time.Second)
+	case <-req.ctx.Done():
+		return "", errors.New("failed to wait until ec2 instance is ready to run. context deadline")
 	}
 
-	if ec2Instance == nil {
-		return "", fmt.Errorf("instance with id: %s not found", containerInstanceArn)
-	}
-	// if !ok {
-	// 	return "", fmt.Errorf("instance with id: %s not found", containerInstanceArn)
-	// }
-
-	ipAddress := *ec2Instance.PrivateIpAddress
-	if config.Conf.UsePublicIp {
-		ipAddress = *ec2Instance.PublicIpAddress
-	}
 	log.WithField("instanceIP", ipAddress).Debug()
 	return ipAddress, nil
 }
 
-func setEnvironmentNetwork(env *environment.ExecutionEnvironment, task *ecs.Task) error {
+func setEnvironmentNetwork(ctx context.Context, env *environment.ExecutionEnvironment, task *ecs.Task) error {
 	for _, endpoint := range env.Network.Endpoints {
 		hostPort, ok := searchHostPort(task, endpoint.ContainerPort)
 		if !ok {
@@ -332,8 +325,8 @@ func setEnvironmentNetwork(env *environment.ExecutionEnvironment, task *ecs.Task
 		}
 		endpoint.HostPort = hostPort
 	}
-
-	ip, err := getTaskIp(task)
+	
+	ip, err := getTaskIp(ctx, task)
 	if err != nil {
 		return err
 	}
@@ -404,7 +397,7 @@ out:
 			taskmap.Write(cachedTask.ID, cachedTask, 0)
 			l.Info("healthcheck latency: ", time.Since(startTime))
 
-			err = setEnvironmentNetwork(env, task)
+			err = setEnvironmentNetwork(ctx, env, task)
 			l.Debug("setEnvironmentNetwork latency: ", time.Since(startTime))
 			if err != nil {
 				outputErr = fmt.Errorf("failed to get network info: %v", err)
