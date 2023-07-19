@@ -165,7 +165,7 @@ func DescribeInstancesStatus(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) ([]*s
 			l := log.WithField("_ec2Id", *is.InstanceId)
 
 			if *is.InstanceStatus.Status == ec2.SummaryStatusImpaired || *is.SystemStatus.Status == ec2.SummaryStatusImpaired {
-				l.Trace("Unhealthy instance", *is.InstanceId)
+				l.Info("Unhealthy instance")
 				unhealthyInstanceIdPtrs = append(unhealthyInstanceIdPtrs, is.InstanceId)
 			} else {
 				l.Trace("Healthy instance")
