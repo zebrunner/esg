@@ -73,7 +73,7 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities) (*Exe
 		Name:       "uploader",
 		Image:      uploaderImage,
 		cpu:        64,  // with 32  uploading is aborted
-		memory:     256, // 64 works for single thread. for backgroud copying it is not enough
+		memory:     256, // 64 works for single thread. for background copying it is not enough
 		Privileged: false,
 		Essential:  false,
 		Env: map[string]string{
