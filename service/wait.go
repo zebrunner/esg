@@ -15,7 +15,7 @@ import (
 var taskWaiter *waitWorker
 var mutex = &sync.RWMutex{}
 
-func init() {
+func InitWaitWorker() {
 	taskWaiter = &waitWorker{
 		requests: make(map[string]*waitRequest, 1000),
 	}

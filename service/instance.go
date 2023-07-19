@@ -14,9 +14,9 @@ import (
 var instanceWorker *instanceWatchWorker
 var instMutex = &sync.RWMutex{}
 
-func init() {
+func InitInstanceWorker() {
 	instanceWorker = &instanceWatchWorker{
-		requests: make(map[string]*instanceWaitRequest, 100),
+		requests: make(map[string]*instanceWaitRequest, 0),
 	}
 	go instanceWorker.start()
 }
@@ -53,45 +53,45 @@ func (w *instanceWatchWorker) start() {
 			continue
 		}
 
-		// containerInstanceIdPtrs - array of ptrs for container-instance describing
-		containerInstanceIdPtrs := make([]*string, 0)
-		// containerInstanceArnTaskArnMap - map for organazing response send from instanceWatchWorker
-		containerInstanceArnTaskArnMap := make(map[string][]string, 0)
+		// ciArnPtrs - array of ptrs for container-instance describing
+		ciArnPtrs := make([]*string, 0)
+		// ciArnTaskArnsMap - map for organazing response send from instanceWatchWorker
+		ciArnTaskArnsMap := make(map[string][]string, 0)
 		for taskArn, req := range w.requests {
-			if containerInstanceArnTaskArnMap[*req.containerInstanceArn] == nil {
-				containerInstanceArnTaskArnMap[*req.containerInstanceArn] = make([]string, 0)
-				containerInstanceIdPtrs = append(containerInstanceIdPtrs, req.containerInstanceArn)
+			if ciArnTaskArnsMap[*req.containerInstanceArn] == nil {
+				ciArnTaskArnsMap[*req.containerInstanceArn] = make([]string, 0)
+				ciArnPtrs = append(ciArnPtrs, req.containerInstanceArn)
 			}
-			containerInstanceArnTaskArnMap[*req.containerInstanceArn] = append(containerInstanceArnTaskArnMap[*req.containerInstanceArn], taskArn)
+			ciArnTaskArnsMap[*req.containerInstanceArn] = append(ciArnTaskArnsMap[*req.containerInstanceArn], taskArn)
 		}
 
-		containerInstances, err := DescribeContainerInstances(containerInstanceIdPtrs, svc)
+		containerInstances, err := DescribeContainerInstances(ciArnPtrs, svc)
 		if err != nil {
 			log.WithError(err).Error("instanceWatchWorker: failed to describe container instances.")
 			continue
 		}
 
-		// ec2InstanceIdPtrs - array of ptrs for instance describing
-		ec2InstanceIdPtrs := make([]*string, 0)
-		// instanceIdTaskArnMap - map for organazing response send from instanceWatchWorker
-		instanceIdTaskArnMap := make(map[string][]string, 0)
+		// ec2IdPtrs - array of ptrs for instance describing
+		ec2IdPtrs := make([]*string, 0)
+		// ec2IdCiArnsMap - map for organazing response send from instanceWatchWorker
+		ec2IdCiArnsMap := make(map[string][]string, 0)
 		for _, ci := range containerInstances {
 			if *ci.Ec2InstanceId == "" {
 				continue
 			}
 
-			if instanceIdTaskArnMap[*ci.Ec2InstanceId] == nil {
-				instanceIdTaskArnMap[*ci.Ec2InstanceId] = make([]string, 0)
-				ec2InstanceIdPtrs = append(ec2InstanceIdPtrs, ci.Ec2InstanceId)
+			if ec2IdCiArnsMap[*ci.Ec2InstanceId] == nil {
+				ec2IdCiArnsMap[*ci.Ec2InstanceId] = make([]string, 0)
+				ec2IdPtrs = append(ec2IdPtrs, ci.Ec2InstanceId)
 			}
-			instanceIdTaskArnMap[*ci.Ec2InstanceId] = append(instanceIdTaskArnMap[*ci.Ec2InstanceId], *ci.ContainerInstanceArn)
+			ec2IdCiArnsMap[*ci.Ec2InstanceId] = append(ec2IdCiArnsMap[*ci.Ec2InstanceId], *ci.ContainerInstanceArn)
 		}
 
-		if len(ec2InstanceIdPtrs) == 0 {
+		if len(ec2IdPtrs) == 0 {
 			continue
 		}
 
-		healthyInstanceIdPtrs, unhealthyInstanceIdPtrs, err := DescribeInstancesStatus(ec2InstanceIdPtrs, ec2Svc)
+		healthyInstanceIdPtrs, unhealthyInstanceIdPtrs, err := DescribeInstancesStatus(ec2IdPtrs, ec2Svc)
 		if err != nil {
 			log.WithError(err).Error("instanceWatchWorker: failed to describe instances status.")
 			if len(healthyInstanceIdPtrs) == 0 && len(unhealthyInstanceIdPtrs) == 0 {
@@ -109,9 +109,9 @@ func (w *instanceWatchWorker) start() {
 
 			// send err to errorChan, so new task on new instance could be recreated
 			for _, ec2InstanceId := range unhealthyInstanceIdPtrs {
-				containerInstanceArns := instanceIdTaskArnMap[*ec2InstanceId]
+				containerInstanceArns := ec2IdCiArnsMap[*ec2InstanceId]
 				for _, containerInstanceArn := range containerInstanceArns {
-					taskArns := containerInstanceArnTaskArnMap[containerInstanceArn]
+					taskArns := ciArnTaskArnsMap[containerInstanceArn]
 					for _, taskArn := range taskArns {
 						req := w.requests[taskArn]
 						req.errorChan <- errors.New("found unhealty instance. InstanceStatus - impaired")
@@ -122,6 +122,7 @@ func (w *instanceWatchWorker) start() {
 		}
 
 		if len(healthyInstanceIdPtrs) == 0 {
+			log.Debug("instanceWatchWorker: no healthy ec2 instances were found")
 			continue
 		}
 
@@ -133,9 +134,9 @@ func (w *instanceWatchWorker) start() {
 		}
 
 		for _, ec2Instance := range ec2Instances {
-			containerInstanceArns := instanceIdTaskArnMap[*ec2Instance.InstanceId]
-			for _, containerInstanceArn := range containerInstanceArns {
-				taskArns := containerInstanceArnTaskArnMap[containerInstanceArn]
+			ciArns := ec2IdCiArnsMap[*ec2Instance.InstanceId]
+			for _, ciArn := range ciArns {
+				taskArns := ciArnTaskArnsMap[ciArn]
 				for _, taskArn := range taskArns {
 					req := w.requests[taskArn]
 					req.responseChan <- ec2Instance

@@ -160,15 +160,16 @@ func DescribeInstancesStatus(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) ([]*s
 			return nil, nil, err
 		}
 
-		statuses := statusOutput.InstanceStatuses
-		for _, instanceStatus := range statuses {
-			log.Debug("instance statuses: ", *instanceStatus.InstanceStatus.Status, ", ", *instanceStatus.SystemStatus.Status)
-			if *instanceStatus.InstanceStatus.Status == ec2.SummaryStatusImpaired ||
-				*instanceStatus.SystemStatus.Status == ec2.SummaryStatusImpaired {
-				unhealthyInstanceIdPtrs = append(unhealthyInstanceIdPtrs, instanceStatus.InstanceId)
-				log.Debug("Found unhealthy instance: ", *instanceStatus.InstanceId)
+		instanceStatuses := statusOutput.InstanceStatuses
+		for _, is := range instanceStatuses {
+			l := log.WithField("_ec2Id", *is.InstanceId)
+
+			if *is.InstanceStatus.Status == ec2.SummaryStatusImpaired || *is.SystemStatus.Status == ec2.SummaryStatusImpaired {
+				l.Trace("Unhealthy instance", *is.InstanceId)
+				unhealthyInstanceIdPtrs = append(unhealthyInstanceIdPtrs, is.InstanceId)
 			} else {
-				healthyInstanceIdPtrs = append(unhealthyInstanceIdPtrs, instanceStatus.InstanceId)
+				l.Trace("Healthy instance")
+				healthyInstanceIdPtrs = append(healthyInstanceIdPtrs, is.InstanceId)
 			}
 		}
 
