@@ -95,7 +95,6 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities) (*Exe
 		Containers:           containers,
 		Capabilities:         caps,
 		Volumes: map[string]volume{
-			//taskVolume:    {ContainerPath: sharedFolder, Driver: "local", Scope: "task", ReadOnly: false},
 			logVolume: {ContainerPath: logDir, Driver: "local", Scope: "task", ReadOnly: false},
 			browserVolume: {ContainerPath: "/tmp/zebrunner/chrome", HostPath: "/opt/zebrunner/chrome", ReadOnly: false}, //TODO: think about path unification on host and inside container
 		},
