@@ -110,8 +110,6 @@ func DescribeContainerInstances(containerInstanceIdPtrs []*string, svc *ecs.ECS)
 			return nil, err
 		}
 
-		log.Debug("DescribeContainerInstances failures: ", describeResult.Failures)
-
 		containerInstances = append(containerInstances, describeResult.ContainerInstances...)
 	}
 

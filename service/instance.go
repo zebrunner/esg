@@ -114,7 +114,7 @@ func (w *instanceWatchWorker) start() {
 					taskArns := ciArnTaskArnsMap[containerInstanceArn]
 					for _, taskArn := range taskArns {
 						req := w.requests[taskArn]
-						req.errorChan <- errors.New("found unhealty instance. InstanceStatus - impaired")
+						req.errorChan <- errors.New("instance unhealty, status: impaired")
 						delete(w.requests, taskArn)
 					}
 				}
@@ -122,7 +122,6 @@ func (w *instanceWatchWorker) start() {
 		}
 
 		if len(healthyInstanceIdPtrs) == 0 {
-			log.Debug("instanceWatchWorker: no healthy ec2 instances were found")
 			continue
 		}
 

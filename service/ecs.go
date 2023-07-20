@@ -215,7 +215,7 @@ func StopTask(taskId string, stopReason taskmap.StoppedReason) error {
 	var result *ecs.StopTaskOutput
 	for i := 0; i < 5; i++ {
 		l = l.WithField("retry", i)
-		
+
 		result, err = utils.RetryThrottling(svc.StopTask)(stopTaskInput)
 		if err != nil {
 			l.WithError(err).Debug("Failed to stop task")
@@ -325,7 +325,7 @@ func setEnvironmentNetwork(ctx context.Context, env *environment.ExecutionEnviro
 		}
 		endpoint.HostPort = hostPort
 	}
-	
+
 	ip, err := getTaskIp(ctx, task)
 	if err != nil {
 		return err
@@ -381,7 +381,7 @@ out:
 			return cachedTask, nil
 		}
 
-		l.Debug("Waiting for the task to start")
+		l.Info("task starting")
 		req := taskWaiter.waitFor(ctx, taskArn)
 		select {
 		case <-req.ctx.Done():

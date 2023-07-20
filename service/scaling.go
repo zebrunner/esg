@@ -111,15 +111,15 @@ func setDesiredCapacity(autoscalingService *autoscaling.AutoScaling, newCapacity
 	if newCapacity < currentCapacity {
 		log.WithFields(log.Fields{
 			"currentCapacity": currentCapacity,
-			"newCapacity":     newCapacity,
+			"desiredCapacity": newCapacity,
 		}).Warn("Scale down not allowed")
 		return
 	}
 
 	if newCapacity > *autoScalingGroup.MaxSize {
 		log.WithFields(log.Fields{
-			"maxCount":    *autoScalingGroup.MaxSize,
-			"newCapacity": newCapacity,
+			"maxCapacity":    *autoScalingGroup.MaxSize,
+			"desiredCapacity": newCapacity,
 		}).Warn("ASG desired size reached limit!")
 		newCapacity = *autoScalingGroup.MaxSize
 	}
@@ -139,8 +139,8 @@ func setDesiredCapacity(autoscalingService *autoscaling.AutoScaling, newCapacity
 		return
 	}
 	log.WithFields(log.Fields{
-		"currentCapacity": currentCapacity,
-		"newCapacity":     newCapacity,
+		"oldCapacity": currentCapacity,
+		"newCapacity": newCapacity,
 	}).Info("Capacity updated")
 }
 
@@ -364,8 +364,8 @@ func ScaleDown() {
 	}
 	if terminatedCount != 0 {
 		log.WithFields(log.Fields{
-			"currentCapacity": currentCapacity,
-			"newCapacity":     desiredCapacity,
+			"oldCapacity": currentCapacity,
+			"newCapacity": desiredCapacity,
 		}).Info("Capacity updated")
 	}
 }
