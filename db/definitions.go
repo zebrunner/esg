@@ -85,6 +85,51 @@ func GetDefinition(family string, schema string) (*TaskDefinition, error) {
 	return td, nil
 }
 
+func IsHashPresent(hash string) (bool, *TaskDefinition) {
+	getDefinitionQuery := `SELECT f.task_family, s.schema, d.register_definition_hash, d.revision_tag, d.updated_at, d.override_definition_hash
+		FROM definitions d
+		INNER JOIN schemas s ON d.schema_id = s.schema_id
+		INNER JOIN families f ON d.family_id = f.family_id
+		WHERE d.register_definition_hash = $1
+	`
+
+	td := &TaskDefinition{}
+	err := config.DbConnection.Get(td, getDefinitionQuery, hash)
+	if err != nil {
+		return false, nil
+	}
+
+	return true, td
+}
+
+func UpdateSchema(oldSchema, newSchema string) error {
+	updateQuery := `UPDATE schemas
+		SET schema = $1,
+		WHERE task_family = $2
+	`
+
+	_, err := config.DbConnection.Exec(updateQuery, newSchema, oldSchema)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func UpdateTaskDefinitionFamily(oldFamily, newFamily string) error {
+	updateQuery := `UPDATE families
+		SET task_family = $1,
+		WHERE task_family = $2
+	`
+
+	_, err := config.DbConnection.Exec(updateQuery, newFamily, oldFamily)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func RefreshTag(registerHashToAlter string, newTd *TaskDefinition) error {
 	updateQuery := `UPDATE definitions
 		SET register_definition_hash = $1,

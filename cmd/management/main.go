@@ -302,33 +302,58 @@ func RefreshTaskDefinition(image string) error {
 		dbDefinition, err := db.GetDefinition(env.TaskDefinitionFamily, env.Schema)
 		if err != nil {
 			if err == sql.ErrNoRows {
-				l.Info("Creating new record")
-				taskDef, err := service.CreateTaskDefinition(env)
-				if err != nil {
-					return err
-				}
-				// pause after aws call
-				time.Sleep(1 * time.Second)
+				
+				hashPresent, tdToUpdate := db.IsHashPresent(registerDefinitionHash)
+				if hashPresent {
+					//situtation when task definition family naming were changed or/and changed containers naming(schema)
+					if tdToUpdate.Family != env.TaskDefinitionFamily {
+						err = db.UpdateTaskDefinitionFamily(tdToUpdate.Family, env.TaskDefinitionFamily)
+						if err != nil {
+							return err
+						}
+					}
 
-				newDefinition := &db.TaskDefinition{
-					RevisionTag:            *taskDef.Revision,
-					Family:                 env.TaskDefinitionFamily,
-					Schema:                 env.Schema,
-					RegisterDefinitionHash: registerDefinitionHash,
-					OverrideDefinitionHash: env.HashOvverideDefinition(),
-				}
+					if tdToUpdate.Schema != env.Schema {
+						err = db.UpdateSchema(tdToUpdate.Schema, env.Schema)
+						if err != nil {
+							return err
+						}
+					}
 
-				err = db.CreateDefinition(newDefinition)
-				if err != nil {
-					return err
-				}
+					err = definitionmap.AddDefinition(tdToUpdate.OverrideDefinitionHash, tdToUpdate.RevisionTag)
+					if err != nil {
+						return err
+					}
+				} else {
 
-				err = definitionmap.AddDefinition(newDefinition.OverrideDefinitionHash, newDefinition.RevisionTag)
-				if err != nil {
-					return err
-				}
+					l.Info("Creating new record")
+					taskDef, err := service.CreateTaskDefinition(env)
+					if err != nil {
+						return err
+					}
+					// pause after aws call
+					time.Sleep(1 * time.Second)
 
-				continue
+					newDefinition := &db.TaskDefinition{
+						RevisionTag:            *taskDef.Revision,
+						Family:                 env.TaskDefinitionFamily,
+						Schema:                 env.Schema,
+						RegisterDefinitionHash: registerDefinitionHash,
+						OverrideDefinitionHash: env.HashOvverideDefinition(),
+					}
+
+					err = db.CreateDefinition(newDefinition)
+					if err != nil {
+						return err
+					}
+
+					err = definitionmap.AddDefinition(newDefinition.OverrideDefinitionHash, newDefinition.RevisionTag)
+					if err != nil {
+						return err
+					}
+
+					continue
+				}
 			} else {
 				return err
 			}
