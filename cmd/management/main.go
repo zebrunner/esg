@@ -307,6 +307,7 @@ func RefreshTaskDefinition(image string) error {
 				if hashPresent {
 					//situtation when task definition family naming were changed or/and changed containers naming(schema)
 					if tdToUpdate.Family != env.TaskDefinitionFamily {
+						l.WithField("oldFamily", tdToUpdate.Family).Info("Updating family")
 						err = db.UpdateTaskDefinitionFamily(tdToUpdate.Family, env.TaskDefinitionFamily)
 						if err != nil {
 							return err
@@ -314,6 +315,7 @@ func RefreshTaskDefinition(image string) error {
 					}
 
 					if tdToUpdate.Schema != env.Schema {
+						l.WithField("oldSchema", tdToUpdate.Family).Info("Updating schema")
 						err = db.UpdateSchema(tdToUpdate.Schema, env.Schema)
 						if err != nil {
 							return err
