@@ -105,7 +105,7 @@ func IsHashPresent(hash string) (bool, *TaskDefinition) {
 func UpdateSchema(oldSchema, newSchema string) error {
 	updateQuery := `UPDATE schemas
 		SET schema = $1
-		WHERE task_family = $2
+		WHERE schema = $2
 	`
 
 	_, err := config.DbConnection.Exec(updateQuery, newSchema, oldSchema)
