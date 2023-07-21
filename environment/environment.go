@@ -27,7 +27,7 @@ const (
 	mitmImage            = imageRepo + "mitmproxy:1.1-beta8"
 	recorderImage        = imageRepo + "recorder:1.2"
 	cypressRecorderImage = imageRepo + "cypress-recorder:1.1"
-	appiumImage          = imageRepo + "appium:2.0-beta13"
+	appiumImage          = imageRepo + "appium:2.0-beta16"
 	cloneImage           = imageRepo + "git:latest"
 	entrypointImage      = imageRepo + "entrypoint:2.3"
 	mavenImage           = imageRepo + "m2-repo-carina:1.4"
