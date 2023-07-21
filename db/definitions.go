@@ -131,6 +131,25 @@ func UpdateTaskDefinitionFamily(oldFamily, newFamily string) error {
 }
 
 func RefreshTag(registerHashToAlter string, newTd *TaskDefinition) error {
+	tx, err := config.DbConnection.Beginx()
+	if err != nil {
+		return err
+	}
+
+	getDefinitionQuery := `SELECT * FROM definitions WHERE override_definition_hash = $1`
+	rows, err := tx.Query(getDefinitionQuery, newTd.OverrideDefinitionHash)
+	if err != nil {
+		return err
+	}
+	
+	if rows.NextResultSet() {
+		removeRecordQuery := `DELETE FROM definitions WHERE WHERE override_definition_hash = $1'`
+		_, err := tx.Exec(removeRecordQuery, newTd.OverrideDefinitionHash)
+		if err != nil {
+			return err
+		}
+	}
+
 	updateQuery := `UPDATE definitions
 		SET register_definition_hash = $1,
 		revision_tag = $2,
@@ -138,7 +157,7 @@ func RefreshTag(registerHashToAlter string, newTd *TaskDefinition) error {
 		override_definition_hash = $4
 		WHERE register_definition_hash = $5
 	`
-	_, err := config.DbConnection.Exec(updateQuery, newTd.RegisterDefinitionHash, newTd.RevisionTag, time.Now(), newTd.OverrideDefinitionHash, registerHashToAlter)
+	_, err = tx.Exec(updateQuery, newTd.RegisterDefinitionHash, newTd.RevisionTag, time.Now(), newTd.OverrideDefinitionHash, registerHashToAlter)
 	if err != nil {
 		return err
 	}

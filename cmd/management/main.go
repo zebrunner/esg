@@ -302,7 +302,6 @@ func RefreshTaskDefinition(image string) error {
 		dbDefinition, err := db.GetDefinition(env.TaskDefinitionFamily, env.Schema)
 		if err != nil {
 			if err == sql.ErrNoRows {
-
 				hashPresent, tdToUpdate := db.IsHashPresent(registerDefinitionHash)
 				if hashPresent {
 					//situtation when task definition family naming were changed or/and changed containers naming(schema)
@@ -329,7 +328,6 @@ func RefreshTaskDefinition(image string) error {
 
 					continue
 				} else {
-
 					l.Info("Creating new record")
 					taskDef, err := service.CreateTaskDefinition(env)
 					if err != nil {
