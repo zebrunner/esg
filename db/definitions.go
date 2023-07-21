@@ -104,7 +104,7 @@ func IsHashPresent(hash string) (bool, *TaskDefinition) {
 
 func UpdateSchema(oldSchema, newSchema string) error {
 	updateQuery := `UPDATE schemas
-		SET schema = $1,
+		SET schema = $1
 		WHERE task_family = $2
 	`
 
@@ -118,7 +118,7 @@ func UpdateSchema(oldSchema, newSchema string) error {
 
 func UpdateTaskDefinitionFamily(oldFamily, newFamily string) error {
 	updateQuery := `UPDATE families
-		SET task_family = $1,
+		SET task_family = $1
 		WHERE task_family = $2
 	`
 
