@@ -98,7 +98,12 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 		"instant":  time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 		"seconds":  duration.Seconds() - provisioningTime.Seconds(), // register only net time without provisioning time
 		"platform": platformName,
+		"taskId":	cachedTask.ID,
 	}
+	if cachedTask.CurrentSessionID != ""{
+		requestBody["sessionId"] =  cachedTask.CurrentSessionID
+	}
+	
 	l.Trace("request body to track resources: ", requestBody)
 
 	body, err := json.Marshal(requestBody)
