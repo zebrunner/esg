@@ -179,7 +179,7 @@ func (e *ExecutionEnvironment) ContainerOverrides() []*ecs.ContainerOverride {
 }
 
 func (e *ExecutionEnvironment) HashOvverideDefinition() string {
-	overrideDefinitionData := make([]*Container, 0)
+	overrideContainersData := make([]*Container, 0)
 	for _, container := range e.Containers {
 		dependsOn := make([]*ecs.ContainerDependency, 0)
 		if container.DependsOn != nil {
@@ -205,7 +205,7 @@ func (e *ExecutionEnvironment) HashOvverideDefinition() string {
 			}
 		}
 
-		overrideDefinitionData = append(overrideDefinitionData, &Container{
+		overrideContainersData = append(overrideContainersData, &Container{
 			Name:             container.Name,
 			Image:            container.Image,
 			Essential:        container.Essential,
@@ -219,6 +219,12 @@ func (e *ExecutionEnvironment) HashOvverideDefinition() string {
 			DependsOn:        dependsOn,
 		})
 	}
+	
+	overrideDefinitionData := &ExecutionEnvironment{
+		TaskDefinitionFamily: e.TaskDefinitionFamily,
+		Containers:           overrideContainersData,
+	}
+
 	overrideDefinitionHash := utils.EncodeToHash(overrideDefinitionData)
 
 	return overrideDefinitionHash
@@ -271,8 +277,9 @@ func (e *ExecutionEnvironment) HashRegisterDefinition() string {
 	}
 
 	registerDefinitionData := &ExecutionEnvironment{
-		Containers: containers,
-		Volumes:    e.Volumes,
+		TaskDefinitionFamily: e.TaskDefinitionFamily,
+		Containers:           containers,
+		Volumes:              e.Volumes,
 	}
 	registerDefinitionHash := utils.EncodeToHash(registerDefinitionData)
 
