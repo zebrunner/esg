@@ -44,26 +44,18 @@ func (c *Container) Cpu() int64 {
 	return c.cpu
 }
 
-func (c *Container) SetCpu(capsCpu **int64, minCpu int64, maxCpu int64) {
-	if *capsCpu == nil {
-		defValue := int64(0)
-		*capsCpu = &defValue
-	}
-	c.cpu = calculateResource(**capsCpu, minCpu, maxCpu)
-	**capsCpu = c.cpu //override default one as we have min/max limits
+func (c *Container) SetCpu(capsCpu *int64, minCpu int64, maxCpu int64) {
+	c.cpu = calculateResource(*capsCpu, minCpu, maxCpu)
+	*capsCpu = c.cpu //override default one as we have min/max limits
 }
 
 func (c *Container) Memory() int64 {
 	return c.memory
 }
 
-func (c *Container) SetMemory(capsMemory **int64, minMemory int64, maxMemory int64) {
-	if *capsMemory == nil {
-		defValue := int64(0)
-		*capsMemory = &defValue
-	}
-	c.memory = calculateResource(**capsMemory, minMemory, maxMemory)
-	**capsMemory = c.memory //override default one as we have min/max limits
+func (c *Container) SetMemory(capsMemory *int64, minMemory int64, maxMemory int64) {
+	c.memory = calculateResource(*capsMemory, minMemory, maxMemory)
+	*capsMemory = c.memory //override default one as we have min/max limits
 }
 
 func calculateResource(amount int64, min int64, max int64) int64 {

@@ -1,7 +1,11 @@
 package capabilities
 
 import (
+	"errors"
 	"fmt"
+	"reflect"
+	"strconv"
+
 	"regexp"
 	"strings"
 	"time"
@@ -26,21 +30,21 @@ type Capabilities struct {
 	EnableLog        bool
 	ScreenResolution string
 	DeviceName       string
-	IdleTimeout      int64 `json:"idleTimeout,string,omitempty"`
-	MaxTimeout       int64 `json:"maxTimeout,string,omitempty"`
+	IdleTimeout      int64
+	MaxTimeout       int64
 	TimeZone         string
 	Env              []string
 	HostsEntries     []string
 	DNSServers       []string
 
 	//Vendor caps
-	Cpu    *int64 `json:"cpu,string,omitempty"`
-	Memory *int64 `json:"memory,string,omitempty"`
+	Cpu    int64
+	Memory int64
 	//Mitm proxy caps
 	Mitm       bool   //enabl mitm with har dump and output generation for mitmweb
 	MitmArgs   string // list of arguments for mitmdump command. Important: --verbose and --quiet will be appended forcibly
-	MitmCpu    *int64 `json:"mitmCpu,string,omitempty"`
-	MitmMemory *int64 `json:"mitmMemory,string,omitempty"`
+	MitmCpu    int64
+	MitmMemory int64
 
 	// generic launcher caps
 	RepositoryUrl string
@@ -121,6 +125,104 @@ func FromImage(image string) ([]*Capabilities, error) {
 	}
 
 	return capsList, nil
+}
+
+func FromRequestCaps(reqCaps map[string]interface{}) (*Capabilities, error) {
+	c := &Capabilities{}
+	mapping := map[string]interface{}{
+		"browserName":      &c.BrowserName,
+		"browserVersion":   &c.BrowserVersion,
+		"platformName":     &c.PlatformName,
+		"platformVersion":  &c.PlatformVersion,
+		"proxy":            &c.Proxy,
+		"timeouts":         &c.Timeouts,
+		"enableVNC":        &c.EnableVNC,
+		"enableVideo":      &c.EnableVideo,
+		"enableLog":        &c.EnableLog,
+		"screenResolution": &c.ScreenResolution,
+		"deviceName":       &c.DeviceName,
+		"idleTimeout":      &c.IdleTimeout,
+		"maxTimeout":       &c.MaxTimeout,
+		"timeZone":         &c.TimeZone,
+		"env":              &c.Env,
+		"hostsEntries":     &c.HostsEntries,
+		"DNSServers":       &c.DNSServers,
+
+		"cpu":    &c.Cpu,
+		"memory": &c.Memory,
+
+		"mitm":       &c.Mitm,
+		"mitmArgs":   &c.MitmArgs,
+		"mitmCpu":    &c.MitmCpu,
+		"mitmMemory": &c.MitmMemory,
+
+		"RepositoryUrl": &c.RepositoryUrl,
+		"Branch":        &c.Branch,
+		"Image":         &c.Image,
+		"LaunchCommand": &c.LaunchCommand,
+		"EnvVariables":  &c.EnvVariables,
+	}
+
+	errs := make([]string, 0)
+	for reqKey, reqValue := range reqCaps {
+		if capPtr := mapping[reqKey]; capPtr != nil {
+			capValue := reflect.Indirect(reflect.ValueOf(capPtr))
+
+			reqValueKind := reflect.TypeOf(reqValue).Kind()
+			capValueKind := capValue.Kind()
+			if capValueKind == reqValueKind {
+				capValue.Set(reflect.ValueOf(reqValue))
+				continue
+			}
+
+			if capValueKind == reflect.Int64 {
+				switch reqValueKind {
+				case reflect.Float64:
+					reqValue = int64(reqValue.(float64))
+				case reflect.String:
+					reqValueStr := reqValue.(string)
+					var err error
+					reqValue, err = strconv.ParseInt(reqValueStr, 10, 64)
+					if err != nil {
+						errs = append(errs, fmt.Sprintf("invalid \"%s\" value format for %s capability", reqValueStr, reqKey))
+						continue
+					}
+				default:
+					errs = append(errs, fmt.Sprintf("invalid capability type for %s. Expected: %s, actual: %s",
+						reqKey, capValueKind.String(), reqValueKind.String()))
+					continue
+				}
+			} else if capValueKind == reflect.Bool {
+				switch reqValueKind {
+				case reflect.String:
+					reqValueStr := reqValue.(string)
+					var err error
+					reqValue, err = strconv.ParseBool(reqValueStr)
+					if err != nil {
+						errs = append(errs, fmt.Sprintf("invalid \"%s\" value format for %s capability", reqValueStr, reqKey))
+						continue
+					}
+				default:
+					errs = append(errs, fmt.Sprintf("invalid capability type for %s. Expected: %s, actual: %s",
+						reqKey, capValueKind.String(), reqValueKind.String()))
+					continue
+				}
+			} else {
+				errs = append(errs, fmt.Sprintf("invalid capability type for %s. Expected: %s, actual: %s",
+					reqKey, capValueKind.String(), reqValueKind.String()))
+				continue
+			}
+
+			capValue.Set(reflect.ValueOf(reqValue))
+		}
+	}
+
+	var err error
+	if len(errs) != 0 {
+		err = errors.New(strings.Join(errs, "\n"))
+	}
+
+	return c, err
 }
 
 func (c *Capabilities) GetScreenResolution() (string, error) {

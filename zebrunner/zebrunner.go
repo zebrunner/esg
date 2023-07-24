@@ -79,12 +79,12 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 		platformName = "linux"
 	}
 
-	cpuUsage := *cachedTask.Capabilities.Cpu
-	memUsage := *cachedTask.Capabilities.Memory
+	cpuUsage := cachedTask.Capabilities.Cpu
+	memUsage := cachedTask.Capabilities.Memory
 	if cachedTask.Capabilities.Mitm {
 		// #579: track mitm container cpu and memory usage
-		cpuUsage += *cachedTask.Capabilities.MitmCpu
-		memUsage += *cachedTask.Capabilities.MitmMemory
+		cpuUsage += cachedTask.Capabilities.MitmCpu
+		memUsage += cachedTask.Capabilities.MitmMemory
 	}
 
 	if !conf.SingleTenant {
@@ -94,12 +94,12 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 	}
 	requestUrl.Path = USAGE_API_PATH
 	requestBody := map[string]interface{}{
-		"cpu": strconv.FormatInt(cpuUsage, 10) + " millicores",
-		"memory": strconv.FormatInt(memUsage, 10) + " MiB",
-		"instant": time.Now().UTC().Format("2006-01-02T15:04:05Z"),
-		"seconds": duration.Seconds() - provisioningTime.Seconds(), // register only net time without provisioning time
-		"platform": platformName,
-		"taskId": cachedTask.ID,
+		"cpu":       strconv.FormatInt(cpuUsage, 10) + " millicores",
+		"memory":    strconv.FormatInt(memUsage, 10) + " MiB",
+		"instant":   time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+		"seconds":   duration.Seconds() - provisioningTime.Seconds(), // register only net time without provisioning time
+		"platform":  platformName,
+		"taskId":    cachedTask.ID,
 		"sessionId": cachedTask.CurrentSessionID,
 	}
 	l.Trace("request body to track resources: ", requestBody)
