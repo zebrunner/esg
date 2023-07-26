@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 
@@ -128,6 +129,8 @@ func (c *RequestCaps) Process() error {
 		return err
 	}
 
+	processProxy(c.Capabilities.AlwaysMatch)
+
 	for index := range c.Capabilities.FirstMatch {
 		err = processLegacyCaps(c.Capabilities.FirstMatch[index])
 		if err != nil {
@@ -148,6 +151,8 @@ func (c *RequestCaps) Process() error {
 		if err != nil {
 			return err
 		}
+
+		processProxy(c.Capabilities.FirstMatch[index])
 	}
 
 	return nil
@@ -194,13 +199,15 @@ func (c *RequestCaps) ProcessLegacy() error {
 			}
 		}
 
+		processProxy(fmCaps)
+
 		renamedLegacy := []string{"browserName", "platformName", "browserVersion"}
 		for _, name := range renamedLegacy {
 			if fmCaps[name] == nil && c.DesiredCapabilities[name] != nil {
 				fmCaps[name] = c.DesiredCapabilities[name]
 			}
 		}
-		
+
 		err = processCaps(fmCaps)
 		if err != nil {
 			return err
@@ -219,13 +226,13 @@ func (c *RequestCaps) GetContainerConfiguration() (*Capabilities, error) {
 	amConf, err := MapConfig(amCaps)
 	if err != nil {
 		log.WithError(err).Warn("Failed to map config")
-		return nil, validationErr
+		return nil, fmt.Errorf("%v: %v", validationErr, err)
 	}
 
 	err = mergo.Merge(&conf, amConf)
 	if err != nil {
 		log.WithError(err).Warn("Failed to map config")
-		return nil, validationErr
+		return nil, fmt.Errorf("%v: %v", validationErr, err)
 	}
 
 	for _, fmCaps := range c.Capabilities.FirstMatch {
@@ -234,12 +241,11 @@ func (c *RequestCaps) GetContainerConfiguration() (*Capabilities, error) {
 
 		fmConf, err := MapConfig(caps)
 		if err != nil {
-
-			return nil, validationErr
+			return nil, fmt.Errorf("%v: %v", validationErr, err)
 		}
 		err = mergo.Merge(&conf, fmConf)
 		if err != nil {
-			return nil, validationErr
+			return nil, fmt.Errorf("%v: %v", validationErr, err)
 		}
 	}
 
@@ -294,11 +300,23 @@ func processVendorCaps(caps map[string]interface{}) error {
 		"dnsServers",
 		"mitm", "Mitm", //to support lower case and camel case
 		"mitmArgs", "MitmArgs", "mitmargs",
+		"mitmCpu", "MitmCpu", "mitmcpu",
+		"mitmMemory", "MitmMemory", "mitmmemory",
 	}
 	processors := map[string]*CapProcessor{}
 	for _, name := range vendorCapNames {
 		processors[name] = &CapProcessor{
 			KeyProcessor: addPrefix(config.VendorPrefix),
+		}
+	}
+
+	//overrided vendor caps by existing w3c caps
+	if zebrunnerOptions, ok := caps["zebrunner:options"].(map[string]interface{}); ok {
+		for k, v := range zebrunnerOptions {
+			caps[k] = v
+			processors[k] = &CapProcessor{
+				KeyProcessor: addPrefix(config.VendorPrefix),
+			}
 		}
 	}
 
@@ -334,8 +352,27 @@ func processCaps(caps map[string]interface{}) error {
 	return nil
 }
 
+func processProxy(caps map[string]interface{}) {
+	for key, value := range caps {
+		if strings.ToLower(key) == "zebrunner:mitm" {
+			if enabled, ok := value.(bool); !ok || !enabled {
+				return
+			}
+
+			log.Debug("Found mitm cap, overriding proxy capabilities object...")
+			// proxy:map[sslProxy:mitm:8080 httpProxy:mitm:8080 proxyType:MANUAL]
+			caps["proxy"] = map[string]interface{}{
+				"httpProxy": "mitm:8080",
+				"sslProxy":  "mitm:8080",
+				"proxyType": "manual",
+			}
+			return
+		}
+	}
+}
+
 func processOptions(caps map[string]interface{}) error {
-	optionProcessors := map[string]*CapProcessor{
+	downloadOptionProcessors := map[string]*CapProcessor{
 		"goog:chromeOptions": {
 			ValueProcessor: deletePref("download.default_directory"),
 		},
@@ -380,7 +417,32 @@ func processOptions(caps map[string]interface{}) error {
 		},
 	}
 
-	err := applyProcessor(caps, optionProcessors)
+	err := applyProcessor(caps, downloadOptionProcessors)
+	if err != nil {
+		return err
+	}
+
+	argsProcessors := map[string]*CapProcessor{
+		"goog:chromeOptions": {
+			ValueProcessor: func(options interface{}) interface{} {
+				if optionsMap, ok := options.(map[string]interface{}); ok {
+					if args, ok := optionsMap["args"].([]interface{}); ok {
+						for i, v := range args {
+							argStr := v.(string)
+							if strings.Contains(argStr, "--remote-allow-origins") {
+								args[i] = "--remote-allow-origins=*"
+								return options
+							}
+						}
+						optionsMap["args"] = append(args, "--remote-allow-origins=*")
+					}
+				}
+				return options
+			},
+		},
+	}
+
+	err = applyProcessor(caps, argsProcessors)
 	if err != nil {
 		return err
 	}

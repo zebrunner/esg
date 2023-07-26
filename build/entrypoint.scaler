@@ -35,6 +35,9 @@ fi
 if [ ! -z ${LOG_LEVEL} ]; then
   CMD_ARGS="${CMD_ARGS} -log-level ${LOG_LEVEL}"
 fi
+if [ ! -z ${DATABASE} ]; then
+  CMD_ARGS="${CMD_ARGS} -db-connection ${DATABASE}"
+fi
 if [ ! -z ${MAX_MEMORY} ]; then
   CMD_ARGS="${CMD_ARGS} -max-memory ${MAX_MEMORY}"
 fi

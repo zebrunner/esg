@@ -30,7 +30,7 @@ func init() {
 func Ping(c *gin.Context) {
 	c.JSON(http.StatusOK, map[string]interface{}{
 		"uptime":  time.Since(startTime),
-		"version": "1.0.0", // TODO: Get current version for project
+		"version": Version,
 	})
 }
 
@@ -58,7 +58,7 @@ func ListDrivers(c *gin.Context) {
 	images, err := utils.ListBrowsers()
 	if err != nil {
 		log.WithError(err).Warn("Failed to get browser list")
-		_ = c.Error(err).SetType(gin.ErrorTypePublic)
+		c.Error(utils.NotFoundApiErr("failed to get browser list")).SetType(gin.ErrorTypePublic)
 		return
 	}
 
@@ -94,6 +94,9 @@ func ListDrivers(c *gin.Context) {
 
 		if _, ok := imagesPlatforms[name]; ok {
 			// hardcoded browser name and verion for ReDroid emulator
+			if browserData["version"] == "latest" {
+				continue
+			}
 			browserData["platform"] = imagesPlatforms[name]
 			browserData["browserName"] = "chrome"
 			browserData["browserVersion"] = "107.0"

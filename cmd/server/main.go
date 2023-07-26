@@ -12,6 +12,7 @@ import (
 	"golang.org/x/net/websocket"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/cachemaps/definitionmap"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/handlers"
 	"github.com/zebrunner/esg/service"
@@ -45,9 +46,7 @@ func CreateRouter() *gin.Engine {
 	r := gin.New()
 	r.Use(gin.LoggerWithFormatter(utils.TraceLogFromating), gin.Recovery())
 
-	api := r.Group("/api")
-	api.Use(handlers.APIError)
-	api.Use(handlers.APIAuthentication)
+	api := r.Group("/api", handlers.APIError, handlers.LowLvlAuthentication)
 	{
 		api.POST("/users", handlers.CreateUser)
 		api.DELETE("/users/:username", handlers.DeleteUser)
@@ -60,24 +59,13 @@ func CreateRouter() *gin.Engine {
 	}
 
 	hub := r.Group("/")
-	hub.Use(handlers.SeleniumError)
+	hub.Any("/wd/hub/*action", ReverseProxy())
 	{
 		hub.GET("/", handlers.Welcome)
-		hub.GET("/status", handlers.Authentication, handlers.ClusterStatus)
 		hub.GET("/ping", handlers.Ping)
-		hub.GET("/browsers", handlers.ListDrivers)
 
-		hub.Any("/wd/hub/*action", ReverseProxy())
-		hub.POST("/session", handlers.Create) // Auth logic moved to handler
-		hub.DELETE("/session/:session", handlers.CloseSession)
-		hub.Any("/session/:session/*action", handlers.Proxy)
-
-		hub.GET("/vnc/:session", func(c *gin.Context) {
-			handler := websocket.Handler(handlers.Vnc)
-			log.WithField("request", c.Request).Debug("Vnc request")
-			handler.ServeHTTP(c.Writer, c.Request)
-		})
-		hub.GET("/ws/vnc/:session", func(c *gin.Context) {
+		// sessionId passed for linux browsers and redroid session. taskId passed for cypress
+		hub.GET("/ws/vnc/:id", func(c *gin.Context) {
 			handler := websocket.Handler(handlers.Vnc)
 			c.Request.Header.Add("Access-Control-Allow-Origin", "*")
 			c.Request.Header.Add("X-Real-IP", c.Request.RemoteAddr)
@@ -85,32 +73,41 @@ func CreateRouter() *gin.Engine {
 			log.WithField("request", c.Request).Debug("Vnc request")
 			handler.ServeHTTP(c.Writer, c.Request)
 		})
-
-		hub.GET("/download/:session/:file", handlers.Downloads)
-		hub.GET("/download/:session", handlers.Downloads)
-		hub.DELETE("/download/:session/:file", handlers.Downloads)
-		hub.HEAD("/download/:session/:file", handlers.Downloads)
-
-		hub.GET("/clipboard/:session", handlers.Clipboard)
-		hub.POST("/clipboard/:session", handlers.Clipboard)
-
-		hub.GET("/devtools/:session", handlers.Devtools)
-
-		hub.DELETE("/tasks/:task", handlers.AbortTask) // to be able to abort generic tasks by taskId
 	}
 
-	hub.Use(handlers.APIError)
+	seleniumHub := hub.Group("/", handlers.SeleniumError)
 	{
-		hub.GET("/logs/:session", handlers.Logs)
-		hub.GET("/video/:session", handlers.Video)
-		hub.GET("/tasks/:task/log", handlers.TaskLog)
-		hub.GET("/tasks/:task/status", handlers.TaskDescribe)
+		seleniumHub.POST("/session", handlers.Create) // Auth logic moved to handler
+		seleniumHub.DELETE("/session/:session", handlers.CloseSession)
+		seleniumHub.Any("/session/:session/*action", handlers.Proxy)
+
+		seleniumHub.GET("/download/:session/:file", handlers.Downloads)
+		seleniumHub.GET("/download/:session", handlers.Downloads)
+		seleniumHub.DELETE("/download/:session/:file", handlers.Downloads)
+		seleniumHub.HEAD("/download/:session/:file", handlers.Downloads)
+
+		seleniumHub.GET("/clipboard/:session", handlers.Clipboard)
+		seleniumHub.POST("/clipboard/:session", handlers.Clipboard)
+
+		seleniumHub.GET("/devtools/:session", handlers.Devtools)
+
+		seleniumHub.DELETE("/tasks/:task", handlers.AbortTask) // to be able to abort generic tasks by taskId
+	}
+
+	httpHub := hub.Group("/", handlers.APIError)
+	{
+		httpHub.GET("/status", handlers.APIAuthentication, handlers.ClusterStatus)
+		httpHub.GET("/browsers", handlers.ListDrivers)
+		httpHub.GET("/logs/:session", handlers.Logs)
+		httpHub.GET("/video/:session", handlers.Video)
+		httpHub.GET("/tasks/:task/log", handlers.TaskLog)
+		httpHub.GET("/tasks/:task/status", handlers.TaskDescribe)
 	}
 
 	return r
 }
 
-func refreshIMDSV2Token(){	
+func refreshIMDSV2Token() {
 	for {
 		err := utils.RefreshIMDSV2Token()
 		if err != nil {
@@ -118,7 +115,7 @@ func refreshIMDSV2Token(){
 		} else {
 			log.Debug("Successfully generated IMDSV2 token")
 		}
-		time.Sleep(2 * time.Hour + 30 * time.Minute)
+		time.Sleep(2*time.Hour + 30*time.Minute)
 	}
 }
 
@@ -131,21 +128,23 @@ func main() {
 		DisableColors: true,
 	})
 
-	db, err := config.InitDBConnection(config.Conf.DbConnectionString)
+	err := config.InitDBConnection(config.Conf.DbConnectionString)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to init DB client! Stopping router...")
 		os.Exit(1)
 	}
-	config.DbConnection = db
-	defer db.Close()
 
-	rdb, err := config.InitCache()
+	defer config.DbConnection.Close()
+
+	err = config.InitCache()
 	if err != nil {
 		log.WithError(err).Fatal("Failed to init Redis client! Stopping router...")
 		os.Exit(1)
 	}
-	config.RedisConnection = rdb
-	defer rdb.Close()
+
+	defer config.RedisSessionsConnection.Close()
+	defer config.RedisTasksConnection.Close()
+	defer config.RedisDefinitionConnection.Close()
 
 	aws, err := service.InitAws()
 	if err != nil {
@@ -159,6 +158,17 @@ func main() {
 	}
 
 	router := CreateRouter()
+
+	for {
+		if definitionmap.IsRefreshDone() {
+			break
+		}
+		time.Sleep(5 * time.Second)
+	}
+
+	service.InitInstanceWorker()
+	service.InitWaitWorker()
+
 	log.Infof("Listening on %s", listen)
 	err = router.Run(listen)
 	if err != nil {

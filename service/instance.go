@@ -1,48 +1,36 @@
 package service
 
 import (
-	"math"
-	"os"
+	"context"
+	"errors"
 	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ecs"
-	"github.com/zebrunner/esg/config"
-	"github.com/zebrunner/esg/utils"
-
 	log "github.com/sirupsen/logrus"
 )
 
 var instanceWorker *instanceWatchWorker
 var instMutex = &sync.RWMutex{}
 
-func init() {
+func InitInstanceWorker() {
 	instanceWorker = &instanceWatchWorker{
-		containerInstances: map[string]*ecs.ContainerInstance{},
-		ec2Instances:       map[string]*ec2.Instance{},
+		requests: make(map[string]*instanceWaitRequest, 0),
 	}
 	go instanceWorker.start()
 }
 
-type instanceWatchWorker struct {
-	containerInstances map[string]*ecs.ContainerInstance
-	ec2Instances       map[string]*ec2.Instance
+type instanceWaitRequest struct {
+	ctx                  context.Context
+	responseChan         chan *ec2.Instance
+	errorChan            chan error
+	containerInstanceArn *string
 }
 
-func paginate[T interface{}](l []T, size int) [][]T {
-	numPages := int(math.Ceil(float64(len(l)) / float64(size)))
-	pages := make([][]T, numPages)
-	for i := 0; i < numPages; i++ {
-		left := i * size
-		right := (i + 1) * size
-		if right > len(l) {
-			right = len(l)
-		}
-		pages[i] = l[left:right]
-	}
-
-	return pages
+type instanceWatchWorker struct {
+	// taskArn -> instanceWaitRequest
+	requests map[string]*instanceWaitRequest
 }
 
 func (w *instanceWatchWorker) start() {
@@ -52,124 +40,123 @@ func (w *instanceWatchWorker) start() {
 	for {
 		time.Sleep(5 * time.Second)
 
-		// List all containerInstances
-		var containerInstanceIds []*string
-		listInput := ecs.ListContainerInstancesInput{
-			Cluster: &config.Conf.AwsCluster,
+		for k, v := range w.requests {
+			select {
+			case <-v.ctx.Done():
+				delete(w.requests, k)
+			default:
+				continue
+			}
 		}
-		for {
-			listResult, err := utils.RetryThrottling(svc.ListContainerInstances)(&listInput)
-			if err != nil {
-				log.WithField("list", listInput).WithField("error", err).Error("Failed to ListContainerInstances!")
-				os.Exit(1)
+
+		if len(w.requests) == 0 {
+			continue
+		}
+
+		// ciArnPtrs - array of ptrs for container-instance describing
+		ciArnPtrs := make([]*string, 0)
+		// ciArnTaskArnsMap - map for organazing response send from instanceWatchWorker
+		ciArnTaskArnsMap := make(map[string][]string, 0)
+		for taskArn, req := range w.requests {
+			if ciArnTaskArnsMap[*req.containerInstanceArn] == nil {
+				ciArnTaskArnsMap[*req.containerInstanceArn] = make([]string, 0)
+				ciArnPtrs = append(ciArnPtrs, req.containerInstanceArn)
+			}
+			ciArnTaskArnsMap[*req.containerInstanceArn] = append(ciArnTaskArnsMap[*req.containerInstanceArn], taskArn)
+		}
+
+		containerInstances, err := DescribeContainerInstances(ciArnPtrs, svc)
+		if err != nil {
+			log.WithError(err).Error("instanceWatchWorker: failed to describe container instances.")
+			continue
+		}
+
+		// ec2IdPtrs - array of ptrs for instance describing
+		ec2IdPtrs := make([]*string, 0)
+		// ec2IdCiArnsMap - map for organazing response send from instanceWatchWorker
+		ec2IdCiArnsMap := make(map[string][]string, 0)
+		for _, ci := range containerInstances {
+			if *ci.Ec2InstanceId == "" {
+				continue
 			}
 
-			containerInstanceIds = append(containerInstanceIds, listResult.ContainerInstanceArns...)
+			if ec2IdCiArnsMap[*ci.Ec2InstanceId] == nil {
+				ec2IdCiArnsMap[*ci.Ec2InstanceId] = make([]string, 0)
+				ec2IdPtrs = append(ec2IdPtrs, ci.Ec2InstanceId)
+			}
+			ec2IdCiArnsMap[*ci.Ec2InstanceId] = append(ec2IdCiArnsMap[*ci.Ec2InstanceId], *ci.ContainerInstanceArn)
+		}
 
-			if listResult.NextToken != nil {
-				listInput.NextToken = listResult.NextToken
-			} else {
+		if len(ec2IdPtrs) == 0 {
+			continue
+		}
+
+		healthyInstanceIdPtrs, unhealthyInstanceIdPtrs, err := DescribeInstancesStatus(ec2IdPtrs, ec2Svc)
+		if err != nil {
+			log.WithError(err).Error("instanceWatchWorker: failed to describe instances status.")
+			if len(healthyInstanceIdPtrs) == 0 && len(unhealthyInstanceIdPtrs) == 0 {
+				continue
+			}
+		}
+
+		if len(unhealthyInstanceIdPtrs) != 0 {
+			// stop unhealthy instances
+			err := TerminateInstances(unhealthyInstanceIdPtrs, ec2Svc)
+			if err != nil {
+				log.WithError(err).Error("instanceWatchWorker: failed to terminate instances.")
 				break
 			}
-		}
 
-		// Describe all container instances
-		var containerInstances []*ecs.ContainerInstance
-		pages := paginate(containerInstanceIds, 100)
-		for _, page := range pages {
-			input := ecs.DescribeContainerInstancesInput{
-				Cluster:            &config.Conf.AwsCluster,
-				ContainerInstances: page,
-			}
-			describeResult, err := utils.RetryThrottling(svc.DescribeContainerInstances)(&input)
-			if err != nil {
-				log.WithField("list", input).WithField("error", err).Error("Failed to DescribeContainerInstances!")
-				continue
-			}
-
-			if len(describeResult.Failures) != 0 {
-				log.WithField("result", describeResult).Error("DescribeContainerInstances Failures is not 0!")
-				continue
-			}
-
-			if len(describeResult.ContainerInstances) == 0 {
-				log.WithField("result", describeResult).Error("DescribeContainerInstances ContainerInstances is 0!")
-				continue
-			}
-
-			containerInstances = append(containerInstances, describeResult.ContainerInstances...)
-
-			// save to map
-			instMutex.Lock()
-			for _, ci := range containerInstances {
-				w.containerInstances[*ci.ContainerInstanceArn] = ci
-			}
-			instMutex.Unlock()
-		}
-
-		// Describe all ec2 instances
-		ec2InstanceMap := map[string]*string{}
-		for _, ci := range containerInstances {
-			if *ci.Ec2InstanceId != "" {
-				ec2InstanceMap[*ci.Ec2InstanceId] = ci.Ec2InstanceId
-			}
-		}
-
-		if len(ec2InstanceMap) > 0 {
-			var ec2Instances []*ec2.Instance
-			for {
-				input := ec2.DescribeInstancesInput{
-					InstanceIds: make([]*string, 0),
-				}
-
-				for _, instanceIdPtr := range ec2InstanceMap {
-					if instanceIdPtr != nil {
-						input.InstanceIds = append(input.InstanceIds, instanceIdPtr)
+			// send err to errorChan, so new task on new instance could be recreated
+			for _, ec2InstanceId := range unhealthyInstanceIdPtrs {
+				containerInstanceArns := ec2IdCiArnsMap[*ec2InstanceId]
+				for _, containerInstanceArn := range containerInstanceArns {
+					taskArns := ciArnTaskArnsMap[containerInstanceArn]
+					for _, taskArn := range taskArns {
+						req := w.requests[taskArn]
+						req.errorChan <- errors.New("instance unhealty, status: impaired")
+						delete(w.requests, taskArn)
 					}
 				}
+			}
+		}
 
-				ec2Result, err := utils.RetryThrottling(ec2Svc.DescribeInstances)(&input)
-				if err != nil {
-					log.WithField("error", err).Error("Failed to DescribeInstances!")
-					break
-				}
+		if len(healthyInstanceIdPtrs) == 0 {
+			continue
+		}
 
-				for _, reservation := range ec2Result.Reservations {
-					ec2Instances = append(ec2Instances, reservation.Instances...)
-				}
+		// describing only healthy instances...
+		ec2Instances, err := DescribeInstances(healthyInstanceIdPtrs, ec2Svc)
+		if err != nil {
+			log.Error("instanceWatchWorker: failed to describe ec2 instances")
+			continue
+		}
 
-				if ec2Result.NextToken != nil {
-					input.NextToken = ec2Result.NextToken
-				} else {
-					break
+		for _, ec2Instance := range ec2Instances {
+			ciArns := ec2IdCiArnsMap[*ec2Instance.InstanceId]
+			for _, ciArn := range ciArns {
+				taskArns := ciArnTaskArnsMap[ciArn]
+				for _, taskArn := range taskArns {
+					req := w.requests[taskArn]
+					req.responseChan <- ec2Instance
+					delete(w.requests, taskArn)
 				}
 			}
-
-			// save to map
-			instMutex.Lock()
-			for _, instance := range ec2Instances {
-				w.ec2Instances[*instance.InstanceId] = instance
-			}
-			instMutex.Unlock()
 		}
 	}
 }
 
-func (w *instanceWatchWorker) getInstance(instanceId string) (*ec2.Instance, bool) {
-	instMutex.RLock()
-	instance, ok := w.ec2Instances[instanceId]
-	instMutex.RUnlock()
-	return instance, ok
-}
-
-func (w *instanceWatchWorker) getInstanceByContainerInstance(containerInstanceId string) (*ec2.Instance, bool) {
-	instMutex.RLock()
-	containerInstance, ok := w.containerInstances[containerInstanceId]
-	instMutex.RUnlock()
-	if !ok {
-		return nil, false
+func (w *instanceWatchWorker) waitForInstance(ctx context.Context, task *ecs.Task) *instanceWaitRequest {
+	req := instanceWaitRequest{
+		ctx:                  ctx,
+		responseChan:         make(chan *ec2.Instance),
+		errorChan:            make(chan error),
+		containerInstanceArn: task.ContainerInstanceArn,
 	}
 
-	instance, ok := w.getInstance(*containerInstance.Ec2InstanceId)
-	return instance, ok
+	instMutex.Lock()
+	w.requests[*task.TaskArn] = &req
+	instMutex.Unlock()
+
+	return &req
 }
