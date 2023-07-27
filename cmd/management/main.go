@@ -210,7 +210,7 @@ func TrackResourceUsage(tasks []*ecs.Task, wg *sync.WaitGroup) {
 
 		zebrunner.TrackResourcesUsage(cachedTask, task)
 
-		if !strings.HasPrefix(cachedTask.Capabilities.Image, "public.ecr.aws/zebrunner/cypress-") && cachedTask.Status == taskmap.TaskGeneric {
+		if !strings.HasPrefix(cachedTask.Capabilities.Image.ToPrimitive(), "public.ecr.aws/zebrunner/cypress-") && cachedTask.Status == taskmap.TaskGeneric {
 			// #503: суpress tests aborted automatically
 			// automatic abort of the public.ecr.aws/zebrunner/cypress-* should be prohibited as execution is control by parent cyserver process
 			zebrunner.AbortTask(cachedTask, task)

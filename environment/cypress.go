@@ -39,7 +39,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 
 	branchArg := ""
 	if caps.Branch != "" {
-		branchArg = "--branch=" + caps.Branch
+		branchArg = "--branch=" + caps.Branch.ToPrimitive()
 	}
 
 	browserImage, err := buildImage(caps)
@@ -67,7 +67,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 
 	launchCommand := "CHANGE_ME"
 	if caps.LaunchCommand != "" {
-		launchCommand = caps.LaunchCommand
+		launchCommand = caps.LaunchCommand.ToPrimitive()
 	}
 
 	entrypointContainer := Container{

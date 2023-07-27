@@ -219,7 +219,7 @@ func (e *ExecutionEnvironment) HashOvverideDefinition() string {
 			DependsOn:        dependsOn,
 		})
 	}
-	
+
 	overrideDefinitionData := &ExecutionEnvironment{
 		TaskDefinitionFamily: e.TaskDefinitionFamily,
 		Containers:           overrideContainersData,
@@ -287,9 +287,9 @@ func (e *ExecutionEnvironment) HashRegisterDefinition() string {
 }
 
 func Build(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
-	platform := strings.ToLower(caps.PlatformName)
+	platform := strings.ToLower(caps.PlatformName.ToPrimitive())
 	if platform == androidPlatform {
-		if strings.ToLower(caps.DeviceName) == redroidDevice {
+		if strings.ToLower(caps.DeviceName.ToPrimitive()) == redroidDevice {
 			return buildAppiumRedroid(workspace, caps)
 		}
 		return nil, fmt.Errorf("device is not supported. deviceName=%s", caps.DeviceName)
@@ -341,8 +341,8 @@ func (n *NetworkConfiguration) GetUrl(endpointName string) (u *url.URL, ok bool)
 }
 
 func buildImage(caps *capabilities.Capabilities) (string, error) {
-	platformName := strings.ToLower(caps.PlatformName)
-	deviceName := strings.ToLower(caps.DeviceName)
+	platformName := strings.ToLower(caps.PlatformName.ToPrimitive())
+	deviceName := strings.ToLower(caps.DeviceName.ToPrimitive())
 
 	if platformName == anyPlatform || platformName == "" {
 		platformName = "linux"
@@ -354,21 +354,21 @@ func buildImage(caps *capabilities.Capabilities) (string, error) {
 		if version == "" {
 			version = "latest"
 		}
-		return imageRepo + name + ":" + version, nil
+		return imageRepo + name + ":" + version.ToPrimitive(), nil
 	} else if platformName == linuxPlatform {
-		name := strings.ToLower(caps.BrowserName)
+		name := strings.ToLower(caps.BrowserName.ToPrimitive())
 		name = remapName(name)
-		version := strings.ToLower(caps.BrowserVersion)
+		version := strings.ToLower(caps.BrowserVersion.ToPrimitive())
 		version = remapVersion(version)
 		return imageRepo + name + ":" + version, nil
 	} else if platformName == cypressPlatform {
 		if caps.Image != "" {
-			return caps.Image, nil
+			return caps.Image.ToPrimitive(), nil
 		}
 		//use-case for task definition generation
-		name := strings.ToLower(caps.BrowserName)
+		name := strings.ToLower(caps.BrowserName.ToPrimitive())
 		name = remapName(name)
-		version := strings.ToLower(caps.BrowserVersion)
+		version := strings.ToLower(caps.BrowserVersion.ToPrimitive())
 		version = remapVersion(version)
 		return imageRepo + name + ":" + version, nil
 	} else {
@@ -378,7 +378,7 @@ func buildImage(caps *capabilities.Capabilities) (string, error) {
 
 func buildTaskDefinitionFamily(caps *capabilities.Capabilities) string {
 	familyParts := []string{}
-	platformName := strings.ToLower(caps.PlatformName)
+	platformName := strings.ToLower(caps.PlatformName.ToPrimitive())
 
 	if caps.PlatformName == "" || platformName == "any" {
 		platformName = "linux"
@@ -386,21 +386,21 @@ func buildTaskDefinitionFamily(caps *capabilities.Capabilities) string {
 
 	familyParts = append(familyParts, platformName)
 
-	deviceName := strings.ToLower(caps.DeviceName)
+	deviceName := strings.ToLower(caps.DeviceName.ToPrimitive())
 	if deviceName != "" {
 		familyParts = append(familyParts, deviceName)
 		if deviceName == "redroid" {
-			platformVersion := strings.ToLower(caps.PlatformVersion)
+			platformVersion := strings.ToLower(caps.PlatformVersion.ToPrimitive())
 			platformVersion = remapVersion(platformVersion)
 			platformVersion = strings.Replace(platformVersion, ".", "-", -1)
 			familyParts = append(familyParts, platformVersion)
 		}
 	}
 
-	browserName := strings.ToLower(caps.BrowserName)
+	browserName := strings.ToLower(caps.BrowserName.ToPrimitive())
 	if browserName != "" && deviceName != "redroid" {
 		familyParts = append(familyParts, remapName(browserName))
-		browserVersion := strings.ToLower(caps.BrowserVersion)
+		browserVersion := strings.ToLower(caps.BrowserVersion.ToPrimitive())
 		browserVersion = remapVersion(browserVersion)
 		browserVersion = strings.Replace(browserVersion, ".", "-", -1)
 		familyParts = append(familyParts, browserVersion)

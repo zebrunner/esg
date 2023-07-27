@@ -74,17 +74,17 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 	provisioningTime := healthAt.Sub(startedAt) //diff between healthAt and startedAt provide task preparation time
 	l.Trace("provisioningSeconds: ", provisioningTime.Seconds())
 
-	platformName := strings.ToLower(cachedTask.Capabilities.PlatformName)
+	platformName := strings.ToLower(cachedTask.Capabilities.PlatformName.ToPrimitive())
 	if platformName == "" || platformName == "generic" || platformName == "any" {
 		platformName = "linux"
 	}
 
-	cpuUsage := *cachedTask.Capabilities.Cpu
-	memUsage := *cachedTask.Capabilities.Memory
+	cpuUsage := cachedTask.Capabilities.Cpu.ToPrimitive()
+	memUsage := cachedTask.Capabilities.Memory.ToPrimitive()
 	if cachedTask.Capabilities.Mitm {
 		// #579: track mitm container cpu and memory usage
-		cpuUsage += *cachedTask.Capabilities.MitmCpu
-		memUsage += *cachedTask.Capabilities.MitmMemory
+		cpuUsage += cachedTask.Capabilities.MitmCpu.ToPrimitive()
+		memUsage += cachedTask.Capabilities.MitmMemory.ToPrimitive()
 	}
 
 	if !conf.SingleTenant {
