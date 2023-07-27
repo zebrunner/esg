@@ -132,7 +132,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		mitmCommand := "mitmdump -w " + logDir + "/dump.mitm"
 		if caps.MitmArgs != "" {
 			//append args only if mitm=true
-			mitmCommand = mitmCommand + " " + caps.MitmArgs
+			mitmCommand = mitmCommand + " " + caps.MitmArgs.ToPrimitive()
 		}
 		// --quiet is a must to run without interactive console
 		mitmCommand = mitmCommand + " --quiet"

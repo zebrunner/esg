@@ -30,7 +30,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 
 	branchArg := ""
 	if caps.Branch != "" {
-		branchArg = "--branch=" + caps.Branch
+		branchArg = "--branch=" + caps.Branch.ToPrimitive()
 	}
 
 	if caps.RepositoryUrl == "" {
@@ -72,7 +72,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 		EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
 	}
 
-	includeMaven := strings.Contains(caps.Image, "maven")
+	includeMaven := strings.Contains(caps.Image.ToPrimitive(), "maven")
 	var mavenContainer *Container = nil
 	if includeMaven {
 		mavenContainer = &Container{
@@ -116,11 +116,11 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 	})
 	executorContainer := Container{
 		Name:       "executor",
-		Image:      executorImage,
+		Image:      executorImage.ToPrimitive(),
 		Privileged: false,
 		Essential:  true,
 		Env: map[string]string{
-			"COMMAND": launchCommand,
+			"COMMAND": launchCommand.ToPrimitive(),
 		},
 		Mounts:           mounts,
 		WorkingDirectory: workDir,

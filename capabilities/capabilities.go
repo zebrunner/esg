@@ -1,7 +1,10 @@
 package capabilities
 
 import (
+	"errors"
 	"fmt"
+	"strconv"
+
 	"regexp"
 	"strings"
 	"time"
@@ -14,46 +17,216 @@ var (
 	shortResolutionFormat = regexp.MustCompile(`^[0-9]+x[0-9]+$`)
 )
 
+func formatError(value interface{}, cap string, capType string) string {
+	return fmt.Sprintf("invalid format for %s capability. Cannot parse \"%v\" into field of type  %s", cap, value, capType)
+}
+
+func typeError(value interface{}, cap string, capType string) string {
+	return fmt.Sprintf("invalid type for %s capability. Cannot assign \"%v\" to field of type %s", cap, value, capType)
+}
+
+type Validator interface {
+	Validate(string, any) string
+}
+
+type Wrapper[T any] interface {
+	ToPrimitive() T
+	From(T)
+}
+
+type stringWrapper string
+
+func (s *stringWrapper) Validate(key string, value interface{}) string {
+	errStr := ""
+	if valueStr, ok := value.(string); ok {
+		s.From(valueStr)
+	} else {
+		errStr = typeError(value, key, "string")
+	}
+
+	return errStr
+}
+
+func (s *stringWrapper) ToPrimitive() string {
+	return string(*s)
+}
+
+func (s *stringWrapper) From(value string) {
+	*s = stringWrapper(value)
+}
+
+type boolWrapper bool
+
+func (b *boolWrapper) Validate(key string, value interface{}) string {
+	errStr := ""
+
+	if valueBool, ok := value.(bool); ok {
+		b.From(valueBool)
+	} else if valueStr, ok := value.(string); ok {
+		if valueBool, err := strconv.ParseBool(valueStr); err == nil {
+			b.From(valueBool)
+		} else {
+			errStr = formatError(value, key, "bool")
+		}
+	} else {
+		errStr = typeError(value, key, "bool")
+	}
+
+	return errStr
+}
+
+func (b *boolWrapper) ToPrimitive() bool {
+	return bool(*b)
+}
+
+func (b *boolWrapper) From(value bool) {
+	*b = boolWrapper(value)
+}
+
+type int64Wrapper int64
+
+func (i *int64Wrapper) Validate(key string, value interface{}) string {
+	errStr := ""
+
+	if valueFloat, ok := value.(float64); ok {
+		i.From(int64(valueFloat))
+	} else if valueStr, ok := value.(string); ok {
+		if valueInt, err := strconv.ParseInt(valueStr, 10, 64); err == nil {
+			i.From(valueInt)
+		} else {
+			errStr = formatError(value, key, "int")
+		}
+	} else {
+		errStr = typeError(value, key, "int")
+	}
+
+	return errStr
+}
+
+func (i *int64Wrapper) ToPrimitive() int64 {
+	return int64(*i)
+}
+
+func (i *int64Wrapper) From(value int64) {
+	*i = int64Wrapper(value)
+}
+
+type sliceStringWrapper []string
+
+func (sliceStr *sliceStringWrapper) Validate(key string, value interface{}) string {
+	errStr := ""
+	if valueStrSlice, ok := value.([]string); ok {
+		sliceStr.From(valueStrSlice)
+	} else {
+		errStr = typeError(value, key, "[]string")
+	}
+
+	return errStr
+}
+
+func (sliceStr *sliceStringWrapper) ToPrimitive() []string {
+	return []string(*sliceStr)
+}
+
+func (sliceStr *sliceStringWrapper) From(value []string) {
+	*sliceStr = sliceStringWrapper(value)
+}
+
+type mapStrInterfaceWrapper map[string]interface{}
+
+func (m *mapStrInterfaceWrapper) Validate(key string, value interface{}) string {
+	errStr := ""
+
+	if valueMap, ok := value.(map[string]interface{}); ok {
+		m.From(valueMap)
+	} else {
+		errStr = typeError(value, key, "map[string]interface{}")
+	}
+
+	return errStr
+}
+
+func (m *mapStrInterfaceWrapper) ToPrimitive() map[string]interface{} {
+	return map[string]interface{}(*m)
+}
+
+func (m *mapStrInterfaceWrapper) From(value map[string]interface{}) {
+	*m = mapStrInterfaceWrapper(value)
+}
+
+type mapStrStrWrapper map[string]string
+
+func (m *mapStrStrWrapper) Validate(key string, value interface{}) string {
+	errStr := ""
+
+	if valueMapStr, ok := value.(map[string]string); ok {
+		m.From(valueMapStr)
+	} else if valueMap, ok := value.(map[string]interface{}); ok {
+		valueMapStr := make(map[string]string, len(valueMap))
+		for k, v := range valueMap {
+			if vStr, ok := v.(string); ok {
+				valueMapStr[k] = vStr
+			} else {
+				errStr = typeError(v, key, "string")
+				break
+			}
+		}
+		m.From(valueMapStr)
+	} else {
+		errStr = typeError(value, key, "map[string]string")
+	}
+
+	return errStr
+}
+
+func (m *mapStrStrWrapper) ToPrimitive() map[string]string {
+	return map[string]string(*m)
+}
+
+func (m *mapStrStrWrapper) From(value map[string]string) {
+	*m = mapStrStrWrapper(value)
+}
+
 type Capabilities struct {
-	BrowserName      string
-	BrowserVersion   string
-	PlatformName     string
-	PlatformVersion  string
-	Proxy            map[string]interface{}
-	Timeouts         string
-	EnableVNC        bool
-	EnableVideo      bool
-	EnableLog        bool
-	ScreenResolution string
-	DeviceName       string
-	IdleTimeout      int64 `json:"idleTimeout,string,omitempty"`
-	MaxTimeout       int64 `json:"maxTimeout,string,omitempty"`
-	TimeZone         string
-	Env              []string
-	HostsEntries     []string
-	DNSServers       []string
+	BrowserName      stringWrapper
+	BrowserVersion   stringWrapper
+	PlatformName     stringWrapper
+	PlatformVersion  stringWrapper
+	Proxy            mapStrInterfaceWrapper
+	Timeouts         stringWrapper
+	EnableVNC        boolWrapper
+	EnableVideo      boolWrapper
+	EnableLog        boolWrapper
+	ScreenResolution stringWrapper
+	DeviceName       stringWrapper
+	IdleTimeout      int64Wrapper
+	MaxTimeout       int64Wrapper
+	TimeZone         stringWrapper
+	Env              sliceStringWrapper
+	HostsEntries     sliceStringWrapper
+	DNSServers       sliceStringWrapper
 
 	//Vendor caps
-	Cpu    *int64 `json:"cpu,string,omitempty"`
-	Memory *int64 `json:"memory,string,omitempty"`
+	Cpu    int64Wrapper
+	Memory int64Wrapper
 	//Mitm proxy caps
-	Mitm       bool   //enabl mitm with har dump and output generation for mitmweb
-	MitmArgs   string // list of arguments for mitmdump command. Important: --verbose and --quiet will be appended forcibly
-	MitmCpu    *int64 `json:"mitmCpu,string,omitempty"`
-	MitmMemory *int64 `json:"mitmMemory,string,omitempty"`
+	Mitm       boolWrapper   //enabl mitm with har dump and output generation for mitmweb
+	MitmArgs   stringWrapper // list of arguments for mitmdump command. Important: --verbose and --quiet will be appended forcibly
+	MitmCpu    int64Wrapper
+	MitmMemory int64Wrapper
 
 	// generic launcher caps
-	RepositoryUrl string
-	Branch        string
-	Image         string
-	LaunchCommand string
-	EnvVariables  map[string]string
+	RepositoryUrl stringWrapper
+	Branch        stringWrapper
+	Image         stringWrapper
+	LaunchCommand stringWrapper
+	EnvVariables  mapStrStrWrapper
 }
 
 func (c *Capabilities) GetTimeZone() (*time.Location, error) {
 	timeZone := time.UTC
 	if c.TimeZone != "" {
-		tz, err := time.LoadLocation(c.TimeZone)
+		tz, err := time.LoadLocation(c.TimeZone.ToPrimitive())
 		if err != nil {
 			log.WithError(err).WithField("value", c.GetTimeZone).Warn("Bad timezone specified")
 		} else {
@@ -94,27 +267,27 @@ func FromImage(image string) ([]*Capabilities, error) {
 		capsList = append(capsList, &Capabilities{
 			PlatformName:    "android",
 			DeviceName:      "redroid",
-			PlatformVersion: version,
+			PlatformVersion: stringWrapper(version),
 		})
 	} else if in(executor, platforms["linux"]) {
 		capsList = append(capsList, &Capabilities{
 			PlatformName:   "linux",
-			BrowserName:    executor,
-			BrowserVersion: version,
+			BrowserName:    stringWrapper(executor),
+			BrowserVersion: stringWrapper(version),
 			Mitm:           false,
 		})
 
 		capsList = append(capsList, &Capabilities{
 			PlatformName:   "linux",
-			BrowserName:    executor,
-			BrowserVersion: version,
+			BrowserName:    stringWrapper(executor),
+			BrowserVersion: stringWrapper(version),
 			Mitm:           true,
 		})
 	} else if in(executor, platforms["cypress"]) {
 		capsList = append(capsList, &Capabilities{
 			PlatformName:   "cypress",
-			BrowserName:    executor,
-			BrowserVersion: version,
+			BrowserName:    stringWrapper(executor),
+			BrowserVersion: stringWrapper(version),
 		})
 	} else {
 		return nil, fmt.Errorf("failed to build capabilities from unknown image. image=%s", image)
@@ -122,15 +295,71 @@ func FromImage(image string) ([]*Capabilities, error) {
 
 	return capsList, nil
 }
+func FromRequestCaps(reqCaps map[string]interface{}) (*Capabilities, error) {
+	c := &Capabilities{}
+	mapping := map[string]Validator{
+		"browsername":      &c.BrowserName,
+		"browserversion":   &c.BrowserVersion,
+		"platformname":     &c.PlatformName,
+		"platformversion":  &c.PlatformVersion,
+		"proxy":            &c.Proxy,
+		"timeouts":         &c.Timeouts,
+		"enablevnc":        &c.EnableVNC,
+		"enablevideo":      &c.EnableVideo,
+		"enablelog":        &c.EnableLog,
+		"screenresolution": &c.ScreenResolution,
+		"devicename":       &c.DeviceName,
+		"idletimeout":      &c.IdleTimeout,
+		"maxtimeout":       &c.MaxTimeout,
+		"timezone":         &c.TimeZone,
+		"env":              &c.Env,
+		"hostsentries":     &c.HostsEntries,
+		"dnsservers":       &c.DNSServers,
+
+		"cpu":    &c.Cpu,
+		"memory": &c.Memory,
+
+		"mitm":       &c.Mitm,
+		"mitmargs":   &c.MitmArgs,
+		"mitmcpu":    &c.MitmCpu,
+		"mitmmemory": &c.MitmMemory,
+
+		"repositoryurl": &c.RepositoryUrl,
+		"branch":        &c.Branch,
+		"image":         &c.Image,
+		"launchcommand": &c.LaunchCommand,
+		"envvariables":  &c.EnvVariables,
+	}
+
+	errs := make([]string, 0)
+	for key, value := range reqCaps {
+		keyLower := strings.ToLower(key)
+		if validator := mapping[keyLower]; validator != nil {
+			log.Info("Found cap: ", key)
+			errStr := validator.Validate(key, value)
+			if errStr != "" {
+				log.WithFields(log.Fields{"cap": key, "err": errStr}).Info("cap contains error")
+				errs = append(errs, errStr)
+			}
+		}
+	}
+
+	var err error
+	if len(errs) > 0 {
+		err = errors.New(strings.Join(errs, "\n"))
+	}
+
+	return c, err
+}
 
 func (c *Capabilities) GetScreenResolution() (string, error) {
 	if c.ScreenResolution == "" {
 		return "1920x1080x24", nil
 	}
-	if fullResolutionFormat.MatchString(c.ScreenResolution) {
-		return c.ScreenResolution, nil
+	if fullResolutionFormat.MatchString(c.ScreenResolution.ToPrimitive()) {
+		return c.ScreenResolution.ToPrimitive(), nil
 	}
-	if shortResolutionFormat.MatchString(c.ScreenResolution) {
+	if shortResolutionFormat.MatchString(c.ScreenResolution.ToPrimitive()) {
 		return fmt.Sprintf("%sx24", c.ScreenResolution), nil
 	}
 	return "", fmt.Errorf(

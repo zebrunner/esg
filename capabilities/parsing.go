@@ -5,7 +5,6 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -223,7 +222,7 @@ func (c *RequestCaps) GetContainerConfiguration() (*Capabilities, error) {
 
 	amCaps := RemovePrefix(c.Capabilities.AlwaysMatch, config.VendorPrefix)
 	amCaps = RemovePrefix(amCaps, "appium")
-	amConf, err := MapConfig(amCaps)
+	amConf, err := FromRequestCaps(amCaps)
 	if err != nil {
 		log.WithError(err).Warn("Failed to map config")
 		return nil, fmt.Errorf("%v: %v", validationErr, err)
@@ -239,7 +238,7 @@ func (c *RequestCaps) GetContainerConfiguration() (*Capabilities, error) {
 		caps := RemovePrefix(fmCaps, config.VendorPrefix)
 		caps = RemovePrefix(caps, "appium")
 
-		fmConf, err := MapConfig(caps)
+		fmConf, err := FromRequestCaps(caps)
 		if err != nil {
 			return nil, fmt.Errorf("%v: %v", validationErr, err)
 		}
@@ -491,23 +490,6 @@ func zipFFProfile(profilesMap map[string][]string) (*bytes.Buffer, error) {
 	}
 	zipWriter.Close()
 	return zippedBuf, nil
-}
-
-func MapConfig(m map[string]interface{}) (*Capabilities, error) {
-	jsonCaps, err := json.Marshal(m)
-	if err != nil {
-		log.WithError(err).Warn("Failed to serialize caps")
-		return nil, err
-	}
-
-	conf := Capabilities{}
-	err = json.Unmarshal(jsonCaps, &conf)
-	if err != nil {
-		log.WithError(err).Warn("Failed to deserialize caps")
-		return nil, err
-	}
-
-	return &conf, nil
 }
 
 func RemovePrefix(caps map[string]interface{}, prefix string) map[string]interface{} {
