@@ -18,7 +18,7 @@ var (
 )
 
 func formatError(value interface{}, cap string, capType string) string {
-	return fmt.Sprintf("invalid format for %s capability. Cannot parse \"%v\" into field of type  %s", cap, value, capType)
+	return fmt.Sprintf("invalid format for %s capability. Cannot parse \"%v\" into field of type %s", cap, value, capType)
 }
 
 func typeError(value interface{}, cap string, capType string) string {
@@ -117,6 +117,17 @@ func (sliceStr *sliceStringWrapper) Validate(key string, value interface{}) stri
 	errStr := ""
 	if valueStrSlice, ok := value.([]string); ok {
 		sliceStr.From(valueStrSlice)
+	} else if valueSlice, ok := value.([]interface{}); ok {
+		reqSliceStr := make([]string, len(valueSlice))
+		for _, v := range valueSlice {
+			if vStr, ok := v.(string); ok {
+				reqSliceStr = append(reqSliceStr, vStr)
+			} else {
+				errStr = typeError(v, key, "[]string")
+				break
+			}
+		}
+		sliceStr.From(reqSliceStr)
 	} else {
 		errStr = typeError(value, key, "[]string")
 	}
@@ -167,7 +178,7 @@ func (m *mapStrStrWrapper) Validate(key string, value interface{}) string {
 			if vStr, ok := v.(string); ok {
 				valueMapStr[k] = vStr
 			} else {
-				errStr = typeError(v, key, "string")
+				errStr = typeError(fmt.Sprintf("%s:%v", k, v), key, "map[string]string")
 				break
 			}
 		}
@@ -335,10 +346,8 @@ func FromRequestCaps(reqCaps map[string]interface{}) (*Capabilities, error) {
 	for key, value := range reqCaps {
 		keyLower := strings.ToLower(key)
 		if validator := mapping[keyLower]; validator != nil {
-			log.Info("Found cap: ", key)
 			errStr := validator.Validate(key, value)
 			if errStr != "" {
-				log.WithFields(log.Fields{"cap": key, "err": errStr}).Info("cap contains error")
 				errs = append(errs, errStr)
 			}
 		}
