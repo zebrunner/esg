@@ -240,10 +240,13 @@ func (c *RequestCaps) GetContainerConfiguration() (*Capabilities, error) {
 
 		fmConf, err := FromRequestCaps(caps)
 		if err != nil {
-			return nil, validationErr
+			log.WithError(err).Warn("Failed to map config")
+			return nil, err
 		}
+
 		err = mergo.Merge(&conf, fmConf)
 		if err != nil {
+			log.WithError(err).Warn("Failed to map config")
 			return nil, fmt.Errorf("%v: %v", validationErr, err)
 		}
 	}
