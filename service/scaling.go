@@ -251,7 +251,7 @@ func ScaleUp() {
 	requiredCpu := float64(totalRequiredResources.CPU) / float64(instanceTypeResources.CPU)
 	requiredMemory := float64(totalRequiredResources.Memory) / float64(instanceTypeResources.Memory)
 
-	requiredInstances := currentInstanceCount + int64(math.Ceil(math.Max(requiredCpu, requiredMemory)*(1+config.Conf.ReserveInstancesPercent)))
+	requiredInstances := int64(math.Ceil((float64(currentInstanceCount) + math.Max(requiredCpu, requiredMemory))*(1+config.Conf.ReserveInstancesPercent)))
 	setDesiredCapacity(autoscalingSvc, requiredInstances)
 }
 
