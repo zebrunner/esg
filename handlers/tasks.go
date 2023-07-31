@@ -446,12 +446,16 @@ func Clipboard(c *gin.Context) {
 
 func Devtools(c *gin.Context) {
 	sess := c.MustGet(sessionContextKey).(*sessionmap.Session)
-
+	url, _ := sess.Network.GetUrl("devtools")
+	///devtools/:session/page 
+	pathFragments := strings.Split(c.Request.URL.Path, "/")
+	log.Debug("c.Request.URL.Path:", c.Request.URL.Path)
 	director := func(req *http.Request) {
 		req.URL.Scheme = "http"
-		url, _ := sess.Network.GetUrl("devtools")
 		req.URL.Host = url.Host
 		req.Host = url.Host
+		req.URL.Path = "/" + strings.Join(pathFragments[3:], "/")
+		log.Debug("URL.Path:", req.URL.Path)
 	}
 	proxy := &httputil.ReverseProxy{Director: director}
 	proxy.ServeHTTP(c.Writer, c.Request)
