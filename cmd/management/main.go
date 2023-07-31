@@ -478,6 +478,8 @@ func main() {
 
 	RefreshTaskDefinitions()
 
+	service.InitScalingData()
+	
 	var wg sync.WaitGroup
 	wg.Add(1)
 

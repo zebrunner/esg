@@ -2,6 +2,7 @@ package service
 
 import (
 	"math"
+	"os"
 	"strconv"
 	"time"
 
@@ -28,6 +29,15 @@ type ClusterResources struct {
 	CurrentResources      Resources
 	ReservedResources     Resources
 	ProvisioningResources Resources
+}
+
+func InitScalingData() {
+	var err error
+	instanceTypeResources, err = getInstanceResources()
+	if err != nil {
+		log.WithError(err).Error("Failed to get instance resources. Stopping scaler")
+		os.Exit(1)
+	}
 }
 
 func getInstanceCount(svc *ecs.ECS) (int64, error) {
@@ -118,7 +128,7 @@ func setDesiredCapacity(autoscalingService *autoscaling.AutoScaling, newCapacity
 
 	if newCapacity > *autoScalingGroup.MaxSize {
 		log.WithFields(log.Fields{
-			"maxCapacity":    *autoScalingGroup.MaxSize,
+			"maxCapacity":     *autoScalingGroup.MaxSize,
 			"desiredCapacity": newCapacity,
 		}).Warn("ASG desired size reached limit!")
 		newCapacity = *autoScalingGroup.MaxSize
@@ -165,14 +175,6 @@ func ScaleUp() {
 		return
 	}
 
-	if instanceTypeResources == nil {
-		instanceTypeResources, err = getInstanceResources()
-		if err != nil {
-			log.WithError(err).Error("Failed to get instance resources")
-			return
-		}
-	}
-
 	currentInstanceCount, err := getInstanceCount(svc)
 	if err != nil {
 		log.WithError(err).Error("Failed to get instance count")
@@ -180,7 +182,7 @@ func ScaleUp() {
 	}
 
 	// Generate list of resources for each instance
-	instanceResources := []*Resources{}
+	instanceResources := make([]*Resources, 0, int(currentInstanceCount))
 	for i := 0; i < int(currentInstanceCount); i++ {
 		instanceResources = append(instanceResources, &Resources{
 			CPU:    instanceTypeResources.CPU,
@@ -210,20 +212,19 @@ func ScaleUp() {
 	}
 
 	// Remove resources that might be used for PROVISSIONING tasks
-	enought := false
 	requiredTaskResources := []*Resources{}
 	for _, t := range provisioningTasksResources {
-		enought = false
+		enough := false
 		for _, i := range freeInstanceResources {
 			if i.CPU >= t.CPU && i.Memory >= t.Memory {
 				i.CPU -= t.CPU
 				i.Memory -= t.Memory
-				enought = true
+				enough = true
 				break
 			}
 		}
 
-		if !enought {
+		if !enough {
 			requiredTaskResources = append(requiredTaskResources, t)
 		}
 	}
@@ -250,9 +251,8 @@ func ScaleUp() {
 	requiredCpu := float64(totalRequiredResources.CPU) / float64(instanceTypeResources.CPU)
 	requiredMemory := float64(totalRequiredResources.Memory) / float64(instanceTypeResources.Memory)
 
-	requiredInstances := currentInstanceCount + int64(math.Ceil(math.Max(requiredCpu, requiredMemory)))
-	maxInstancesWithReservation := int64(math.Ceil(float64(requiredInstances) * (1 + config.Conf.ReserveInstancesPercent)))
-	setDesiredCapacity(autoscalingSvc, maxInstancesWithReservation)
+	requiredInstances := int64(math.Ceil((float64(currentInstanceCount) + math.Max(requiredCpu, requiredMemory))*(1+config.Conf.ReserveInstancesPercent)))
+	setDesiredCapacity(autoscalingSvc, requiredInstances)
 }
 
 func ScaleDown() {
