@@ -89,7 +89,13 @@ func CreateRouter() *gin.Engine {
 		seleniumHub.GET("/clipboard/:session", handlers.Clipboard)
 		seleniumHub.POST("/clipboard/:session", handlers.Clipboard)
 
-		seleniumHub.GET("/devtools/:session", handlers.Devtools)
+		devtoolsHub := seleniumHub.Group("/devtools/:session", handlers.Devtools)
+		{
+			devtoolsHub.GET("/")
+			devtoolsHub.GET("/browser")
+			devtoolsHub.GET("/page")
+			devtoolsHub.GET("/page/:target-id")
+		}
 
 		seleniumHub.DELETE("/tasks/:task", handlers.AbortTask) // to be able to abort generic tasks by taskId
 	}
