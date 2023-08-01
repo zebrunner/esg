@@ -96,7 +96,7 @@ func (w *waitWorker) start() {
 
 			if *task.LastStatus == "STOPPED" {
 				log.Error("Task stopped: ", *task)
-				req.errorChan <- errors.New("failed to start task: " + *task.StoppedReason)
+				req.errorChan <- errors.New("task stopped with reason: " + *task.StoppedReason)
 				delete(w.requests, *task.TaskArn)
 			}
 
@@ -108,7 +108,7 @@ func (w *waitWorker) start() {
 			switch *task.HealthStatus {
 			case "UNHEALTHY":
 				log.Error("Task unhealthy: ", *task)
-				req.errorChan <- errors.New("failed to start task. HealthStatus - UNHEALTHY")
+				req.errorChan <- errors.New("task unhealthy")
 				delete(w.requests, *task.TaskArn)
 			case "HEALTHY":
 				req.responseChan <- task
