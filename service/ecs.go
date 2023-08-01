@@ -346,7 +346,7 @@ out:
 			if outputErr == nil {
 				outputErr = fmt.Errorf("error forwarding the new session request timed out waiting for a node to become available")
 			} else {
-				outputErr = fmt.Errorf("failed to run task: service startup timed out")
+				outputErr = fmt.Errorf("service startup timed out")
 			}
 			break out
 		default:
