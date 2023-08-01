@@ -118,8 +118,7 @@ func Create(c *gin.Context) {
 
 	cachedTask, err := service.StartTask(ctx, env)
 	if err != nil {
-		err = fmt.Errorf("service startup failed: %v", err)
-		l.Error(err)
+		l.Errorf("service startup failed: %v", err)
 
 		c.Error(utils.CreationErr(err)).SetType(gin.ErrorTypePublic)
 		return
@@ -166,10 +165,12 @@ func Create(c *gin.Context) {
 		if err != nil {
 			if strings.Contains(err.Error(), context.DeadlineExceeded.Error()) {
 				err = errors.New("driver startup timed out")
+			} else {
+				err = fmt.Errorf("failed to start driver: %v", err)
 			}
 			l.WithError(err).WithField("response", resp).Error("driver startup failed")
 
-			c.Error(utils.CreationErr(fmt.Errorf("failed to start driver: %v", err))).SetType(gin.ErrorTypePublic)
+			c.Error(utils.CreationErr(err)).SetType(gin.ErrorTypePublic)
 
 			err = service.StopTask(cachedTask.ID, taskmap.SessiongStartupFailure)
 			if err != nil {
