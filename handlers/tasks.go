@@ -290,7 +290,7 @@ func Vnc(wsconn *websocket.Conn) {
 	if seErr != nil {
 		task, taskErr := getTask(id)
 		if taskErr != nil {
-			l.WithError(seErr).WithError(taskErr).WithField("id", id).Error("Vnc(): can't access session")
+			l.WithError(seErr).WithField("id", id).Error("Vnc(): can't access session")
 			return
 		}
 		l = l.WithField("_taskId", id)
