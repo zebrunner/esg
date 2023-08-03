@@ -338,7 +338,6 @@ func StartTask(ctx context.Context, env *environment.ExecutionEnvironment) (*tas
 	var outputErr error
 	startTime := time.Now()
 	// retry attempt counter
-out:
 	for i := 0; true; i++ {
 		l := log.WithField("attempt", i)
 		select {
@@ -346,20 +345,20 @@ out:
 			if outputErr == nil {
 				outputErr = fmt.Errorf("error forwarding the new session request timed out waiting for a node to become available")
 			} else {
-				outputErr = fmt.Errorf("service startup timed out")
+				outputErr = env.Capabilities.GenerateError("service startup timed out", fmt.Errorf("internal eror: %s", outputErr))
 			}
-			break out
+			return nil, outputErr
 		default:
 		}
 
 		taskArn, err := RegisterTask(ctx, env)
 		if err != nil {
+			if strings.HasPrefix(err.Error(), "image not found: ") || strings.HasPrefix(err.Error(), "InvalidParameterException") { //#366 disable retries for InvalidParameterException
+				return nil, env.Capabilities.GenerateError("failed to run task", err)
+			}
+
 			outputErr = fmt.Errorf("failed to run task: %v", err)
 			l.WithError(outputErr).WithField("latency", time.Since(startTime)).Warn()
-
-			if strings.HasPrefix(err.Error(), "image not found: ") || strings.HasPrefix(err.Error(), "InvalidParameterException") { //#366 disable retries for InvalidParameterException
-				break out
-			}
 			continue
 		}
 
@@ -383,7 +382,7 @@ out:
 			l.Debug("do not wait for generic task startup.")
 			return cachedTask, nil
 		}
-
+		
 		l.Info("task starting")
 		req := taskWaiter.waitFor(ctx, taskArn)
 		select {

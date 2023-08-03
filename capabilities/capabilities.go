@@ -208,6 +208,7 @@ type Capabilities struct {
 	EnableVNC        boolWrapper
 	EnableVideo      boolWrapper
 	EnableLog        boolWrapper
+	EnableDebug      boolWrapper
 	ScreenResolution stringWrapper
 	DeviceName       stringWrapper
 	IdleTimeout      int64Wrapper
@@ -318,6 +319,7 @@ func FromRequestCaps(reqCaps map[string]interface{}) (*Capabilities, error) {
 		"enablevnc":        &c.EnableVNC,
 		"enablevideo":      &c.EnableVideo,
 		"enablelog":        &c.EnableLog,
+		"enabledebug":      &c.EnableDebug,
 		"screenresolution": &c.ScreenResolution,
 		"devicename":       &c.DeviceName,
 		"idletimeout":      &c.IdleTimeout,
@@ -386,4 +388,12 @@ func (c *Capabilities) GetVideoScreenSize() (string, error) {
 		)
 	}
 	return screenResolution, nil
+}
+
+func (c *Capabilities) GenerateError(businessError string, internalError error) error {
+	if c.EnableDebug {
+		return fmt.Errorf("%s, [debug] %s", businessError, internalError.Error())
+	} else {
+		return fmt.Errorf("%s", businessError)
+	}
 }

@@ -290,6 +290,7 @@ func processVendorCaps(caps map[string]interface{}) error {
 		"enableVNC",
 		"enableVideo",
 		"enableLog",
+		"enableDebug",
 		"idleTimeout",
 		"maxTimeout",
 		"screenResolution",

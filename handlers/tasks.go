@@ -93,8 +93,7 @@ func Create(c *gin.Context) {
 	env, err := environment.Build(user, caps)
 	if err != nil {
 		log.WithError(err).Error("Failed to build execution environment")
-
-		c.Error(utils.CreationErr(fmt.Errorf("failed to start executor: %v", err))).SetType(gin.ErrorTypePublic)
+		c.Error(utils.CreationErr(caps.GenerateError("failed to create executor", err))).SetType(gin.ErrorTypePublic)
 		return
 	}
 	env.RawCapabilities = &taskCaps
@@ -145,7 +144,7 @@ func Create(c *gin.Context) {
 		if !ok {
 			l.Error("failed to get url for `driver` service")
 
-			c.Error(utils.CreationErr(fmt.Errorf("failed to start driver: %v", err))).SetType(gin.ErrorTypePublic)
+			c.Error(utils.CreationErr(caps.GenerateError("failed to start driver", err))).SetType(gin.ErrorTypePublic)
 			return
 		}
 
@@ -153,7 +152,7 @@ func Create(c *gin.Context) {
 		if err != nil {
 			l.WithError(err).Error("Failed to marshal request")
 
-			c.Error(utils.UnknownErr(fmt.Errorf("failed to marshal capabilities: %v", err))).SetType(gin.ErrorTypePublic)
+			c.Error(utils.UnknownErr(caps.GenerateError("failed to marshal capabilities", err))).SetType(gin.ErrorTypePublic)
 			return
 		}
 
@@ -164,9 +163,9 @@ func Create(c *gin.Context) {
 		resp, err = selenium.StartSession(driverCtx, c.Request.URL, c.Request.Header, requestBody)
 		if err != nil {
 			if strings.Contains(err.Error(), context.DeadlineExceeded.Error()) {
-				err = errors.New("driver startup timed out")
+				err = caps.GenerateError("driver startup timed out", err)
 			} else {
-				err = fmt.Errorf("failed to start driver: %v", err)
+				err = caps.GenerateError("failed to start driver", err)
 			}
 			l.WithError(err).WithField("response", resp).Error("driver startup failed")
 
@@ -186,7 +185,7 @@ func Create(c *gin.Context) {
 			}
 			l.WithError(err).Error("Failed to get sessionId")
 
-			c.Error(utils.CreationErr(fmt.Errorf("failed to create driver: %v", err))).SetType(gin.ErrorTypePublic)
+			c.Error(utils.CreationErr(caps.GenerateError("failed to create driver", err))).SetType(gin.ErrorTypePublic)
 
 			err = service.StopTask(cachedTask.ID, taskmap.SessiongStartupFailure)
 			if err != nil {
@@ -199,7 +198,7 @@ func Create(c *gin.Context) {
 		if err != nil {
 			l.WithError(err).Error("Failed to cache driver session")
 
-			c.Error(utils.UnknownErr(fmt.Errorf("failed to cache driver session: %v", err))).SetType(gin.ErrorTypePublic)
+			c.Error(utils.UnknownErr(caps.GenerateError("failed to cache driver session", err))).SetType(gin.ErrorTypePublic)
 
 			err = service.StopTask(cachedTask.ID, taskmap.SessiongStartupFailure)
 			if err != nil {
