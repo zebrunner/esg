@@ -186,7 +186,7 @@ func Create(c *gin.Context) {
 			}
 			l.WithError(err).Error("Failed to get sessionId")
 
-			c.Error(utils.CreationErr(fmt.Errorf("failed to create driver: %v", err))).SetType(gin.ErrorTypePublic)
+			c.Error(utils.CreationErr(fmt.Errorf("failed to start driver: %v", err))).SetType(gin.ErrorTypePublic)
 
 			err = service.StopTask(cachedTask.ID, taskmap.SessiongStartupFailure)
 			if err != nil {
