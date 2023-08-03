@@ -34,22 +34,11 @@ type ClusterResources struct {
 func InitScalingData() {
 	var err error
 	instanceTypeResources, err = getInstanceResources()
+	log.Debug("Res:", *instanceTypeResources)
 	if err != nil {
 		log.WithError(err).Error("Failed to get instance resources. Stopping scaler")
 		os.Exit(1)
 	}
-}
-
-func getInstanceCount(svc *ecs.ECS) (int64, error) {
-	listInstancesInput := &ecs.ListContainerInstancesInput{
-		Cluster: &config.Conf.AwsCluster,
-	}
-	listInstancesOutput, err := utils.RetryThrottling(svc.ListContainerInstances)(listInstancesInput)
-	if err != nil {
-		return 0, err
-	}
-	instanceCount := len(listInstancesOutput.ContainerInstanceArns)
-	return int64(instanceCount), nil
 }
 
 func getInstanceResources() (*Resources, error) {
@@ -85,10 +74,12 @@ func getInstanceResources() (*Resources, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	instanceInfo := instanceTypesResult.InstanceTypes[0]
 
-	return &Resources{CPU: *instanceInfo.VCpuInfo.DefaultVCpus * 1024, Memory: *instanceInfo.MemoryInfo.SizeInMiB}, nil
+	executableMemoryPercent := 0.967529296875
+	registeredMemoryToUse := int64(float64(*instanceInfo.MemoryInfo.SizeInMiB) * executableMemoryPercent)
+
+	return &Resources{CPU: *instanceInfo.VCpuInfo.DefaultVCpus * 1024, Memory: registeredMemoryToUse}, nil
 }
 
 func getTasksResources(tasks []*ecs.Task, status string) []*Resources {
@@ -107,51 +98,17 @@ func getTasksResources(tasks []*ecs.Task, status string) []*Resources {
 	return resources
 }
 
-func setDesiredCapacity(autoscalingService *autoscaling.AutoScaling, newCapacity int64) {
+func describeASG(autoscalingService *autoscaling.AutoScaling) (*autoscaling.Group, error) {
 	describeAutoScalingGroupsInput := &autoscaling.DescribeAutoScalingGroupsInput{
 		AutoScalingGroupNames: []*string{&config.Conf.AwsAutoScalingGroup},
 	}
 	describeAutoScalingGroupsOutput, err := utils.RetryThrottling(autoscalingService.DescribeAutoScalingGroups)(describeAutoScalingGroupsInput)
 	if err != nil {
 		log.WithError(err).Error("Failed to set desired capacity. Can't describe auto scaling group.")
-		return
+		return nil, err
 	}
 	autoScalingGroup := describeAutoScalingGroupsOutput.AutoScalingGroups[0]
-	currentCapacity := *autoScalingGroup.DesiredCapacity
-	if newCapacity < currentCapacity {
-		log.WithFields(log.Fields{
-			"currentCapacity": currentCapacity,
-			"desiredCapacity": newCapacity,
-		}).Warn("Scale down not allowed")
-		return
-	}
-
-	if newCapacity > *autoScalingGroup.MaxSize {
-		log.WithFields(log.Fields{
-			"maxCapacity":     *autoScalingGroup.MaxSize,
-			"desiredCapacity": newCapacity,
-		}).Warn("ASG desired size reached limit!")
-		newCapacity = *autoScalingGroup.MaxSize
-	}
-
-	if newCapacity == currentCapacity {
-		// do nothing
-		return
-	}
-
-	updateGroupInput := &autoscaling.UpdateAutoScalingGroupInput{
-		AutoScalingGroupName: autoScalingGroup.AutoScalingGroupName,
-		DesiredCapacity:      &newCapacity,
-	}
-	_, err = utils.RetryThrottling(autoscalingService.UpdateAutoScalingGroup)(updateGroupInput)
-	if err != nil {
-		log.WithError(err).Error("Failed to update auto scaling group")
-		return
-	}
-	log.WithFields(log.Fields{
-		"oldCapacity": currentCapacity,
-		"newCapacity": newCapacity,
-	}).Info("Capacity updated")
+	return autoScalingGroup, nil
 }
 
 func ScaleUp() {
@@ -169,27 +126,29 @@ func ScaleUp() {
 	}
 
 	provisioningTasksResources := getTasksResources(tasks, "PROVISIONING")
-	runningTasksResources := getTasksResources(tasks, "RUNNING")
 	// There is no task in provisioning state, no need to scale up
 	if len(provisioningTasksResources) == 0 {
 		return
 	}
 
-	currentInstanceCount, err := getInstanceCount(svc)
+	asg, err := describeASG(autoscalingSvc)
 	if err != nil {
-		log.WithError(err).Error("Failed to get instance count")
+		log.WithError(err).Error("Failed to describe autoscaling group")
 		return
 	}
+	currentCapacity := *asg.DesiredCapacity
+	log.Debug("Current capacity:", currentCapacity)
 
 	// Generate list of resources for each instance
-	instanceResources := make([]*Resources, 0, int(currentInstanceCount))
-	for i := 0; i < int(currentInstanceCount); i++ {
+	instanceResources := make([]*Resources, 0, int(currentCapacity))
+	for i := 0; i < int(currentCapacity); i++ {
 		instanceResources = append(instanceResources, &Resources{
 			CPU:    instanceTypeResources.CPU,
 			Memory: instanceTypeResources.Memory,
 		})
 	}
 
+	runningTasksResources := getTasksResources(tasks, "RUNNING")
 	// Remove resources that already are using by RUNNING tasks
 	for _, t := range runningTasksResources {
 		for _, i := range instanceResources {
@@ -251,8 +210,39 @@ func ScaleUp() {
 	requiredCpu := float64(totalRequiredResources.CPU) / float64(instanceTypeResources.CPU)
 	requiredMemory := float64(totalRequiredResources.Memory) / float64(instanceTypeResources.Memory)
 
-	requiredInstances := int64(math.Ceil((float64(currentInstanceCount) + math.Max(requiredCpu, requiredMemory))*(1+config.Conf.ReserveInstancesPercent)))
-	setDesiredCapacity(autoscalingSvc, requiredInstances)
+	requiredInstances := float64(currentCapacity) + math.Max(requiredCpu, requiredMemory)
+	desiredCapacity := int64(math.Ceil(requiredInstances * (1 + config.Conf.ReserveInstancesPercent)))
+
+	log.Debug("requiredCpu:", requiredCpu, " requiredMemory:", requiredMemory, " requiredInstances:", requiredInstances, " withReservation:", desiredCapacity)
+
+	if desiredCapacity > *asg.MaxSize {
+		log.WithFields(log.Fields{
+			"maxCapacity":     *asg.MaxSize,
+			"desiredCapacity": desiredCapacity,
+		}).Warn("ASG desired size reached limit!")
+		desiredCapacity = *asg.MaxSize
+	}
+
+	if desiredCapacity == currentCapacity {
+		// do nothing
+		return
+	}
+
+	updateGroupInput := &autoscaling.UpdateAutoScalingGroupInput{
+		AutoScalingGroupName: asg.AutoScalingGroupName,
+		DesiredCapacity:      &desiredCapacity,
+	}
+
+	_, err = utils.RetryThrottling(autoscalingSvc.UpdateAutoScalingGroup)(updateGroupInput)
+	if err != nil {
+		log.WithError(err).Error("Failed to update auto scaling group")
+		return
+	}
+
+	log.WithFields(log.Fields{
+		"oldCapacity": currentCapacity,
+		"newCapacity": desiredCapacity,
+	}).Info("Capacity updated")
 }
 
 func ScaleDown() {
