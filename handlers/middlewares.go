@@ -109,9 +109,10 @@ func SeleniumError(c *gin.Context) {
 	}
 
 	l.WithFields(log.Fields{
-		"status":  seErr.ResponseStatus,
-		"error":   seErr.Name,
-		"message": seErr.Err,
+		"status":       seErr.ResponseStatus,
+		"error":        seErr.Name,
+		"message":      seErr.Err,
+		"request path": c.Request.URL.Path,
 	}).Warn("Error sent to selenium")
 
 	seErr.SendEncodedResponse(c)
