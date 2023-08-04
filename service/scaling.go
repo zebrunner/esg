@@ -1,6 +1,7 @@
 package service
 
 import (
+	"database/sql"
 	"math"
 	"os"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
+	"github.com/zebrunner/esg/db"
 	"github.com/zebrunner/esg/utils"
 )
 
@@ -23,12 +25,6 @@ var (
 type Resources struct {
 	CPU    int64
 	Memory int64
-}
-
-type ClusterResources struct {
-	CurrentResources      Resources
-	ReservedResources     Resources
-	ProvisioningResources Resources
 }
 
 func InitScalingData() {
@@ -66,6 +62,19 @@ func getInstanceResources() (*Resources, error) {
 	}
 
 	instanceType := result.LaunchConfigurations[0].InstanceType
+
+	instance, err := db.GetInstance(*instanceType)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
+
+	//check actual registered resource
+	go checkForResourcesChange(session, *instanceType)
+
+	if instance != nil {
+		return &Resources{CPU: instance.Cpu, Memory: instance.Memory}, nil
+	}
+
 	ec2Svc := ec2.New(session, &aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
 	describeInstanceTypeInput := ec2.DescribeInstanceTypesInput{
 		InstanceTypes: []*string{instanceType},
@@ -76,10 +85,83 @@ func getInstanceResources() (*Resources, error) {
 	}
 	instanceInfo := instanceTypesResult.InstanceTypes[0]
 
-	executableMemoryPercent := 0.967529296875
+	//considering 5% of total memory as an instance system needs
+	executableMemoryPercent := 0.95
 	registeredMemoryToUse := int64(float64(*instanceInfo.MemoryInfo.SizeInMiB) * executableMemoryPercent)
 
 	return &Resources{CPU: *instanceInfo.VCpuInfo.DefaultVCpus * 1024, Memory: registeredMemoryToUse}, nil
+}
+
+//works only if one instance type used among all build
+func checkForResourcesChange(session *awsSession.Session, instanceType string) {
+	//perform check every periodBeforeCheck time
+	periodBeforeCheck := time.Hour * 6
+	//if failed to get registerd resources, trying to get it after periodAfterFailCheck time
+	//the most common reason to fail = 0 instances is up
+	periodAfterFailCheck := time.Minute * 1
+
+	svc := ecs.New(session)
+	//Check if any changes happend
+	for {
+		listInstancesInput := &ecs.ListContainerInstancesInput{
+			Cluster: &config.Conf.AwsCluster,
+		}
+
+		listInstancesOutput, err := utils.RetryThrottling(svc.ListContainerInstances)(listInstancesInput)
+
+		if err != nil || len(listInstancesOutput.ContainerInstanceArns) == 0 {
+			time.Sleep(periodAfterFailCheck)
+			continue
+		}
+
+		ciArr, err := DescribeContainerInstances([]*string{listInstancesOutput.ContainerInstanceArns[0]}, svc)
+		if err != nil || len(ciArr) == 0 {
+			time.Sleep(periodAfterFailCheck)
+			continue
+		}
+
+		currentResources := &Resources{}
+		ci := ciArr[0]
+		for _, resource := range ci.RegisteredResources {
+			if *resource.Name == "CPU" {
+				currentResources.CPU = *resource.IntegerValue
+			} else if *resource.Name == "MEMORY" {
+				currentResources.CPU = *resource.IntegerValue
+			}
+		}
+
+		if currentResources.CPU == 0 || currentResources.Memory == 0 {
+			time.Sleep(periodAfterFailCheck)
+			continue
+		}
+
+		instance, err := db.GetInstance(instanceType)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				instance := &db.Instance{
+					Type:   instanceType,
+					Cpu:    currentResources.CPU,
+					Memory: currentResources.Memory,
+				}
+				db.CreateInstance(instance)
+
+				instanceTypeResources = currentResources
+			} else {
+				time.Sleep(periodAfterFailCheck)
+				continue
+			}
+		} else {
+			if instance.Cpu != currentResources.CPU || instance.Memory != currentResources.Memory {
+				instance.Cpu = currentResources.CPU
+				instance.Memory = currentResources.Memory
+				db.RefreshInstance(instance)
+
+				instanceTypeResources = currentResources
+			}
+		}
+
+		time.Sleep(periodBeforeCheck)
+	}
 }
 
 func getTasksResources(tasks []*ecs.Task, status string) []*Resources {
@@ -139,12 +221,16 @@ func ScaleUp() {
 	currentCapacity := *asg.DesiredCapacity
 	log.Debug("Current capacity:", currentCapacity)
 
+	//copying values to variables, as instanceTypeResources could be changed in runtime
+	instanceCpu := instanceTypeResources.CPU
+	instanceMemory := instanceTypeResources.Memory
+
 	// Generate list of resources for each instance
 	instanceResources := make([]*Resources, 0, int(currentCapacity))
 	for i := 0; i < int(currentCapacity); i++ {
 		instanceResources = append(instanceResources, &Resources{
-			CPU:    instanceTypeResources.CPU,
-			Memory: instanceTypeResources.Memory,
+			CPU:    instanceCpu,
+			Memory: instanceMemory,
 		})
 	}
 
@@ -197,8 +283,8 @@ func ScaleUp() {
 		"Memory": totalRequiredResources.Memory,
 	}).Debug("Total required resources")
 
-	requiredCpu := float64(totalRequiredResources.CPU) / float64(instanceTypeResources.CPU)
-	requiredMemory := float64(totalRequiredResources.Memory) / float64(instanceTypeResources.Memory)
+	requiredCpu := float64(totalRequiredResources.CPU) / float64(instanceCpu)
+	requiredMemory := float64(totalRequiredResources.Memory) / float64(instanceMemory)
 
 	requiredInstances := float64(currentCapacity) + math.Max(requiredCpu, requiredMemory)
 	desiredCapacity := int64(math.Ceil(requiredInstances * (1 + config.Conf.ReserveInstancesPercent)))
