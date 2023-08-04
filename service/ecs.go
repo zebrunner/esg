@@ -345,7 +345,7 @@ func StartTask(ctx context.Context, env *environment.ExecutionEnvironment) (*tas
 			if outputErr == nil {
 				outputErr = fmt.Errorf("error forwarding the new session request timed out waiting for a node to become available")
 			} else {
-				outputErr = env.Capabilities.GenerateError("service startup timed out", fmt.Errorf("internal eror: %s", outputErr))
+				outputErr = env.Capabilities.GenerateError("service startup timed out", fmt.Errorf("internal error: %s", outputErr))
 			}
 			return nil, outputErr
 		default:
@@ -382,7 +382,7 @@ func StartTask(ctx context.Context, env *environment.ExecutionEnvironment) (*tas
 			l.Debug("do not wait for generic task startup.")
 			return cachedTask, nil
 		}
-		
+
 		l.Info("task starting")
 		req := taskWaiter.waitFor(ctx, taskArn)
 		select {
