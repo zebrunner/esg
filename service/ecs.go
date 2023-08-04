@@ -343,13 +343,16 @@ out:
 		l := log.WithField("attempt", i)
 		select {
 		case <-ctx.Done():
-			outputErr = fmt.Errorf("failed to run task: Service startup timed out")
+			if outputErr == nil {
+				outputErr = fmt.Errorf("error forwarding the new session request timed out waiting for a node to become available")
+			} else {
+				outputErr = fmt.Errorf("service startup timed out")
+			}
 			break out
 		default:
 		}
 
 		taskArn, err := RegisterTask(ctx, env)
-
 		if err != nil {
 			outputErr = fmt.Errorf("failed to run task: %v", err)
 			l.WithError(outputErr).WithField("latency", time.Since(startTime)).Warn()
@@ -363,7 +366,7 @@ out:
 		// caching task as soon as possible
 		cachedTask, err := taskmap.CreateEntity(strings.Split(taskArn, "/")[2], env)
 		if err != nil {
-			outputErr = fmt.Errorf("task not cached!: %v", err)
+			outputErr = fmt.Errorf("failed to cache task: %v", err)
 			l.WithError(outputErr).Warn()
 			err := StopTask(cachedTask.ID, taskmap.TaskStartupFailure)
 			if err != nil {
@@ -389,7 +392,7 @@ out:
 			// https://go.dev/tour/concurrency/4#:~:text=Note%3A%20Only%20the%20sender%20should,to%20terminate%20a%20range%20loop.
 			l.WithField("latency", time.Since(startTime)).Warn("failed to wait until task is running. context deadline")
 		case err := <-req.errorChan:
-			outputErr = fmt.Errorf("failed to wait until Task is running and healthy!: %v", err)
+			outputErr = fmt.Errorf("failed to run task: %v", err)
 			l.WithField("latency", time.Since(startTime)).WithError(outputErr).Warn()
 		case task := <-req.responseChan:
 			// timediff between HealthAt (current time) and task.startedAt should be cut during resources tracking to bill only actual (net) time
@@ -406,7 +409,7 @@ out:
 				cachedTask.Status = taskmap.TaskActive
 				err = taskmap.Write(cachedTask.ID, cachedTask, 0)
 				if err != nil {
-					l.WithError(fmt.Errorf("task not recached after network set!: %v", err))
+					l.WithError(fmt.Errorf("failed to recache task: %v", err))
 				}
 				return cachedTask, nil
 			}
