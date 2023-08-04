@@ -63,17 +63,20 @@ func getInstanceResources() (*Resources, error) {
 
 	instanceType := result.LaunchConfigurations[0].InstanceType
 
-	instance, err := db.GetInstance(*instanceType)
-	if err != nil && err != sql.ErrNoRows {
-		return nil, err
-	}
-
 	//check actual registered resource
 	go checkForResourcesChange(session, *instanceType)
 
+	instance, err := db.GetInstance(*instanceType)
+	if err != nil && err != sql.ErrNoRows {
+		log.Info("err on getting instance from db: ", err)
+		return nil, err
+	}
+
 	if instance != nil {
+		log.Info("Found instance in db:", *instance)
 		return &Resources{CPU: instance.Cpu, Memory: instance.Memory}, nil
 	}
+	log.Info("Didn't found instance in db")
 
 	ec2Svc := ec2.New(session, &aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
 	describeInstanceTypeInput := ec2.DescribeInstanceTypesInput{
@@ -85,7 +88,7 @@ func getInstanceResources() (*Resources, error) {
 	}
 	instanceInfo := instanceTypesResult.InstanceTypes[0]
 
-	//considering 5% of total memory as an instance system needs
+	//considering that 5% of total memory is used by an instance system needs
 	executableMemoryPercent := 0.95
 	registeredMemoryToUse := int64(float64(*instanceInfo.MemoryInfo.SizeInMiB) * executableMemoryPercent)
 
@@ -110,12 +113,14 @@ func checkForResourcesChange(session *awsSession.Session, instanceType string) {
 		listInstancesOutput, err := utils.RetryThrottling(svc.ListContainerInstances)(listInstancesInput)
 
 		if err != nil || len(listInstancesOutput.ContainerInstanceArns) == 0 {
+			log.WithError(err).Info("no ContainerInstance were found")
 			time.Sleep(periodAfterFailCheck)
 			continue
 		}
 
 		ciArr, err := DescribeContainerInstances([]*string{listInstancesOutput.ContainerInstanceArns[0]}, svc)
-		if err != nil || len(ciArr) == 0 {
+		if err != nil {
+			log.WithError(err).Info("Error on describing ci")
 			time.Sleep(periodAfterFailCheck)
 			continue
 		}
@@ -126,9 +131,10 @@ func checkForResourcesChange(session *awsSession.Session, instanceType string) {
 			if *resource.Name == "CPU" {
 				currentResources.CPU = *resource.IntegerValue
 			} else if *resource.Name == "MEMORY" {
-				currentResources.CPU = *resource.IntegerValue
+				currentResources.Memory = *resource.IntegerValue
 			}
 		}
+		log.Info("Registered resources: ", *currentResources)
 
 		if currentResources.CPU == 0 || currentResources.Memory == 0 {
 			time.Sleep(periodAfterFailCheck)
@@ -144,19 +150,23 @@ func checkForResourcesChange(session *awsSession.Session, instanceType string) {
 					Memory: currentResources.Memory,
 				}
 				db.CreateInstance(instance)
-
+				log.Info("Created instance record in db: ", *instance)
 				instanceTypeResources = currentResources
 			} else {
+				log.Info("err on getting instance from db: ", err)
 				time.Sleep(periodAfterFailCheck)
 				continue
 			}
 		} else {
 			if instance.Cpu != currentResources.CPU || instance.Memory != currentResources.Memory {
+				log.WithFields(log.Fields{"instance: ": *instance, "current resources: ": *currentResources}).Info("instance record differs from registered resources", err)
 				instance.Cpu = currentResources.CPU
 				instance.Memory = currentResources.Memory
 				db.RefreshInstance(instance)
-
+				log.Info("Updated instance record in db: ", *instance)
 				instanceTypeResources = currentResources
+			} else {
+				log.Info("No diff in resources were found ", *instance)
 			}
 		}
 

@@ -2,5 +2,5 @@ CREATE TABLE IF NOT EXISTS instances(
     type VARCHAR PRIMARY KEY,
     cpu INTEGER NOT NULL,
     memory INTEGER NOT NULL,
-    updated_at TIMESTAMP,
+    updated_at TIMESTAMP
 );
