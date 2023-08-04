@@ -38,4 +38,4 @@ If something went wrong on creation/execution/finish phase, client will recieve 
     1. `invalid username or password` - can't find/invalid credentials
 
 
-* name: `unknown error`, status: `500`. Contains ESG internal erros
+* name: `unknown error`, status: `500`. Contains ESG internal errors
