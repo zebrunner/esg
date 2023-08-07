@@ -98,10 +98,10 @@ func getInstanceResources() (*Resources, error) {
 //works only if one instance type used among all build
 func checkForResourcesChange(session *awsSession.Session, instanceType string) {
 	//perform check every periodBeforeCheck time
-	periodBeforeCheck := time.Hour * 6
+	periodBeforeCheck := time.Hour * 12
 	//if failed to get registerd resources, trying to get it after periodAfterFailCheck time
 	//the most common reason to fail = 0 instances is up
-	periodAfterFailCheck := time.Minute * 1
+	periodAfterFailCheck := time.Minute * 5
 
 	svc := ecs.New(session)
 	//Check if any changes happend
