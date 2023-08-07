@@ -128,7 +128,7 @@ func RegisterTask(ctx context.Context, env *environment.ExecutionEnvironment) (t
 	var outputErr error
 	for i := 0; i < 25; i++ {
 
-		l = l.WithField("retry", i)
+		l = l.WithField("taskRegisterAttempt", i)
 
 		select {
 		case <-ctx.Done():
@@ -317,7 +317,7 @@ func getTaskIp(ctx context.Context, task *ecs.Task) (string, error) {
 	return ipAddress, nil
 }
 
-func setEnvironmentNetwork(ctx context.Context, env *environment.ExecutionEnvironment, task *ecs.Task) error {
+func SetEnvironmentNetwork(ctx context.Context, env *environment.ExecutionEnvironment, task *ecs.Task) error {
 	for _, endpoint := range env.Network.Endpoints {
 		hostPort, ok := searchHostPort(task, endpoint.ContainerPort)
 		if !ok {
@@ -334,13 +334,13 @@ func setEnvironmentNetwork(ctx context.Context, env *environment.ExecutionEnviro
 	return nil
 }
 
-func StartTask(ctx context.Context, env *environment.ExecutionEnvironment) (*taskmap.Task, error) {
+func StartTask(ctx context.Context, env *environment.ExecutionEnvironment) (*taskmap.Task, *ecs.Task, error) {
 	var outputErr error
 	startTime := time.Now()
 	// retry attempt counter
 out:
 	for i := 0; true; i++ {
-		l := log.WithField("attempt", i)
+		l := log.WithField("taskStartAttempt", i)
 		select {
 		case <-ctx.Done():
 			if outputErr == nil {
@@ -363,8 +363,37 @@ out:
 			continue
 		}
 
+		taskId := strings.Split(taskArn, "/")[2]
+		l = l.WithField("_taskId", taskId)
+
+		//not waiting for generic task
+		if strings.Contains(env.TaskDefinitionFamily, "generic") {
+			cachedTask := &taskmap.Task{
+				ID:           taskId,
+				Capabilities: env.Capabilities,
+				Status:       taskmap.TaskGeneric, // TODO: change status to active when CloseSession() for generic tasks will be called
+				Workspace:    env.Workspace,
+				HealthAt:     time.Now(), //TODO: remove HealthAt as only healthcheck integrated into the generic as well
+				Network:      *env.Network,
+			}
+
+			err := taskmap.Write(cachedTask.ID, cachedTask, 0)
+			if err != nil {
+				outputErr = fmt.Errorf("failed to cache task: %v", err)
+				l.WithError(outputErr).Warn()
+				err := StopTask(cachedTask.ID, taskmap.TaskStartupFailure)
+				if err != nil {
+					l.WithError(err).Warn("Failed to stop task")
+				}
+				continue
+			}
+
+			l.Debug("do not wait for generic task startup.")
+			return cachedTask, nil, nil
+		}
+
 		// caching task as soon as possible
-		cachedTask, err := taskmap.CreateEntity(strings.Split(taskArn, "/")[2], env)
+		cachedTask, err := taskmap.CreateEntity(taskId, env)
 		if err != nil {
 			outputErr = fmt.Errorf("failed to cache task: %v", err)
 			l.WithError(outputErr).Warn()
@@ -373,15 +402,6 @@ out:
 				l.WithError(err).Warn("Failed to stop task")
 			}
 			continue
-		}
-		l = l.WithField("_taskId", cachedTask.ID)
-
-		if strings.Contains(env.TaskDefinitionFamily, "generic") {
-			//TODO: remove HealthAt as only healthcheck integrated into the generic as well
-			cachedTask.HealthAt = time.Now()
-			taskmap.Write(cachedTask.ID, cachedTask, 0)
-			l.Debug("do not wait for generic task startup.")
-			return cachedTask, nil
 		}
 
 		l.Info("task starting")
@@ -398,21 +418,8 @@ out:
 			// timediff between HealthAt (current time) and task.startedAt should be cut during resources tracking to bill only actual (net) time
 			cachedTask.HealthAt = time.Now()
 			taskmap.Write(cachedTask.ID, cachedTask, 0)
-			l.Info("healthcheck latency: ", time.Since(startTime))
-
-			err = setEnvironmentNetwork(ctx, env, task)
-			l.Debug("setEnvironmentNetwork latency: ", time.Since(startTime))
-			if err != nil {
-				outputErr = fmt.Errorf("failed to get network info: %v", err)
-				l.WithField("latency", time.Since(startTime)).WithError(outputErr).Warn()
-			} else {
-				cachedTask.Status = taskmap.TaskActive
-				err = taskmap.Write(cachedTask.ID, cachedTask, 0)
-				if err != nil {
-					l.WithError(fmt.Errorf("failed to recache task: %v", err))
-				}
-				return cachedTask, nil
-			}
+			l.WithField("latency", time.Since(startTime)).Info("task started")
+			return cachedTask, task, nil
 		}
 		// will be called only for unsuccess task startup
 		// as on success startup we return from func in switch select
@@ -422,7 +429,7 @@ out:
 		}
 	}
 
-	return nil, outputErr
+	return nil, nil, outputErr
 }
 
 func GeneratePreSignedURL(key string) (string, error) {

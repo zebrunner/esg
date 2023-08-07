@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"net/url"
 	"path"
 	"strings"
 	"time"
@@ -116,101 +117,129 @@ func Create(c *gin.Context) {
 		}
 	}
 
-	cachedTask, err := service.StartTask(ctx, env)
-	if err != nil {
-		l.Errorf("service startup failed: %v", err)
-
-		c.Error(utils.CreationErr(err)).SetType(gin.ErrorTypePublic)
-		return
-	}
-
-	l = l.WithField("_taskId", cachedTask.ID)
-	l.Info("task started")
-	var resp map[string]interface{}
-	if strings.Contains(env.TaskDefinitionFamily, "generic") || strings.Contains(env.TaskDefinitionFamily, "cypress") {
-		// TODO: delete status update when CloseSession() for generic tasks will be called
-		cachedTask.Status = taskmap.TaskGeneric
-		cachedTask.Network = *env.Network
-		err := taskmap.Write(cachedTask.ID, cachedTask, 0)
-		if err != nil {
-			l.WithError(err).Error("Failed to update generic's status")
+	for i := 0; true; i++ {
+		l := l.WithField("serviceStartAttempt", i)
+		select {
+		case <-ctx.Done():
+			c.Error(utils.CreationErr(fmt.Errorf("service startup timed out"))).SetType(gin.ErrorTypePublic)
+			return
+		default:
 		}
-		data := "{\"taskId\": \"" + cachedTask.ID + "\"}"
-		json.Unmarshal([]byte(data), &resp)
-		l.WithFields(log.Fields{"resp": resp}).Debug("Response")
-	} else {
-		driverCtx, driverCtxCancel := context.WithTimeout(context.Background(), config.Conf.DriverStartupTimeout)
-		defer driverCtxCancel()
+
+		cachedTask, task, err := service.StartTask(ctx, env)
+		//return error on task startup failure
+		if err != nil {
+			l.Errorf("service startup failed: %v", err)
+			c.Error(utils.CreationErr(err)).SetType(gin.ErrorTypePublic)
+			return
+		}
+
+		l = l.WithField("_taskId", cachedTask.ID)
+
+		// return response for generic task as soon as possible.
+		if strings.Contains(env.TaskDefinitionFamily, "generic") {
+			resp := make(map[string]interface{}, 0)
+			resp["taskId"] = cachedTask.ID
+			l.WithFields(log.Fields{"resp": resp}).Debug("Response")
+			c.JSON(http.StatusOK, resp)
+			return
+		}
+
+		setNetworkStartTime := time.Now()
+		err = service.SetEnvironmentNetwork(ctx, env, task)
+		if err != nil {
+			l.WithField("latency", time.Since(setNetworkStartTime)).WithError(err).Warn("failed to set network info")
+			err = service.StopTask(cachedTask.ID, taskmap.SessiongStartupFailure)
+			if err != nil {
+				l.WithError(err).Warn("Failed to stop task")
+			}
+			continue
+		}
+		l.WithField("latency", time.Since(setNetworkStartTime)).Debug("network info set")
+
+		// return response for cypress task after network env is set
+		if strings.Contains(env.TaskDefinitionFamily, "cypress") {
+			resp := make(map[string]interface{}, 0)
+			resp["taskId"] = cachedTask.ID
+			cachedTask.Status = taskmap.TaskGeneric
+			err = taskmap.Write(cachedTask.ID, cachedTask, 0)
+			if err != nil {
+				l.WithError(fmt.Errorf("failed to recache task: %v", err))
+			}
+			l.WithFields(log.Fields{"resp": resp}).Debug("Response")
+			c.JSON(http.StatusOK, resp)
+			return
+		}
+
+		// mark other tasks (except cypress and generic) as Active
+		cachedTask.Status = taskmap.TaskActive
+		err = taskmap.Write(cachedTask.ID, cachedTask, 0)
+		if err != nil {
+			l.WithError(fmt.Errorf("failed to recache task: %v", err))
+		}
+
 		u, ok := env.Network.GetUrl("driver")
 		if !ok {
 			l.Error("failed to get url for `driver` service")
-
-			c.Error(utils.CreationErr(fmt.Errorf("failed to start driver: %v", err))).SetType(gin.ErrorTypePublic)
-			return
+			err = service.StopTask(cachedTask.ID, taskmap.SessiongStartupFailure)
+			if err != nil {
+				l.WithError(err).Warn("Failed to stop task")
+			}
+			continue
 		}
 
 		requestBody, err := json.Marshal(env.RawCapabilities)
 		if err != nil {
 			l.WithError(err).Error("Failed to marshal request")
-
-			c.Error(utils.UnknownErr(fmt.Errorf("failed to marshal capabilities: %v", err))).SetType(gin.ErrorTypePublic)
-			return
-		}
-
-		c.Request.URL.Host, c.Request.URL.Path = u.Host, path.Join(u.Path, c.Request.URL.Path)
-		c.Request.URL.Scheme = "http"
-		l.WithField("serviceUrl", u).Debug("driver starting")
-
-		resp, err = selenium.StartSession(driverCtx, c.Request.URL, c.Request.Header, requestBody)
-		if err != nil {
-			if strings.Contains(err.Error(), context.DeadlineExceeded.Error()) {
-				err = errors.New("driver startup timed out")
-			} else {
-				err = fmt.Errorf("failed to start driver: %v", err)
-			}
-			l.WithError(err).WithField("response", resp).Error("driver startup failed")
-
-			c.Error(utils.CreationErr(err)).SetType(gin.ErrorTypePublic)
-
 			err = service.StopTask(cachedTask.ID, taskmap.SessiongStartupFailure)
 			if err != nil {
 				l.WithError(err).Warn("Failed to stop task")
 			}
-			return
+			continue
+		}
+	
+		reqUrl := &url.URL{}
+		reqUrl.Host, reqUrl.Path = u.Host, path.Join(u.Path, c.Request.URL.Path)
+		reqUrl.Scheme = "http"
+		l.WithField("serviceUrl", reqUrl).Debug("driver starting")
+		driverResp, err := selenium.StartSession(ctx, reqUrl, c.Request.Header, requestBody)
+		if err != nil {
+			l.WithError(err).WithField("response", driverResp).Error("driver startup failure")
+			err = service.StopTask(cachedTask.ID, taskmap.SessiongStartupFailure)
+			if err != nil {
+				l.WithError(err).Warn("Failed to stop task")
+			}
+			continue
 		}
 
-		sessionId, err := getSessionId(resp)
+		sessionId, err := getSessionId(driverResp)
 		if sessionId == "" {
 			if err == nil {
 				err = errors.New("session id in driver response is empty")
 			}
 			l.WithError(err).Error("Failed to get sessionId")
-
-			c.Error(utils.CreationErr(fmt.Errorf("failed to create driver: %v", err))).SetType(gin.ErrorTypePublic)
-
 			err = service.StopTask(cachedTask.ID, taskmap.SessiongStartupFailure)
 			if err != nil {
 				l.WithError(err).Warn("Failed to stop task")
 			}
-			return
+			continue
 		}
 
 		cachedSession, err := sessionmap.CreateEntity(sessionId, env, cachedTask)
 		if err != nil {
 			l.WithError(err).Error("Failed to cache driver session")
 
-			c.Error(utils.UnknownErr(fmt.Errorf("failed to cache driver session: %v", err))).SetType(gin.ErrorTypePublic)
-
 			err = service.StopTask(cachedTask.ID, taskmap.SessiongStartupFailure)
 			if err != nil {
 				l.WithError(err).Warn("Failed to stop task")
 			}
-			return
+			continue
 		}
-		l.WithField("sessionId", cachedSession.ID).WithField("latency", util.SecondsSince(sessionStartTime)).Info("driver started")
-	}
 
-	c.JSON(http.StatusOK, resp)
+		l.WithField("sessionId", cachedSession.ID).WithField("latency", util.SecondsSince(sessionStartTime)).Info("driver started")
+		c.JSON(http.StatusOK, driverResp)
+		return
+	}
 }
 
 func Proxy(c *gin.Context) {
