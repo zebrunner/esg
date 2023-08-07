@@ -248,7 +248,7 @@ func ScaleUp() {
 		log.WithFields(log.Fields{
 			"desired reservation capacity": math.Ceil(desiredReservationCapacity),
 			"desired capacity":             math.Ceil(desiredCapacity),
-			"max resercation capacity":     config.Conf.ReserveMaxCapacity,
+			"max reservation capacity":     config.Conf.ReserveMaxCapacity,
 		}).Warn("Triggered max reservation capacity limit")
 		desiredReservationCapacity = desiredCapacity + float64(config.Conf.ReserveMaxCapacity)
 	}
@@ -334,7 +334,17 @@ func ScaleDown() {
 		}
 	}
 
-	maxInstancesToDelete := int(math.Ceil(float64(len(instancesToDelete)) * (1 - config.Conf.ReserveInstancesPercent)))
+	instanceToDeleteReserved := float64(len(instancesToDelete)) * (1 - config.Conf.ReserveInstancesPercent)
+	if float64(len(instancesToDelete))-instanceToDeleteReserved > float64(config.Conf.ReserveMaxCapacity) {
+		log.WithFields(log.Fields{
+			"instances to delete":                 len(instancesToDelete),
+			"instances to delete except reserved": math.Ceil(instanceToDeleteReserved),
+			"max reservation capacity":            config.Conf.ReserveMaxCapacity,
+		}).Warn("Triggered max reservation capacity limit")
+		instanceToDeleteReserved = float64(int64(len(instancesToDelete)) - config.Conf.ReserveMaxCapacity)
+	}
+
+	maxInstancesToDelete := int(math.Ceil(instanceToDeleteReserved))
 
 	terminatedCount := 0
 	for _, instance := range instancesToDelete {
