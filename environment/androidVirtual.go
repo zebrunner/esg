@@ -63,9 +63,9 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities) (*Exe
 		Links:  []string{"device"},
 		HealthCheck: &ecs.HealthCheck{
 			Command:     []*string{aws.String("CMD-SHELL"), aws.String("healthcheck")},
-			Retries:     aws.Int64(4),
-			Interval:    aws.Int64(10),
-			StartPeriod: aws.Int64(60),
+			Retries:     aws.Int64(10),
+			Interval:    aws.Int64(24),
+			StartPeriod: aws.Int64(240),
 		},
 	}
 
