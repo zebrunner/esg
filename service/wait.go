@@ -24,8 +24,8 @@ func InitWaitWorker() {
 
 type waitRequest struct {
 	ctx          context.Context
-	responseChan chan *ecs.Task
-	errorChan    chan error
+	responseChan chan<- *ecs.Task
+	errorChan    chan<- error
 	taskId       string
 }
 
@@ -121,8 +121,8 @@ func (w *waitWorker) start() {
 func (w *waitWorker) waitFor(ctx context.Context, taskId string) *waitRequest {
 	req := waitRequest{
 		ctx:          ctx,
-		responseChan: make(chan *ecs.Task),
-		errorChan:    make(chan error),
+		responseChan: make(chan<- *ecs.Task),
+		errorChan:    make(chan<- error),
 		taskId:       taskId,
 	}
 

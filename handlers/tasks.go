@@ -31,80 +31,58 @@ import (
 
 func Create(c *gin.Context) {
 	remote := c.ClientIP()
-	user, password, _ := c.Request.BasicAuth()
-	workspace, err := db.GetWorkspace(user)
-	if err != nil {
+	l := log.WithField("remote", remote)
+	user, password, ok := c.Request.BasicAuth()
+	if !ok {
+		l.Warn("credentials not provided")
 		// Hotfix: Selenium java client don't send request with credentials without this sleep.
 		// Remove with full migration to Selenium 4.0
 		time.Sleep(500 * time.Millisecond)
-
-		c.Error(utils.AuthErr(err)).SetType(gin.ErrorTypePublic)
+		c.Error(utils.AuthErr(errors.New("credentials not provided"))).SetType(gin.ErrorTypePublic)
 		return
 	}
+	l = l.WithField("user", user)
 
 	apiErr := db.CheckAuth(user, password)
 	if apiErr != nil {
-		log.WithError(apiErr).WithFields(log.Fields{
-			"client":   c.ClientIP(),
-			"user":     user,
-			"password": password,
-		}).Warn("Failed to authenticate user on session creation")
-
+		l.WithError(apiErr).WithField("password", password).Warn("Failed to authenticate user on session creation")
 		c.Error(utils.AuthErr(errors.New("invalid username or password"))).SetType(gin.ErrorTypePublic)
 		return
 	}
 
-	l := log.WithFields(log.Fields{"user": user, "remote": remote})
-
-	var taskCaps capabilities.RequestCaps
-	err = c.BindJSON(&taskCaps)
+	workspace, err := db.GetWorkspace(user)
 	if err != nil {
-		l.WithError(err).Error("Failed to bind json to browser struct")
-
-		c.Error(utils.InvalidArgErr(fmt.Errorf("bad JSON format: %v", err))).SetType(gin.ErrorTypePublic)
-		return
+		l.Warnf("Workspace for user %s not found", user)
+		c.Error(utils.AuthErr(err)).SetType(gin.ErrorTypePublic)
 	}
 
-	if len(taskCaps.DesiredCapabilities) != 0 {
-		err = taskCaps.ProcessLegacy()
-	} else {
-		err = taskCaps.Process()
-	}
-	if err != nil {
-		l.WithError(err).Error("Failed to process capabilities")
-
-		c.Error(utils.InvalidArgErr(fmt.Errorf("failed to process capabilities: %v", err))).SetType(gin.ErrorTypePublic)
-		return
-	}
-	log.Trace("Driver capabilitites: ", taskCaps.ToMap())
-
-	caps, err := taskCaps.GetContainerConfiguration()
-	if err != nil {
-		l.WithError(err).Error("Failed to get container config.Configuration")
-
-		c.Error(utils.InvalidArgErr(fmt.Errorf("failed to process capabilities: %v", err))).SetType(gin.ErrorTypePublic)
-		return
-	}
-	log.Trace("caps: ", caps)
-
-	sessionStartTime := time.Now()
-	ctx, ctxCancel := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout)
-	defer ctxCancel()
-
-	env, err := environment.Build(user, caps)
-	if err != nil {
-		log.WithError(err).Error("Failed to build execution environment")
-
-		c.Error(utils.CreationErr(fmt.Errorf("failed to start executor: %v", err))).SetType(gin.ErrorTypePublic)
-		return
-	}
-	env.RawCapabilities = &taskCaps
-	env.Workspace = workspace
-
-	l = log.WithFields(log.Fields{"remote": remote, "family": env.TaskDefinitionFamily})
 	if !config.Conf.SingleTenant {
 		l = l.WithField("workspace", workspace)
 	}
+
+	reqCaps, err := capabilities.ParseRequestCapabilities(c.Request.Body)
+	if err != nil {
+		l.WithError(err).Error("Failed to process capabilities")
+		c.Error(utils.InvalidArgErr(fmt.Errorf("Failed to process capabilities: %v", err))).SetType(gin.ErrorTypePublic)
+		return
+	}
+	log.Trace("Request capabilitites: ", reqCaps.ToMap())
+
+	configurationCaps, err := reqCaps.GetContainerConfiguration()
+	if err != nil {
+		l.WithError(err).Error("Failed to process zebrunner container configuration")
+		c.Error(utils.InvalidArgErr(fmt.Errorf("failed to process capabilities: %v", err))).SetType(gin.ErrorTypePublic)
+		return
+	}
+	log.Trace("Container configuration: ", configurationCaps)
+
+	env, err := environment.Build(user, configurationCaps)
+	if err != nil {
+		log.WithError(err).Error("Failed to build execution environment")
+		c.Error(utils.CreationErr(fmt.Errorf("failed to start executor: %v", err))).SetType(gin.ErrorTypePublic)
+		return
+	}
+	l = l.WithField("family", env.TaskDefinitionFamily)
 
 	l.Info("new request")
 	l.WithField("env", env).Debug("Env details")
@@ -117,128 +95,11 @@ func Create(c *gin.Context) {
 		}
 	}
 
-	for i := 0; true; i++ {
-		l := l.WithField("serviceStartAttempt", i)
-		select {
-		case <-ctx.Done():
-			c.Error(utils.CreationErr(fmt.Errorf("service startup timed out"))).SetType(gin.ErrorTypePublic)
-			return
-		default:
-		}
-
-		cachedTask, task, err := service.StartTask(ctx, env)
-		//return error on task startup failure
-		if err != nil {
-			l.Errorf("service startup failed: %v", err)
-			c.Error(utils.CreationErr(err)).SetType(gin.ErrorTypePublic)
-			return
-		}
-
-		l = l.WithField("_taskId", cachedTask.ID)
-
-		// return response for generic task as soon as possible.
-		if strings.Contains(env.TaskDefinitionFamily, "generic") {
-			resp := make(map[string]interface{}, 0)
-			resp["taskId"] = cachedTask.ID
-			l.WithFields(log.Fields{"resp": resp}).Debug("Response")
-			c.JSON(http.StatusOK, resp)
-			return
-		}
-
-		setNetworkStartTime := time.Now()
-		err = service.SetEnvironmentNetwork(ctx, env, task)
-		if err != nil {
-			l.WithField("latency", time.Since(setNetworkStartTime)).WithError(err).Warn("failed to set network info")
-			err = service.StopTask(cachedTask.ID, taskmap.SessiongStartupFailure)
-			if err != nil {
-				l.WithError(err).Warn("Failed to stop task")
-			}
-			continue
-		}
-		l.WithField("latency", time.Since(setNetworkStartTime)).Debug("network info set")
-
-		// return response for cypress task after network env is set
-		if strings.Contains(env.TaskDefinitionFamily, "cypress") {
-			resp := make(map[string]interface{}, 0)
-			resp["taskId"] = cachedTask.ID
-			cachedTask.Status = taskmap.TaskGeneric
-			err = taskmap.Write(cachedTask.ID, cachedTask, 0)
-			if err != nil {
-				l.WithError(fmt.Errorf("failed to recache task: %v", err))
-			}
-			l.WithFields(log.Fields{"resp": resp}).Debug("Response")
-			c.JSON(http.StatusOK, resp)
-			return
-		}
-
-		// mark other tasks (except cypress and generic) as Active
-		cachedTask.Status = taskmap.TaskActive
-		err = taskmap.Write(cachedTask.ID, cachedTask, 0)
-		if err != nil {
-			l.WithError(fmt.Errorf("failed to recache task: %v", err))
-		}
-
-		u, ok := env.Network.GetUrl("driver")
-		if !ok {
-			l.Error("failed to get url for `driver` service")
-			err = service.StopTask(cachedTask.ID, taskmap.SessiongStartupFailure)
-			if err != nil {
-				l.WithError(err).Warn("Failed to stop task")
-			}
-			continue
-		}
-
-		requestBody, err := json.Marshal(env.RawCapabilities)
-		if err != nil {
-			l.WithError(err).Error("Failed to marshal request")
-			err = service.StopTask(cachedTask.ID, taskmap.SessiongStartupFailure)
-			if err != nil {
-				l.WithError(err).Warn("Failed to stop task")
-			}
-			continue
-		}
-	
-		reqUrl := &url.URL{}
-		reqUrl.Host, reqUrl.Path = u.Host, path.Join(u.Path, c.Request.URL.Path)
-		reqUrl.Scheme = "http"
-		l.WithField("serviceUrl", reqUrl).Debug("driver starting")
-		driverResp, err := selenium.StartSession(ctx, reqUrl, c.Request.Header, requestBody)
-		if err != nil {
-			l.WithError(err).WithField("response", driverResp).Error("driver startup failure")
-			err = service.StopTask(cachedTask.ID, taskmap.SessiongStartupFailure)
-			if err != nil {
-				l.WithError(err).Warn("Failed to stop task")
-			}
-			continue
-		}
-
-		sessionId, err := getSessionId(driverResp)
-		if sessionId == "" {
-			if err == nil {
-				err = errors.New("session id in driver response is empty")
-			}
-			l.WithError(err).Error("Failed to get sessionId")
-			err = service.StopTask(cachedTask.ID, taskmap.SessiongStartupFailure)
-			if err != nil {
-				l.WithError(err).Warn("Failed to stop task")
-			}
-			continue
-		}
-
-		cachedSession, err := sessionmap.CreateEntity(sessionId, env, cachedTask)
-		if err != nil {
-			l.WithError(err).Error("Failed to cache driver session")
-
-			err = service.StopTask(cachedTask.ID, taskmap.SessiongStartupFailure)
-			if err != nil {
-				l.WithError(err).Warn("Failed to stop task")
-			}
-			continue
-		}
-
-		l.WithField("sessionId", cachedSession.ID).WithField("latency", util.SecondsSince(sessionStartTime)).Info("driver started")
-		c.JSON(http.StatusOK, driverResp)
-		return
+	resp, seErr := service.GetStarter(env, c.Request, reqCaps, l).StartService()
+	if seErr != nil {
+		c.Error(seErr).SetType(gin.ErrorTypePublic)
+	} else {
+		c.JSON(http.StatusOK, resp)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -96,6 +97,22 @@ type RequestCaps struct {
 	DesiredCapabilities map[string]interface{} `json:"desiredCapabilities,omitempty"`
 }
 
+func ParseRequestCapabilities(body io.ReadCloser) (*RequestCaps, error) {
+	reqCaps := &RequestCaps{}
+	err := json.NewDecoder(body).Decode(reqCaps)
+	if err != nil {
+		return nil, fmt.Errorf("bad json format: %v", err)
+	}
+
+	if len(reqCaps.DesiredCapabilities) != 0 {
+		err = reqCaps.processLegacy()
+	} else {
+		err = reqCaps.process()
+	}
+
+	return reqCaps, err
+}
+
 func (c *RequestCaps) ToMap() map[string]interface{} {
 	return map[string]interface{}{
 		"capabilities": map[string]interface{}{
@@ -106,7 +123,7 @@ func (c *RequestCaps) ToMap() map[string]interface{} {
 	}
 }
 
-func (c *RequestCaps) Process() error {
+func (c *RequestCaps) process() error {
 	var err error
 	err = processLegacyCaps(c.Capabilities.AlwaysMatch)
 	if err != nil {
@@ -157,7 +174,7 @@ func (c *RequestCaps) Process() error {
 	return nil
 }
 
-func (c *RequestCaps) ProcessLegacy() error {
+func (c *RequestCaps) processLegacy() error {
 	// Process desired caps
 	err := processLegacyCaps(c.DesiredCapabilities)
 	if err != nil {

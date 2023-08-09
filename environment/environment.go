@@ -10,6 +10,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
+	"github.com/zebrunner/esg/cachemaps/definitionmap"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/utils"
 )
@@ -61,10 +62,10 @@ type Endpoint struct {
 
 type ExecutionEnvironment struct {
 	TaskDefinitionFamily string
+	Revision             int64
 	Schema               string
 	Containers           []*Container
 	Capabilities         *capabilities.Capabilities
-	RawCapabilities      *capabilities.RequestCaps
 	Volumes              map[string]volume
 	Network              *NetworkConfiguration
 	Workspace            string
@@ -284,6 +285,20 @@ func (e *ExecutionEnvironment) HashRegisterDefinition() string {
 	registerDefinitionHash := utils.EncodeToHash(registerDefinitionData)
 
 	return registerDefinitionHash
+}
+
+func (env *ExecutionEnvironment) GetFamilyRevision() (string, error) {
+	//used Contains() as task definition family could be org-generic/dev-generic etc.
+	if strings.Contains(env.TaskDefinitionFamily, "generic") {
+		return env.TaskDefinitionFamily, nil
+	}
+
+	revision, err := definitionmap.FindRevision(env.HashOvverideDefinition())
+	if err != nil {
+		return "", fmt.Errorf("revision not found for '%s'. %v", env.TaskDefinitionFamily, err)
+	}
+
+	return fmt.Sprint(env.TaskDefinitionFamily, ":", revision), nil
 }
 
 func Build(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
