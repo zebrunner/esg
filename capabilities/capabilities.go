@@ -88,7 +88,9 @@ type int64Wrapper int64
 func (i *int64Wrapper) Validate(key string, value interface{}) string {
 	errStr := ""
 
-	if valueFloat, ok := value.(float64); ok {
+	if value == nil {
+		i.From(0)
+	} else if valueFloat, ok := value.(float64); ok {
 		i.From(int64(valueFloat))
 	} else if valueStr, ok := value.(string); ok {
 		if valueInt, err := strconv.ParseInt(valueStr, 10, 64); err == nil {
