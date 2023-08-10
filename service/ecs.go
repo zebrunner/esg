@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"math/rand"
@@ -16,7 +15,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/aws/aws-sdk-go/service/s3"
 	log "github.com/sirupsen/logrus"
-	"github.com/zebrunner/esg/cachemaps/definitionmap"
 	"github.com/zebrunner/esg/cachemaps/taskmap"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
@@ -195,18 +193,6 @@ func DescribeTasks(taskArns []string) ([]*ecs.Task, error) {
 	}
 
 	return resultArr, nil
-}
-
-func searchHostPort(task *ecs.Task, containerPort int64) (port int64, ok bool) {
-	for _, container := range task.Containers {
-		for _, networkBinding := range container.NetworkBindings {
-			if *networkBinding.ContainerPort == containerPort {
-				return *networkBinding.HostPort, true
-			}
-		}
-	}
-
-	return 0, false
 }
 
 func getTaskIp(ctx context.Context, task *ecs.Task) (string, error) {

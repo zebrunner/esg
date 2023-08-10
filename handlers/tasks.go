@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
-	"net/url"
 	"path"
 	"strings"
 	"time"
@@ -95,7 +93,7 @@ func Create(c *gin.Context) {
 		}
 	}
 
-	resp, seErr := service.GetStarter(env, c.Request, reqCaps, l).StartService()
+	resp, seErr := service.GetStarter(env, c, reqCaps, l).StartService()
 	if seErr != nil {
 		c.Error(seErr).SetType(gin.ErrorTypePublic)
 	} else {
@@ -374,25 +372,4 @@ func defaultErrorHandler(c *gin.Context) func(http.ResponseWriter, *http.Request
 		}
 		_ = json.NewEncoder(w).Encode(driverError)
 	}
-}
-
-func getSessionId(resp map[string]interface{}) (string, error) {
-	// Get sessionId from root. For unknown reason opera returns sessionId in root of object
-	sessionId, ok := resp["sessionId"].(string)
-	if ok {
-		return sessionId, nil
-	}
-
-	// Get session from value
-	value, ok := resp["value"].(map[string]interface{})
-	if !ok {
-		return "", errors.New("`value` must be an object")
-	}
-
-	sessionId, ok = value["sessionId"].(string)
-	if ok {
-		return sessionId, nil
-	}
-
-	return "", errors.New("failed to find sessionId field in response")
 }

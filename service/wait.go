@@ -23,10 +23,11 @@ func InitWaitWorker() {
 }
 
 type waitRequest struct {
-	ctx          context.Context
-	responseChan chan<- *ecs.Task
-	errorChan    chan<- error
-	taskId       string
+	ctx               context.Context
+	taskId            string
+	essentialErrCh    chan error
+	nonEssentialErrCh chan error
+	responseChan      chan *ecs.Task
 }
 
 type waitWorker struct {
@@ -96,7 +97,7 @@ func (w *waitWorker) start() {
 
 			if *task.LastStatus == "STOPPED" {
 				log.Error("Task stopped: ", *task)
-				req.errorChan <- errors.New("task stopped with reason: " + *task.StoppedReason)
+				req.nonEssentialErrCh <- errors.New("task stopped with reason: " + *task.StoppedReason)
 				delete(w.requests, *task.TaskArn)
 			}
 
@@ -108,7 +109,7 @@ func (w *waitWorker) start() {
 			switch *task.HealthStatus {
 			case "UNHEALTHY":
 				log.Error("Task unhealthy: ", *task)
-				req.errorChan <- errors.New("task unhealthy")
+				req.nonEssentialErrCh <- errors.New("task unhealthy")
 				delete(w.requests, *task.TaskArn)
 			case "HEALTHY":
 				req.responseChan <- task
@@ -120,10 +121,11 @@ func (w *waitWorker) start() {
 
 func (w *waitWorker) waitFor(ctx context.Context, taskId string) *waitRequest {
 	req := waitRequest{
-		ctx:          ctx,
-		responseChan: make(chan<- *ecs.Task),
-		errorChan:    make(chan<- error),
-		taskId:       taskId,
+		ctx:               ctx,
+		taskId:            taskId,
+		essentialErrCh:    make(chan error),
+		nonEssentialErrCh: make(chan error),
+		responseChan:      make(chan *ecs.Task),
 	}
 
 	// https://medium.com/@luanrubensf/concurrent-map-access-in-go-a6a733c5ffd1
