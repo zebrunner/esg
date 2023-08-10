@@ -200,10 +200,10 @@ func getTaskIp(ctx context.Context, task *ecs.Task) (string, error) {
 
 	req := instanceWorker.waitForInstance(ctx, task)
 	select {
-	case err := <-req.errorChan:
+	case err := <-req.NonEssentialErrCh:
 		log.WithError(err).Warn("Failed to get ip from instance")
 		return "", err
-	case instance := <-req.responseChan:
+	case instance := <-req.ResponseChan:
 		if config.Conf.UsePublicIp {
 			ipAddress = *instance.PublicIpAddress
 		} else {

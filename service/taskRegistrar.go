@@ -16,9 +16,9 @@ import (
 )
 
 type registerWaitRequest struct {
-	nonEssentialErrCh chan error
-	essentialErrCh    chan error
-	taskArnCh         chan string
+	NonEssentialErrCh chan error
+	EssentialErrCh    chan error
+	ResponseChan      chan string
 }
 
 func registerTask(ctx context.Context, env environment.ExecutionEnvironment, waitRequest registerWaitRequest) {
@@ -26,7 +26,7 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 
 	family, err := env.GetFamilyRevision()
 	if err != nil {
-		waitRequest.essentialErrCh <- fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily)
+		waitRequest.EssentialErrCh <- fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily)
 		return
 	}
 	l := log.WithField("family", env.TaskDefinitionFamily)
@@ -72,7 +72,7 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 			// Not good solution but aws doesn't give a choice
 			errStr := err.Error()
 			if errStr == "ClientException: TaskDefinition not found." {
-				waitRequest.essentialErrCh <- fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily)
+				waitRequest.EssentialErrCh <- fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily)
 				return
 			} else if errStr == "ClientException: Tasks provisioning capacity limit exceeded." {
 				// wait for 15 seconds (repeated until new instances will be provided and provisioning tasks will get to the next phase)
@@ -101,18 +101,18 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 		}
 
 		// All is ok. We got task then we can return it.
-		waitRequest.taskArnCh <- *resultRunTask.Tasks[0].TaskArn
+		waitRequest.ResponseChan <- *resultRunTask.Tasks[0].TaskArn
 		return
 	}
 
-	waitRequest.nonEssentialErrCh <- outputErr
+	waitRequest.NonEssentialErrCh <- outputErr
 }
 
 func WaitForTaskRegister(ctx context.Context, env environment.ExecutionEnvironment) *registerWaitRequest {
 	waitReq := registerWaitRequest{
-		nonEssentialErrCh: make(chan error),
-		essentialErrCh:    make(chan error),
-		taskArnCh:         make(chan string),
+		NonEssentialErrCh: make(chan error),
+		EssentialErrCh:    make(chan error),
+		ResponseChan:      make(chan string),
 	}
 
 	go registerTask(ctx, env, waitReq)

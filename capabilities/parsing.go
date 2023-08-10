@@ -271,6 +271,15 @@ func (c *RequestCaps) GetContainerConfiguration() (*Capabilities, error) {
 	return &conf, nil
 }
 
+func (c *RequestCaps) ToRequestBody() (*bytes.Reader, error) {
+	body, err := json.Marshal(c)
+	if err != nil {
+		return nil, err
+	}
+	
+	return bytes.NewReader(body), nil
+}
+
 func processLegacyCaps(caps map[string]interface{}) error {
 	allowedPlatforms := []string{"linux", "any"}
 	legacyProcessors := map[string]*CapProcessor{

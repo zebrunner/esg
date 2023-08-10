@@ -20,6 +20,8 @@ var (
 	}
 	VendorPrefix = "zebrunner"
 	Conf         = Config{}
+	TaskIdKey    = "_taskId"
+	SessionIdKey = "sessionId"
 )
 
 type Config struct {

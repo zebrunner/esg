@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,9 +26,9 @@ func InitWaitWorker() {
 type waitRequest struct {
 	ctx               context.Context
 	taskId            string
-	essentialErrCh    chan error
-	nonEssentialErrCh chan error
-	responseChan      chan *ecs.Task
+	EssentialErrCh    chan error
+	NonEssentialErrCh chan error
+	ResponseChan      chan *ecs.Task
 }
 
 type waitWorker struct {
@@ -90,15 +91,16 @@ func (w *waitWorker) start() {
 
 		// Send responses for running tasks
 		for _, task := range tasks {
-			req, ok := w.requests[*task.TaskArn]
+			taskId := strings.Split(*task.TaskArn, "/")[2]
+			req, ok := w.requests[taskId]
 			if !ok {
 				continue
 			}
 
 			if *task.LastStatus == "STOPPED" {
 				log.Error("Task stopped: ", *task)
-				req.nonEssentialErrCh <- errors.New("task stopped with reason: " + *task.StoppedReason)
-				delete(w.requests, *task.TaskArn)
+				req.NonEssentialErrCh <- errors.New("task stopped with reason: " + *task.StoppedReason)
+				delete(w.requests, taskId)
 			}
 
 			if *task.LastStatus != "RUNNING" {
@@ -109,11 +111,11 @@ func (w *waitWorker) start() {
 			switch *task.HealthStatus {
 			case "UNHEALTHY":
 				log.Error("Task unhealthy: ", *task)
-				req.nonEssentialErrCh <- errors.New("task unhealthy")
-				delete(w.requests, *task.TaskArn)
+				req.NonEssentialErrCh <- errors.New("task unhealthy")
+				delete(w.requests, taskId)
 			case "HEALTHY":
-				req.responseChan <- task
-				delete(w.requests, *task.TaskArn)
+				req.ResponseChan <- task
+				delete(w.requests, taskId)
 			}
 		}
 	}
@@ -123,9 +125,9 @@ func (w *waitWorker) waitFor(ctx context.Context, taskId string) *waitRequest {
 	req := waitRequest{
 		ctx:               ctx,
 		taskId:            taskId,
-		essentialErrCh:    make(chan error),
-		nonEssentialErrCh: make(chan error),
-		responseChan:      make(chan *ecs.Task),
+		EssentialErrCh:    make(chan error),
+		NonEssentialErrCh: make(chan error),
+		ResponseChan:      make(chan *ecs.Task),
 	}
 
 	// https://medium.com/@luanrubensf/concurrent-map-access-in-go-a6a733c5ffd1

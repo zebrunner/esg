@@ -80,6 +80,7 @@ func Create(c *gin.Context) {
 		c.Error(utils.CreationErr(fmt.Errorf("failed to start executor: %v", err))).SetType(gin.ErrorTypePublic)
 		return
 	}
+	env.ReqCapabilities = reqCaps
 	l = l.WithField("family", env.TaskDefinitionFamily)
 
 	l.Info("new request")
@@ -93,16 +94,17 @@ func Create(c *gin.Context) {
 		}
 	}
 
-	resp, seErr := service.GetStarter(env, c, reqCaps, l).StartService()
+	resp, seErr := service.GetServiceStarter(env, c, l).StartService()
 	if seErr != nil {
 		c.Error(seErr).SetType(gin.ErrorTypePublic)
 	} else {
+		l.WithFields(log.Fields{"resp": resp}).Debug("Response")
 		c.JSON(http.StatusOK, resp)
 	}
 }
 
 func Proxy(c *gin.Context) {
-	sess := c.MustGet(sessionContextKey).(*sessionmap.Session)
+	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
 
 	(&httputil.ReverseProxy{
 		Director: func(r *http.Request) {
@@ -132,7 +134,7 @@ func Proxy(c *gin.Context) {
 	}).ServeHTTP(c.Writer, c.Request)
 }
 func CloseSession(c *gin.Context) {
-	sess := c.MustGet(sessionContextKey).(*sessionmap.Session)
+	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
 
 	l := log.WithField("_taskId", sess.TaskID)
 
@@ -149,7 +151,7 @@ func CloseSession(c *gin.Context) {
 }
 
 func AbortTask(c *gin.Context) {
-	task := c.MustGet(taskContextKey).(*taskmap.Task)
+	task := c.MustGet(config.TaskIdKey).(*taskmap.Task)
 
 	l := log.WithField("_taskId", task.ID)
 
@@ -304,7 +306,7 @@ func TaskDescribe(c *gin.Context) {
 
 func Downloads(c *gin.Context) {
 	filename := c.Param("file")
-	sess := c.MustGet(sessionContextKey).(*sessionmap.Session)
+	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
 
 	director := func(req *http.Request) {
 		req.URL.Scheme = "http"
@@ -321,7 +323,7 @@ func Downloads(c *gin.Context) {
 }
 
 func Clipboard(c *gin.Context) {
-	sess := c.MustGet(sessionContextKey).(*sessionmap.Session)
+	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
 
 	director := func(req *http.Request) {
 		req.URL.Scheme = "http"
@@ -334,7 +336,7 @@ func Clipboard(c *gin.Context) {
 }
 
 func Devtools(c *gin.Context) {
-	sess := c.MustGet(sessionContextKey).(*sessionmap.Session)
+	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
 	url, _ := sess.Network.GetUrl("devtools")
 	director := func(req *http.Request) {
 		req.URL.Scheme = "http"

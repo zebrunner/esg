@@ -66,6 +66,7 @@ type ExecutionEnvironment struct {
 	Schema               string
 	Containers           []*Container
 	Capabilities         *capabilities.Capabilities
+	ReqCapabilities		 *capabilities.RequestCaps
 	Volumes              map[string]volume
 	Network              *NetworkConfiguration
 	Workspace            string

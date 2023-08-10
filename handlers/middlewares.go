@@ -9,13 +9,9 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps/sessionmap"
 	"github.com/zebrunner/esg/cachemaps/taskmap"
+	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/db"
 	"github.com/zebrunner/esg/utils"
-)
-
-var (
-	taskContextKey    = "cachedTaskKey"
-	sessionContextKey = "cachedSessionKey"
 )
 
 func APIError(c *gin.Context) {
@@ -66,7 +62,7 @@ func SeleniumError(c *gin.Context) {
 			c.Error(seErr).SetType(gin.ErrorTypePublic)
 			c.Abort()
 		} else {
-			c.Set(sessionContextKey, sess)
+			c.Set(config.SessionIdKey, sess)
 		}
 	}
 
@@ -79,7 +75,7 @@ func SeleniumError(c *gin.Context) {
 			c.Error(seErr).SetType(gin.ErrorTypePublic)
 			c.Abort()
 		} else {
-			c.Set(taskContextKey, task)
+			c.Set(config.TaskIdKey, task)
 		}
 	}
 
