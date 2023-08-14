@@ -2,7 +2,7 @@ package service
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -28,7 +28,7 @@ type waitRequest struct {
 	taskId            string
 	EssentialErrCh    chan error
 	NonEssentialErrCh chan error
-	ResponseChan      chan *ecs.Task
+	ResponseCh        chan *ecs.Task
 }
 
 type waitWorker struct {
@@ -99,7 +99,7 @@ func (w *waitWorker) start() {
 
 			if *task.LastStatus == "STOPPED" {
 				log.Error("Task stopped: ", *task)
-				req.NonEssentialErrCh <- errors.New("task stopped with reason: " + *task.StoppedReason)
+				req.NonEssentialErrCh <- fmt.Errorf("task stopped with reason: %s", *task.StoppedReason)
 				delete(w.requests, taskId)
 			}
 
@@ -111,10 +111,10 @@ func (w *waitWorker) start() {
 			switch *task.HealthStatus {
 			case "UNHEALTHY":
 				log.Error("Task unhealthy: ", *task)
-				req.NonEssentialErrCh <- errors.New("task unhealthy")
+				req.NonEssentialErrCh <- fmt.Errorf("task unhealthy")
 				delete(w.requests, taskId)
 			case "HEALTHY":
-				req.ResponseChan <- task
+				req.ResponseCh <- task
 				delete(w.requests, taskId)
 			}
 		}
@@ -127,7 +127,7 @@ func (w *waitWorker) waitFor(ctx context.Context, taskId string) *waitRequest {
 		taskId:            taskId,
 		EssentialErrCh:    make(chan error),
 		NonEssentialErrCh: make(chan error),
-		ResponseChan:      make(chan *ecs.Task),
+		ResponseCh:        make(chan *ecs.Task),
 	}
 
 	// https://medium.com/@luanrubensf/concurrent-map-access-in-go-a6a733c5ffd1

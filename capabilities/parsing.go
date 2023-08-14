@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -235,7 +234,7 @@ func (c *RequestCaps) processLegacy() error {
 
 func (c *RequestCaps) GetContainerConfiguration() (*Capabilities, error) {
 	conf := Capabilities{}
-	validationErr := errors.New("wrong capabilities format")
+	validationErr := fmt.Errorf("wrong capabilities format")
 
 	amCaps := RemovePrefix(c.Capabilities.AlwaysMatch, config.VendorPrefix)
 	amCaps = RemovePrefix(amCaps, "appium")
@@ -292,7 +291,7 @@ func processLegacyCaps(caps map[string]interface{}) error {
 						return nil
 					}
 				}
-				return errors.New("platform not allowed")
+				return fmt.Errorf("platform not allowed")
 			},
 		},
 		"name": {

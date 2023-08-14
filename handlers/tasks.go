@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -36,7 +35,7 @@ func Create(c *gin.Context) {
 		// Hotfix: Selenium java client don't send request with credentials without this sleep.
 		// Remove with full migration to Selenium 4.0
 		time.Sleep(500 * time.Millisecond)
-		c.Error(utils.AuthErr(errors.New("credentials not provided"))).SetType(gin.ErrorTypePublic)
+		c.Error(utils.AuthErr(fmt.Errorf("credentials not provided"))).SetType(gin.ErrorTypePublic)
 		return
 	}
 	l = l.WithField("user", user)
@@ -44,7 +43,7 @@ func Create(c *gin.Context) {
 	apiErr := db.CheckAuth(user, password)
 	if apiErr != nil {
 		l.WithError(apiErr).WithField("password", password).Warn("Failed to authenticate user on session creation")
-		c.Error(utils.AuthErr(errors.New("invalid username or password"))).SetType(gin.ErrorTypePublic)
+		c.Error(utils.AuthErr(fmt.Errorf("invalid username or password"))).SetType(gin.ErrorTypePublic)
 		return
 	}
 

@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -18,7 +17,7 @@ import (
 type registerWaitRequest struct {
 	NonEssentialErrCh chan error
 	EssentialErrCh    chan error
-	ResponseChan      chan string
+	ResponseCh        chan string
 }
 
 func registerTask(ctx context.Context, env environment.ExecutionEnvironment, waitRequest registerWaitRequest) {
@@ -89,19 +88,19 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 		}
 
 		if len(resultRunTask.Failures) != 0 {
-			outputErr = errors.New(*resultRunTask.Failures[0].Reason)
+			outputErr = fmt.Errorf(*resultRunTask.Failures[0].Reason)
 			l.WithError(outputErr).Debug("Task register failed. Response contains failures")
 			continue
 		}
 
 		if len(resultRunTask.Tasks) == 0 {
-			outputErr = errors.New("Response doesn't contains tasks")
+			outputErr = fmt.Errorf("Response doesn't contain tasks")
 			l.WithError(outputErr).Debug("Task register failed")
 			continue
 		}
 
 		// All is ok. We got task then we can return it.
-		waitRequest.ResponseChan <- *resultRunTask.Tasks[0].TaskArn
+		waitRequest.ResponseCh <- *resultRunTask.Tasks[0].TaskArn
 		return
 	}
 
@@ -112,7 +111,7 @@ func WaitForTaskRegister(ctx context.Context, env environment.ExecutionEnvironme
 	waitReq := registerWaitRequest{
 		NonEssentialErrCh: make(chan error),
 		EssentialErrCh:    make(chan error),
-		ResponseChan:      make(chan string),
+		ResponseCh:        make(chan string),
 	}
 
 	go registerTask(ctx, env, waitReq)

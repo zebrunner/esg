@@ -23,7 +23,7 @@ var (
 type startSessRequest struct {
 	EssentialErrCh    chan error
 	NonEssentialErrCh chan error
-	ResponseChan      chan map[string]interface{}
+	ResponseCh        chan map[string]interface{}
 }
 
 func startSession(ctx context.Context, req *http.Request, sessReq startSessRequest) {
@@ -55,14 +55,14 @@ func startSession(ctx context.Context, req *http.Request, sessReq startSessReque
 		return
 	}
 
-	sessReq.ResponseChan <- reply
+	sessReq.ResponseCh <- reply
 }
 
 func WaitForSessionStart(ctx context.Context, request *http.Request) *startSessRequest {
 	sessReq := startSessRequest{
 		EssentialErrCh:    make(chan error),
 		NonEssentialErrCh: make(chan error),
-		ResponseChan:      make(chan map[string]interface{}),
+		ResponseCh:        make(chan map[string]interface{}),
 	}
 
 	go startSession(ctx, request, sessReq)

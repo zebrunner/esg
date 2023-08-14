@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"errors"
 	"fmt"
 	"os"
 
@@ -117,11 +116,11 @@ func SeleniumError(c *gin.Context) {
 func getSession(id string) (*sessionmap.Session, *utils.SeleniumError) {
 	session, _ := sessionmap.Find(id, true)
 	if session == nil {
-		return nil, utils.NoSuchSessionErr(errors.New("session timed out or not found"))
+		return nil, utils.NoSuchSessionErr(fmt.Errorf("session timed out or not found"))
 	}
 
 	if session.Status == sessionmap.SessionStopped {
-		return nil, utils.SessionStoppedErr(errors.New(string(session.StopReason)))
+		return nil, utils.SessionStoppedErr(fmt.Errorf(string(session.StopReason)))
 	}
 
 	return session, nil
@@ -130,11 +129,11 @@ func getSession(id string) (*sessionmap.Session, *utils.SeleniumError) {
 func getTask(id string) (*taskmap.Task, *utils.SeleniumError) {
 	task, _ := taskmap.Find(id)
 	if task == nil {
-		return nil, utils.NoSuchTaskErr(errors.New("task timed out or not found"))
+		return nil, utils.NoSuchTaskErr(fmt.Errorf("task timed out or not found"))
 	}
 
 	if task.Status == taskmap.TaskStopped {
-		return nil, utils.TaskStoppedErr(errors.New(string(task.StopReason)))
+		return nil, utils.TaskStoppedErr(fmt.Errorf(string(task.StopReason)))
 	}
 
 	return task, nil

@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -112,7 +111,7 @@ func StopTask(taskId string, stopReason taskmap.StoppedReason) error {
 	var oldTaskStatus taskmap.TaskStatus
 	if cachedTask != nil {
 		if cachedTask.Status == taskmap.TaskStopped || cachedTask.Status == taskmap.TaskPendingToStop {
-			err := errors.New("StopTask() call for stopped/pending to stop task")
+			err := fmt.Errorf("StopTask() call for stopped/pending to stop task")
 			return err
 		} else {
 			// Set pendingToStop status so no new StopTask() call for current task would be performed
@@ -203,14 +202,14 @@ func getTaskIp(ctx context.Context, task *ecs.Task) (string, error) {
 	case err := <-req.NonEssentialErrCh:
 		log.WithError(err).Warn("Failed to get ip from instance")
 		return "", err
-	case instance := <-req.ResponseChan:
+	case instance := <-req.ResponseCh:
 		if config.Conf.UsePublicIp {
 			ipAddress = *instance.PublicIpAddress
 		} else {
 			ipAddress = *instance.PrivateIpAddress
 		}
 	case <-req.ctx.Done():
-		return "", errors.New("failed to wait until ec2 instance is ready to run. context deadline")
+		return "", fmt.Errorf("failed to wait until ec2 instance is ready to run. context deadline")
 	}
 
 	log.WithField("instanceIP", ipAddress).Debug()
@@ -265,7 +264,7 @@ func GeneratePreSignedURL(key string) (string, error) {
 		return "", err
 	}
 	if *res.KeyCount == 0 {
-		err = errors.New("The specified key does not exist: " + key)
+		err = fmt.Errorf("The specified key does not exist: " + key)
 		return "", err
 	}
 

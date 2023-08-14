@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -10,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
@@ -36,47 +34,23 @@ type startBasis struct {
 }
 
 // essential error -> stop service, non essential error -> retry service start, response chan -> successfull phase execution
-type waitAdapter[Input, Output any] func(context.Context, Input) (<-chan error, <-chan error, <-chan Output)
-
 type phase func(ctx context.Context) (map[string]interface{}, error, error)
-
-var (
-	registerTaskAdapter waitAdapter[environment.ExecutionEnvironment, string] = func(ctx context.Context, env environment.ExecutionEnvironment) (<-chan error, <-chan error, <-chan string) {
-		waitRequest := WaitForTaskRegister(ctx, env)
-		return waitRequest.EssentialErrCh, waitRequest.NonEssentialErrCh, waitRequest.ResponseChan
-	}
-
-	startTaskAdapter waitAdapter[string, *ecs.Task] = func(ctx context.Context, taskArn string) (<-chan error, <-chan error, <-chan *ecs.Task) {
-		waitRequest := taskWaiter.waitFor(ctx, taskArn)
-		return waitRequest.EssentialErrCh, waitRequest.NonEssentialErrCh, waitRequest.ResponseChan
-	}
-
-	findInstanceAdapter waitAdapter[*ecs.Task, *ec2.Instance] = func(ctx context.Context, task *ecs.Task) (<-chan error, <-chan error, <-chan *ec2.Instance) {
-		waitRequest := instanceWorker.waitForInstance(ctx, task)
-		return waitRequest.EssentialErrCh, waitRequest.NonEssentialErrCh, waitRequest.ResponseChan
-	}
-
-	startSessionAdapter waitAdapter[*http.Request, map[string]interface{}] = func(ctx context.Context, request *http.Request) (<-chan error, <-chan error, <-chan map[string]interface{}) {
-		waitRequest := selenium.WaitForSessionStart(ctx, request)
-		return waitRequest.EssentialErrCh, waitRequest.NonEssentialErrCh, waitRequest.ResponseChan
-	}
-)
 
 func (s *startBasis) registerTaskPhase(ctx context.Context) (reply map[string]interface{}, essential error, nonEssential error) {
 	s.Log.Debug("task registering")
-	essentialErrCh, nonEsentialErrCh, responseCh := registerTaskAdapter(ctx, *s.Env)
+	waitRequest := WaitForTaskRegister(ctx, *s.Env)
 	select {
 	case <-ctx.Done():
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("Task register timed out")
 		essential = ctx.Err()
 		return
-	case essential = <-essentialErrCh:
+	case essential = <-waitRequest.EssentialErrCh:
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to register task, stopping service...")
 		return
-	case nonEssential = <-nonEsentialErrCh:
+	case nonEssential = <-waitRequest.NonEssentialErrCh:
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(nonEssential).Warn("Failed to register task, restarting...")
 		return
-	case taskArn := <-responseCh:
+	case taskArn := <-waitRequest.ResponseCh:
 		taskId := strings.Split(taskArn, "/")[2]
 		s.Log = s.Log.WithField("_taskId", taskId)
 		s.GinCtx.Set(config.TaskIdKey, taskId)
@@ -97,19 +71,19 @@ func (s *startBasis) registerTaskPhase(ctx context.Context) (reply map[string]in
 
 func (s *startBasis) startTaskPhase(ctx context.Context) (reply map[string]interface{}, essential error, nonEssential error) {
 	s.Log.Info("task starting")
-	essentialErrCh, nonEsentialErrCh, responseCh := startTaskAdapter(ctx, s.CachedTask.ID)
+	waitRequest := taskWaiter.waitFor(ctx, s.CachedTask.ID)
 	select {
 	case <-ctx.Done():
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("Task startup timed out")
 		essential = ctx.Err()
 		return
-	case essential = <-essentialErrCh:
+	case essential = <-waitRequest.EssentialErrCh:
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to start task, stopping service...")
 		return
-	case nonEssential = <-nonEsentialErrCh:
+	case nonEssential = <-waitRequest.NonEssentialErrCh:
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(nonEssential).Warn("Failed to start task, restarting...")
 		return
-	case s.Task = <-responseCh:
+	case s.Task = <-waitRequest.ResponseCh:
 		s.CachedTask.HealthAt = time.Now()
 		s.CachedTask.Status = taskmap.TaskActive
 		nonEssential = taskmap.Write(s.CachedTask.ID, s.CachedTask, 0)
@@ -132,19 +106,19 @@ func (s *startBasis) startTaskPhase(ctx context.Context) (reply map[string]inter
 
 func (s *startBasis) setNetworkPhase(ctx context.Context) (reply map[string]interface{}, essential error, nonEssential error) {
 	s.Log.Debug("setting network environment")
-	essentialErrCh, nonEsentialErrCh, responseCh := findInstanceAdapter(ctx, s.Task)
+	waitRequest := instanceWorker.waitForInstance(ctx, s.Task)
 	select {
 	case <-ctx.Done():
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("Network configure timed out")
 		essential = ctx.Err()
 		return
-	case essential = <-essentialErrCh:
+	case essential = <-waitRequest.EssentialErrCh:
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to get network configuration, stopping service...")
 		return
-	case nonEssential = <-nonEsentialErrCh:
+	case nonEssential = <-waitRequest.NonEssentialErrCh:
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(nonEssential).Warn("Failed to get Network configuration, restarting...")
 		return
-	case instance := <-responseCh:
+	case instance := <-waitRequest.ResponseCh:
 		if config.Conf.UsePublicIp {
 			s.Env.Network.IP = *instance.PublicIpAddress
 		} else {
@@ -185,7 +159,7 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (reply map[string]int
 
 	u, ok := s.Env.Network.GetUrl("driver")
 	if !ok {
-		nonEssential = errors.New("failed to get driver network")
+		nonEssential = fmt.Errorf("failed to get driver network")
 		s.Log.WithError(nonEssential).Warn("Failed to start driver, restarting...")
 		err := StopTask(s.CachedTask.ID, taskmap.TaskStartupFailure)
 		if err != nil {
@@ -223,24 +197,24 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (reply map[string]int
 
 	startSessionRequest.Header = s.GinCtx.Request.Header
 
-	essentialErrCh, nonEsentialErrCh, responseCh := startSessionAdapter(ctx, startSessionRequest)
+	waitRequest := selenium.WaitForSessionStart(ctx, startSessionRequest)
 	select {
 	case <-ctx.Done():
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("driver startup timed out")
 		essential = ctx.Err()
 		return
-	case essential = <-essentialErrCh:
+	case essential = <-waitRequest.EssentialErrCh:
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to start driver, stopping service...")
 		return
-	case nonEssential = <-nonEsentialErrCh:
+	case nonEssential = <-waitRequest.NonEssentialErrCh:
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(nonEssential).Warn("Failed to start driver, restarting...")
 		return
-	case reply = <-responseCh:
+	case reply = <-waitRequest.ResponseCh:
 		var sessionId string
 		sessionId, nonEssential = getSessionId(reply)
 		if sessionId == "" {
 			if nonEssential == nil {
-				nonEssential = errors.New("session id in driver response is empty")
+				nonEssential = fmt.Errorf("session id in driver response is empty")
 			}
 			s.Log.WithError(err).Error("Failed to get sessionId")
 			err := StopTask(s.CachedTask.ID, taskmap.TaskStartupFailure)
@@ -384,7 +358,7 @@ func getSessionId(resp map[string]interface{}) (string, error) {
 	// Get session from value
 	value, ok := resp["value"].(map[string]interface{})
 	if !ok {
-		return "", errors.New("`value` must be an object")
+		return "", fmt.Errorf("`value` must be an object")
 	}
 
 	sessionId, ok = value["sessionId"].(string)
@@ -392,5 +366,5 @@ func getSessionId(resp map[string]interface{}) (string, error) {
 		return sessionId, nil
 	}
 
-	return "", errors.New("failed to find sessionId field in response")
+	return "", fmt.Errorf("failed to find sessionId field in response")
 }

@@ -1,7 +1,6 @@
 package capabilities
 
 import (
-	"errors"
 	"fmt"
 	"strconv"
 
@@ -355,7 +354,7 @@ func FromRequestCaps(reqCaps map[string]interface{}) (*Capabilities, error) {
 
 	var err error
 	if len(errs) > 0 {
-		err = errors.New(strings.Join(errs, "\n"))
+		err = fmt.Errorf(strings.Join(errs, "\n"))
 	}
 
 	return c, err
