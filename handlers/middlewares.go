@@ -54,10 +54,9 @@ func SeleniumError(c *gin.Context) {
 	l := log.NewEntry(log.StandardLogger())
 	sessionId := c.Param("session")
 	if sessionId != "" {
-		l = l.WithField("sessionId", sessionId)
 		sess, seErr := getSession(sessionId)
 		if seErr != nil {
-			l.WithError(seErr).Error("can't access session")
+			l.WithField(config.SessionIdKey, sessionId).WithError(seErr).Error("can't access session")
 			c.Error(seErr).SetType(gin.ErrorTypePublic)
 			c.Abort()
 		} else {
@@ -67,10 +66,9 @@ func SeleniumError(c *gin.Context) {
 
 	taskId := c.Param("task")
 	if taskId != "" {
-		l = l.WithField("_taskId", taskId)
 		task, seErr := getTask(taskId)
 		if seErr != nil {
-			l.WithError(seErr).Error("can't access task")
+			l.WithField(config.TaskIdKey, taskId).WithError(seErr).Error("can't access task")
 			c.Error(seErr).SetType(gin.ErrorTypePublic)
 			c.Abort()
 		} else {
@@ -82,6 +80,14 @@ func SeleniumError(c *gin.Context) {
 
 	if c.Errors.Last() == nil {
 		return
+	}
+
+	if value, ok := c.Get(config.TaskIdKey); ok {
+		l = l.WithField(config.TaskIdKey, value)
+	}
+
+	if value, ok := c.Get(config.SessionIdKey); ok {
+		l = l.WithField(config.SessionIdKey, value)
 	}
 
 	for _, err := range c.Errors {

@@ -135,10 +135,10 @@ func Proxy(c *gin.Context) {
 func CloseSession(c *gin.Context) {
 	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
 
-	l := log.WithField("_taskId", sess.TaskID)
+	l := log.WithField(config.TaskIdKey, sess.TaskID)
 
 	selenium.CloseSession(sess, sessionmap.SessionFinished)
-	l = l.WithField("sessionId", sess.ID)
+	l = l.WithField(config.SessionIdKey, sess.ID)
 
 	err := service.StopTask(sess.TaskID, taskmap.TaskFinished)
 	if err != nil {
@@ -152,7 +152,7 @@ func CloseSession(c *gin.Context) {
 func AbortTask(c *gin.Context) {
 	task := c.MustGet(config.TaskIdKey).(*taskmap.Task)
 
-	l := log.WithField("_taskId", task.ID)
+	l := log.WithField(config.TaskIdKey, task.ID)
 
 	if !config.Conf.SingleTenant {
 		l = l.WithField("workspace", task.Workspace)
@@ -182,10 +182,10 @@ func Vnc(wsconn *websocket.Conn) {
 			l.WithError(seErr).WithField("id", id).Error("Vnc(): can't access session")
 			return
 		}
-		l = l.WithField("_taskId", id)
+		l = l.WithField(config.TaskIdKey, id)
 		network = task.Network
 	} else {
-		l = l.WithField("sessionId", id)
+		l = l.WithField(config.SessionIdKey, id)
 		network = sess.Network
 	}
 	l.Debug("network: ", network)
@@ -251,9 +251,9 @@ func Video(c *gin.Context) {
 	presignedUrl, err := service.GeneratePreSignedURL(videoFile)
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{
-			"user":      user,
-			"remote":    c.ClientIP(),
-			"sessionId": sessionID,
+			"user":              user,
+			"remote":            c.ClientIP(),
+			config.SessionIdKey: sessionID,
 		}).Error("Failed to create pre signed url to session video")
 
 		c.Error(utils.NotFoundApiErr("resource not found")).SetType(gin.ErrorTypePublic)
@@ -290,7 +290,7 @@ func TaskDescribe(c *gin.Context) {
 	}
 
 	taskId := c.Param("task")
-	l := log.WithField("user", user).WithField("_taskId", taskId)
+	l := log.WithField("user", user).WithField(config.TaskIdKey, taskId)
 	l.Debug("Get task status")
 	result, err := service.DescribeTask(taskId)
 	if err != nil {

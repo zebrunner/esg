@@ -58,7 +58,9 @@ func (s *startBasis) registerTaskPhase(ctx context.Context) (reply map[string]in
 		return
 	case taskArn := <-waitRequest.ResponseCh:
 		taskId := strings.Split(taskArn, "/")[2]
-		s.Log = s.Log.WithField("_taskId", taskId)
+		s.Log = s.Log.WithField(config.TaskIdKey, taskId)
+
+		// add arn to ctx, so we can add it to selenium err log if any failure will happen
 		s.GinCtx.Set(config.TaskIdKey, taskId)
 
 		s.CachedTask, nonEssential = taskmap.CreateEntity(taskId, s.Env)
@@ -279,7 +281,6 @@ func (st starter) StartService() (map[string]interface{}, *utils.SeleniumError) 
 		logCopy := *st.basis.Log
 		st.basis.Log = st.basis.Log.WithField("attempt", i)
 		for j, p := range st.basis.Phases {
-			st.basis.Log.Info("phase ", i)
 			reply, essential, nonEssential := p(ctx)
 
 			if essential != nil {
@@ -293,6 +294,7 @@ func (st starter) StartService() (map[string]interface{}, *utils.SeleniumError) 
 				st.basis.Log = &logCopy
 				st.basis.CachedTask = nil
 				st.basis.Task = nil
+				break
 			} else if j == len(st.basis.Phases)-1 {
 				// last phase, no errors, finalize service start and return reply
 				if st.finalize != nil {
@@ -304,7 +306,7 @@ func (st starter) StartService() (map[string]interface{}, *utils.SeleniumError) 
 		}
 	}
 
-	return nil, nil
+	return nil, utils.UnknownErr(fmt.Errorf("service startup failed"))
 }
 
 func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l *log.Entry) ServiceStarter {
@@ -338,8 +340,6 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l 
 		st = starter{basis: s}
 	}
 
-	log.Debug(*st.basis.Log, st.basis.GinCtx, *st.basis.Env)
-	log.Debug("phases??: ", s.Phases)
 	return st
 }
 

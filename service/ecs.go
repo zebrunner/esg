@@ -121,7 +121,7 @@ func StopTask(taskId string, stopReason taskmap.StoppedReason) error {
 		}
 	}
 
-	l := log.WithField("_taskId", taskId)
+	l := log.WithField(config.TaskIdKey, taskId)
 	var err error
 	var result *ecs.StopTaskOutput
 	for i := 0; i < 5; i++ {
