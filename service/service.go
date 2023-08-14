@@ -60,7 +60,7 @@ func (s *startBasis) registerTaskPhase(ctx context.Context) (reply map[string]in
 		taskId := strings.Split(taskArn, "/")[2]
 		s.Log = s.Log.WithField(config.TaskIdKey, taskId)
 
-		// add arn to ctx, so we can add it to selenium err log if any failure will happen
+		// add taskId to ctx, so we can add it to selenium err log if any failure will happen later
 		s.GinCtx.Set(config.TaskIdKey, taskId)
 
 		s.CachedTask, nonEssential = taskmap.CreateEntity(taskId, s.Env)
@@ -232,6 +232,8 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (reply map[string]int
 			return
 		}
 
+		// add sessionId to ctx, so we can add it to selenium err log if any failure will happen later
+		s.GinCtx.Set(config.SessionIdKey, sessionId)
 		s.Log = s.Log.WithField(config.SessionIdKey, sessionId)
 
 		_, nonEssential = sessionmap.CreateEntity(sessionId, s.Env, s.CachedTask)
