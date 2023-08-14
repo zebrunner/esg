@@ -53,9 +53,10 @@ func Create(c *gin.Context) {
 		c.Error(utils.AuthErr(err)).SetType(gin.ErrorTypePublic)
 	}
 
-	if !config.Conf.SingleTenant {
-		l = l.WithField("workspace", workspace)
-	}
+	// not adding workspace to logs because as for now user and workspace have the same value
+	// if !config.Conf.SingleTenant {
+		// l = l.WithField("workspace", workspace)
+	// }
 
 	reqCaps, err := capabilities.ParseRequestCapabilities(c.Request.Body)
 	if err != nil {
@@ -73,7 +74,7 @@ func Create(c *gin.Context) {
 	}
 	log.Trace("Container configuration: ", configurationCaps)
 
-	env, err := environment.Build(user, configurationCaps)
+	env, err := environment.Build(workspace, configurationCaps)
 	if err != nil {
 		log.WithError(err).Error("Failed to build execution environment")
 		c.Error(utils.CreationErr(fmt.Errorf("failed to start executor: %v", err))).SetType(gin.ErrorTypePublic)

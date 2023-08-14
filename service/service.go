@@ -154,7 +154,7 @@ func (s *startBasis) setNetworkPhase(ctx context.Context) (reply map[string]inte
 			return
 		}
 
-		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("task started")
+		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("network environment set")
 
 		reply = make(map[string]interface{}, 0)
 		reply["taskId"] = s.CachedTask.ID
