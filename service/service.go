@@ -29,12 +29,18 @@ type startBasis struct {
 	Log          *log.Entry
 	GinCtx       *gin.Context
 	Env          *environment.ExecutionEnvironment
+	Phases       []phase
 	CachedTask   *taskmap.Task
 	Task         *ecs.Task
 }
 
 // essential error -> stop service, non essential error -> retry service start, response chan -> successfull phase execution
 type phase func(ctx context.Context) (map[string]interface{}, error, error)
+
+func (s *startBasis) appendPhase(p phase) *startBasis {
+	s.Phases = append(s.Phases, p)
+	return s
+}
 
 func (s *startBasis) registerTaskPhase(ctx context.Context) (reply map[string]interface{}, essential error, nonEssential error) {
 	s.Log.Debug("task registering")
@@ -259,14 +265,8 @@ func (s *startBasis) setHostPort() error {
 }
 
 type starter struct {
-	basis    startBasis
-	phases   []phase
-	finalize func(basis startBasis)
-}
-
-func (st *starter) appendPhase(p phase) *starter {
-	st.phases = append(st.phases, p)
-	return st
+	basis    *startBasis
+	finalize func(basis *startBasis)
 }
 
 func (st starter) StartService() (map[string]interface{}, *utils.SeleniumError) {
@@ -278,7 +278,7 @@ func (st starter) StartService() (map[string]interface{}, *utils.SeleniumError) 
 	for i := 0; true; i++ {
 		logCopy := *st.basis.Log
 		st.basis.Log = st.basis.Log.WithField("attempt", i)
-		for j, p := range st.phases {
+		for j, p := range st.basis.Phases {
 			st.basis.Log.Info("phase ", i)
 			reply, essential, nonEssential := p(ctx)
 
@@ -293,8 +293,8 @@ func (st starter) StartService() (map[string]interface{}, *utils.SeleniumError) 
 				st.basis.Log = &logCopy
 				st.basis.CachedTask = nil
 				st.basis.Task = nil
-			} else if j == len(st.phases)-1 {
-				// last phase, no errors, finalize start and return reply
+			} else if j == len(st.basis.Phases)-1 {
+				// last phase, no errors, finalize service start and return reply
 				if st.finalize != nil {
 					st.finalize(st.basis)
 				}
@@ -308,31 +308,38 @@ func (st starter) StartService() (map[string]interface{}, *utils.SeleniumError) 
 }
 
 func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l *log.Entry) ServiceStarter {
-	st := starter{
-		basis: startBasis{
-			Log:    l,
-			GinCtx: c,
-			Env:    env,
-		},
-		phases: make([]phase, 0),
+	s := &startBasis{
+		Log:    l,
+		GinCtx: c,
+		Env:    env,
+		Phases: make([]phase, 0),
 	}
 
-	markAsGeneric := func(s startBasis) {
+	markAsGeneric := func(s *startBasis) {
 		s.CachedTask.Status = taskmap.TaskGeneric
 		taskmap.Write(s.CachedTask.ID, s.CachedTask, 0)
 	}
 
+	var st starter
 	if strings.Contains(env.TaskDefinitionFamily, "generic") {
-		st.appendPhase(st.basis.registerTaskPhase)
-		st.finalize = markAsGeneric
+		s.appendPhase(s.registerTaskPhase)
+		st = starter{
+			basis:    s,
+			finalize: markAsGeneric,
+		}
 	} else if strings.Contains(env.TaskDefinitionFamily, "cypress") {
-		st.appendPhase(st.basis.registerTaskPhase).appendPhase(st.basis.startTaskPhase).appendPhase(st.basis.setNetworkPhase)
-		st.finalize = markAsGeneric
+		s.appendPhase(s.registerTaskPhase).appendPhase(s.startTaskPhase).appendPhase(s.setNetworkPhase)
+		st = starter{
+			basis:    s,
+			finalize: markAsGeneric,
+		}
 	} else {
-		st.appendPhase(st.basis.registerTaskPhase).appendPhase(st.basis.startTaskPhase).appendPhase(st.basis.setNetworkPhase).appendPhase(st.basis.startDriverPhase)
+		s.appendPhase(s.registerTaskPhase).appendPhase(s.startTaskPhase).appendPhase(s.setNetworkPhase).appendPhase(s.startDriverPhase)
+		st = starter{basis: s}
 	}
+
 	log.Debug(*st.basis.Log, st.basis.GinCtx, *st.basis.Env)
-	log.Debug("phases??: ", st.phases)
+	log.Debug("phases??: ", s.Phases)
 	return st
 }
 
