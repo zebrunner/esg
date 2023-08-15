@@ -40,16 +40,11 @@ type Session struct {
 }
 
 func CreateEntity(id string, env *environment.ExecutionEnvironment, task *taskmap.Task) (*Session, error) {
-	idleTimeout := float64(env.Capabilities.IdleTimeout)
-	if idleTimeout == 0 {
-		idleTimeout = config.Conf.IdleTimeout.Seconds()
-	}
-
 	cachedSession := &Session{
 		ID:          id,
 		StartedAt:   time.Now(),
 		AccessedAt:  time.Now(),
-		IdleTimeout: idleTimeout,
+		IdleTimeout: float64(env.Capabilities.IdleTimeout),
 		Network:     *env.Network,
 		TaskID:      task.ID,
 		Status:      SessionActive,

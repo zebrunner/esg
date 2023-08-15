@@ -33,8 +33,28 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 	tz, err := caps.GetTimeZone()
 	// Video recorder & artifacts uploader logic
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse timezone. error=%s", err)
+		log.WithError(err).Error("failed to parse timezone")
+		return nil, err
 	}
+
+	resolution, err := caps.GetScreenResolution()
+	if err != nil {
+		log.WithError(err).Error("failed to parse screenResolution")
+		return nil, err
+	}
+
+	videoSize, err := caps.GetVideoScreenSize(resolution)
+	if err != nil {
+		log.WithError(err).Error("failed to parse videoScreenSize")
+		return nil, err
+	}
+
+	frameRate, err := caps.GetFrameRate()
+	if err != nil {
+		log.WithError(err).Error("failed to parse frameRate")
+		return nil, err
+	}
+	log.Info("frameRate: ", frameRate, " resolution: ", resolution, " videoSize: ", videoSize)
 
 	taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
 	// In future maybe there will be need to disable vnc
@@ -59,11 +79,12 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			"clipboardPort":  {clipboardPort, 0},
 		},
 		Env: map[string]string{
-			"DRIVER_ARGS":   driverArgs,
-			"ENABLE_VNC":    strconv.FormatBool(enableVNC),
-			"DNS_SERVERS":   strings.Join(caps.DNSServers, " "),
-			"HOSTS_ENTRIES": strings.Join(caps.HostsEntries, " "),
-			"TZ":            tz.String(),
+			"DRIVER_ARGS":       driverArgs,
+			"ENABLE_VNC":        strconv.FormatBool(enableVNC),
+			"DNS_SERVERS":       strings.Join(caps.DNSServers, " "),
+			"HOSTS_ENTRIES":     strings.Join(caps.HostsEntries, " "),
+			"TZ":                tz.String(),
+			"SCREEN_RESOLUTION": resolution,
 		},
 		Mounts:     []string{shmVolume, logVolume},
 		Command:    []string{"-c", "/entrypoint.sh" + taskLogRedirect},
@@ -90,9 +111,12 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			"LOG_DIR":              logDir,
 			"TASK_LOG":             logDir + "/task.log",
 			"LOG_FILE":             "session.log",
-			"ENABLE_VIDEO":         "true",
+			"ENABLE_VIDEO":         strconv.FormatBool(caps.EnableVideo.ToPrimitive()),
 			"ENABLE_REALTIME_LOGS": "false",
 			"BASIC_AUTH":           "",
+			"VIDEO_SIZE":           videoSize,
+			"CODEC":                caps.VideoCodec.ToPrimitive(),
+			"FRAME_RATE":           frameRate,
 		},
 		Mounts:      []string{logVolume},
 		Links:       []string{"browser"},
@@ -110,8 +134,8 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 	uploaderContainer := Container{
 		Name:       "uploader",
 		Image:      uploaderImage,
-		cpu:        64,  // with 32  uploading is aborted
-		memory:     256, // 64 works for single thread. for backgroud copying it is not enough
+		cpu:        128,  // with 32  uploading is aborted
+		memory:     512, // 64 works for single thread. for backgroud copying it is not enough
 		Privileged: false,
 		Essential:  false,
 		Env: map[string]string{
@@ -157,7 +181,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 		mitmContainer.SetMemory(&caps.MitmMemory, 512, conf.MaxMemory)
 
 		containers = append(containers, &mitmContainer)
-	
+
 		browserContainer.Links = []string{"mitm"}
 	}
 	environment := ExecutionEnvironment{

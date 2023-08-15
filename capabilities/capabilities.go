@@ -10,6 +10,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/config"
 )
 
 var (
@@ -23,6 +24,10 @@ func formatError(value interface{}, cap string, capType string) string {
 
 func typeError(value interface{}, cap string, capType string) string {
 	return fmt.Sprintf("invalid type for %s capability. Cannot assign \"%v\" to field of type %s", cap, value, capType)
+}
+
+func malformedError(value interface{}, cap string, msg string) error {
+	return fmt.Errorf("malformed %s capability: %v. %s", cap, value, msg)
 }
 
 type Validator interface {
@@ -206,7 +211,6 @@ type Capabilities struct {
 	Proxy            mapStrInterfaceWrapper
 	Timeouts         stringWrapper
 	EnableVNC        boolWrapper
-	EnableVideo      boolWrapper
 	EnableLog        boolWrapper
 	ScreenResolution stringWrapper
 	DeviceName       stringWrapper
@@ -216,6 +220,12 @@ type Capabilities struct {
 	Env              sliceStringWrapper
 	HostsEntries     sliceStringWrapper
 	DNSServers       sliceStringWrapper
+
+	//Video related caps
+	EnableVideo     boolWrapper
+	VideoScreenSize stringWrapper
+	VideoCodec      stringWrapper
+	FrameRate       int64Wrapper
 
 	//Vendor caps
 	Cpu    int64Wrapper
@@ -235,79 +245,66 @@ type Capabilities struct {
 }
 
 func (c *Capabilities) GetTimeZone() (*time.Location, error) {
-	timeZone := time.UTC
-	if c.TimeZone != "" {
-		tz, err := time.LoadLocation(c.TimeZone.ToPrimitive())
-		if err != nil {
-			log.WithError(err).WithField("value", c.GetTimeZone).Warn("Bad timezone specified")
-		} else {
-			timeZone = tz
-		}
+	if c.TimeZone == "" {
+		return time.UTC, nil
 	}
-
-	return timeZone, nil
+	tz, err := time.LoadLocation(c.TimeZone.ToPrimitive())
+	if err != nil {
+		log.WithError(err).WithField("value", c.GetTimeZone).Warn("Bad timezone specified")
+		return nil, fmt.Errorf("malformed timeZone capability: %v. Bad timezone specified", c.TimeZone)
+	}
+	return tz, nil
 }
 
-func in(image string, images []string) bool {
-	for _, s := range images {
-		if s == image {
-			return true
-		}
+func (c *Capabilities) GetScreenResolution() (string, error) {
+	if fullResolutionFormat.MatchString(c.ScreenResolution.ToPrimitive()) {
+		return c.ScreenResolution.ToPrimitive(), nil
 	}
-
-	return false
+	if shortResolutionFormat.MatchString(c.ScreenResolution.ToPrimitive()) {
+		return fmt.Sprintf("%sx24", c.ScreenResolution), nil
+	}
+	return "", malformedError(c.ScreenResolution, "screenResolution", "Correct format is WxH (1920x1080) or WxHxD (1920x1080x24)")
 }
 
-func FromImage(image string) ([]*Capabilities, error) {
-	platforms := map[string][]string{
-		"android": {"redroid"},
-		"linux":   {"chrome", "firefox", "edge"},
-		"cypress": {"cypress-chrome", "cypress-chromium", "cypress-edge", "cypress-firefox"},
+// recorder container uses only short resolution format
+func (c *Capabilities) GetVideoScreenSize(screenResolution string) (string, error) {
+	if c.VideoScreenSize == "" {
+		return strings.TrimSuffix(screenResolution, "x24"), nil
 	}
-
-	parts := strings.Split(image, ":")
-	if len(parts) != 2 {
-		return nil, fmt.Errorf("failed to parse image, image is in invalid format. image=%s", image)
+	if fullResolutionFormat.MatchString(c.VideoScreenSize.ToPrimitive()) {
+		return strings.TrimSuffix(c.VideoScreenSize.ToPrimitive(), "x24"), nil
 	}
-
-	executor := parts[0]
-	version := parts[1]
-
-	capsList := make([]*Capabilities, 0)
-	if executor == "redroid" {
-		capsList = append(capsList, &Capabilities{
-			PlatformName:    "android",
-			DeviceName:      "redroid",
-			PlatformVersion: stringWrapper(version),
-		})
-	} else if in(executor, platforms["linux"]) {
-		capsList = append(capsList, &Capabilities{
-			PlatformName:   "linux",
-			BrowserName:    stringWrapper(executor),
-			BrowserVersion: stringWrapper(version),
-			Mitm:           false,
-		})
-
-		capsList = append(capsList, &Capabilities{
-			PlatformName:   "linux",
-			BrowserName:    stringWrapper(executor),
-			BrowserVersion: stringWrapper(version),
-			Mitm:           true,
-		})
-	} else if in(executor, platforms["cypress"]) {
-		capsList = append(capsList, &Capabilities{
-			PlatformName:   "cypress",
-			BrowserName:    stringWrapper(executor),
-			BrowserVersion: stringWrapper(version),
-		})
-	} else {
-		return nil, fmt.Errorf("failed to build capabilities from unknown image. image=%s", image)
+	if shortResolutionFormat.MatchString(c.VideoScreenSize.ToPrimitive()) {
+		return c.VideoScreenSize.ToPrimitive(), nil
 	}
-
-	return capsList, nil
+	return "", malformedError(c.VideoScreenSize, "videoScreenSize", "Correct format is WxH (1920x1080) or WxHxD (1920x1080x24)")
 }
-func FromRequestCaps(reqCaps map[string]interface{}) (*Capabilities, error) {
-	c := &Capabilities{}
+
+func (c *Capabilities) GetFrameRate() (string, error) {
+	if c.FrameRate <= 0 {
+		return "", malformedError(c.FrameRate, "frameRate", "Correct value should be always positive")
+	}
+
+	return strconv.FormatInt(c.FrameRate.ToPrimitive(), 10), nil
+}
+
+func GetDefaultCaps() *Capabilities {
+	// set default values, that are differ from default primitive values (like int64 == 0, bool == false, etc)
+	return &Capabilities{
+		EnableVNC:        true,
+		EnableLog:        true,
+		ScreenResolution: "1920x1080x24",
+
+		IdleTimeout: int64Wrapper(config.Conf.IdleTimeout.Seconds()),
+		MaxTimeout:  int64Wrapper(config.Conf.MaxTimeout.Seconds()),
+
+		EnableVideo: true,
+		FrameRate:   12,
+		VideoCodec:  "libx264",
+	}
+}
+
+func (c *Capabilities) ParseRequestCaps(reqCaps map[string]interface{}) error {
 	mapping := map[string]Validator{
 		"browsername":      &c.BrowserName,
 		"browserversion":   &c.BrowserVersion,
@@ -316,7 +313,6 @@ func FromRequestCaps(reqCaps map[string]interface{}) (*Capabilities, error) {
 		"proxy":            &c.Proxy,
 		"timeouts":         &c.Timeouts,
 		"enablevnc":        &c.EnableVNC,
-		"enablevideo":      &c.EnableVideo,
 		"enablelog":        &c.EnableLog,
 		"screenresolution": &c.ScreenResolution,
 		"devicename":       &c.DeviceName,
@@ -326,6 +322,11 @@ func FromRequestCaps(reqCaps map[string]interface{}) (*Capabilities, error) {
 		"env":              &c.Env,
 		"hostsentries":     &c.HostsEntries,
 		"dnsservers":       &c.DNSServers,
+
+		"enablevideo":     &c.EnableVideo,
+		"videoscreensize": &c.VideoScreenSize,
+		"videocodec":      &c.VideoCodec,
+		"framerate":       &c.FrameRate,
 
 		"cpu":    &c.Cpu,
 		"memory": &c.Memory,
@@ -358,32 +359,104 @@ func FromRequestCaps(reqCaps map[string]interface{}) (*Capabilities, error) {
 		err = errors.New(strings.Join(errs, "\n"))
 	}
 
-	return c, err
+	return err
 }
 
-func (c *Capabilities) GetScreenResolution() (string, error) {
-	if c.ScreenResolution == "" {
-		return "1920x1080x24", nil
-	}
-	if fullResolutionFormat.MatchString(c.ScreenResolution.ToPrimitive()) {
-		return c.ScreenResolution.ToPrimitive(), nil
-	}
-	if shortResolutionFormat.MatchString(c.ScreenResolution.ToPrimitive()) {
-		return fmt.Sprintf("%sx24", c.ScreenResolution), nil
-	}
-	return "", fmt.Errorf(
-		"malformed screenResolution capability: %s. Correct format is WxH (1920x1080) or WxHxD (1920x1080x24)",
-		c.ScreenResolution,
-	)
-}
+type capsForPlatform func(executor string, version string) ([]*Capabilities, error)
 
-func (c *Capabilities) GetVideoScreenSize() (string, error) {
-	screenResolution, err := c.GetScreenResolution()
+func capsForAndroid(executor string, version string) ([]*Capabilities, error) {
+	capsList := make([]*Capabilities, 0)
+	caps := GetDefaultCaps()
+	reqCaps := map[string]interface{}{
+		"platformName":    "android",
+		"deviceName":      executor,
+		"platformVersion": version,
+	}
+
+	err := caps.ParseRequestCaps(reqCaps)
 	if err != nil {
-		return "", fmt.Errorf(
-			"malformed screenResolution capability: %s. Correct format is WxH (1920x1080) or WxHxD (1920x1080x24)",
-			c.ScreenResolution,
-		)
+		return nil, err
 	}
-	return screenResolution, nil
+
+	return append(capsList, caps), nil
+}
+
+func capsForLinux(executor string, version string) ([]*Capabilities, error) {
+	capsList := make([]*Capabilities, 0)
+	reqCaps := map[string]interface{}{
+		"platformName":   "linux",
+		"browserName":    executor,
+		"browserVersion": version,
+	}
+
+	capsWithoutMitm := GetDefaultCaps()
+	err := capsWithoutMitm.ParseRequestCaps(reqCaps)
+	if err != nil {
+		return nil, err
+	}
+
+	capsList = append(capsList, capsWithoutMitm)
+
+	reqCaps["mitm"] = true
+
+	capsWithMitm := GetDefaultCaps()
+	err = capsWithMitm.ParseRequestCaps(reqCaps)
+	if err != nil {
+		return nil, err
+	}
+
+	capsList = append(capsList, capsWithMitm)
+	return capsList, nil
+}
+
+func capsForCypress(executor string, version string) ([]*Capabilities, error) {
+	capsList := make([]*Capabilities, 0)
+	caps := GetDefaultCaps()
+	reqCaps := map[string]interface{}{
+		"platformName":   "cypress",
+		"browserName":    executor,
+		"browserVersion": version,
+	}
+
+	err := caps.ParseRequestCaps(reqCaps)
+	if err != nil {
+		return nil, err
+	}
+
+	return append(capsList, caps), nil
+}
+
+func FromImage(image string) ([]*Capabilities, error) {
+	executors := map[string]capsForPlatform{
+		"redroid": capsForAndroid,
+
+		"chrome":  capsForLinux,
+		"firefox": capsForLinux,
+		"edge":    capsForLinux,
+
+		"cypress-chrome":   capsForCypress,
+		"cypress-chromium": capsForCypress,
+		"cypress-edge":     capsForCypress,
+		"cypress-firefox":  capsForCypress,
+	}
+
+	parts := strings.Split(image, ":")
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("failed to parse image, image is in invalid format. image=%s", image)
+	}
+
+	executor := parts[0]
+	version := parts[1]
+
+	getCapsFn, ok := executors[executor]
+	if !ok {
+		return nil, fmt.Errorf("failed to build capabilities from unknown image. image=%s", image)
+	}
+
+	capsList, err := getCapsFn(executor, version)
+	if err != nil {
+		return nil, err
+	}
+
+	return capsList, nil
 }
