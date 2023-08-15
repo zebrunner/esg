@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 )
 
@@ -250,8 +249,7 @@ func (c *Capabilities) GetTimeZone() (*time.Location, error) {
 	}
 	tz, err := time.LoadLocation(c.TimeZone.ToPrimitive())
 	if err != nil {
-		log.WithError(err).WithField("value", c.GetTimeZone).Warn("Bad timezone specified")
-		return nil, fmt.Errorf("malformed timeZone capability: %v. Bad timezone specified", c.TimeZone)
+		return nil, malformedError(c.TimeZone, "timeZone", "Bad timezone specified")
 	}
 	return tz, nil
 }
@@ -269,10 +267,10 @@ func (c *Capabilities) GetScreenResolution() (string, error) {
 // recorder container uses only short resolution format
 func (c *Capabilities) GetVideoScreenSize(screenResolution string) (string, error) {
 	if c.VideoScreenSize == "" {
-		return strings.TrimSuffix(screenResolution, "x24"), nil
+		return shortResolutionFormat.FindString(screenResolution), nil
 	}
 	if fullResolutionFormat.MatchString(c.VideoScreenSize.ToPrimitive()) {
-		return strings.TrimSuffix(c.VideoScreenSize.ToPrimitive(), "x24"), nil
+		return shortResolutionFormat.FindString(c.VideoScreenSize.ToPrimitive()), nil
 	}
 	if shortResolutionFormat.MatchString(c.VideoScreenSize.ToPrimitive()) {
 		return c.VideoScreenSize.ToPrimitive(), nil
