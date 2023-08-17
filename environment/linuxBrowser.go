@@ -204,6 +204,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 				"healthcheck": {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
 			},
 		},
+		Workspace: workspace,
 	}
 
 	if caps.BrowserName == "firefox" {

@@ -238,6 +238,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 				"vnc": {ContainerPort: vncPort, HostPort: 0, Path: "/"},
 			},
 		},
+		Workspace: workspace,
 	}
 
 	return &environment, nil

@@ -5,7 +5,8 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/base64"
-	"errors"
+	"encoding/json"
+	"fmt"
 	"io"
 	"strings"
 
@@ -94,6 +95,22 @@ type RequestCaps struct {
 	DesiredCapabilities map[string]interface{} `json:"desiredCapabilities,omitempty"`
 }
 
+func ParseRequestCapabilities(body io.ReadCloser) (*RequestCaps, error) {
+	reqCaps := &RequestCaps{}
+	err := json.NewDecoder(body).Decode(reqCaps)
+	if err != nil {
+		return nil, fmt.Errorf("bad json format: %v", err)
+	}
+
+	if len(reqCaps.DesiredCapabilities) != 0 {
+		err = reqCaps.processLegacy()
+	} else {
+		err = reqCaps.process()
+	}
+
+	return reqCaps, err
+}
+
 func (c *RequestCaps) ToMap() map[string]interface{} {
 	return map[string]interface{}{
 		"capabilities": map[string]interface{}{
@@ -104,7 +121,7 @@ func (c *RequestCaps) ToMap() map[string]interface{} {
 	}
 }
 
-func (c *RequestCaps) Process() error {
+func (c *RequestCaps) process() error {
 	var err error
 	err = processLegacyCaps(c.Capabilities.AlwaysMatch)
 	if err != nil {
@@ -155,7 +172,7 @@ func (c *RequestCaps) Process() error {
 	return nil
 }
 
-func (c *RequestCaps) ProcessLegacy() error {
+func (c *RequestCaps) processLegacy() error {
 	// Process desired caps
 	err := processLegacyCaps(c.DesiredCapabilities)
 	if err != nil {
@@ -239,6 +256,15 @@ func (c *RequestCaps) GetContainerConfiguration() (*Capabilities, error) {
 	return conf, nil
 }
 
+func (c *RequestCaps) ToRequestBody() (*bytes.Reader, error) {
+	body, err := json.Marshal(c)
+	if err != nil {
+		return nil, err
+	}
+	
+	return bytes.NewReader(body), nil
+}
+
 func processLegacyCaps(caps map[string]interface{}) error {
 	allowedPlatforms := []string{"linux", "any"}
 	legacyProcessors := map[string]*CapProcessor{
@@ -251,7 +277,7 @@ func processLegacyCaps(caps map[string]interface{}) error {
 						return nil
 					}
 				}
-				return errors.New("platform not allowed")
+				return fmt.Errorf("platform not allowed")
 			},
 		},
 		"name": {

@@ -1,7 +1,6 @@
 package capabilities
 
 import (
-	"errors"
 	"fmt"
 	"strconv"
 
@@ -437,7 +436,7 @@ func (c *Capabilities) ParseRequestCaps(reqCaps map[string]interface{}) error {
 
 	var err error
 	if len(errs) > 0 {
-		err = errors.New(strings.Join(errs, "\n"))
+		err = fmt.Errorf(strings.Join(errs, "\n"))
 	}
 
 	return err

@@ -2,7 +2,7 @@ package service
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -23,9 +23,10 @@ func InitInstanceWorker() {
 
 type instanceWaitRequest struct {
 	ctx                  context.Context
-	responseChan         chan *ec2.Instance
-	errorChan            chan error
 	containerInstanceArn *string
+	EssentialErrCh       chan error
+	NonEssentialErrCh    chan error
+	ResponseCh           chan *ec2.Instance
 }
 
 type instanceWatchWorker struct {
@@ -114,7 +115,7 @@ func (w *instanceWatchWorker) start() {
 					taskArns := ciArnTaskArnsMap[containerInstanceArn]
 					for _, taskArn := range taskArns {
 						req := w.requests[taskArn]
-						req.errorChan <- errors.New("instance unhealty, status: impaired")
+						req.NonEssentialErrCh <- fmt.Errorf("instance unhealty, status: impaired")
 						delete(w.requests, taskArn)
 					}
 				}
@@ -138,7 +139,7 @@ func (w *instanceWatchWorker) start() {
 				taskArns := ciArnTaskArnsMap[ciArn]
 				for _, taskArn := range taskArns {
 					req := w.requests[taskArn]
-					req.responseChan <- ec2Instance
+					req.ResponseCh <- ec2Instance
 					delete(w.requests, taskArn)
 				}
 			}
@@ -149,8 +150,9 @@ func (w *instanceWatchWorker) start() {
 func (w *instanceWatchWorker) waitForInstance(ctx context.Context, task *ecs.Task) *instanceWaitRequest {
 	req := instanceWaitRequest{
 		ctx:                  ctx,
-		responseChan:         make(chan *ec2.Instance),
-		errorChan:            make(chan error),
+		EssentialErrCh:       make(chan error),
+		NonEssentialErrCh:    make(chan error),
+		ResponseCh:           make(chan *ec2.Instance),
 		containerInstanceArn: task.ContainerInstanceArn,
 	}
 

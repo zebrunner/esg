@@ -105,6 +105,7 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities) (*Exe
 				"healthcheck": {ContainerPort: appiumPort, HostPort: 0, Path: "/wd/hub/status-adb"},
 			},
 		},
+		Workspace: workspace,
 	}
 
 	return &environment, nil
