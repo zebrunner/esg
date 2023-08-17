@@ -352,7 +352,7 @@ func validateVideoResolution(videoScreenSize, screenResolution string) error {
 		}
 	}
 
-	if videoResArrInt[0]*videoResArrInt[0] > maxVideoResolutionPixels {
+	if videoResArrInt[0]*videoResArrInt[1] > maxVideoResolutionPixels {
 		return fmt.Errorf("video max total pixels should not be higher than %v", maxVideoResolutionPixels)
 	}
 
