@@ -15,6 +15,17 @@ import (
 var (
 	fullResolutionFormat  = regexp.MustCompile(`^([0-9]+x[0-9]+)x(8|16|24)$`)
 	shortResolutionFormat = regexp.MustCompile(`^[0-9]+x[0-9]+$`)
+	shortFromFullFormat   = regexp.MustCompile(`^[0-9]+x[0-9]+`)
+
+	// 40x30
+	minScrenResolution = []string{"40", "30"}
+	// max aspect ratio 1:6 or 6:1
+	maxScreenAspectRation = 6
+	// added to deal with hardcoded recorder and uploader cpu/memory usage. Also should deal with the limited time for video upload after test
+	// default was: 1920x1080=2_073_600. Should be tested with max possible resolution and framerate, as max pixels value is increased by 50%.
+	maxVideoResolutionPixels = 3_000_000
+	// if frame rate higher than 60, video speed will increase accordingly
+	maxVideoFrameRate int64 = 30
 )
 
 func formatError(value interface{}, cap string, capType string) string {
@@ -255,32 +266,102 @@ func (c *Capabilities) GetTimeZone() (*time.Location, error) {
 }
 
 func (c *Capabilities) GetScreenResolution() (string, error) {
+	var resolution string
 	if fullResolutionFormat.MatchString(c.ScreenResolution.ToPrimitive()) {
-		return c.ScreenResolution.ToPrimitive(), nil
+		resolution = c.ScreenResolution.ToPrimitive()
+	} else if shortResolutionFormat.MatchString(c.ScreenResolution.ToPrimitive()) {
+		resolution = fmt.Sprintf("%sx24", c.ScreenResolution)
+	} else {
+		return "", malformedError(c.ScreenResolution, "screenResolution", "Correct format is WxH (1920x1080) or WxHxD (1920x1080x24)")
 	}
-	if shortResolutionFormat.MatchString(c.ScreenResolution.ToPrimitive()) {
-		return fmt.Sprintf("%sx24", c.ScreenResolution), nil
+
+	err := validateScreenResolution(resolution)
+	if err != nil {
+		return "", malformedError(c.ScreenResolution, "screenResolution", err.Error())
 	}
-	return "", malformedError(c.ScreenResolution, "screenResolution", "Correct format is WxH (1920x1080) or WxHxD (1920x1080x24)")
+
+	return resolution, nil
+}
+
+func validateScreenResolution(resolution string) error {
+	resArrInt := make([]int, 0)
+	for _, v := range strings.Split(resolution, "x") {
+		resInt, _ := strconv.Atoi(v)
+		resArrInt = append(resArrInt, resInt)
+	}
+
+	minResArrInt := make([]int, 0)
+	for _, v := range minScrenResolution {
+		resInt, _ := strconv.Atoi(v)
+		minResArrInt = append(minResArrInt, resInt)
+	}
+
+	for i := 0; i < len(minResArrInt); i++ {
+		if minResArrInt[i] > resArrInt[i] {
+			return fmt.Errorf("min resolution is %s", strings.Join(minScrenResolution, "x"))
+		}
+	}
+
+	if float64(resArrInt[0])/float64(resArrInt[1]) > float64(maxScreenAspectRation) ||
+		float64(resArrInt[1])/float64(resArrInt[0]) > float64(maxScreenAspectRation) {
+		return fmt.Errorf("max aspect ratio is 1:%[1]v or %[1]v:1", maxScreenAspectRation)
+	}
+
+	return nil
 }
 
 // recorder container uses only short resolution format
 func (c *Capabilities) GetVideoScreenSize(screenResolution string) (string, error) {
 	if c.VideoScreenSize == "" {
-		return shortResolutionFormat.FindString(screenResolution), nil
+		return shortFromFullFormat.FindString(screenResolution), nil
 	}
+
+	var videoScreenSize string
 	if fullResolutionFormat.MatchString(c.VideoScreenSize.ToPrimitive()) {
-		return shortResolutionFormat.FindString(c.VideoScreenSize.ToPrimitive()), nil
+		videoScreenSize = shortFromFullFormat.FindString(c.VideoScreenSize.ToPrimitive())
+	} else if shortResolutionFormat.MatchString(c.VideoScreenSize.ToPrimitive()) {
+		videoScreenSize = c.VideoScreenSize.ToPrimitive()
+	} else {
+		return "", malformedError(c.VideoScreenSize, "videoScreenSize", "correct format is WxH (1920x1080) or WxHxD (1920x1080x24)")
 	}
-	if shortResolutionFormat.MatchString(c.VideoScreenSize.ToPrimitive()) {
-		return c.VideoScreenSize.ToPrimitive(), nil
+
+	err := validateVideoResolution(videoScreenSize, screenResolution)
+	if err != nil {
+		return "", malformedError(c.VideoScreenSize, "videoScreenSize", err.Error())
 	}
-	return "", malformedError(c.VideoScreenSize, "videoScreenSize", "Correct format is WxH (1920x1080) or WxHxD (1920x1080x24)")
+
+	return videoScreenSize, nil
+}
+
+func validateVideoResolution(videoScreenSize, screenResolution string) error {
+	resArrInt := make([]int, 0)
+	for _, v := range strings.Split(screenResolution, "x") {
+		resInt, _ := strconv.Atoi(v)
+		resArrInt = append(resArrInt, resInt)
+	}
+
+	videoResArrInt := make([]int, 0)
+	for _, v := range strings.Split(videoScreenSize, "x") {
+		resInt, _ := strconv.Atoi(v)
+		videoResArrInt = append(videoResArrInt, resInt)
+	}
+
+	for i := 0; i < len(videoResArrInt); i++ {
+		if videoResArrInt[i] > resArrInt[i] {
+			return fmt.Errorf("video resolution should not be higher than screen resolution")
+		}
+	}
+
+	if videoResArrInt[0]*videoResArrInt[0] > maxVideoResolutionPixels {
+		return fmt.Errorf("video max total pixels should not be higher than %v", maxVideoResolutionPixels)
+	}
+
+	return nil
 }
 
 func (c *Capabilities) GetFrameRate() (string, error) {
-	if c.FrameRate <= 0 {
-		return "", malformedError(c.FrameRate, "frameRate", "Correct value should be always positive")
+	if c.FrameRate <= 0 || c.FrameRate.ToPrimitive() > maxVideoFrameRate {
+		return "", malformedError(c.FrameRate, "frameRate", fmt.Sprintf("Correct value should be in range [1:%v]", maxVideoFrameRate))
 	}
 
 	return strconv.FormatInt(c.FrameRate.ToPrimitive(), 10), nil
