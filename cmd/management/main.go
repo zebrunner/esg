@@ -87,10 +87,7 @@ func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 					l.WithError(err).Error("Failed to stop the task")
 				}
 			} else {
-				maxTimeout := config.Conf.MaxTimeout
-				if cachedTask.Capabilities.MaxTimeout != 0 {
-					maxTimeout = time.Duration(cachedTask.Capabilities.MaxTimeout) * time.Second
-				}
+				maxTimeout := time.Duration(cachedTask.Capabilities.MaxTimeout) * time.Second
 				l.Trace("maxTimeout: ", maxTimeout)
 
 				if task.CreatedAt != nil && time.Since(*task.CreatedAt) > maxTimeout {

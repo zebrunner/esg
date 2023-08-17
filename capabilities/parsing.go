@@ -10,7 +10,6 @@ import (
 	"io"
 	"strings"
 
-	"github.com/imdario/mergo"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 )
@@ -233,41 +232,28 @@ func (c *RequestCaps) processLegacy() error {
 }
 
 func (c *RequestCaps) GetContainerConfiguration() (*Capabilities, error) {
-	conf := Capabilities{}
-	validationErr := fmt.Errorf("wrong capabilities format")
+	conf := GetDefaultCaps()
 
 	amCaps := RemovePrefix(c.Capabilities.AlwaysMatch, config.VendorPrefix)
 	amCaps = RemovePrefix(amCaps, "appium")
-	amConf, err := FromRequestCaps(amCaps)
+	err := conf.ParseRequestCaps(amCaps)
 	if err != nil {
 		log.WithError(err).Warn("Failed to map config")
 		return nil, err
-	}
-
-	err = mergo.Merge(&conf, amConf)
-	if err != nil {
-		log.WithError(err).Warn("Failed to map config")
-		return nil, fmt.Errorf("%v: %v", validationErr, err)
 	}
 
 	for _, fmCaps := range c.Capabilities.FirstMatch {
 		caps := RemovePrefix(fmCaps, config.VendorPrefix)
 		caps = RemovePrefix(caps, "appium")
 
-		fmConf, err := FromRequestCaps(caps)
+		conf.ParseRequestCaps(caps)
 		if err != nil {
 			log.WithError(err).Warn("Failed to map config")
 			return nil, err
 		}
-
-		err = mergo.Merge(&conf, fmConf)
-		if err != nil {
-			log.WithError(err).Warn("Failed to map config")
-			return nil, fmt.Errorf("%v: %v", validationErr, err)
-		}
 	}
 
-	return &conf, nil
+	return conf, nil
 }
 
 func (c *RequestCaps) ToRequestBody() (*bytes.Reader, error) {
@@ -318,6 +304,9 @@ func processVendorCaps(caps map[string]interface{}) error {
 		"idleTimeout",
 		"maxTimeout",
 		"screenResolution",
+		"videoScreenSize",
+		"videoCodec",
+		"frameRate",
 		"deviceName",
 		"cpu", "Cpu", //to support lower case and camel case
 		"memory", "Memory", //to support lower case and camel case
