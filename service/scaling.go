@@ -241,8 +241,18 @@ func ScaleUp() {
 	requiredCpu := float64(totalRequiredResources.CPU) / float64(instanceTypeResources.CPU)
 	requiredMemory := float64(totalRequiredResources.Memory) / float64(instanceTypeResources.Memory)
 
-	requiredInstances := int64(math.Ceil((float64(currentInstanceCount) + math.Max(requiredCpu, requiredMemory))*(1+config.Conf.ReserveInstancesPercent)))
-	setDesiredCapacity(autoscalingSvc, requiredInstances)
+	desiredCapacity := float64(currentInstanceCount) + math.Max(requiredCpu, requiredMemory)
+	desiredReservationCapacity := desiredCapacity * (1 + config.Conf.ReserveInstancesPercent)
+
+	if desiredReservationCapacity-desiredCapacity > float64(config.Conf.ReserveMaxCapacity) {
+		log.WithFields(log.Fields{
+			"desired reservation capacity": math.Ceil(desiredReservationCapacity),
+			"desired capacity":             math.Ceil(desiredCapacity),
+			"max reservation capacity":     config.Conf.ReserveMaxCapacity,
+		}).Warn("Triggered max reservation capacity limit")
+		desiredReservationCapacity = desiredCapacity + float64(config.Conf.ReserveMaxCapacity)
+	}
+	setDesiredCapacity(autoscalingSvc, int64(math.Ceil(desiredReservationCapacity)))
 }
 
 func ScaleDown() {
@@ -324,7 +334,17 @@ func ScaleDown() {
 		}
 	}
 
-	maxInstancesToDelete := int(math.Ceil(float64(len(instancesToDelete)) * (1 - config.Conf.ReserveInstancesPercent)))
+	instanceToDeleteReserved := float64(len(instancesToDelete)) * (1 - config.Conf.ReserveInstancesPercent)
+	if float64(len(instancesToDelete))-instanceToDeleteReserved > float64(config.Conf.ReserveMaxCapacity) {
+		log.WithFields(log.Fields{
+			"instances to delete":                 len(instancesToDelete),
+			"instances to delete except reserved": math.Ceil(instanceToDeleteReserved),
+			"max reservation capacity":            config.Conf.ReserveMaxCapacity,
+		}).Warn("Triggered max reservation capacity limit")
+		instanceToDeleteReserved = float64(int64(len(instancesToDelete)) - config.Conf.ReserveMaxCapacity)
+	}
+
+	maxInstancesToDelete := int(math.Ceil(instanceToDeleteReserved))
 
 	terminatedCount := 0
 	for _, instance := range instancesToDelete {
