@@ -64,6 +64,7 @@ func (s *startBasis) registerTaskPhase(ctx context.Context) (reply map[string]in
 		s.CachedTask, nonEssential = taskmap.CreateEntity(taskId, s.Env)
 		if nonEssential != nil {
 			s.Log.WithError(nonEssential).Warn("Failed to cache task, restarting...")
+			StopTask(taskId, taskmap.TaskStartupFailure)
 			return
 		}
 
@@ -98,10 +99,6 @@ func (s *startBasis) startTaskPhase(ctx context.Context) (reply map[string]inter
 		nonEssential = taskmap.Write(s.CachedTask.ID, s.CachedTask, 0)
 		if nonEssential != nil {
 			s.Log.WithError(nonEssential).Warn("Failed to cache task, restarting...")
-			err := StopTask(s.CachedTask.ID, taskmap.TaskStartupFailure)
-			if err != nil {
-				s.Log.WithError(err).Warn("Failed to stop task")
-			}
 			return
 		}
 
@@ -137,10 +134,6 @@ func (s *startBasis) setNetworkPhase(ctx context.Context) (reply map[string]inte
 		nonEssential = s.setHostPort()
 		if nonEssential != nil {
 			s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(nonEssential).Warn("failed to set host port")
-			err := StopTask(s.CachedTask.ID, taskmap.TaskStartupFailure)
-			if err != nil {
-				s.Log.WithError(err).Warn("Failed to stop task")
-			}
 			return
 		}
 
@@ -148,10 +141,6 @@ func (s *startBasis) setNetworkPhase(ctx context.Context) (reply map[string]inte
 		nonEssential = taskmap.Write(s.CachedTask.ID, s.CachedTask, 0)
 		if nonEssential != nil {
 			s.Log.WithError(nonEssential).Warn("Failed to cache task, restarting...")
-			err := StopTask(s.CachedTask.ID, taskmap.TaskStartupFailure)
-			if err != nil {
-				s.Log.WithError(err).Warn("Failed to stop task")
-			}
 			return
 		}
 
@@ -170,10 +159,6 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (reply map[string]int
 	if !ok {
 		nonEssential = fmt.Errorf("failed to get driver network")
 		s.Log.WithError(nonEssential).Warn("Failed to start driver, restarting...")
-		err := StopTask(s.CachedTask.ID, taskmap.TaskStartupFailure)
-		if err != nil {
-			s.Log.WithError(err).Warn("Failed to stop task")
-		}
 		return
 	}
 
@@ -181,10 +166,6 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (reply map[string]int
 	if err != nil {
 		essential = utils.CreationErr(fmt.Errorf("failed to start driver"), err.Error())
 		s.Log.WithError(nonEssential).Warn("Failed to start driver, stopping service...")
-		err := StopTask(s.CachedTask.ID, taskmap.TaskStartupFailure)
-		if err != nil {
-			s.Log.WithError(err).Warn("Failed to stop task")
-		}
 		return
 	}
 
@@ -197,10 +178,6 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (reply map[string]int
 	if err != nil {
 		essential = utils.CreationErr(fmt.Errorf("failed to start driver"), err.Error())
 		s.Log.WithError(nonEssential).Warn("Failed to start driver, stopping service...")
-		err := StopTask(s.CachedTask.ID, taskmap.TaskStartupFailure)
-		if err != nil {
-			s.Log.WithError(err).Warn("Failed to stop task")
-		}
 		return
 	}
 
@@ -227,10 +204,6 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (reply map[string]int
 				nonEssential = fmt.Errorf("session id in driver response is empty")
 			}
 			s.Log.WithError(err).Error("Failed to get sessionId")
-			err := StopTask(s.CachedTask.ID, taskmap.TaskStartupFailure)
-			if err != nil {
-				s.Log.WithError(err).Warn("Failed to stop task")
-			}
 			return
 		}
 
@@ -240,11 +213,6 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (reply map[string]int
 		sess, nonEssential = sessionmap.CreateEntity(sessionId, s.Env, s.CachedTask)
 		if err != nil {
 			s.Log.WithError(err).Error("Failed to cache driver session")
-
-			err := StopTask(s.CachedTask.ID, taskmap.TaskStartupFailure)
-			if err != nil {
-				s.Log.WithError(err).Warn("Failed to stop task")
-			}
 			return
 		}
 		// add session to ctx, so we can add it to selenium err log if any failure will happen later
@@ -276,6 +244,15 @@ type starter struct {
 	finalize func(basis *startBasis)
 }
 
+func (st starter) stopTask() {
+	if st.basis.CachedTask != nil {
+		err := StopTask(st.basis.CachedTask.ID, taskmap.TaskStartupFailure)
+		if err != nil {
+			st.basis.Log.WithError(err).Warn("Failed to stop task")
+		}
+	}
+}
+
 func (st starter) StartService() (map[string]interface{}, *utils.SeleniumError) {
 	ctx, ctxCancel := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout)
 	defer ctxCancel()
@@ -287,12 +264,13 @@ func (st starter) StartService() (map[string]interface{}, *utils.SeleniumError) 
 		st.basis.Log = st.basis.Log.WithField("attempt", i)
 		for j, p := range st.basis.Phases {
 			reply, essential, nonEssential := p(ctx)
-
 			if essential != nil {
 				// stop service start, return error
+				st.stopTask()
 				return nil, essential
 			} else if nonEssential != nil {
 				// flush data, next retry
+				st.stopTask()
 				st.basis.Log = &logCopy
 				st.basis.CachedTask = nil
 				st.basis.Task = nil
