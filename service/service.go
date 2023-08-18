@@ -83,7 +83,7 @@ func (s *startBasis) startTaskPhase(ctx context.Context) (reply map[string]inter
 	select {
 	case <-ctx.Done():
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("Task startup timed out")
-		essential = utils.CreationErr(fmt.Errorf("service startup timed out"))
+		essential = utils.CreationErr(fmt.Errorf("request timed out waiting for a node to become available"))
 		return
 	case essentialReason := <-waitRequest.EssentialErrCh:
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to start task, stopping service...")
