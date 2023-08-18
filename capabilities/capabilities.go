@@ -223,6 +223,7 @@ type Capabilities struct {
 	Timeouts         stringWrapper
 	EnableVNC        boolWrapper
 	EnableLog        boolWrapper
+	EnableDebug      boolWrapper
 	ScreenResolution stringWrapper
 	DeviceName       stringWrapper
 	IdleTimeout      int64Wrapper
@@ -394,6 +395,7 @@ func (c *Capabilities) ParseRequestCaps(reqCaps map[string]interface{}) error {
 		"timeouts":         &c.Timeouts,
 		"enablevnc":        &c.EnableVNC,
 		"enablelog":        &c.EnableLog,
+		"enabledebug":      &c.EnableDebug,
 		"screenresolution": &c.ScreenResolution,
 		"devicename":       &c.DeviceName,
 		"idletimeout":      &c.IdleTimeout,
@@ -540,3 +542,4 @@ func FromImage(image string) ([]*Capabilities, error) {
 
 	return capsList, nil
 }
+
