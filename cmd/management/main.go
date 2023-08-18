@@ -75,7 +75,7 @@ func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 			continue
 		}
 
-		l := log.WithField("_taskId", cachedTask.ID)
+		l := log.WithField(config.TaskIdKey, cachedTask.ID)
 
 		// stop zombie and UNHEALTHY tasks that are not pending for stop.
 		// resource usage register and taskId mark for removal is performed only for stopped tasks
@@ -87,10 +87,7 @@ func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 					l.WithError(err).Error("Failed to stop the task")
 				}
 			} else {
-				maxTimeout := config.Conf.MaxTimeout
-				if cachedTask.Capabilities.MaxTimeout != 0 {
-					maxTimeout = time.Duration(cachedTask.Capabilities.MaxTimeout) * time.Second
-				}
+				maxTimeout := time.Duration(cachedTask.Capabilities.MaxTimeout) * time.Second
 				l.Trace("maxTimeout: ", maxTimeout)
 
 				if task.CreatedAt != nil && time.Since(*task.CreatedAt) > maxTimeout {
@@ -145,7 +142,7 @@ func StopLostTasks(keys []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 	for _, task := range tasks {
 		if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
 			taskId := strings.Split(*task.TaskArn, "/")[2]
-			l := log.WithField("_taskId", taskId)
+			l := log.WithField(config.TaskIdKey, taskId)
 			l.Warn("Unrecognized task detected! Aborting")
 
 			cachedTask := &taskmap.Task{
@@ -169,7 +166,7 @@ func TrackResourceUsage(tasks []*ecs.Task, wg *sync.WaitGroup) {
 	// analyze tasks response
 	for _, task := range tasks {
 		taskId := strings.Split(*task.TaskArn, "/")[2]
-		l := log.WithFields(log.Fields{"_taskId": taskId})
+		l := log.WithField(config.TaskIdKey, taskId)
 
 		// tracking task only when execution is stopped
 		if *task.LastStatus != "STOPPED" {
@@ -246,7 +243,7 @@ func StopIdleTasks() {
 				continue
 			}
 
-			l := log.WithFields(log.Fields{"_taskId": session.TaskID, "sessionId": session.ID})
+			l := log.WithFields(log.Fields{config.TaskIdKey: session.TaskID, config.SessionIdKey: session.ID})
 			if !config.Conf.SingleTenant {
 				l = l.WithField("workspace", session.Workspace)
 			}
@@ -479,7 +476,7 @@ func main() {
 	RefreshTaskDefinitions()
 
 	service.InitScalingData()
-	
+
 	var wg sync.WaitGroup
 	wg.Add(1)
 

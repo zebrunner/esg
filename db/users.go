@@ -2,7 +2,6 @@ package db
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
 	"sync"
 
@@ -145,7 +144,7 @@ func DeleteUser(name string) *utils.APIError {
 
 func GetWorkspace(name string) (string, error) {
 	if name == "" {
-		return "", errors.New("failed to get auth credentials")
+		return "", fmt.Errorf("failed to get workspace for user: %s", name)
 	}
 	return name, nil
 }
