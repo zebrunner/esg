@@ -388,7 +388,7 @@ func buildImage(caps *capabilities.Capabilities) (string, error) {
 		version = remapVersion(version)
 		return imageRepo + name + ":" + version, nil
 	} else {
-		return "", fmt.Errorf("filed to build container image. unsupported platform specified. platformName=%s", caps.PlatformName)
+		return "", fmt.Errorf("failed to build container image. unsupported platform specified. platformName=%s", caps.PlatformName)
 	}
 }
 

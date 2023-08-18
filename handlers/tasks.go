@@ -55,13 +55,13 @@ func Create(c *gin.Context) {
 
 	// not adding workspace to logs because as for now user and workspace have the same value
 	// if !config.Conf.SingleTenant {
-		// l = l.WithField("workspace", workspace)
+	// l = l.WithField("workspace", workspace)
 	// }
 
 	reqCaps, err := capabilities.ParseRequestCapabilities(c.Request.Body)
 	if err != nil {
 		l.WithError(err).Error("Failed to process capabilities")
-		c.Error(utils.InvalidArgErr(fmt.Errorf("Failed to process capabilities: %v", err))).SetType(gin.ErrorTypePublic)
+		c.Error(utils.InvalidArgErr(fmt.Errorf("failed to process capabilities"), err.Error())).SetType(gin.ErrorTypePublic)
 		return
 	}
 	log.Trace("Request capabilitites: ", reqCaps.ToMap())
@@ -69,7 +69,7 @@ func Create(c *gin.Context) {
 	configurationCaps, err := reqCaps.GetContainerConfiguration()
 	if err != nil {
 		l.WithError(err).Error("Failed to process zebrunner container configuration")
-		c.Error(utils.InvalidArgErr(fmt.Errorf("failed to process capabilities: %v", err))).SetType(gin.ErrorTypePublic)
+		c.Error(utils.InvalidArgErr(fmt.Errorf("failed to process capabilities"), err.Error())).SetType(gin.ErrorTypePublic)
 		return
 	}
 	log.Trace("Container configuration: ", configurationCaps)
@@ -77,7 +77,7 @@ func Create(c *gin.Context) {
 	env, err := environment.Build(workspace, configurationCaps)
 	if err != nil {
 		log.WithError(err).Error("Failed to build execution environment")
-		c.Error(utils.CreationErr(configurationCaps.GenerateError("failed to create executor", err))).SetType(gin.ErrorTypePublic)
+		c.Error(utils.CreationErr(fmt.Errorf("failed to create executor"), err.Error())).SetType(gin.ErrorTypePublic)
 		return
 	}
 	env.ReqCapabilities = reqCaps

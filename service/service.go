@@ -35,23 +35,24 @@ type startBasis struct {
 }
 
 // essential error -> stop service, non essential error -> retry service start, response chan -> successfull phase execution
-type phase func(ctx context.Context) (map[string]interface{}, error, error)
+type phase func(ctx context.Context) (map[string]interface{}, *utils.SeleniumError, error)
 
 func (s *startBasis) appendPhase(p phase) *startBasis {
 	s.Phases = append(s.Phases, p)
 	return s
 }
 
-func (s *startBasis) registerTaskPhase(ctx context.Context) (reply map[string]interface{}, essential error, nonEssential error) {
+func (s *startBasis) registerTaskPhase(ctx context.Context) (reply map[string]interface{}, essential *utils.SeleniumError, nonEssential error) {
 	s.Log.Debug("task registering")
 	waitRequest := WaitForTaskRegister(ctx, *s.Env)
 	select {
 	case <-ctx.Done():
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("Task register timed out")
-		essential = ctx.Err()
+		essential = utils.CreationErr(fmt.Errorf("service startup timed out"))
 		return
-	case essential = <-waitRequest.EssentialErrCh:
+	case essentialReason := <-waitRequest.EssentialErrCh:
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to register task, stopping service...")
+		essential = utils.CreationErr(fmt.Errorf("failed to create task"), essentialReason.Error())
 		return
 	case nonEssential = <-waitRequest.NonEssentialErrCh:
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(nonEssential).Warn("Failed to register task, restarting...")
@@ -60,33 +61,33 @@ func (s *startBasis) registerTaskPhase(ctx context.Context) (reply map[string]in
 		taskId := strings.Split(taskArn, "/")[2]
 		s.Log = s.Log.WithField(config.TaskIdKey, taskId)
 
-		// add taskId to ctx, so we can add it to selenium err log if any failure will happen later
-		s.GinCtx.Set(config.TaskIdKey, taskId)
-
 		s.CachedTask, nonEssential = taskmap.CreateEntity(taskId, s.Env)
 		if nonEssential != nil {
 			s.Log.WithError(nonEssential).Warn("Failed to cache task, restarting...")
 			return
 		}
 
-		s.Log.WithField("latency", time.Since(s.ServiceStart)).Debug("task registered")
+		// add task to ctx, so we can add taskId to selenium err log if any failure will happen later
+		s.GinCtx.Set(config.TaskIdKey, s.CachedTask)
 
+		s.Log.WithField("latency", time.Since(s.ServiceStart)).Debug("task registered")
 		reply = make(map[string]interface{}, 0)
 		reply["taskId"] = s.CachedTask.ID
 		return reply, nil, nil
 	}
 }
 
-func (s *startBasis) startTaskPhase(ctx context.Context) (reply map[string]interface{}, essential error, nonEssential error) {
+func (s *startBasis) startTaskPhase(ctx context.Context) (reply map[string]interface{}, essential *utils.SeleniumError, nonEssential error) {
 	s.Log.Info("task starting")
 	waitRequest := taskWaiter.waitFor(ctx, s.CachedTask.ID)
 	select {
 	case <-ctx.Done():
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("Task startup timed out")
-		essential = ctx.Err()
+		essential = utils.CreationErr(fmt.Errorf("service startup timed out"))
 		return
-	case essential = <-waitRequest.EssentialErrCh:
+	case essentialReason := <-waitRequest.EssentialErrCh:
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to start task, stopping service...")
+		essential = utils.CreationErr(fmt.Errorf("failed to start task"), essentialReason.Error())
 		return
 	case nonEssential = <-waitRequest.NonEssentialErrCh:
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(nonEssential).Warn("Failed to start task, restarting...")
@@ -105,23 +106,23 @@ func (s *startBasis) startTaskPhase(ctx context.Context) (reply map[string]inter
 		}
 
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("task started")
-
 		reply = make(map[string]interface{}, 0)
 		reply["taskId"] = s.CachedTask.ID
 		return reply, nil, nil
 	}
 }
 
-func (s *startBasis) setNetworkPhase(ctx context.Context) (reply map[string]interface{}, essential error, nonEssential error) {
+func (s *startBasis) setNetworkPhase(ctx context.Context) (reply map[string]interface{}, essential *utils.SeleniumError, nonEssential error) {
 	s.Log.Debug("setting network environment")
 	waitRequest := instanceWorker.waitForInstance(ctx, s.Task)
 	select {
 	case <-ctx.Done():
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("Network configure timed out")
-		essential = ctx.Err()
+		essential = utils.CreationErr(fmt.Errorf("service startup timed out"))
 		return
-	case essential = <-waitRequest.EssentialErrCh:
+	case essentialReason := <-waitRequest.EssentialErrCh:
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to get network configuration, stopping service...")
+		essential = utils.CreationErr(fmt.Errorf("failed to set network configuration"), essentialReason.Error())
 		return
 	case nonEssential = <-waitRequest.NonEssentialErrCh:
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(nonEssential).Warn("Failed to get Network configuration, restarting...")
@@ -162,7 +163,7 @@ func (s *startBasis) setNetworkPhase(ctx context.Context) (reply map[string]inte
 	}
 }
 
-func (s *startBasis) startDriverPhase(ctx context.Context) (reply map[string]interface{}, essential error, nonEssential error) {
+func (s *startBasis) startDriverPhase(ctx context.Context) (reply map[string]interface{}, essential *utils.SeleniumError, nonEssential error) {
 	s.Log.Info("driver starting")
 
 	u, ok := s.Env.Network.GetUrl("driver")
@@ -178,7 +179,7 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (reply map[string]int
 
 	requestBody, err := s.Env.ReqCapabilities.ToRequestBody()
 	if err != nil {
-		essential = err
+		essential = utils.CreationErr(fmt.Errorf("failed to start driver"), err.Error())
 		s.Log.WithError(nonEssential).Warn("Failed to start driver, stopping service...")
 		err := StopTask(s.CachedTask.ID, taskmap.TaskStartupFailure)
 		if err != nil {
@@ -194,7 +195,7 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (reply map[string]int
 
 	startSessionRequest, err := http.NewRequest(http.MethodPost, reqUrl.String(), requestBody)
 	if err != nil {
-		essential = err
+		essential = utils.CreationErr(fmt.Errorf("failed to start driver"), err.Error())
 		s.Log.WithError(nonEssential).Warn("Failed to start driver, stopping service...")
 		err := StopTask(s.CachedTask.ID, taskmap.TaskStartupFailure)
 		if err != nil {
@@ -209,10 +210,11 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (reply map[string]int
 	select {
 	case <-ctx.Done():
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("driver startup timed out")
-		essential = ctx.Err()
+		essential = utils.CreationErr(fmt.Errorf("service startup timed out"))
 		return
-	case essential = <-waitRequest.EssentialErrCh:
+	case essentialReason := <-waitRequest.EssentialErrCh:
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to start driver, stopping service...")
+		essential = utils.CreationErr(fmt.Errorf("failed to start driver"), essentialReason.Error())
 		return
 	case nonEssential = <-waitRequest.NonEssentialErrCh:
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(nonEssential).Warn("Failed to start driver, restarting...")
@@ -232,11 +234,10 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (reply map[string]int
 			return
 		}
 
-		// add sessionId to ctx, so we can add it to selenium err log if any failure will happen later
-		s.GinCtx.Set(config.SessionIdKey, sessionId)
 		s.Log = s.Log.WithField(config.SessionIdKey, sessionId)
 
-		_, nonEssential = sessionmap.CreateEntity(sessionId, s.Env, s.CachedTask)
+		var sess *sessionmap.Session
+		sess, nonEssential = sessionmap.CreateEntity(sessionId, s.Env, s.CachedTask)
 		if err != nil {
 			s.Log.WithError(err).Error("Failed to cache driver session")
 
@@ -246,6 +247,8 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (reply map[string]int
 			}
 			return
 		}
+		// add session to ctx, so we can add it to selenium err log if any failure will happen later
+		s.GinCtx.Set(config.SessionIdKey, sess)
 
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("driver started")
 		return reply, nil, nil
@@ -287,15 +290,14 @@ func (st starter) StartService() (map[string]interface{}, *utils.SeleniumError) 
 
 			if essential != nil {
 				// stop service start, return error
-				if essential == ctx.Err() {
-					return nil, utils.CreationErr(fmt.Errorf("service startup timed out"))
-				}
-				return nil, utils.CreationErr(essential)
+				return nil, essential
 			} else if nonEssential != nil {
 				// flush data, next retry
 				st.basis.Log = &logCopy
 				st.basis.CachedTask = nil
 				st.basis.Task = nil
+				st.basis.GinCtx.Set(config.TaskIdKey, "")
+				st.basis.GinCtx.Set(config.SessionIdKey, "")
 				break
 			} else if j == len(st.basis.Phases)-1 {
 				// last phase, no errors, finalize service start and return reply

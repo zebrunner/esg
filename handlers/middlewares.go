@@ -52,8 +52,8 @@ func APIError(c *gin.Context) {
 func SeleniumError(c *gin.Context) {
 	// Add sessionID to gin context for logging purposes
 	l := log.NewEntry(log.StandardLogger())
-	sessionId := c.Param("session")
-	if sessionId != "" {
+
+	if sessionId := c.Param("session"); sessionId != "" {
 		sess, seErr := getSession(sessionId)
 		if seErr != nil {
 			l.WithField(config.SessionIdKey, sessionId).WithError(seErr).Error("can't access session")
@@ -64,8 +64,7 @@ func SeleniumError(c *gin.Context) {
 		}
 	}
 
-	taskId := c.Param("task")
-	if taskId != "" {
+	if taskId := c.Param("task"); taskId != "" {
 		task, seErr := getTask(taskId)
 		if seErr != nil {
 			l.WithField(config.TaskIdKey, taskId).WithError(seErr).Error("can't access task")
@@ -82,12 +81,23 @@ func SeleniumError(c *gin.Context) {
 		return
 	}
 
-	if value, ok := c.Get(config.TaskIdKey); ok {
-		l = l.WithField(config.TaskIdKey, value)
+	enableDebug := true
+	if taskObject, ok := c.Get(config.TaskIdKey); ok {
+		if task, ok := taskObject.(*taskmap.Task); ok {
+			// Capabilities.EnableDebug by default - false
+			enableDebug = task.Capabilities.EnableDebug.ToPrimitive()
+			l = l.WithField(config.TaskIdKey, task.ID)
+		} else {
+			l.Warn("TaskIdKey was used for storting something other than task cache!")
+		}
 	}
 
-	if value, ok := c.Get(config.SessionIdKey); ok {
-		l = l.WithField(config.SessionIdKey, value)
+	if sessionObject, ok := c.Get(config.SessionIdKey); ok {
+		if session, ok := sessionObject.(*sessionmap.Session); ok {
+			l = l.WithField(config.SessionIdKey, session.ID)
+		} else {
+			l.Warn("SessionIdKey was used for storing something other than session cache!")
+		}
 	}
 
 	for _, err := range c.Errors {
@@ -111,12 +121,12 @@ func SeleniumError(c *gin.Context) {
 
 	l.WithFields(log.Fields{
 		"status":       seErr.ResponseStatus,
-		"error":        seErr.Name,
-		"message":      seErr.Err,
+		"error":        seErr.Error(),
+		"debug":        enableDebug,
 		"request path": c.Request.URL.Path,
 	}).Warn("Error sent to selenium")
 
-	seErr.SendEncodedResponse(c)
+	seErr.SendEncodedResponse(c, enableDebug)
 }
 
 func getSession(id string) (*sessionmap.Session, *utils.SeleniumError) {

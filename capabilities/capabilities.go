@@ -543,10 +543,3 @@ func FromImage(image string) ([]*Capabilities, error) {
 	return capsList, nil
 }
 
-func (c *Capabilities) GenerateError(businessError string, internalError error) error {
-	if c.EnableDebug {
-		return fmt.Errorf("%s; [debug] %s", businessError, internalError.Error())
-	} else {
-		return fmt.Errorf("%s", businessError)
-	}
-}
