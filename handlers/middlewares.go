@@ -88,7 +88,7 @@ func SeleniumError(c *gin.Context) {
 			enableDebug = task.Capabilities.EnableDebug.ToPrimitive()
 			l = l.WithField(config.TaskIdKey, task.ID)
 		} else {
-			l.Warn("TaskIdKey was used for storting something other than task cache!")
+			l.Warn("TaskIdKey was used for storing something other than task cache!")
 		}
 	}
 
