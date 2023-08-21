@@ -3,6 +3,7 @@ package utils
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -53,82 +54,98 @@ func NotFoundApiErr(message string) *APIError {
 type SeleniumError struct {
 	ResponseStatus int
 	Name           string
-	Err            error
+	MainErr        error
+	DebugInfo      []string
 }
 
 func (seErr *SeleniumError) Error() string {
-	return fmt.Sprintf("%s: %s", seErr.Name, seErr.Err.Error())
+	return fmt.Sprintf("%s: %s. %s", seErr.Name, seErr.MainErr.Error(), strings.Join(seErr.DebugInfo, ". "))
 }
 
-func (seErr *SeleniumError) SendEncodedResponse(c *gin.Context) {
+func (seErr *SeleniumError) SendEncodedResponse(c *gin.Context, enableDebug bool) {
+	var message string
+	if enableDebug {
+		message = fmt.Sprintf("%s. %s", seErr.MainErr, strings.Join(seErr.DebugInfo, ". "))
+	} else {
+		message = seErr.MainErr.Error()
+	}
+
 	c.JSON(seErr.ResponseStatus, gin.H{
 		"value": gin.H{
 			"error":   seErr.Name,
-			"message": seErr.Error(),
+			"message": message,
 		},
 	})
 }
 
-func CreationErr(err error) *SeleniumError {
+func CreationErr(err error, extraInfo ...string) *SeleniumError {
 	return &SeleniumError{
 		ResponseStatus: http.StatusInternalServerError,
 		Name:           "session not created",
-		Err:            err,
+		MainErr:        err,
+		DebugInfo:      extraInfo,
 	}
 }
 
-func InvalidArgErr(err error) *SeleniumError {
+func InvalidArgErr(err error, extraInfo ...string) *SeleniumError {
 	return &SeleniumError{
 		ResponseStatus: http.StatusBadRequest,
 		Name:           "invalid argument",
-		Err:            err,
+		MainErr:        err,
+		DebugInfo:      extraInfo,
 	}
 }
 
-func UnknownErr(err error) *SeleniumError {
+func UnknownErr(err error, extraInfo ...string) *SeleniumError {
 	return &SeleniumError{
 		ResponseStatus: http.StatusInternalServerError,
 		Name:           "unknown error",
-		Err:            err,
+		MainErr:        err,
+		DebugInfo:      extraInfo,
 	}
 }
 
-func NoSuchSessionErr(err error) *SeleniumError {
+func NoSuchSessionErr(err error, extraInfo ...string) *SeleniumError {
 	return &SeleniumError{
 		ResponseStatus: http.StatusNotFound,
 		Name:           "invalid session id",
-		Err:            err,
+		MainErr:        err,
+		DebugInfo:      extraInfo,
 	}
 }
 
-func SessionStoppedErr(err error) *SeleniumError {
+func SessionStoppedErr(err error, extraInfo ...string) *SeleniumError {
 	return &SeleniumError{
 		ResponseStatus: http.StatusForbidden,
 		Name:           "session stopped",
-		Err:            err,
+		MainErr:        err,
+		DebugInfo:      extraInfo,
 	}
 }
 
-func NoSuchTaskErr(err error) *SeleniumError {
+func NoSuchTaskErr(err error, extraInfo ...string) *SeleniumError {
 	return &SeleniumError{
 		ResponseStatus: http.StatusNotFound,
 		Name:           "invalid task id",
-		Err:            err,
+		MainErr:        err,
+		DebugInfo:      extraInfo,
 	}
 }
 
-func TaskStoppedErr(err error) *SeleniumError {
+func TaskStoppedErr(err error, extraInfo ...string) *SeleniumError {
 	return &SeleniumError{
 		ResponseStatus: http.StatusForbidden,
 		Name:           "task stopped",
-		Err:            err,
+		MainErr:        err,
+		DebugInfo:      extraInfo,
 	}
 }
 
-func AuthErr(err error) *SeleniumError {
+func AuthErr(err error, extraInfo ...string) *SeleniumError {
 	return &SeleniumError{
 		ResponseStatus: http.StatusUnauthorized,
 		Name:           "invalid credentials",
-		Err:            err,
+		MainErr:        err,
+		DebugInfo:      extraInfo,
 	}
 }

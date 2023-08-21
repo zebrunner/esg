@@ -2,7 +2,8 @@ package service
 
 import (
 	"context"
-	"errors"
+	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,10 +24,11 @@ func InitWaitWorker() {
 }
 
 type waitRequest struct {
-	ctx          context.Context
-	responseChan chan *ecs.Task
-	errorChan    chan error
-	taskId       string
+	ctx               context.Context
+	taskId            string
+	EssentialErrCh    chan error
+	NonEssentialErrCh chan error
+	ResponseCh        chan *ecs.Task
 }
 
 type waitWorker struct {
@@ -89,15 +91,16 @@ func (w *waitWorker) start() {
 
 		// Send responses for running tasks
 		for _, task := range tasks {
-			req, ok := w.requests[*task.TaskArn]
+			taskId := strings.Split(*task.TaskArn, "/")[2]
+			req, ok := w.requests[taskId]
 			if !ok {
 				continue
 			}
 
 			if *task.LastStatus == "STOPPED" {
 				log.Error("Task stopped: ", *task)
-				req.errorChan <- errors.New("task stopped with reason: " + *task.StoppedReason)
-				delete(w.requests, *task.TaskArn)
+				req.NonEssentialErrCh <- fmt.Errorf("task stopped with reason: %s", *task.StoppedReason)
+				delete(w.requests, taskId)
 			}
 
 			if *task.LastStatus != "RUNNING" {
@@ -108,11 +111,11 @@ func (w *waitWorker) start() {
 			switch *task.HealthStatus {
 			case "UNHEALTHY":
 				log.Error("Task unhealthy: ", *task)
-				req.errorChan <- errors.New("task unhealthy")
-				delete(w.requests, *task.TaskArn)
+				req.NonEssentialErrCh <- fmt.Errorf("task unhealthy")
+				delete(w.requests, taskId)
 			case "HEALTHY":
-				req.responseChan <- task
-				delete(w.requests, *task.TaskArn)
+				req.ResponseCh <- task
+				delete(w.requests, taskId)
 			}
 		}
 	}
@@ -120,10 +123,11 @@ func (w *waitWorker) start() {
 
 func (w *waitWorker) waitFor(ctx context.Context, taskId string) *waitRequest {
 	req := waitRequest{
-		ctx:          ctx,
-		responseChan: make(chan *ecs.Task),
-		errorChan:    make(chan error),
-		taskId:       taskId,
+		ctx:               ctx,
+		taskId:            taskId,
+		EssentialErrCh:    make(chan error),
+		NonEssentialErrCh: make(chan error),
+		ResponseCh:        make(chan *ecs.Task),
 	}
 
 	// https://medium.com/@luanrubensf/concurrent-map-access-in-go-a6a733c5ffd1

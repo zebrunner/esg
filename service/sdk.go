@@ -94,6 +94,32 @@ func GetTasksByTaskIds(taskIds []string, svc *ecs.ECS) []*ecs.Task {
 	return tasks
 }
 
+func ListContainerInstances(svc *ecs.ECS) ([]*string, error) {
+	containerInstancesArns := make([]*string, 0)
+	listContainerInstancesInput := ecs.ListContainerInstancesInput{
+		Cluster: &config.Conf.AwsCluster,
+	}
+	for {
+		listContainerInstancesResult, err := utils.RetryThrottling(svc.ListContainerInstances)(&listContainerInstancesInput)
+		if err != nil && len(listContainerInstancesResult.ContainerInstanceArns) != 0 {
+			return nil, err
+		}
+
+		if len(listContainerInstancesResult.ContainerInstanceArns) == 0 {
+			break
+		}
+
+		containerInstancesArns = append(containerInstancesArns, listContainerInstancesResult.ContainerInstanceArns...)
+
+		if listContainerInstancesResult.NextToken == nil {
+			break
+		}
+		listContainerInstancesInput = *listContainerInstancesInput.SetNextToken(*listContainerInstancesResult.NextToken)
+	}
+
+	return containerInstancesArns, nil
+}
+
 func DescribeContainerInstances(containerInstanceIdPtrs []*string, svc *ecs.ECS) ([]*ecs.ContainerInstance, error) {
 	pages := paginate(containerInstanceIdPtrs, 100)
 	containerInstances := make([]*ecs.ContainerInstance, 0)

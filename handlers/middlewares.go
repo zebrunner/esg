@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"errors"
 	"fmt"
 	"os"
 
@@ -9,13 +8,9 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps/sessionmap"
 	"github.com/zebrunner/esg/cachemaps/taskmap"
+	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/db"
 	"github.com/zebrunner/esg/utils"
-)
-
-var (
-	taskContextKey    = "cachedTaskKey"
-	sessionContextKey = "cachedSessionKey"
 )
 
 func APIError(c *gin.Context) {
@@ -57,29 +52,26 @@ func APIError(c *gin.Context) {
 func SeleniumError(c *gin.Context) {
 	// Add sessionID to gin context for logging purposes
 	l := log.NewEntry(log.StandardLogger())
-	sessionId := c.Param("session")
-	if sessionId != "" {
-		l = l.WithField("sessionId", sessionId)
+
+	if sessionId := c.Param("session"); sessionId != "" {
 		sess, seErr := getSession(sessionId)
 		if seErr != nil {
-			l.WithError(seErr).Error("can't access session")
+			l.WithField(config.SessionIdKey, sessionId).WithError(seErr).Error("can't access session")
 			c.Error(seErr).SetType(gin.ErrorTypePublic)
 			c.Abort()
 		} else {
-			c.Set(sessionContextKey, sess)
+			c.Set(config.SessionIdKey, sess)
 		}
 	}
 
-	taskId := c.Param("task")
-	if taskId != "" {
-		l = l.WithField("_taskId", taskId)
+	if taskId := c.Param("task"); taskId != "" {
 		task, seErr := getTask(taskId)
 		if seErr != nil {
-			l.WithError(seErr).Error("can't access task")
+			l.WithField(config.TaskIdKey, taskId).WithError(seErr).Error("can't access task")
 			c.Error(seErr).SetType(gin.ErrorTypePublic)
 			c.Abort()
 		} else {
-			c.Set(taskContextKey, task)
+			c.Set(config.TaskIdKey, task)
 		}
 	}
 
@@ -87,6 +79,25 @@ func SeleniumError(c *gin.Context) {
 
 	if c.Errors.Last() == nil {
 		return
+	}
+
+	enableDebug := true
+	if taskObject, ok := c.Get(config.TaskIdKey); ok {
+		if task, ok := taskObject.(*taskmap.Task); ok {
+			// Capabilities.EnableDebug by default - false
+			enableDebug = task.Capabilities.EnableDebug.ToPrimitive()
+			l = l.WithField(config.TaskIdKey, task.ID)
+		} else {
+			l.Warn("TaskIdKey was used for storing something other than task cache!")
+		}
+	}
+
+	if sessionObject, ok := c.Get(config.SessionIdKey); ok {
+		if session, ok := sessionObject.(*sessionmap.Session); ok {
+			l = l.WithField(config.SessionIdKey, session.ID)
+		} else {
+			l.Warn("SessionIdKey was used for storing something other than session cache!")
+		}
 	}
 
 	for _, err := range c.Errors {
@@ -110,22 +121,22 @@ func SeleniumError(c *gin.Context) {
 
 	l.WithFields(log.Fields{
 		"status":       seErr.ResponseStatus,
-		"error":        seErr.Name,
-		"message":      seErr.Err,
+		"error":        seErr.Error(),
+		"debug":        enableDebug,
 		"request path": c.Request.URL.Path,
 	}).Warn("Error sent to selenium")
 
-	seErr.SendEncodedResponse(c)
+	seErr.SendEncodedResponse(c, enableDebug)
 }
 
 func getSession(id string) (*sessionmap.Session, *utils.SeleniumError) {
 	session, _ := sessionmap.Find(id, true)
 	if session == nil {
-		return nil, utils.NoSuchSessionErr(errors.New("session timed out or not found"))
+		return nil, utils.NoSuchSessionErr(fmt.Errorf("session timed out or not found"))
 	}
 
 	if session.Status == sessionmap.SessionStopped {
-		return nil, utils.SessionStoppedErr(errors.New(string(session.StopReason)))
+		return nil, utils.SessionStoppedErr(fmt.Errorf(string(session.StopReason)))
 	}
 
 	return session, nil
@@ -134,11 +145,11 @@ func getSession(id string) (*sessionmap.Session, *utils.SeleniumError) {
 func getTask(id string) (*taskmap.Task, *utils.SeleniumError) {
 	task, _ := taskmap.Find(id)
 	if task == nil {
-		return nil, utils.NoSuchTaskErr(errors.New("task timed out or not found"))
+		return nil, utils.NoSuchTaskErr(fmt.Errorf("task timed out or not found"))
 	}
 
 	if task.Status == taskmap.TaskStopped {
-		return nil, utils.TaskStoppedErr(errors.New(string(task.StopReason)))
+		return nil, utils.TaskStoppedErr(fmt.Errorf(string(task.StopReason)))
 	}
 
 	return task, nil

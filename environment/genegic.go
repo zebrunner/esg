@@ -212,6 +212,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 				"driver": {ContainerPort: genericPort, HostPort: 0, Path: "/"},
 			},
 		},
+		Workspace: workspace,
 	}
 
 	return &environment, nil

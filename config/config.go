@@ -20,6 +20,8 @@ var (
 	}
 	VendorPrefix = "zebrunner"
 	Conf         = Config{}
+	TaskIdKey    = "_taskId"
+	SessionIdKey = "sessionId"
 )
 
 type Config struct {
@@ -58,6 +60,7 @@ type Config struct {
 
 	LogLevel                string
 	ReserveInstancesPercent float64
+	ReserveMaxCapacity      int64
 
 	ExcludeBrowsers string
 
@@ -97,6 +100,7 @@ func init() {
 
 	flag.StringVar(&Conf.LogLevel, "log-level", "debug", "Desired log level. Valid levels: `panic`, `fatal`, `error`, `warning`, `info`, `debug`, `trace`")
 	flag.Float64Var(&Conf.ReserveInstancesPercent, "reserve-instances-percent", 0.25, "Reserved cluster capacity quota during scale up and down operations")
+	flag.Int64Var(&Conf.ReserveMaxCapacity, "reserve-max-capacity", 5, "Reservation instance limit")
 
 	flag.StringVar(&Conf.ExcludeBrowsers, "exclude-browsers", "", "Pattern for excluding browsers from available images")
 

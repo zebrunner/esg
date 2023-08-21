@@ -2,6 +2,7 @@ package service
 
 import (
 	"database/sql"
+	"fmt"
 	"math"
 	"os"
 	"strconv"
@@ -190,16 +191,21 @@ func getTasksResources(tasks []*ecs.Task, status string) []*Resources {
 	return resources
 }
 
-func describeASG(autoscalingService *autoscaling.AutoScaling) (*autoscaling.Group, error) {
+func getAutoscalingGroup(autoscalingSvc *autoscaling.AutoScaling) (*autoscaling.Group, error) {
 	describeAutoScalingGroupsInput := &autoscaling.DescribeAutoScalingGroupsInput{
 		AutoScalingGroupNames: []*string{&config.Conf.AwsAutoScalingGroup},
 	}
-	describeAutoScalingGroupsOutput, err := utils.RetryThrottling(autoscalingService.DescribeAutoScalingGroups)(describeAutoScalingGroupsInput)
+	describeAutoScalingGroupsOutput, err := utils.RetryThrottling(autoscalingSvc.DescribeAutoScalingGroups)(describeAutoScalingGroupsInput)
 	if err != nil {
-		log.WithError(err).Error("Failed to set desired capacity. Can't describe auto scaling group.")
+		log.WithError(err).Error("Failed to describe auto scaling group.")
 		return nil, err
 	}
+
+	if len(describeAutoScalingGroupsOutput.AutoScalingGroups) == 0 {
+		return nil, fmt.Errorf("autoscaling group with name %s not found", config.Conf.AwsAutoScalingGroup)
+	}
 	autoScalingGroup := describeAutoScalingGroupsOutput.AutoScalingGroups[0]
+
 	return autoScalingGroup, nil
 }
 
@@ -223,24 +229,22 @@ func ScaleUp() {
 		return
 	}
 
-	asg, err := describeASG(autoscalingSvc)
+	asg, err := getAutoscalingGroup(autoscalingSvc)
 	if err != nil {
-		log.WithError(err).Error("Failed to describe autoscaling group")
+		log.WithError(err).Error("Failed to get autoscaling group")
 		return
 	}
 	currentCapacity := *asg.DesiredCapacity
-	log.Debug("Current capacity:", currentCapacity)
 
-	//copying values to variables, as instanceTypeResources could be changed in runtime
-	instanceCpu := instanceTypeResources.CPU
-	instanceMemory := instanceTypeResources.Memory
+	//copying to variable, as instanceTypeResources could be changed in runtime
+	instanceType := *instanceTypeResources
 
 	// Generate list of resources for each instance
 	instanceResources := make([]*Resources, 0, int(currentCapacity))
 	for i := 0; i < int(currentCapacity); i++ {
 		instanceResources = append(instanceResources, &Resources{
-			CPU:    instanceCpu,
-			Memory: instanceMemory,
+			CPU:    instanceType.CPU,
+			Memory: instanceType.Memory,
 		})
 	}
 
@@ -293,41 +297,50 @@ func ScaleUp() {
 		"Memory": totalRequiredResources.Memory,
 	}).Debug("Total required resources")
 
-	requiredCpu := float64(totalRequiredResources.CPU) / float64(instanceCpu)
-	requiredMemory := float64(totalRequiredResources.Memory) / float64(instanceMemory)
+	requiredCpu := float64(totalRequiredResources.CPU) / float64(instanceType.CPU)
+	requiredMemory := float64(totalRequiredResources.Memory) / float64(instanceType.Memory)
 
-	requiredInstances := float64(currentCapacity) + math.Max(requiredCpu, requiredMemory)
-	desiredCapacity := int64(math.Ceil(requiredInstances * (1 + config.Conf.ReserveInstancesPercent)))
+	desiredCapacity := float64(currentCapacity) + math.Max(requiredCpu, requiredMemory)
+	desiredReservationCapacity := desiredCapacity * (1 + config.Conf.ReserveInstancesPercent)
 
-	log.Debug("requiredCpu:", requiredCpu, " requiredMemory:", requiredMemory, " requiredInstances:", requiredInstances, " withReservation:", desiredCapacity)
-
-	if desiredCapacity > *asg.MaxSize {
+	if desiredReservationCapacity-desiredCapacity > float64(config.Conf.ReserveMaxCapacity) {
 		log.WithFields(log.Fields{
-			"maxCapacity":     *asg.MaxSize,
-			"desiredCapacity": desiredCapacity,
-		}).Warn("ASG desired size reached limit!")
-		desiredCapacity = *asg.MaxSize
+			"desired reservation capacity": math.Ceil(desiredReservationCapacity),
+			"desired capacity":             math.Ceil(desiredCapacity),
+			"max reservation capacity":     config.Conf.ReserveMaxCapacity,
+		}).Warn("Triggered max reservation capacity limit")
+		desiredReservationCapacity = desiredCapacity + float64(config.Conf.ReserveMaxCapacity)
 	}
 
-	if desiredCapacity == currentCapacity {
+	newCapacity := int64(math.Ceil(desiredReservationCapacity))
+
+	log.Debug("requiredCpu:", requiredCpu, " requiredMemory:", requiredMemory, " requiredInstances:", desiredCapacity, " withReservation:", desiredReservationCapacity)
+
+	if newCapacity > *asg.MaxSize {
+		log.WithFields(log.Fields{
+			"maxCapacity":     *asg.MaxSize,
+			"desiredCapacity": newCapacity,
+		}).Warn("ASG desired size reached limit!")
+		newCapacity = *asg.MaxSize
+	}
+
+	if newCapacity == *asg.DesiredCapacity {
 		// do nothing
 		return
 	}
 
 	updateGroupInput := &autoscaling.UpdateAutoScalingGroupInput{
 		AutoScalingGroupName: asg.AutoScalingGroupName,
-		DesiredCapacity:      &desiredCapacity,
+		DesiredCapacity:      &newCapacity,
 	}
-
 	_, err = utils.RetryThrottling(autoscalingSvc.UpdateAutoScalingGroup)(updateGroupInput)
 	if err != nil {
 		log.WithError(err).Error("Failed to update auto scaling group")
 		return
 	}
-
 	log.WithFields(log.Fields{
 		"oldCapacity": currentCapacity,
-		"newCapacity": desiredCapacity,
+		"newCapacity": newCapacity,
 	}).Info("Capacity updated")
 }
 
@@ -344,86 +357,57 @@ func ScaleDown() {
 		return
 	}
 
-	describeAutoScalingGroupsInput := &autoscaling.DescribeAutoScalingGroupsInput{
-		AutoScalingGroupNames: []*string{&config.Conf.AwsAutoScalingGroup},
-	}
-	describeAutoScalingGroupsOutput, err := utils.RetryThrottling(autoscalingSvc.DescribeAutoScalingGroups)(describeAutoScalingGroupsInput)
+	asg, err := getAutoscalingGroup(autoscalingSvc)
 	if err != nil {
-		log.WithError(err).Error("Can't describe auto scaling group.")
+		log.WithError(err).Error("Failed to get autoscaling group")
 		return
 	}
-	autoScalingGroup := describeAutoScalingGroupsOutput.AutoScalingGroups[0]
-	minSize := *autoScalingGroup.MinSize
-	desiredCapacity := *autoScalingGroup.DesiredCapacity
-	currentCapacity := desiredCapacity
+	minSize := *asg.MinSize
+	newCapacity, currentCapacity := *asg.DesiredCapacity, *asg.DesiredCapacity
 
-	instances := []*ecs.ContainerInstance{}
-	listInstancesInput := ecs.ListContainerInstancesInput{
-		Cluster: &config.Conf.AwsCluster,
-	}
-	for {
-		listInstancesResult, err := utils.RetryThrottling(svc.ListContainerInstances)(&listInstancesInput)
-		if err != nil && len(listInstancesResult.ContainerInstanceArns) != 0 {
-			log.WithError(err).Debug("Failed to list instances")
-			return
-		}
-		if len(listInstancesResult.ContainerInstanceArns) == 0 {
-			return
-		}
-
-		log.WithField("listInstancesResult", listInstancesResult)
-
-		containerInstances := make([]*string, 0)
-		for _, containerInstanceAws := range listInstancesResult.ContainerInstanceArns {
-			if containerInstanceAws != nil {
-				containerInstances = append(containerInstances, containerInstanceAws)
-			} else {
-				log.Debug("AWS returned an empty containerInsetanceArns??")
-			}
-		}
-
-		describeInstancesInput := ecs.DescribeContainerInstancesInput{
-			Cluster:            &config.Conf.AwsCluster,
-			ContainerInstances: containerInstances,
-		}
-		describeInstancesResult, err := utils.RetryThrottling(svc.DescribeContainerInstances)(&describeInstancesInput)
-		if err != nil {
-			log.WithError(err).Error("Failed to describe instances")
-			break
-		}
-
-		instances = append(instances, describeInstancesResult.ContainerInstances...)
-		if listInstancesResult.NextToken != nil {
-			listInstancesInput.NextToken = listInstancesResult.NextToken
-		} else {
-			break
-		}
+	ciArns, err := ListContainerInstances(svc)
+	if err != nil {
+		log.WithError(err).Debug("Failed to list container instances")
+		return
 	}
 
-	instancesToDelete := []*ecs.ContainerInstance{}
-	for _, instance := range instances {
+	containerInstances, err := DescribeContainerInstances(ciArns, svc)
+	if err != nil {
+		log.WithError(err).Error("Failed to describe container instances")
+		return
+	}
+
+	instancesToDelete := make([]*ecs.ContainerInstance, 0)
+	for _, instance := range containerInstances {
 		if *instance.PendingTasksCount == 0 && *instance.RunningTasksCount == 0 {
-			registeredAt := time.Since(*instance.RegisteredAt)
-			if registeredAt > config.Conf.InstanceCooldownTimeout {
+			instanceUptime := time.Since(*instance.RegisteredAt)
+			if instanceUptime > config.Conf.InstanceCooldownTimeout {
 				instancesToDelete = append(instancesToDelete, instance)
 			}
 		}
 	}
 
-	maxInstancesToDelete := int(math.Ceil(float64(len(instancesToDelete)) * (1 - config.Conf.ReserveInstancesPercent)))
+	instanceToDeleteReserved := float64(len(instancesToDelete)) * (1 - config.Conf.ReserveInstancesPercent)
+	if float64(len(instancesToDelete))-instanceToDeleteReserved > float64(config.Conf.ReserveMaxCapacity) {
+		log.WithFields(log.Fields{
+			"instances to delete":                 len(instancesToDelete),
+			"instances to delete except reserved": math.Ceil(instanceToDeleteReserved),
+			"max reservation capacity":            config.Conf.ReserveMaxCapacity,
+		}).Warn("Triggered max reservation capacity limit")
+		instanceToDeleteReserved = float64(int64(len(instancesToDelete)) - config.Conf.ReserveMaxCapacity)
+	}
+
+	maxInstancesToDelete := int(math.Ceil(instanceToDeleteReserved))
 
 	terminatedCount := 0
 	for _, instance := range instancesToDelete {
-		if desiredCapacity <= minSize {
+		if newCapacity <= minSize || maxInstancesToDelete <= 0 {
 			break
 		}
 
 		l := log.WithField("instance", *instance.Ec2InstanceId)
-		if maxInstancesToDelete <= 0 {
-			l.Trace("Keep instance for reservation")
-			break
-		}
 
+		l.Trace("Stopping instance")
 		stopInstanceInput := autoscaling.TerminateInstanceInAutoScalingGroupInput{
 			InstanceId:                     instance.Ec2InstanceId,
 			ShouldDecrementDesiredCapacity: aws.Bool(true),
@@ -432,8 +416,8 @@ func ScaleDown() {
 		if err != nil {
 			l.WithError(err).Error("Failed to stop instance")
 		}
-		l.Trace("Stopping instance")
-		desiredCapacity -= 1
+
+		newCapacity -= 1
 		maxInstancesToDelete -= 1
 		terminatedCount++
 		time.Sleep(250 * time.Millisecond)
@@ -441,7 +425,7 @@ func ScaleDown() {
 	if terminatedCount != 0 {
 		log.WithFields(log.Fields{
 			"oldCapacity": currentCapacity,
-			"newCapacity": desiredCapacity,
+			"newCapacity": newCapacity,
 		}).Info("Capacity updated")
 	}
 }
