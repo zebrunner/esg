@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -20,7 +21,8 @@ import (
 )
 
 var (
-	instanceTypeResources *Resources = nil
+	instanceTypeResources  *Resources = nil
+	mutexInstanceResources            = &sync.RWMutex{}
 )
 
 type Resources struct {
@@ -29,59 +31,69 @@ type Resources struct {
 }
 
 func InitScalingData() {
-	var err error
-	instanceTypeResources, err = getInstanceResources()
-	log.Debug("Res:", *instanceTypeResources)
+	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
+	if err != nil {
+		log.WithError(err).Error("Failed to create session. Stopping scaler")
+		os.Exit(1)
+	}
+
+	instanceType, err := getInstanceType(session)
+	if err != nil {
+		log.WithError(err).Error("Failed to get instance type. Stopping scaler")
+		os.Exit(1)
+	}
+
+	instanceTypeResources, err = getInstanceResources(session, instanceType)
 	if err != nil {
 		log.WithError(err).Error("Failed to get instance resources. Stopping scaler")
 		os.Exit(1)
 	}
+	log.WithFields(log.Fields{"instance type": instanceType, "resources": instanceTypeResources}).Debug("scaling basis") // to trace
+
+	go checkForResourcesChange(session, instanceType)
 }
 
-func getInstanceResources() (*Resources, error) {
-	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
-	if err != nil {
-		return nil, err
-	}
-
+func getInstanceType(session *awsSession.Session) (string, error) {
 	autoscalingSvc := autoscaling.New(session, &aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
-	describeGroupInput := autoscaling.DescribeAutoScalingGroupsInput{
-		AutoScalingGroupNames: []*string{aws.String(config.Conf.AwsAutoScalingGroup)},
-	}
-	describeGroupOutput, err := utils.RetryThrottling(autoscalingSvc.DescribeAutoScalingGroups)(&describeGroupInput)
+	asg, err := getAutoscalingGroup(autoscalingSvc)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
-	launchConfiguration := describeGroupOutput.AutoScalingGroups[0].LaunchConfigurationName
 	describeLaunchConfigInput := autoscaling.DescribeLaunchConfigurationsInput{
-		LaunchConfigurationNames: []*string{launchConfiguration},
+		LaunchConfigurationNames: []*string{asg.LaunchConfigurationName},
 	}
-	result, err := utils.RetryThrottling(autoscalingSvc.DescribeLaunchConfigurations)(&describeLaunchConfigInput)
+
+	launchConfiguration, err := utils.RetryThrottling(autoscalingSvc.DescribeLaunchConfigurations)(&describeLaunchConfigInput)
 	if err != nil {
-		return nil, err
+		return "", err
+	}
+	if len(launchConfiguration.LaunchConfigurations) <= 0 {
+		return "", fmt.Errorf("instanType is not specified for %s launchConfiguration in %s autoscaling group", *asg.LaunchConfigurationName, *asg.AutoScalingGroupName)
 	}
 
-	instanceType := result.LaunchConfigurations[0].InstanceType
+	instanceType := launchConfiguration.LaunchConfigurations[0].InstanceType
 
-	//check actual registered resource
-	go checkForResourcesChange(session, *instanceType)
+	return *instanceType, nil
+}
 
-	instance, err := db.GetInstance(*instanceType)
-	if err != nil && err != sql.ErrNoRows {
-		log.Info("err on getting instance from db: ", err)
-		return nil, err
-	}
-
-	if instance != nil {
-		log.Info("Found instance in db:", *instance)
+func getInstanceResources(session *awsSession.Session, instanceType string) (*Resources, error) {
+	instance, err := db.GetInstance(instanceType)
+	if err == nil {
+		log.Info("Found instance in db:", *instance) // to trace
 		return &Resources{CPU: instance.Cpu, Memory: instance.Memory}, nil
 	}
-	log.Info("Didn't found instance in db")
+
+	if err != sql.ErrNoRows {
+		log.WithError(err).Info("failed to get instance from db")
+		return nil, err
+	}
+
+	log.Info("Didn't found instance in db") // to trace
 
 	ec2Svc := ec2.New(session, &aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
 	describeInstanceTypeInput := ec2.DescribeInstanceTypesInput{
-		InstanceTypes: []*string{instanceType},
+		InstanceTypes: []*string{aws.String(instanceType)},
 	}
 	instanceTypesResult, err := utils.RetryThrottling(ec2Svc.DescribeInstanceTypes)(&describeInstanceTypeInput)
 	if err != nil {
@@ -89,53 +101,52 @@ func getInstanceResources() (*Resources, error) {
 	}
 	instanceInfo := instanceTypesResult.InstanceTypes[0]
 
-	//considering that 5% of total memory is used by an instance system needs
+	// considering that 5% of total memory is used by an instance system needs
 	executableMemoryPercent := 0.95
 	registeredMemoryToUse := int64(float64(*instanceInfo.MemoryInfo.SizeInMiB) * executableMemoryPercent)
 
 	return &Resources{CPU: *instanceInfo.VCpuInfo.DefaultVCpus * 1024, Memory: registeredMemoryToUse}, nil
 }
 
-//works only if one instance type used among all build
+// works only if one instance type used among all build
 func checkForResourcesChange(session *awsSession.Session, instanceType string) {
-	//perform check every periodBeforeCheck time
+	// perform check every periodBeforeCheck time
 	periodBeforeCheck := time.Hour * 12
-	//if failed to get registerd resources, trying to get it after periodAfterFailCheck time
-	//the most common reason to fail = 0 instances is up
-	periodAfterFailCheck := time.Minute * 5
+	// if failed to get registered resources, trying to get it after periodAfterFailCheck time
+	// the most common reason to fail: 0 instances is up
+	periodAfterFailCheck := time.Minute * 10
 
 	svc := ecs.New(session)
-	//Check if any changes happend
+	// Check if any changes happend
 	for {
 		listInstancesInput := &ecs.ListContainerInstancesInput{
 			Cluster: &config.Conf.AwsCluster,
 		}
 
 		listInstancesOutput, err := utils.RetryThrottling(svc.ListContainerInstances)(listInstancesInput)
-
 		if err != nil || len(listInstancesOutput.ContainerInstanceArns) == 0 {
-			log.WithError(err).Info("no ContainerInstance were found")
+			log.WithError(err).Info("no ContainerInstance were found") // to trace
 			time.Sleep(periodAfterFailCheck)
 			continue
 		}
 
 		ciArr, err := DescribeContainerInstances([]*string{listInstancesOutput.ContainerInstanceArns[0]}, svc)
 		if err != nil {
-			log.WithError(err).Info("Error on describing ci")
+			log.WithError(err).Warn("Error on describing ci")
 			time.Sleep(periodAfterFailCheck)
 			continue
 		}
 
+		// find registered resources in container-instance
 		currentResources := &Resources{}
-		ci := ciArr[0]
-		for _, resource := range ci.RegisteredResources {
+		for _, resource := range ciArr[0].RegisteredResources {
 			if *resource.Name == "CPU" {
 				currentResources.CPU = *resource.IntegerValue
 			} else if *resource.Name == "MEMORY" {
 				currentResources.Memory = *resource.IntegerValue
 			}
 		}
-		log.Info("Registered resources: ", *currentResources)
+		log.Debug("Registered resources: ", *currentResources)
 
 		if currentResources.CPU == 0 || currentResources.Memory == 0 {
 			time.Sleep(periodAfterFailCheck)
@@ -144,6 +155,7 @@ func checkForResourcesChange(session *awsSession.Session, instanceType string) {
 
 		instance, err := db.GetInstance(instanceType)
 		if err != nil {
+			// create record of instance with up-to-date resource value
 			if err == sql.ErrNoRows {
 				instance := &db.Instance{
 					Type:   instanceType,
@@ -152,22 +164,27 @@ func checkForResourcesChange(session *awsSession.Session, instanceType string) {
 				}
 				db.CreateInstance(instance)
 				log.Info("Created instance record in db: ", *instance)
+				mutexInstanceResources.Lock()
 				instanceTypeResources = currentResources
+				mutexInstanceResources.Unlock()
 			} else {
-				log.Info("err on getting instance from db: ", err)
+				log.WithError(err).Error("failed to get instance from db")
 				time.Sleep(periodAfterFailCheck)
 				continue
 			}
 		} else {
+			// update instance record with changed resource value
 			if instance.Cpu != currentResources.CPU || instance.Memory != currentResources.Memory {
-				log.WithFields(log.Fields{"instance: ": *instance, "current resources: ": *currentResources}).Info("instance record differs from registered resources", err)
+				log.WithFields(log.Fields{"instance: ": *instance, "current resources: ": *currentResources}).
+					Debug("DB instance resources differ from actual")
 				instance.Cpu = currentResources.CPU
 				instance.Memory = currentResources.Memory
 				db.RefreshInstance(instance)
-				log.Info("Updated instance record in db: ", *instance)
+				log.Info("Updated instance record in db: ", *instance) // to trace
+
+				mutexInstanceResources.Lock()
 				instanceTypeResources = currentResources
-			} else {
-				log.Info("No diff in resources were found ", *instance)
+				mutexInstanceResources.Unlock()
 			}
 		}
 
@@ -237,8 +254,10 @@ func ScaleUp() {
 	currentCapacity := *asg.DesiredCapacity
 
 	//copying to variable, as instanceTypeResources could be changed in runtime
+	mutexInstanceResources.RLock()
 	instanceType := *instanceTypeResources
-
+	mutexInstanceResources.RUnlock()
+	
 	// Generate list of resources for each instance
 	instanceResources := make([]*Resources, 0, int(currentCapacity))
 	for i := 0; i < int(currentCapacity); i++ {
