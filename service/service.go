@@ -46,6 +46,10 @@ func (s *startBasis) registerTaskPhase(ctx context.Context) (reply map[string]in
 	s.Log.Debug("task registering")
 	waitRequest := WaitForTaskRegister(ctx, *s.Env)
 	select {
+	case <-s.GinCtx.Request.Context().Done():
+		essential = utils.CreationErr(fmt.Errorf("create request is canceled or timed out"))
+		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to register task, stopping service...")
+		return
 	case <-ctx.Done():
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("Task register timed out")
 		essential = utils.CreationErr(fmt.Errorf("service startup timed out"))
@@ -82,6 +86,10 @@ func (s *startBasis) startTaskPhase(ctx context.Context) (reply map[string]inter
 	s.Log.Info("task starting")
 	waitRequest := taskWaiter.waitFor(ctx, s.CachedTask.ID)
 	select {
+	case <-s.GinCtx.Request.Context().Done():
+		essential = utils.CreationErr(fmt.Errorf("create request is canceled or timed out"))
+		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to start task, stopping service...")
+		return
 	case <-ctx.Done():
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("Task startup timed out")
 		essential = utils.CreationErr(fmt.Errorf("request timed out waiting for a node to become available"))
@@ -113,6 +121,10 @@ func (s *startBasis) setNetworkPhase(ctx context.Context) (reply map[string]inte
 	s.Log.Debug("setting network environment")
 	waitRequest := instanceWorker.waitForInstance(ctx, s.Task)
 	select {
+	case <-s.GinCtx.Request.Context().Done():
+		essential = utils.CreationErr(fmt.Errorf("create request is canceled or timed out"))
+		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to get network configuration, stopping service...")
+		return
 	case <-ctx.Done():
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("Network configure timed out")
 		essential = utils.CreationErr(fmt.Errorf("service startup timed out"))
@@ -185,6 +197,10 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (reply map[string]int
 
 	waitRequest := selenium.WaitForSessionStart(ctx, startSessionRequest)
 	select {
+	case <-s.GinCtx.Request.Context().Done():
+		essential = utils.CreationErr(fmt.Errorf("create request is canceled or timed out"))
+		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to start driver, stopping service...")
+		return
 	case <-ctx.Done():
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("driver startup timed out")
 		essential = utils.CreationErr(fmt.Errorf("service startup timed out"))
