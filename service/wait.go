@@ -121,7 +121,7 @@ func (w *waitWorker) start() {
 				}
 
 				if essential != nil {
-					req.EssentialErrCh <- fmt.Errorf("failed to start proxy")
+					req.EssentialErrCh <- essential
 				} else {
 					req.NonEssentialErrCh <- fmt.Errorf("task unhealthy")
 				}
