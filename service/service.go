@@ -305,7 +305,13 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l 
 	}
 
 	var st starter
-	if strings.Contains(env.TaskDefinitionFamily, "cypress") || strings.Contains(env.TaskDefinitionFamily, "generic") {
+	if strings.Contains(env.TaskDefinitionFamily, "generic") {
+		s.appendPhase(s.registerTaskPhase).appendPhase(s.startTaskPhase)
+		st = starter{
+			basis:    s,
+			finalize: markAsGeneric,
+		}
+	} else if strings.Contains(env.TaskDefinitionFamily, "cypress") {
 		s.appendPhase(s.registerTaskPhase).appendPhase(s.startTaskPhase).appendPhase(s.setNetworkPhase)
 		st = starter{
 			basis:    s,
