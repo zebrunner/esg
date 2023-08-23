@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aws/aws-sdk-go/service/autoscaling"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	log "github.com/sirupsen/logrus"
@@ -37,6 +38,7 @@ type instanceWatchWorker struct {
 func (w *instanceWatchWorker) start() {
 	svc := ecs.New(AwsSess)
 	ec2Svc := ec2.New(AwsSess)
+	autoScalingSvc := autoscaling.New(AwsSess)
 
 	for {
 		time.Sleep(5 * time.Second)
@@ -102,10 +104,10 @@ func (w *instanceWatchWorker) start() {
 
 		if len(unhealthyInstanceIdPtrs) != 0 {
 			// stop unhealthy instances
-			err := TerminateInstances(unhealthyInstanceIdPtrs, ec2Svc)
+			err := TerminateInstancesInASG(unhealthyInstanceIdPtrs, false, autoScalingSvc)
 			if err != nil {
 				log.WithError(err).Error("instanceWatchWorker: failed to terminate instances.")
-				break
+				continue
 			}
 
 			// send err to errorChan, so new task on new instance could be recreated
