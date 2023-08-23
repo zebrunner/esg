@@ -94,7 +94,11 @@ func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 					l.WithField("maxTimeout", maxTimeout).Warn("Aborting task due to the max timeout")
 					err := service.StopTask(cachedTask.ID, taskmap.TaskMaxTimeout)
 					if err != nil {
-						l.WithError(err).Error("Failed to stop the task")
+						l.WithError(err).Error("Failed to stop task. Trying to stop forcibly")
+						err := service.StopTaskForcibly(cachedTask.ID, taskmap.TaskMaxTimeout)
+						if err != nil {
+							l.WithError(err).Error("Failed to stop task forcibly")
+						}
 					}
 				}
 			}
