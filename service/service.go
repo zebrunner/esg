@@ -306,7 +306,7 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l 
 
 	var st starter
 	if strings.Contains(env.TaskDefinitionFamily, "generic") {
-		s.appendPhase(s.registerTaskPhase)
+		s.appendPhase(s.registerTaskPhase).appendPhase(s.startTaskPhase)
 		st = starter{
 			basis:    s,
 			finalize: markAsGeneric,
