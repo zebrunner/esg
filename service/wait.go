@@ -111,7 +111,24 @@ func (w *waitWorker) start() {
 			switch *task.HealthStatus {
 			case "UNHEALTHY":
 				log.Error("Task unhealthy: ", *task)
-				req.NonEssentialErrCh <- fmt.Errorf("task unhealthy")
+
+				var essential error
+				for _, container := range task.Containers {
+					if *container.Name == "mitm" && container.ExitCode != nil && *container.ExitCode != 0 {
+						essential = fmt.Errorf("failed to start proxy. exit code: %v", *container.ExitCode)
+						if container.Reason != nil {
+							essential = fmt.Errorf("%s. Reason: %s", essential, *container.Reason)
+						}
+						break
+					}
+				}
+
+				if essential != nil {
+					req.EssentialErrCh <- essential
+				} else {
+					req.NonEssentialErrCh <- fmt.Errorf("task unhealthy")
+				}
+
 				delete(w.requests, taskId)
 			case "HEALTHY":
 				req.ResponseCh <- task
