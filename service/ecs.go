@@ -98,27 +98,13 @@ func ConstDelay(t time.Duration) func(int) time.Duration {
 	}
 }
 
-func StopTask(taskId string, stopReason taskmap.StoppedReason) error {
+func StopTaskForcibly(taskId string, stopReason taskmap.StoppedReason) error {
 	svc := ecs.New(AwsSess)
 
 	stopTaskInput := &ecs.StopTaskInput{
 		Cluster: &config.Conf.AwsCluster,
 		Reason:  aws.String(string(stopReason)),
 		Task:    aws.String(taskId),
-	}
-
-	cachedTask, _ := taskmap.Find(taskId)
-	var oldTaskStatus taskmap.TaskStatus
-	if cachedTask != nil {
-		if cachedTask.Status == taskmap.TaskStopped || cachedTask.Status == taskmap.TaskPendingToStop {
-			err := fmt.Errorf("StopTask() call for stopped/pending to stop task")
-			return err
-		} else {
-			// Set pendingToStop status so no new StopTask() call for current task would be performed
-			oldTaskStatus = cachedTask.Status
-			cachedTask.Status = taskmap.TaskPendingToStop
-			taskmap.Write(taskId, cachedTask, 0)
-		}
 	}
 
 	l := log.WithField(config.TaskIdKey, taskId)
@@ -134,26 +120,33 @@ func StopTask(taskId string, stopReason taskmap.StoppedReason) error {
 		} else {
 			l.WithField("result", result).Trace("task stopped")
 			l.Info("task stopped")
-
-			// Set stopped status and expiration time 10 minutes to be able to track task's usage
-			if cachedTask != nil {
-				cachedTask.Status = taskmap.TaskStopped
-				cachedTask.StopReason = stopReason
-				taskmap.Write(taskId, cachedTask, 10*time.Minute)
-			}
-
-			// break out of the loop
-			break
+			return nil
 		}
 	}
 
+	return err
+}
+
+func StopTask(taskId string, stopReason taskmap.StoppedReason) error {
+	cachedTask, _ := taskmap.Find(taskId)
+	if cachedTask == nil {
+		return StopTaskForcibly(taskId, stopReason)
+	}
+
+	if cachedTask.Status == taskmap.TaskStopped || cachedTask.Status == taskmap.TaskPendingToStop {
+		return fmt.Errorf("can't stop task that is stopped/pending to stop. Task status: %v", cachedTask.Status)
+	}
+
+	// Cache bakup on task stop fail
+	cachedTaskBak := *cachedTask
+
+	// Set pendingToStop status so no new StopTask() call for current task would be performed
+	cachedTask.Status = taskmap.TaskPendingToStop
+	taskmap.Write(taskId, cachedTask, 0)
+
+	err := StopTaskForcibly(taskId, stopReason)
 	if err != nil {
-		l.WithError(err).Error("Failed to stop task")
-		// revert old status because of a stop failure
-		if cachedTask != nil {
-			cachedTask.Status = oldTaskStatus
-			taskmap.Write(taskId, cachedTask, 0)
-		}
+		taskmap.Write(taskId, &cachedTaskBak, 0)
 	}
 
 	return err
