@@ -116,6 +116,9 @@ func (w *waitWorker) start() {
 				for _, container := range task.Containers {
 					if *container.Name == "mitm" && container.ExitCode != nil && *container.ExitCode != 0 {
 						essential = fmt.Errorf("failed to start proxy. exit code: %v", *container.ExitCode)
+						if container.Reason != nil {
+							essential = fmt.Errorf("%s. Reason: %s", essential, *container.Reason)
+						}
 						break
 					}
 				}
