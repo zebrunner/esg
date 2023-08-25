@@ -20,6 +20,7 @@ var (
 	}
 	VendorPrefix = "zebrunner"
 	Conf         = Config{}
+	EsgUUID		 = "_uuid"
 	TaskIdKey    = "_taskId"
 	SessionIdKey = "sessionId"
 )

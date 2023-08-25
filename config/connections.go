@@ -8,10 +8,11 @@ import (
 )
 
 var (
-	RedisSessionsConnection   *redis.Client
-	RedisTasksConnection      *redis.Client
-	RedisDefinitionConnection *redis.Client
-	DbConnection              *sqlx.DB
+	RedisSessionsConnection    *redis.Client
+	RedisTasksConnection       *redis.Client
+	RedisTasksMapperConnection *redis.Client
+	RedisDefinitionConnection  *redis.Client
+	DbConnection               *sqlx.DB
 )
 
 func InitCache() error {
@@ -51,6 +52,19 @@ func InitCache() error {
 	_, err = RedisDefinitionConnection.Ping(context.Background()).Result()
 	if err != nil {
 		log.WithError(err).Error("Failed to ping redis definitions connection")
+		return err
+	}
+
+	// DB 3 - for task's mapper
+	RedisTasksMapperConnection = redis.NewClient(&redis.Options{
+		Addr:     Conf.RedisConnectionString,
+		Password: "",
+		DB:       3,
+	})
+
+	_, err = RedisTasksMapperConnection.Ping(context.Background()).Result()
+	if err != nil {
+		log.WithError(err).Error("Failed to ping redis tasksmepper connection")
 		return err
 	}
 

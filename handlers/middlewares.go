@@ -64,10 +64,10 @@ func SeleniumError(c *gin.Context) {
 		}
 	}
 
-	if taskId := c.Param("task"); taskId != "" {
-		task, seErr := getTask(taskId)
+	if uuid := c.Param("task"); uuid != "" {
+		task, seErr := getTask(uuid)
 		if seErr != nil {
-			l.WithField(config.TaskIdKey, taskId).WithError(seErr).Error("can't access task")
+			l.WithField(config.EsgUUID, uuid).WithError(seErr).Error("can't access task")
 			c.Error(seErr).SetType(gin.ErrorTypePublic)
 			c.Abort()
 		} else {
@@ -86,7 +86,7 @@ func SeleniumError(c *gin.Context) {
 		if task, ok := taskObject.(*taskmap.Task); ok {
 			// Capabilities.EnableDebug by default - false
 			enableDebug = task.Capabilities.EnableDebug.ToPrimitive()
-			l = l.WithField(config.TaskIdKey, task.ID)
+			l = l.WithField(config.EsgUUID, task.UUID).WithField(config.TaskIdKey, task.TaskId)
 		} else {
 			l.Warn("TaskIdKey was used for storing something other than task cache!")
 		}
@@ -143,7 +143,7 @@ func getSession(id string) (*sessionmap.Session, *utils.SeleniumError) {
 }
 
 func getTask(id string) (*taskmap.Task, *utils.SeleniumError) {
-	task, _ := taskmap.Find(id)
+	task, _ := taskmap.FindByUuid(id)
 	if task == nil {
 		return nil, utils.NoSuchTaskErr(fmt.Errorf("task timed out or not found"))
 	}

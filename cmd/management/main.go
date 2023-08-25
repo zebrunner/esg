@@ -75,14 +75,14 @@ func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 			continue
 		}
 
-		l := log.WithField(config.TaskIdKey, cachedTask.ID)
+		l := log.WithField(config.TaskIdKey, cachedTask.TaskId)
 
 		// stop zombie and UNHEALTHY tasks that are not pending for stop.
 		// resource usage register and taskId mark for removal is performed only for stopped tasks
 		if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
 			if *task.HealthStatus == "UNHEALTHY" {
 				l.Warn("Aborting task due to UNHEALTHY HealthStatus")
-				err := service.StopTask(cachedTask.ID, taskmap.TaskUnhealthy)
+				err := service.StopTask(cachedTask.TaskId, taskmap.TaskUnhealthy)
 				if err != nil {
 					l.WithError(err).Error("Failed to stop the task")
 				}
@@ -92,10 +92,10 @@ func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 
 				if task.CreatedAt != nil && time.Since(*task.CreatedAt) > maxTimeout {
 					l.WithField("maxTimeout", maxTimeout).Warn("Aborting task due to the max timeout")
-					err := service.StopTask(cachedTask.ID, taskmap.TaskMaxTimeout)
+					err := service.StopTask(cachedTask.TaskId, taskmap.TaskMaxTimeout)
 					if err != nil {
 						l.WithError(err).Error("Failed to stop task. Trying to stop forcibly")
-						err := service.StopTaskForcibly(cachedTask.ID, taskmap.TaskMaxTimeout)
+						err := service.StopTaskForcibly(cachedTask.TaskId, taskmap.TaskMaxTimeout)
 						if err != nil {
 							l.WithError(err).Error("Failed to stop task forcibly")
 						}
@@ -150,11 +150,11 @@ func StopLostTasks(keys []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 			l.Warn("Unrecognized task detected! Aborting")
 
 			cachedTask := &taskmap.Task{
-				ID:     taskId,
+				TaskId: taskId,
 				Status: taskmap.TaskActive,
 			}
 			// maybe we can track lost task's session and restore lost cache
-			taskmap.Write(cachedTask.ID, cachedTask, 0)
+			taskmap.Write(cachedTask.TaskId, cachedTask, 0)
 
 			err := service.StopTask(taskId, taskmap.TaskLost)
 			if err != nil {
@@ -247,7 +247,7 @@ func StopIdleTasks() {
 				continue
 			}
 
-			l := log.WithFields(log.Fields{config.TaskIdKey: session.TaskID, config.SessionIdKey: session.ID})
+			l := log.WithFields(log.Fields{config.TaskIdKey: session.TaskId, config.SessionIdKey: session.ID})
 			if !config.Conf.SingleTenant {
 				l = l.WithField("workspace", session.Workspace)
 			}
@@ -257,7 +257,7 @@ func StopIdleTasks() {
 			idleTime := time.Since(session.AccessedAt).Seconds()
 			if idleTime > session.IdleTimeout {
 				selenium.CloseSession(session, sessionmap.SessionIdleTimeout)
-				err := service.StopTask(session.TaskID, taskmap.TaskAborted)
+				err := service.StopTask(session.TaskId, taskmap.TaskAborted)
 				if err != nil {
 					l.WithError(err).Error("Failed to stop idle driver task!")
 				} else {

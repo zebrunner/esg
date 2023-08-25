@@ -33,7 +33,7 @@ type Session struct {
 	AccessedAt  time.Time
 	IdleTimeout float64
 	Network     environment.NetworkConfiguration
-	TaskID      string
+	TaskId      string
 	Status      SessionStatus
 	StopReason  StoppedReason `json:",omitempty"`
 	Workspace   string
@@ -46,7 +46,7 @@ func CreateEntity(id string, env *environment.ExecutionEnvironment, task *taskma
 		AccessedAt:  time.Now(),
 		IdleTimeout: float64(env.Capabilities.IdleTimeout),
 		Network:     *env.Network,
-		TaskID:      task.ID,
+		TaskId:      task.TaskId,
 		Status:      SessionActive,
 		Workspace:   task.Workspace,
 	}
@@ -58,7 +58,7 @@ func CreateEntity(id string, env *environment.ExecutionEnvironment, task *taskma
 	}
 
 	task.CurrentSessionID = id
-	err = taskmap.Write(task.ID, task, 0)
+	err = taskmap.Write(task.TaskId, task, 0)
 	if err != nil {
 		log.WithError(err).Error("Session id not cached for task!")
 		return nil, err
