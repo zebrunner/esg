@@ -29,6 +29,7 @@ type startBasis struct {
 	ServiceStart time.Time
 	Log          *log.Entry
 	GinCtx       *gin.Context
+	Request      *http.Request
 	Env          *environment.ExecutionEnvironment
 	Phases       []phase
 	CachedTask   *taskmap.Task
@@ -80,7 +81,7 @@ func (s *startBasis) registerTaskPhase(ctx context.Context) (reply map[string]in
 			return
 		}
 		// moved here as cancel on this phase still may produce healthy lost task
-		if s.GinCtx.Request.Context().Err() != nil {
+		if s.Request.Context().Err() != nil {
 			essential = utils.CreationErr(fmt.Errorf("create request is canceled or timed out"))
 			s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to register task, stopping service...")
 			return
@@ -100,7 +101,7 @@ func (s *startBasis) startTaskPhase(ctx context.Context) (reply map[string]inter
 	s.Log.Info("task starting")
 	waitRequest := taskWaiter.waitFor(ctx, s.CachedTask.TaskId)
 	select {
-	case <-s.GinCtx.Request.Context().Done():
+	case <-s.Request.Context().Done():
 		essential = utils.CreationErr(fmt.Errorf("create request is canceled or timed out"))
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to start task, stopping service...")
 		return
@@ -135,7 +136,7 @@ func (s *startBasis) setNetworkPhase(ctx context.Context) (reply map[string]inte
 	s.Log.Debug("setting network environment")
 	waitRequest := instanceWorker.waitForInstance(ctx, s.Task)
 	select {
-	case <-s.GinCtx.Request.Context().Done():
+	case <-s.Request.Context().Done():
 		essential = utils.CreationErr(fmt.Errorf("create request is canceled or timed out"))
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to get network configuration, stopping service...")
 		return
@@ -196,7 +197,7 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (reply map[string]int
 	}
 
 	reqUrl := &url.URL{}
-	reqUrl.Host, reqUrl.Path = u.Host, path.Join(u.Path, s.GinCtx.Request.URL.Path)
+	reqUrl.Host, reqUrl.Path = u.Host, path.Join(u.Path, s.Request.URL.Path)
 	reqUrl.Scheme = "http"
 	s.Log = s.Log.WithField("driver url", reqUrl)
 
@@ -207,11 +208,11 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (reply map[string]int
 		return
 	}
 
-	startSessionRequest.Header = s.GinCtx.Request.Header
+	startSessionRequest.Header = s.Request.Header
 
 	waitRequest := selenium.WaitForSessionStart(ctx, startSessionRequest)
 	select {
-	case <-s.GinCtx.Request.Context().Done():
+	case <-s.Request.Context().Done():
 		essential = utils.CreationErr(fmt.Errorf("create request is canceled or timed out"))
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to start driver, stopping service...")
 		return
@@ -276,9 +277,9 @@ type genericStarter struct {
 
 func (starter genericStarter) StartService() (map[string]interface{}, *utils.SeleniumError) {
 	starter.basis.initUUID()
-	//override request context, as after response is sent, request context is canceled
-	starter.basis.GinCtx.Request = starter.basis.GinCtx.Request.WithContext(context.Background())
 
+	//override request context, as after response is sent, request context is canceled
+	starter.basis.Request = starter.basis.Request.WithContext(context.Background())
 	go basicStarter(starter).StartService()
 
 	return gin.H{"taskId": *starter.basis.UUID}, nil
@@ -333,10 +334,11 @@ func (starter basicStarter) StartService() (map[string]interface{}, *utils.Selen
 
 func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l *log.Entry) ServiceStarter {
 	s := &startBasis{
-		Log:    l,
-		GinCtx: c,
-		Env:    env,
-		Phases: make([]phase, 0),
+		Log:     l,
+		GinCtx:  c,
+		Request: c.Request,
+		Env:     env,
+		Phases:  make([]phase, 0),
 	}
 
 	markAsGeneric := func(s *startBasis) {
