@@ -13,7 +13,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func buildBrowser(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
+func buildBrowser(workspace string, uuid string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
 	conf := &config.Conf
 
 	browserImage, err := buildImage(caps)
@@ -205,6 +205,7 @@ func buildBrowser(workspace string, caps *capabilities.Capabilities) (*Execution
 			},
 		},
 		Workspace: workspace,
+		UUID: uuid,
 	}
 
 	if caps.BrowserName == "firefox" {

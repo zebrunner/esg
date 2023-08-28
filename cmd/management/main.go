@@ -291,7 +291,7 @@ func RefreshTaskDefinition(image string) error {
 	}
 
 	for _, caps := range capsList {
-		env, err := environment.Build("", caps)
+		env, err := environment.BuildFromCaps(caps)
 		if err != nil {
 			l.WithError(err).Error("Failed to build execution environment!")
 			return err

@@ -10,6 +10,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
+	"github.com/google/uuid"
 	"github.com/zebrunner/esg/cachemaps/definitionmap"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/utils"
@@ -64,9 +65,10 @@ type ExecutionEnvironment struct {
 	TaskDefinitionFamily string
 	Revision             int64
 	Schema               string
+	UUID                 string
 	Containers           []*Container
 	Capabilities         *capabilities.Capabilities
-	ReqCapabilities		 *capabilities.RequestCaps
+	ReqCapabilities      *capabilities.RequestCaps
 	Volumes              map[string]volume
 	Network              *NetworkConfiguration
 	Workspace            string
@@ -303,18 +305,26 @@ func (env *ExecutionEnvironment) GetFamilyRevision() (string, error) {
 }
 
 func Build(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
+	return build(workspace, uuid.NewString(), caps)
+}
+
+func BuildFromCaps(caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
+	return build("", "", caps)
+}
+
+func build(workspace string, uuid string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
 	platform := strings.ToLower(caps.PlatformName.ToPrimitive())
 	if platform == androidPlatform {
 		if strings.ToLower(caps.DeviceName.ToPrimitive()) == redroidDevice {
-			return buildAppiumRedroid(workspace, caps)
+			return buildAppiumRedroid(workspace, uuid, caps)
 		}
 		return nil, fmt.Errorf("device is not supported. deviceName=%s", caps.DeviceName)
 	} else if platform == genericPlatform {
-		return buildGeneric(workspace, caps)
+		return buildGeneric(workspace, uuid, caps)
 	} else if platform == cypressPlatform {
-		return buildCypress(workspace, caps)
+		return buildCypress(workspace, uuid, caps)
 	} else if platform == linuxPlatform || platform == "" || platform == anyPlatform {
-		return buildBrowser(workspace, caps)
+		return buildBrowser(workspace, uuid, caps)
 	}
 
 	return nil, fmt.Errorf("platform is not supported. platformName=%s", caps.PlatformName)
