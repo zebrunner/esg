@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 )
 
@@ -369,6 +370,18 @@ func (c *Capabilities) GetFrameRate() (string, error) {
 	return strconv.FormatInt(c.FrameRate.ToPrimitive(), 10), nil
 }
 
+func (c *Capabilities) GetIdleTimeout() float64 {
+	maxIdleTimeout := config.Conf.MaxIdleTimeout.Seconds()
+	idleTimeout := float64(c.IdleTimeout.ToPrimitive())
+	if idleTimeout > maxIdleTimeout {
+		log.WithFields(log.Fields{"idleTimeout": idleTimeout, "maxIdleTimeout": maxIdleTimeout}).
+			Warn("IdleTimeout time exceeds the maximum allowed value. IdleTimeout capability is set to permitted maximum")
+		c.IdleTimeout = int64Wrapper(maxIdleTimeout)
+	}
+
+	return float64(c.IdleTimeout.ToPrimitive())
+}
+
 func GetDefaultCaps() *Capabilities {
 	// set default values, that are differ from default primitive values (like int64 == 0, bool == false, etc)
 	return &Capabilities{
@@ -440,6 +453,8 @@ func (c *Capabilities) ParseRequestCaps(reqCaps map[string]interface{}) error {
 	if len(errs) > 0 {
 		err = fmt.Errorf(strings.Join(errs, "\n"))
 	}
+	
+	c.GetIdleTimeout()
 
 	return err
 }
@@ -542,4 +557,3 @@ func FromImage(image string) ([]*Capabilities, error) {
 
 	return capsList, nil
 }
-
