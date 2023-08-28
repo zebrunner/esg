@@ -47,8 +47,8 @@ type Task struct {
 	Network          environment.NetworkConfiguration `json:",omitempty"`
 }
 
-func CreateEntity(taskId string, uuid string, env *environment.ExecutionEnvironment) (*Task, error) {
-	err := write(uuid, &UuidMapper{UUID: uuid, TaskId: taskId}, 0)
+func CreateEntity(taskId string, env *environment.ExecutionEnvironment) (*Task, error) {
+	err := write(env.UUID, &UuidMapper{UUID: env.UUID, TaskId: taskId}, 0)
 	if err != nil {
 		log.WithError(err).Error("Task not cached!")
 		return nil, err
@@ -58,7 +58,7 @@ func CreateEntity(taskId string, uuid string, env *environment.ExecutionEnvironm
 		TaskId:       taskId,
 		Capabilities: env.Capabilities,
 		Status:       TaskQueued,
-		UUID:         uuid,
+		UUID:         env.UUID,
 		Workspace:    env.Workspace,
 	}
 

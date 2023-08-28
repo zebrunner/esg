@@ -81,7 +81,7 @@ func Create(c *gin.Context) {
 		return
 	}
 	env.ReqCapabilities = reqCaps
-	l = l.WithField("family", env.TaskDefinitionFamily)
+	l = l.WithField("family", env.TaskDefinitionFamily).WithField(config.RouterUuid, env.UUID)
 
 	l.Info("new request")
 	l.WithField("env", env).Debug("Env details")
