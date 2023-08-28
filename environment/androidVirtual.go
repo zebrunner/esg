@@ -53,9 +53,7 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities) (*Exe
 		Env: map[string]string{
 			"RETAIN_TASK": 		"false",
 			"DEVICE_NAME": 		"ReDroid",
-			"ANDROID_DEVICES": 	"device:5555",
-			"REMOTE_ADB": 		"true",
-			"MCLOUD": 		"true", //candidate for removal
+			"ANDROID_DEVICE": 	"device:5555",
 			"LOG_DIR": 		logDir,
 			"TASK_LOG": 		logDir + "/appium.log",
 		},
