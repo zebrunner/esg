@@ -43,7 +43,7 @@ func (s *startBasis) initUUID() {
 
 	id := uuid.NewString()
 	s.UUID = &id
-	s.Log = s.Log.WithField(config.EsgUUID, id)
+	s.Log = s.Log.WithField(config.RouterUuid, id)
 }
 
 // essential error -> stop service, non essential error -> retry service start, response chan -> successfull phase execution
@@ -79,7 +79,7 @@ func (s *startBasis) registerTaskPhase(ctx context.Context) (reply map[string]in
 			StopTaskForcibly(taskId, taskmap.TaskStartupFailure)
 			return
 		}
- 		// moved here as cancel on this phase still may produce healthy lost task
+		// moved here as cancel on this phase still may produce healthy lost task
 		if s.GinCtx.Request.Context().Err() != nil {
 			essential = utils.CreationErr(fmt.Errorf("create request is canceled or timed out"))
 			s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to register task, stopping service...")
@@ -276,7 +276,7 @@ type genericStarter struct {
 
 func (starter genericStarter) StartService() (map[string]interface{}, *utils.SeleniumError) {
 	starter.basis.initUUID()
-	//override request context, as after response is send request context is canceled
+	//override request context, as after response is sent, request context is canceled
 	starter.basis.GinCtx.Request = starter.basis.GinCtx.Request.WithContext(context.Background())
 
 	go basicStarter(starter).StartService()

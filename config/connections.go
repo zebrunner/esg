@@ -64,7 +64,7 @@ func InitCache() error {
 
 	_, err = RedisTasksMapperConnection.Ping(context.Background()).Result()
 	if err != nil {
-		log.WithError(err).Error("Failed to ping redis tasksmepper connection")
+		log.WithError(err).Error("Failed to ping redis tasksmapper connection")
 		return err
 	}
 

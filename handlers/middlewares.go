@@ -67,7 +67,7 @@ func SeleniumError(c *gin.Context) {
 	if uuid := c.Param("task"); uuid != "" {
 		task, seErr := getTask(uuid)
 		if seErr != nil {
-			l.WithField(config.EsgUUID, uuid).WithError(seErr).Error("can't access task")
+			l.WithField(config.RouterUuid, uuid).WithError(seErr).Error("can't access task")
 			c.Error(seErr).SetType(gin.ErrorTypePublic)
 			c.Abort()
 		} else {
@@ -86,7 +86,7 @@ func SeleniumError(c *gin.Context) {
 		if task, ok := taskObject.(*taskmap.Task); ok {
 			// Capabilities.EnableDebug by default - false
 			enableDebug = task.Capabilities.EnableDebug.ToPrimitive()
-			l = l.WithField(config.EsgUUID, task.UUID).WithField(config.TaskIdKey, task.TaskId)
+			l = l.WithField(config.RouterUuid, task.UUID).WithField(config.TaskIdKey, task.TaskId)
 		} else {
 			l.Warn("TaskIdKey was used for storing something other than task cache!")
 		}

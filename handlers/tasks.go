@@ -153,7 +153,7 @@ func CloseSession(c *gin.Context) {
 func AbortTask(c *gin.Context) {
 	task := c.MustGet(config.TaskIdKey).(*taskmap.Task)
 
-	l := log.WithField(config.EsgUUID, task.UUID).WithField(config.TaskIdKey, task.TaskId)
+	l := log.WithField(config.RouterUuid, task.UUID).WithField(config.TaskIdKey, task.TaskId)
 
 	if !config.Conf.SingleTenant {
 		l = l.WithField("workspace", task.Workspace)
@@ -183,7 +183,7 @@ func Vnc(wsconn *websocket.Conn) {
 			l.WithError(seErr).WithField("id", id).Error("Vnc(): can't access session")
 			return
 		}
-		l = l.WithField(config.EsgUUID, id).WithField(config.TaskIdKey, task.TaskId)
+		l = l.WithField(config.RouterUuid, id).WithField(config.TaskIdKey, task.TaskId)
 		network = task.Network
 	} else {
 		l = l.WithField(config.SessionIdKey, id)
@@ -291,7 +291,7 @@ func TaskDescribe(c *gin.Context) {
 	}
 
 	uuid := c.Param("task")
-	l := log.WithField("user", user).WithField(config.EsgUUID, uuid)
+	l := log.WithField("user", user).WithField(config.RouterUuid, uuid)
 	l.Debug("Get task status")
 
 	task, seErr := getTask(uuid)
@@ -300,7 +300,7 @@ func TaskDescribe(c *gin.Context) {
 		c.Error(utils.NotFoundApiErr(seErr.Error())).SetType(gin.ErrorTypePublic)
 		return
 	}
-	
+
 	result, err := service.DescribeTask(task.TaskId)
 	if err != nil {
 		l.Error("Failed to get task status")

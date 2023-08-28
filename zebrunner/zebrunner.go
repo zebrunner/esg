@@ -30,7 +30,7 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 		return
 	}
 
-	l := log.WithField(config.EsgUUID, cachedTask.UUID).WithField(config.TaskIdKey, cachedTask.TaskId)
+	l := log.WithField(config.RouterUuid, cachedTask.UUID).WithField(config.TaskIdKey, cachedTask.TaskId)
 	if cachedTask.CurrentSessionID != "" {
 		l = l.WithField(config.SessionIdKey, cachedTask.CurrentSessionID)
 	}
