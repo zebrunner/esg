@@ -20,6 +20,7 @@ var (
 	}
 	VendorPrefix = "zebrunner"
 	Conf         = Config{}
+	RouterUuid   = "_uuid"
 	TaskIdKey    = "_taskId"
 	SessionIdKey = "sessionId"
 )
@@ -38,6 +39,7 @@ type Config struct {
 	MaxCpu    int64
 
 	// Timeouts
+	MaxIdleTimeout          time.Duration
 	IdleTimeout             time.Duration
 	SessionDeleteTimeout    time.Duration
 	ServiceStartupTimeout   time.Duration
@@ -79,6 +81,7 @@ func init() {
 	flag.Int64Var(&Conf.MaxMemory, "max-memory", 28675, "maximum memory limitation for session") // max memory for c5a.4xlarge
 	flag.Int64Var(&Conf.MaxCpu, "max-cpu", 16384, "maximum CPU limitation for session")          //max cpu for c5a.4xlarge
 
+	flag.DurationVar(&Conf.MaxIdleTimeout, "max-idle-timeout", 15*time.Minute, "Maximum session idle timeout time that could be set by user's capabilities")
 	flag.DurationVar(&Conf.IdleTimeout, "idle-timeout", 60*time.Second, "Session idle timeout in time.Duration format")
 	flag.DurationVar(&Conf.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
 	flag.DurationVar(&Conf.ServiceStartupTimeout, "service-startup-timeout", 9*time.Minute, "Service startup timeout in time.Duration format")

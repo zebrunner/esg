@@ -35,26 +35,34 @@ const (
 )
 
 type Task struct {
-	ID               string
+	TaskId           string
 	Capabilities     *capabilities.Capabilities
 	Status           TaskStatus
 	UsageTracked     bool
 	Workspace        string
+	UUID             string
 	CurrentSessionID string                           `json:",omitempty"`
 	StopReason       StoppedReason                    `json:",omitempty"`
 	HealthAt         time.Time                        `json:",omitempty"`
 	Network          environment.NetworkConfiguration `json:",omitempty"`
 }
 
-func CreateEntity(id string, env *environment.ExecutionEnvironment) (*Task, error) {
+func CreateEntity(taskId string, uuid string, env *environment.ExecutionEnvironment) (*Task, error) {
+	err := write(uuid, &UuidMapper{UUID: uuid, TaskId: taskId}, 0)
+	if err != nil {
+		log.WithError(err).Error("Task not cached!")
+		return nil, err
+	}
+
 	cachedTask := &Task{
-		ID:           id,
+		TaskId:       taskId,
 		Capabilities: env.Capabilities,
 		Status:       TaskQueued,
+		UUID:         uuid,
 		Workspace:    env.Workspace,
 	}
 
-	err := Write(cachedTask.ID, cachedTask, 0)
+	err = Write(cachedTask.TaskId, cachedTask, 0)
 	if err != nil {
 		log.WithError(err).Error("Task not cached!")
 		return nil, err
@@ -78,6 +86,15 @@ func Find(id string) (*Task, error) {
 	return &task, nil
 }
 
+func FindByUuid(uuid string) (*Task, error) {
+	taskId, err := findTaskId(uuid)
+	if err != nil {
+		return nil, err
+	}
+
+	return Find(*taskId)
+}
+
 func Write(id string, task *Task, expiration time.Duration) error {
 	data, err := json.Marshal(task)
 	if err != nil {
@@ -87,6 +104,10 @@ func Write(id string, task *Task, expiration time.Duration) error {
 	err = config.RedisTasksConnection.Set(context.Background(), id, data, expiration).Err()
 	if err != nil {
 		return err
+	}
+
+	if expiration > 0 {
+		write(task.UUID, &UuidMapper{UUID: task.UUID, TaskId: task.TaskId}, expiration)
 	}
 
 	return nil

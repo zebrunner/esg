@@ -30,7 +30,7 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 		return
 	}
 
-	l := log.WithField(config.TaskIdKey, cachedTask.ID)
+	l := log.WithField(config.RouterUuid, cachedTask.UUID).WithField(config.TaskIdKey, cachedTask.TaskId)
 	if cachedTask.CurrentSessionID != "" {
 		l = l.WithField(config.SessionIdKey, cachedTask.CurrentSessionID)
 	}
@@ -99,7 +99,7 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 		"instant":   time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 		"seconds":   duration.Seconds() - provisioningTime.Seconds(), // register only net time without provisioning time
 		"platform":  platformName,
-		"taskId":    cachedTask.ID,
+		"taskId":    cachedTask.UUID,
 		"sessionId": cachedTask.CurrentSessionID,
 	}
 	l.Trace("request body to track resources: ", requestBody)
@@ -218,7 +218,7 @@ func AbortTask(cachedTask *taskmap.Task, task *ecs.Task) {
 		}).Error("Failed to abort task!")
 		return
 	} else {
-		l := log.WithFields(log.Fields{config.SessionIdKey: cachedTask.CurrentSessionID, config.TaskIdKey: cachedTask.ID, "comment": stopReason})
+		l := log.WithFields(log.Fields{config.SessionIdKey: cachedTask.CurrentSessionID, config.TaskIdKey: cachedTask.TaskId, "comment": stopReason})
 		if !conf.SingleTenant {
 			l = l.WithField("workspace", cachedTask.Workspace)
 		}

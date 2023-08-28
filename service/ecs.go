@@ -1,7 +1,6 @@
 package service
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -142,11 +141,14 @@ func StopTask(taskId string, stopReason taskmap.StoppedReason) error {
 
 	// Set pendingToStop status so no new StopTask() call for current task would be performed
 	cachedTask.Status = taskmap.TaskPendingToStop
-	taskmap.Write(taskId, cachedTask, 0)
+	taskmap.Write(cachedTask.TaskId, cachedTask, 0)
 
-	err := StopTaskForcibly(taskId, stopReason)
+	err := StopTaskForcibly(cachedTask.TaskId, stopReason)
 	if err != nil {
-		taskmap.Write(taskId, &cachedTaskBak, 0)
+		taskmap.Write(cachedTask.TaskId, &cachedTaskBak, 0)
+	} else {
+		cachedTask.Status = taskmap.TaskStopped
+		taskmap.Write(cachedTask.TaskId, cachedTask, 10*time.Minute)
 	}
 
 	return err
@@ -185,45 +187,6 @@ func DescribeTasks(taskArns []string) ([]*ecs.Task, error) {
 	}
 
 	return resultArr, nil
-}
-
-func getTaskIp(ctx context.Context, task *ecs.Task) (string, error) {
-	var ipAddress string
-
-	req := instanceWorker.waitForInstance(ctx, task)
-	select {
-	case err := <-req.NonEssentialErrCh:
-		log.WithError(err).Warn("Failed to get ip from instance")
-		return "", err
-	case instance := <-req.ResponseCh:
-		if config.Conf.UsePublicIp {
-			ipAddress = *instance.PublicIpAddress
-		} else {
-			ipAddress = *instance.PrivateIpAddress
-		}
-	case <-req.ctx.Done():
-		return "", fmt.Errorf("failed to wait until ec2 instance is ready to run. context deadline")
-	}
-
-	log.WithField("instanceIP", ipAddress).Debug()
-	return ipAddress, nil
-}
-
-func SetEnvironmentNetwork(ctx context.Context, env *environment.ExecutionEnvironment, task *ecs.Task) error {
-	for _, endpoint := range env.Network.Endpoints {
-		hostPort, ok := searchHostPort(task, endpoint.ContainerPort)
-		if !ok {
-			return fmt.Errorf("host port not found. containerPort=%d", endpoint.ContainerPort)
-		}
-		endpoint.HostPort = hostPort
-	}
-
-	ip, err := getTaskIp(ctx, task)
-	if err != nil {
-		return err
-	}
-	env.Network.IP = ip
-	return nil
 }
 
 func GeneratePreSignedURL(key string) (string, error) {
