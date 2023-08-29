@@ -299,7 +299,14 @@ func (starter basicStarter) StartService() (map[string]interface{}, *utils.Selen
 				// flush data, next retry
 				task, err := taskmap.FindByUuid(starter.basis.Env.UUID)
 				if err == nil && task != nil {
-					StopTask(task.TaskId, taskmap.TaskStartupFailure)
+					// stop service if task was aborted
+					if task.StopReason == taskmap.TaskAborted {
+						seErr := utils.CreationErr(fmt.Errorf("task have been aborted"), nonEssential.Error())
+						starter.basis.Log.Info(seErr)
+						return nil, seErr
+					} else {
+						StopTask(task.TaskId, taskmap.TaskStartupFailure)
+					}
 				}
 				starter.basis.Log = &logCopy
 				starter.basis.GinCtx.Set(config.TaskIdKey, "")
