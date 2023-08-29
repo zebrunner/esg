@@ -301,7 +301,7 @@ func (starter basicStarter) StartService() (map[string]interface{}, *utils.Selen
 				if err == nil && task != nil {
 					// stop service if task was aborted
 					if task.StopReason == taskmap.TaskAborted {
-						seErr := utils.CreationErr(fmt.Errorf("task have been aborted"), nonEssential.Error())
+						seErr := utils.CreationErr(fmt.Errorf("service start has been aborted"), nonEssential.Error())
 						starter.basis.Log.Info(seErr)
 						return nil, seErr
 					} else {
