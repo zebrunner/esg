@@ -13,7 +13,7 @@ import (
 	"fmt"
 )
 
-func buildGeneric(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
+func buildGeneric(workspace string, uuid string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
 	conf := &config.Conf
 
 	workDir := "/tmp/zebrunner"
@@ -213,6 +213,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 			},
 		},
 		Workspace: workspace,
+		UUID: uuid,
 	}
 
 	return &environment, nil

@@ -17,7 +17,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func buildCypress(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
+func buildCypress(workspace string, uuid string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
 	conf := &config.Conf
 
 	workDir := "/tmp/zebrunner"
@@ -108,7 +108,8 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 			"vnc": {vncPort, 0},
 		},
 		Env: map[string]string{
-			"COMMAND": launchCommand,
+			"COMMAND": 			 launchCommand,
+			"ZEBRUNNER_TASK_ID": uuid,
 		},
 		Mounts:           []string{entrypointVolume, taskVolume, logVolume, cypressVolume, shmVolume},
 		WorkingDirectory: workDir,
@@ -239,6 +240,7 @@ func buildCypress(workspace string, caps *capabilities.Capabilities) (*Execution
 			},
 		},
 		Workspace: workspace,
+		UUID: uuid,
 	}
 
 	return &environment, nil

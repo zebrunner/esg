@@ -11,7 +11,6 @@ import (
 
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps/sessionmap"
 	"github.com/zebrunner/esg/cachemaps/taskmap"
@@ -33,18 +32,7 @@ type startBasis struct {
 	Env          *environment.ExecutionEnvironment
 	Phases       []phase
 	CachedTask   *taskmap.Task
-	UUID         *string
 	Task         *ecs.Task
-}
-
-func (s *startBasis) initUUID() {
-	if s.UUID != nil {
-		return
-	}
-
-	id := uuid.NewString()
-	s.UUID = &id
-	s.Log = s.Log.WithField(config.RouterUuid, id)
 }
 
 // essential error -> stop service, non essential error -> retry service start, response chan -> successfull phase execution
@@ -74,7 +62,7 @@ func (s *startBasis) registerTaskPhase(ctx context.Context) (reply map[string]in
 		taskId := strings.Split(taskArn, "/")[2]
 		s.Log = s.Log.WithField(config.TaskIdKey, taskId)
 
-		s.CachedTask, nonEssential = taskmap.CreateEntity(taskId, *s.UUID, s.Env)
+		s.CachedTask, nonEssential = taskmap.CreateEntity(taskId, s.Env)
 		if nonEssential != nil {
 			s.Log.WithError(nonEssential).Warn("Failed to cache task, restarting...")
 			StopTaskForcibly(taskId, taskmap.TaskStartupFailure)
@@ -92,7 +80,7 @@ func (s *startBasis) registerTaskPhase(ctx context.Context) (reply map[string]in
 
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Debug("task registered")
 		reply = make(map[string]interface{}, 0)
-		reply["taskId"] = *s.UUID
+		reply["taskId"] = s.Env.UUID
 		return reply, nil, nil
 	}
 }
@@ -127,7 +115,7 @@ func (s *startBasis) startTaskPhase(ctx context.Context) (reply map[string]inter
 
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("task started")
 		reply = make(map[string]interface{}, 0)
-		reply["taskId"] = *s.UUID
+		reply["taskId"] = s.Env.UUID
 		return reply, nil, nil
 	}
 }
@@ -174,7 +162,7 @@ func (s *startBasis) setNetworkPhase(ctx context.Context) (reply map[string]inte
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("network environment set")
 
 		reply = make(map[string]interface{}, 0)
-		reply["taskId"] = *s.UUID
+		reply["taskId"] = s.Env.UUID
 		return reply, nil, nil
 	}
 }
@@ -276,13 +264,11 @@ type genericStarter struct {
 }
 
 func (starter genericStarter) StartService() (map[string]interface{}, *utils.SeleniumError) {
-	starter.basis.initUUID()
-
 	//override request context, as after response is sent, request context is canceled
 	starter.basis.Request = starter.basis.Request.WithContext(context.Background())
 	go basicStarter(starter).StartService()
 
-	return gin.H{"taskId": *starter.basis.UUID}, nil
+	return gin.H{"taskId": starter.basis.Env.UUID}, nil
 }
 
 type basicStarter struct {
@@ -291,7 +277,6 @@ type basicStarter struct {
 }
 
 func (starter basicStarter) StartService() (map[string]interface{}, *utils.SeleniumError) {
-	starter.basis.initUUID()
 	ctx, ctxCancel := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout)
 	defer ctxCancel()
 
