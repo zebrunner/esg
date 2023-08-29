@@ -102,9 +102,9 @@ func (w *waitWorker) start() {
 			if *task.LastStatus == "STOPPED" {
 				// #860: Api tests are reexecuted several times
 				if *task.StoppedReason == string(taskmap.TaskAborted) {
-					seErr := utils.CreationErr(fmt.Errorf("task has been aborted"))
-					l.WithError(seErr).Debug()
-					req.EssentialErrCh <- seErr
+					err := fmt.Errorf("task has been aborted")
+					l.WithError(err).Debug()
+					req.EssentialErrCh <- err
 					delete(w.requests, taskId)
 					continue
 				} else if strings.Contains(*task.TaskDefinitionArn, "generic") {
