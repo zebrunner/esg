@@ -1,6 +1,7 @@
 package environment
 
 import (
+	"math/rand"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -46,6 +47,10 @@ func buildGeneric(workspace string, uuid string, caps *capabilities.Capabilities
 
 	cloneCommand := fmt.Sprintf("git clone --progress --depth=1 --single-branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
 	//fmt.Printf("cloneCommand: %s\n", cloneCommand)
+	n := rand.Intn(2)
+	if n != 0 {
+		cloneCommand = "git clone --should be broke"
+	}
 
 	taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
 

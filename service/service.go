@@ -302,6 +302,14 @@ func (starter basicStarter) StartService() (map[string]interface{}, *utils.Selen
 				starter.basis.Log = &logCopy
 				starter.basis.GinCtx.Set(config.TaskIdKey, "")
 				starter.basis.GinCtx.Set(config.SessionIdKey, "")
+
+				//rebuilding for testing
+				if strings.Contains(starter.basis.Env.TaskDefinitionFamily, "generic") {
+					oldUuid := starter.basis.Env.UUID
+					starter.basis.Env, _ = environment.Build(starter.basis.Env.Workspace, starter.basis.Env.Capabilities)
+					starter.basis.Env.UUID = oldUuid
+				}
+
 				break
 			} else if j == len(starter.basis.Phases)-1 {
 				// last phase, no errors, finalize service start and return reply
