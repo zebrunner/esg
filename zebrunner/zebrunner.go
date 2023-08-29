@@ -52,9 +52,9 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 		}
 
 		if task.StoppingAt == nil {
-			l = l.WithField("StartedAt", task.StoppingAt) // nil
+			l = l.WithField("StoppingAt", task.StoppingAt) // nil
 		} else {
-			l = l.WithField("StartedAt", *task.StoppingAt) //time
+			l = l.WithField("StoppingAt", *task.StoppingAt) //time
 		}
 
 		l.Warn("Unable to track resourse usage!")
@@ -73,7 +73,14 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 
 	provisioningTime := healthAt.Sub(startedAt) //diff between healthAt and startedAt provide task preparation time
 	l.Trace("provisioningSeconds: ", provisioningTime.Seconds())
-
+	netTime := duration.Seconds() - provisioningTime.Seconds()
+	// if task completed before it became healthy
+	if netTime <= 0 {
+		//task waiter sleep period time.Sleep(5 * time.Second)
+		//generic healthcheck Interval: 5 seconds,
+		l.WithField("netTime", netTime).Debug("Net time is smaller than 0")
+		netTime = 5
+	}
 	platformName := strings.ToLower(cachedTask.Capabilities.PlatformName.ToPrimitive())
 	if platformName == "" || platformName == "generic" || platformName == "any" {
 		platformName = "linux"
@@ -97,7 +104,7 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 		"cpu":       strconv.FormatInt(cpuUsage, 10) + " millicores",
 		"memory":    strconv.FormatInt(memUsage, 10) + " MiB",
 		"instant":   time.Now().UTC().Format("2006-01-02T15:04:05Z"),
-		"seconds":   duration.Seconds() - provisioningTime.Seconds(), // register only net time without provisioning time
+		"seconds":   netTime, // register only net time without provisioning time
 		"platform":  platformName,
 		"taskId":    cachedTask.UUID,
 		"sessionId": cachedTask.CurrentSessionID,

@@ -96,11 +96,37 @@ func (w *waitWorker) start() {
 			if !ok {
 				continue
 			}
+			l := log.WithField(config.TaskIdKey, taskId)
 
 			if *task.LastStatus == "STOPPED" {
-				log.Error("Task stopped: ", *task)
-				req.NonEssentialErrCh <- fmt.Errorf("task stopped with reason: %s", *task.StoppedReason)
-				delete(w.requests, taskId)
+				// #860: Api tests are reexecuted several times
+				isFinishedSuccessfully := true
+				if strings.Contains(*task.TaskDefinitionArn, "generic") {
+					for _, container := range task.Containers {
+						if container.ExitCode == nil {
+							isFinishedSuccessfully = false
+							break
+						} else if *container.ExitCode != 0 {
+							if (*container.Name == "recorder" || *container.Name == "uploader") && *container.ExitCode == 137 {
+								continue
+							}
+							isFinishedSuccessfully = false
+							break
+						}
+					}
+				} else {
+					isFinishedSuccessfully = false
+				}
+
+				if isFinishedSuccessfully {
+					l.Info("Task already finished")
+					req.ResponseCh <- task
+					delete(w.requests, taskId)
+				} else {
+					l.Error("Task stopped: ", *task)
+					req.NonEssentialErrCh <- fmt.Errorf("task stopped with reason: %s", *task.StoppedReason)
+					delete(w.requests, taskId)
+				}
 			}
 
 			if *task.LastStatus != "RUNNING" {
@@ -110,7 +136,7 @@ func (w *waitWorker) start() {
 
 			switch *task.HealthStatus {
 			case "UNHEALTHY":
-				log.Error("Task unhealthy: ", *task)
+				l.Error("Task unhealthy: ", *task)
 
 				var essential error
 				for _, container := range task.Containers {

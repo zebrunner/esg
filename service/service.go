@@ -290,14 +290,23 @@ func (starter basicStarter) StartService() (map[string]interface{}, *utils.Selen
 			reply, essential, nonEssential := p(ctx)
 			if essential != nil {
 				// stop service start, return error
-				if starter.basis.CachedTask != nil {
-					StopTask(starter.basis.CachedTask.TaskId, taskmap.TaskStartupFailure)
+				task, err := taskmap.FindByUuid(starter.basis.Env.UUID)
+				if err == nil && task != nil {
+					StopTask(task.TaskId, taskmap.TaskStartupFailure)
 				}
 				return nil, essential
 			} else if nonEssential != nil {
 				// flush data, next retry
-				if starter.basis.CachedTask != nil {
-					StopTask(starter.basis.CachedTask.TaskId, taskmap.TaskStartupFailure)
+				task, err := taskmap.FindByUuid(starter.basis.Env.UUID)
+				if err == nil && task != nil {
+					// stop service if task was aborted
+					if task.StopReason == taskmap.TaskAborted {
+						seErr := utils.CreationErr(fmt.Errorf("service start was aborted"), nonEssential.Error())
+						starter.basis.Log.Info(seErr)
+						return nil, seErr
+					} else {
+						StopTask(task.TaskId, taskmap.TaskStartupFailure)
+					}
 				}
 				starter.basis.Log = &logCopy
 				starter.basis.GinCtx.Set(config.TaskIdKey, "")
