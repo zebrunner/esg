@@ -9,6 +9,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/service/ecs"
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/cachemaps/taskmap"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/utils"
 )
@@ -100,33 +101,24 @@ func (w *waitWorker) start() {
 
 			if *task.LastStatus == "STOPPED" {
 				// #860: Api tests are reexecuted several times
-				isFinishedSuccessfully := true
-				if strings.Contains(*task.TaskDefinitionArn, "generic") {
-					for _, container := range task.Containers {
-						if container.ExitCode == nil {
-							isFinishedSuccessfully = false
-							break
-						} else if *container.ExitCode != 0 {
-							if (*container.Name == "recorder" || *container.Name == "uploader") && *container.ExitCode == 137 {
-								continue
-							}
-							isFinishedSuccessfully = false
-							break
-						}
+				if *task.StoppedReason == string(taskmap.TaskAborted) {
+					seErr := utils.CreationErr(fmt.Errorf("task have been aborted"))
+					l.WithError(seErr).Debug()
+					req.EssentialErrCh <- seErr
+					delete(w.requests, taskId)
+					continue
+				} else if strings.Contains(*task.TaskDefinitionArn, "generic") {
+					if isTaskFinishedSuccessfully(task) {
+						l.Info("task already finished")
+						req.ResponseCh <- task
+						delete(w.requests, taskId)
+						continue
 					}
-				} else {
-					isFinishedSuccessfully = false
-				}
-
-				if isFinishedSuccessfully {
-					l.Info("Task already finished")
-					req.ResponseCh <- task
-					delete(w.requests, taskId)
-				} else {
-					l.Error("Task stopped: ", *task)
-					req.NonEssentialErrCh <- fmt.Errorf("task stopped with reason: %s", *task.StoppedReason)
-					delete(w.requests, taskId)
-				}
+				} 
+				l.Error("Task stopped: ", *task)
+				req.NonEssentialErrCh <- fmt.Errorf("task stopped with reason: %s", *task.StoppedReason)
+				delete(w.requests, taskId)
+				continue
 			}
 
 			if *task.LastStatus != "RUNNING" {
@@ -162,6 +154,21 @@ func (w *waitWorker) start() {
 			}
 		}
 	}
+}
+
+func isTaskFinishedSuccessfully(task *ecs.Task) bool {
+	for _, container := range task.Containers {
+		if container.ExitCode == nil {
+			return false
+		} else if *container.ExitCode != 0 {
+			if (*container.Name == "recorder" || *container.Name == "uploader") && *container.ExitCode == 137 {
+				continue
+			}
+			return false
+		}
+	}
+
+	return true
 }
 
 func (w *waitWorker) waitFor(ctx context.Context, taskId string) *waitRequest {

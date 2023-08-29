@@ -98,8 +98,8 @@ func (s *startBasis) startTaskPhase(ctx context.Context) (reply map[string]inter
 		essential = utils.CreationErr(fmt.Errorf("request timed out waiting for a node to become available"))
 		return
 	case essentialReason := <-waitRequest.EssentialErrCh:
-		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to start task, stopping service...")
 		essential = utils.CreationErr(fmt.Errorf("failed to start task"), essentialReason.Error())
+		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to start task, stopping service...")
 		return
 	case nonEssential = <-waitRequest.NonEssentialErrCh:
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(nonEssential).Warn("Failed to start task, restarting...")
@@ -299,14 +299,7 @@ func (starter basicStarter) StartService() (map[string]interface{}, *utils.Selen
 				// flush data, next retry
 				task, err := taskmap.FindByUuid(starter.basis.Env.UUID)
 				if err == nil && task != nil {
-					// stop service if task was aborted
-					if task.StopReason == taskmap.TaskAborted {
-						seErr := utils.CreationErr(fmt.Errorf("service start was aborted"), nonEssential.Error())
-						starter.basis.Log.Info(seErr)
-						return nil, seErr
-					} else {
-						StopTask(task.TaskId, taskmap.TaskStartupFailure)
-					}
+					StopTask(task.TaskId, taskmap.TaskStartupFailure)
 				}
 				starter.basis.Log = &logCopy
 				starter.basis.GinCtx.Set(config.TaskIdKey, "")
