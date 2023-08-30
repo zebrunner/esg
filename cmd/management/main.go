@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
+	"github.com/google/uuid"
 	"github.com/zebrunner/esg/cachemaps/definitionmap"
 	"github.com/zebrunner/esg/cachemaps/sessionmap"
 	"github.com/zebrunner/esg/cachemaps/taskmap"
@@ -20,7 +20,6 @@ import (
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
 
-	awsSession "github.com/aws/aws-sdk-go/aws/session"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 
@@ -28,13 +27,6 @@ import (
 )
 
 func ClearTasks() {
-	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
-	if err != nil {
-		log.WithError(err).Error("Failed to create AWS session! Stopping scaler...")
-		os.Exit(1)
-	}
-
-	svc := ecs.New(session)
 	var wg sync.WaitGroup
 
 	for {
@@ -49,17 +41,20 @@ func ClearTasks() {
 		if len(taskIds) > 0 {
 			log.WithField("keys:", taskIds).Trace("cached task keys")
 		}
-		wg.Add(1)
-		go StopLostTasks(taskIds, svc, &wg)
 
-		tasks := service.GetTasksByTaskIds(taskIds, svc)
-		if len(tasks) != 0 {
-			wg.Add(1)
-			go StopUnhealthyTasks(tasks, &wg)
-
-			wg.Add(1)
-			go TrackResourceUsage(tasks, &wg)
+		tasks, err := service.DescribeTasks(taskIds)
+		if err != nil {
+			log.WithError(err).Error("Failed to describe tasks")
 		}
+		if len(tasks) == 0 {
+			continue
+		}
+
+		wg.Add(1)
+		go StopUnhealthyTasks(tasks, &wg)
+
+		wg.Add(1)
+		go TrackResourceUsage(tasks, &wg)
 
 		wg.Wait()
 	}
@@ -107,63 +102,70 @@ func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 	wg.Done()
 }
 
-func StopLostTasks(keys []string, svc *ecs.ECS, wg *sync.WaitGroup) {
-	taskArns, err := service.GetClusterTasksArn(svc)
-	if err != nil {
-		log.WithError(err).Error("Error on ecs list-tasks operation")
-	}
+func StopLostTasks() {
+	for {
+		time.Sleep(1 * time.Minute)
 
-	tasksToDescribe := make([]string, 0)
+		keys, err := taskmap.Keys()
+		if err != nil {
+			log.WithError(err).Error("Failed to get list of taskmap keys!")
+			continue
+		}
 
-	for _, taskArn := range taskArns {
-		isFound := false
-		for _, key := range keys {
-			taskId := strings.Split(*taskArn, "/")[2]
-			if key == taskId {
-				isFound = true
-				break
+		taskArns, err := service.GetClusterTasksArns()
+		if err != nil {
+			log.WithError(err).Error("Error on ecs list-tasks operation")
+			continue
+		}
+
+		tasksToDescribe := make([]string, 0)
+		for _, taskArn := range taskArns {
+			isFound := false
+			for _, key := range keys {
+				taskId := strings.Split(*taskArn, "/")[2]
+				if key == taskId {
+					isFound = true
+					break
+				}
+			}
+
+			if !isFound {
+				tasksToDescribe = append(tasksToDescribe, *taskArn)
 			}
 		}
 
-		if !isFound {
-			tasksToDescribe = append(tasksToDescribe, *taskArn)
+		if len(tasksToDescribe) == 0 {
+			// no need to print any log message because it should happen in 99.99% cases.
+			continue
 		}
-	}
 
-	if len(tasksToDescribe) == 0 {
-		// no need to print any log message because it should happen in 99.99% cases.
-		wg.Done()
-		return
-	}
+		tasks, err := service.DescribeTasks(tasksToDescribe)
+		if err != nil {
+			log.WithError(err).Warn("Failed to describe lost tasks")
+			continue
+		}
 
-	tasks, err := service.DescribeTasks(tasksToDescribe)
-	if err != nil {
-		log.WithError(err).Warn("StopLostTasks(): failed to describe lost tasks")
-		wg.Done()
-		return
-	}
+		for _, task := range tasks {
+			if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
+				taskId := strings.Split(*task.TaskArn, "/")[2]
+				l := log.WithField(config.TaskIdKey, taskId)
+				l.Warn("Unrecognized task detected! Aborting")
 
-	for _, task := range tasks {
-		if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
-			taskId := strings.Split(*task.TaskArn, "/")[2]
-			l := log.WithField(config.TaskIdKey, taskId)
-			l.Warn("Unrecognized task detected! Aborting")
+				cachedTask := &taskmap.Task{
+					TaskId: taskId,
+					Status: taskmap.TaskActive,
+					UUID:   uuid.NewString(),
+				}
+				// maybe we can track lost task's session and restore lost cache
+				taskmap.Write(cachedTask.TaskId, cachedTask, 0)
 
-			cachedTask := &taskmap.Task{
-				TaskId: taskId,
-				Status: taskmap.TaskActive,
-			}
-			// maybe we can track lost task's session and restore lost cache
-			taskmap.Write(cachedTask.TaskId, cachedTask, 0)
-
-			err := service.StopTask(taskId, taskmap.TaskLost)
-			if err != nil {
-				l.WithError(err).Error("Failed to stop the task")
+				err := service.StopTask(taskId, taskmap.TaskLost)
+				if err != nil {
+					l.WithError(err).Error("Failed to stop the task")
+				}
 			}
 		}
 	}
-
-	wg.Done()
 }
 
 func TrackResourceUsage(tasks []*ecs.Task, wg *sync.WaitGroup) {
@@ -452,19 +454,17 @@ func main() {
 
 	log.SetLevel(config.Conf.ParseLogLevel())
 
-	awsSess, err := service.InitAws()
+	err := service.InitAws()
 	if err != nil {
 		log.WithError(err).Fatal("Failed to init aws session! Stopping scaler...")
 		os.Exit(1)
 	}
-	service.AwsSess = awsSess
 
 	err = config.InitDBConnection(config.Conf.DbConnectionString)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to init DB client! Stopping router...")
 		os.Exit(1)
 	}
-
 	defer config.DbConnection.Close()
 
 	err = config.InitCache()
@@ -472,17 +472,22 @@ func main() {
 		log.WithError(err).Fatal("Failed to init redis connection! Stopping scaler...")
 		os.Exit(1)
 	}
-
 	defer config.RedisSessionsConnection.Close()
 	defer config.RedisTasksConnection.Close()
 	defer config.RedisDefinitionConnection.Close()
 
-	RefreshTaskDefinitions()
-
-	service.InitScalingData()
+	err = service.InitScalingData()
+	if err != nil {
+		log.WithError(err).Fatal("Failed to init scaling data! Stopping scaler...")
+		os.Exit(1)
+	}
 
 	var wg sync.WaitGroup
 	wg.Add(1)
+
+	go StopLostTasks()
+
+	RefreshTaskDefinitions()
 
 	go ScaleCluster()
 

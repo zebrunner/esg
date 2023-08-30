@@ -152,12 +152,11 @@ func main() {
 	defer config.RedisTasksConnection.Close()
 	defer config.RedisDefinitionConnection.Close()
 
-	aws, err := service.InitAws()
+	err = service.InitAws()
 	if err != nil {
 		log.WithError(err).Fatal("Failed to start aws session! Stopping router...")
 		os.Exit(1)
 	}
-	service.AwsSess = aws
 
 	if config.Conf.Imdsv2Enabled {
 		go refreshIMDSV2Token()

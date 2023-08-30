@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	awsSession "github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/autoscaling"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/aws/aws-sdk-go/service/s3"
 	log "github.com/sirupsen/logrus"
@@ -27,15 +28,7 @@ var (
 	AwsSess *awsSession.Session
 )
 
-func init() {
-	sess, err := InitAws()
-	if err != nil {
-		log.Fatal("failed to init aws session")
-	}
-	AwsSess = sess
-}
-
-func InitAws() (*awsSession.Session, error) {
+func InitAws() error {
 	sess, err := awsSession.NewSession(&aws.Config{
 		Region:     &config.Conf.AwsRegion,
 		MaxRetries: &config.Conf.AwsRetry,
@@ -45,10 +38,13 @@ func InitAws() (*awsSession.Session, error) {
 		},
 	})
 	if err != nil {
-		return nil, err
+		log.Fatal("failed to init aws session")
+		return err
 	}
 
-	return sess, nil
+	AwsSess = sess
+
+	return nil
 }
 
 func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDefinition *ecs.TaskDefinition, err error) {
@@ -235,4 +231,134 @@ func GeneratePreSignedURL(key string) (string, error) {
 	}
 
 	return urlStr, nil
+}
+
+func GetClusterTasks() ([]*ecs.Task, error) {
+	svc := ecs.New(AwsSess)
+	tasks := []*ecs.Task{}
+	listTasksInput := &ecs.ListTasksInput{
+		Cluster: &config.Conf.AwsCluster,
+	}
+	for {
+		listTasksResult, err := utils.RetryThrottling(svc.ListTasks)(listTasksInput)
+		if err != nil {
+			return nil, err
+		}
+		if len(listTasksResult.TaskArns) == 0 {
+			break
+		}
+
+		describeTasksInput := &ecs.DescribeTasksInput{
+			Cluster: &config.Conf.AwsCluster,
+			Tasks:   listTasksResult.TaskArns,
+		}
+		describeTasksResult, err := utils.RetryThrottling(svc.DescribeTasks)(describeTasksInput)
+		if err != nil {
+			log.WithError(err).Warn("Failed to get all tasks. Only partial results returned")
+			break
+		}
+		tasks = append(tasks, describeTasksResult.Tasks...)
+
+		if listTasksResult.NextToken == nil {
+			break
+		}
+		listTasksInput = listTasksInput.SetNextToken(*listTasksResult.NextToken)
+	}
+
+	return tasks, nil
+}
+
+func GetClusterTasksArns() ([]*string, error) {
+	svc := ecs.New(AwsSess)
+	taskArns := make([]*string, 0)
+	listTasksInput := &ecs.ListTasksInput{
+		Cluster: &config.Conf.AwsCluster,
+	}
+
+	for {
+		listTasksResult, err := utils.RetryThrottling(svc.ListTasks)(listTasksInput)
+		if err != nil {
+			return nil, err
+		}
+		if len(listTasksResult.TaskArns) == 0 {
+			break
+		}
+
+		taskArns = append(taskArns, listTasksResult.TaskArns...)
+
+		if listTasksResult.NextToken == nil {
+			break
+		}
+		listTasksInput = listTasksInput.SetNextToken(*listTasksResult.NextToken)
+	}
+
+	return taskArns, nil
+}
+
+func ListContainerInstances(svc *ecs.ECS) ([]*string, error) {
+	containerInstancesArns := make([]*string, 0)
+	listContainerInstancesInput := ecs.ListContainerInstancesInput{
+		Cluster: &config.Conf.AwsCluster,
+	}
+	for {
+		listContainerInstancesResult, err := utils.RetryThrottling(svc.ListContainerInstances)(&listContainerInstancesInput)
+		if err != nil && len(listContainerInstancesResult.ContainerInstanceArns) != 0 {
+			return nil, err
+		}
+
+		if len(listContainerInstancesResult.ContainerInstanceArns) == 0 {
+			break
+		}
+
+		containerInstancesArns = append(containerInstancesArns, listContainerInstancesResult.ContainerInstanceArns...)
+
+		if listContainerInstancesResult.NextToken == nil {
+			break
+		}
+		listContainerInstancesInput = *listContainerInstancesInput.SetNextToken(*listContainerInstancesResult.NextToken)
+	}
+
+	return containerInstancesArns, nil
+}
+
+func DescribeContainerInstances(containerInstanceIdPtrs []*string, svc *ecs.ECS) ([]*ecs.ContainerInstance, error) {
+	pages := paginate(containerInstanceIdPtrs, 100)
+	containerInstances := make([]*ecs.ContainerInstance, 0)
+
+	for _, page := range pages {
+		describeInput := ecs.DescribeContainerInstancesInput{
+			Cluster:            &config.Conf.AwsCluster,
+			ContainerInstances: page,
+		}
+
+		describeResult, err := utils.RetryThrottling(svc.DescribeContainerInstances)(&describeInput)
+		if err != nil {
+			log.WithField("describeResult", describeResult).WithField("error", err).Error("Failed to DescribeContainerInstances!")
+			return nil, err
+		}
+
+		containerInstances = append(containerInstances, describeResult.ContainerInstances...)
+	}
+
+	return containerInstances, nil
+}
+
+func TerminateInstancesInASG(ec2InstanceIdPtrs []*string, decrementDesiredCapacity bool, autoscalingSvc *autoscaling.AutoScaling) error {
+	for _, instanceId := range ec2InstanceIdPtrs {
+		stopInstanceInput := autoscaling.TerminateInstanceInAutoScalingGroupInput{
+			InstanceId:                     instanceId,
+			ShouldDecrementDesiredCapacity: aws.Bool(decrementDesiredCapacity),
+		}
+
+		_, err := utils.RetryThrottling(autoscalingSvc.TerminateInstanceInAutoScalingGroup)(&stopInstanceInput)
+		if err != nil {
+			log.WithError(err).Error("Failed to terminate instance")
+			return err
+		}
+
+		// as we terminating one by one
+		time.Sleep(250 * time.Millisecond)
+	}
+
+	return nil
 }

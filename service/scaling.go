@@ -3,7 +3,6 @@ package service
 import (
 	"fmt"
 	"math"
-	"os"
 	"strconv"
 	"time"
 
@@ -32,13 +31,15 @@ type ClusterResources struct {
 	ProvisioningResources Resources
 }
 
-func InitScalingData() {
+func InitScalingData() error {
 	var err error
 	instanceTypeResources, err = getInstanceResources()
 	if err != nil {
 		log.WithError(err).Error("Failed to get instance resources. Stopping scaler")
-		os.Exit(1)
+		return err
 	}
+
+	return nil
 }
 
 func getInstanceResources() (*Resources, error) {
@@ -120,9 +121,9 @@ func ScaleUp() {
 		log.WithError(err).Error("Failed to create AWS session")
 		return
 	}
-	svc := ecs.New(session)
 	autoscalingSvc := autoscaling.New(session)
-	tasks, err := GetClusterTasks(svc)
+
+	tasks, err := GetClusterTasks()
 	if err != nil {
 		log.WithError(err).Error("Failed to get list of running task")
 		return
@@ -316,7 +317,7 @@ func ScaleDown() {
 		if err != nil {
 			l.WithError(err).Error("Failed to stop instance")
 		}
-		
+
 		newCapacity -= 1
 		maxInstancesToDelete -= 1
 		terminatedCount++
