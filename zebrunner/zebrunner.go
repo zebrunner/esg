@@ -162,7 +162,7 @@ func getStoppedReason(task ecs.Task) string {
 	return "Launch finished"
 }
 
-func AbortTask(cachedTask *taskmap.Task, task *ecs.Task) {
+func AbortTask(cachedTask *taskmap.Task, task *ecs.Task, reason string) {
 	automationRunId := getAutomationRunId(*task)
 	if automationRunId == "" {
 		return
@@ -185,9 +185,9 @@ func AbortTask(cachedTask *taskmap.Task, task *ecs.Task) {
 		requestUrl.Host = cachedTask.Workspace + "." + requestUrl.Host
 	}
 
-	stopReason := getStoppedReason(*task)
+	// stopReason := getStoppedReason(*task)
 	requestBody := map[string]interface{}{
-		"comment": stopReason,
+		"comment": reason,
 	}
 
 	body, err := json.Marshal(requestBody)
@@ -215,13 +215,13 @@ func AbortTask(cachedTask *taskmap.Task, task *ecs.Task) {
 		log.WithFields(log.Fields{
 			"status":   resp.Status,
 			"response": data,
-		}).Error("Failed to abort task!")
+		}).Error("Failed to abort launch!")
 		return
 	} else {
-		l := log.WithFields(log.Fields{config.SessionIdKey: cachedTask.CurrentSessionID, config.TaskIdKey: cachedTask.TaskId, "comment": stopReason})
+		l := log.WithFields(log.Fields{config.SessionIdKey: cachedTask.CurrentSessionID, config.TaskIdKey: cachedTask.TaskId, "comment": reason})
 		if !conf.SingleTenant {
 			l = l.WithField("workspace", cachedTask.Workspace)
 		}
-		l.Trace("task aborted")
+		l.Debug("launch aborted")
 	}
 }
