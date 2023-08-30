@@ -289,7 +289,7 @@ func (starter basicStarter) StartService() (map[string]interface{}, *utils.Selen
 		for j, p := range starter.basis.Phases {
 			reply, essential, nonEssential := p(ctx)
 			task, err := taskmap.FindByUuid(starter.basis.Env.UUID)
-			if err != nil && task != nil && task.StopReason == taskmap.TaskAborted {
+			if err == nil && task != nil && task.StopReason == taskmap.TaskAborted {
 				seErr := utils.CreationErr(fmt.Errorf("service start has been aborted"))
 				starter.basis.Log.Info(seErr)
 				return nil, seErr
