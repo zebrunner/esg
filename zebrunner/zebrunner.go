@@ -15,7 +15,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps/taskmap"
 	"github.com/zebrunner/esg/config"
-	"github.com/zebrunner/esg/environment"
 )
 
 const (
@@ -141,7 +140,7 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 	}
 }
 
-func AbortTask(env *environment.ExecutionEnvironment, reason string) {
+func AbortTask(uuid, workspace, launchUUID, reason string) {
 	conf := &config.Conf
 
 	if conf.ZebrunnerHost == "" {
@@ -149,18 +148,18 @@ func AbortTask(env *environment.ExecutionEnvironment, reason string) {
 		return
 	}
 
-	l := log.WithFields(log.Fields{config.RouterUuid: env.UUID, "comment": reason})
+	l := log.WithFields(log.Fields{config.RouterUuid: uuid, "comment": reason})
 
 	requestUrl, err := url.ParseRequestURI(
-		fmt.Sprintf("%s%s?ciRunId=%s", conf.ZebrunnerHost, ABORT_API_PATH, env.Capabilities.LaunchUUID.ToPrimitive()))
+		fmt.Sprintf("%s%s?ciRunId=%s", conf.ZebrunnerHost, ABORT_API_PATH, launchUUID))
 	if err != nil {
 		l.WithError(err).Error("Failed to parse zebrunner base url")
 		return
 	}
 
 	if !conf.SingleTenant {
-		l = l.WithField("workspace", env.Workspace)
-		requestUrl.Host = env.Workspace + "." + requestUrl.Host
+		l = l.WithField("workspace", workspace)
+		requestUrl.Host = workspace + "." + requestUrl.Host
 	}
 
 	// stopReason := getStoppedReason(*task)

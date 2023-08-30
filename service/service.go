@@ -272,7 +272,8 @@ func (starter genericStarter) StartService() (map[string]interface{}, *utils.Sel
 
 		// abort launch if service startup returned error
 		if startErr != nil {
-			zebrunner.AbortTask(starter.basis.Env, startErr.Error())
+			zebrunner.AbortTask(starter.basis.Env.UUID, starter.basis.Env.Workspace,
+				starter.basis.Env.Capabilities.LaunchUUID.ToPrimitive(), startErr.Error())
 		}
 	}()
 
