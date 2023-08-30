@@ -162,7 +162,6 @@ func AbortTask(uuid, workspace, launchUUID, reason string) {
 		requestUrl.Host = workspace + "." + requestUrl.Host
 	}
 
-	// stopReason := getStoppedReason(*task)
 	requestBody := map[string]interface{}{
 		"comment": reason,
 	}
