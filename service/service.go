@@ -270,10 +270,10 @@ func (starter genericStarter) StartService() (map[string]interface{}, *utils.Sel
 	go func() {
 		_, startErr := basicStarter(starter).StartService()
 
-		// abort launch if task was not found in cache or if task was stopped due to the startup failure
+		// abort launch if service startup returned error
 		if startErr != nil {
 			cachedTask, err := taskmap.FindByUuid(starter.basis.Env.UUID)
-			if err != nil || (cachedTask != nil && cachedTask.StopReason == taskmap.TaskStartupFailure) {
+			if err == nil && cachedTask != nil {
 				result, err := DescribeTask(cachedTask.TaskId)
 				if err != nil {
 					starter.basis.Log.WithError(err).Warn("failed to abort launch")
