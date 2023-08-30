@@ -298,6 +298,7 @@ func processLegacyCaps(caps map[string]interface{}) error {
 
 func processVendorCaps(caps map[string]interface{}) error {
 	vendorCapNames := []string{
+		"ZEBRUNNER_LAUNCH_UUID",
 		"enableVNC",
 		"enableVideo",
 		"enableLog",

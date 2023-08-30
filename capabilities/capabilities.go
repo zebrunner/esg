@@ -255,6 +255,7 @@ type Capabilities struct {
 	Image         stringWrapper
 	LaunchCommand stringWrapper
 	EnvVariables  mapStrStrWrapper
+	LaunchUUID    stringWrapper
 }
 
 func (c *Capabilities) GetTimeZone() (*time.Location, error) {
@@ -431,11 +432,12 @@ func (c *Capabilities) ParseRequestCaps(reqCaps map[string]interface{}) error {
 		"mitmcpu":    &c.MitmCpu,
 		"mitmmemory": &c.MitmMemory,
 
-		"repositoryurl": &c.RepositoryUrl,
-		"branch":        &c.Branch,
-		"image":         &c.Image,
-		"launchcommand": &c.LaunchCommand,
-		"envvariables":  &c.EnvVariables,
+		"repositoryurl":         &c.RepositoryUrl,
+		"branch":                &c.Branch,
+		"image":                 &c.Image,
+		"launchcommand":         &c.LaunchCommand,
+		"envvariables":          &c.EnvVariables,
+		"zebrunner_launch_uuid": &c.LaunchUUID,
 	}
 
 	errs := make([]string, 0)
@@ -453,7 +455,7 @@ func (c *Capabilities) ParseRequestCaps(reqCaps map[string]interface{}) error {
 	if len(errs) > 0 {
 		err = fmt.Errorf(strings.Join(errs, "\n"))
 	}
-	
+
 	c.GetIdleTimeout()
 
 	return err

@@ -272,15 +272,7 @@ func (starter genericStarter) StartService() (map[string]interface{}, *utils.Sel
 
 		// abort launch if service startup returned error
 		if startErr != nil {
-			cachedTask, err := taskmap.FindByUuid(starter.basis.Env.UUID)
-			if err == nil && cachedTask != nil {
-				result, err := DescribeTask(cachedTask.TaskId)
-				if err != nil {
-					starter.basis.Log.WithError(err).Warn("failed to abort launch")
-				} else {
-					zebrunner.AbortTask(cachedTask, result.Tasks[0], startErr.Error())
-				}
-			}
+			zebrunner.AbortTask(starter.basis.Env, startErr.Error())
 		}
 	}()
 

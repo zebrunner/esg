@@ -15,6 +15,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps/taskmap"
 	"github.com/zebrunner/esg/config"
+	"github.com/zebrunner/esg/environment"
 )
 
 const (
@@ -140,34 +141,7 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 	}
 }
 
-func getAutomationRunId(task ecs.Task) string {
-	for _, containerOverride := range task.Overrides.ContainerOverrides {
-		for _, environment := range containerOverride.Environment {
-			if *environment.Name == "ZEBRUNNER_LAUNCH_UUID" {
-				return *environment.Value
-			}
-		}
-	}
-	return ""
-}
-
-func getStoppedReason(task ecs.Task) string {
-	// get failed reason if any from any task container
-	for _, container := range task.Containers {
-		if container.Reason != nil {
-			log.Trace(fmt.Sprintf("Container: %s; Reason: %s", *container.Name, *container.Reason))
-			return *container.Reason
-		}
-	}
-	return "Launch finished"
-}
-
-func AbortTask(cachedTask *taskmap.Task, task *ecs.Task, reason string) {
-	automationRunId := getAutomationRunId(*task)
-	if automationRunId == "" {
-		return
-	}
-
+func AbortTask(env *environment.ExecutionEnvironment, reason string) {
 	conf := &config.Conf
 
 	if conf.ZebrunnerHost == "" {
@@ -175,14 +149,18 @@ func AbortTask(cachedTask *taskmap.Task, task *ecs.Task, reason string) {
 		return
 	}
 
-	requestUrl, err := url.ParseRequestURI(fmt.Sprintf("%s%s?ciRunId=%s", conf.ZebrunnerHost, ABORT_API_PATH, automationRunId))
+	l := log.WithFields(log.Fields{config.RouterUuid: env.UUID, "comment": reason})
+
+	requestUrl, err := url.ParseRequestURI(
+		fmt.Sprintf("%s%s?ciRunId=%s", conf.ZebrunnerHost, ABORT_API_PATH, env.Capabilities.LaunchUUID.ToPrimitive()))
 	if err != nil {
-		log.WithError(err).Error("Failed to parse zebrunner base url")
+		l.WithError(err).Error("Failed to parse zebrunner base url")
 		return
 	}
+
 	if !conf.SingleTenant {
-		// add workspace/tenant to the url
-		requestUrl.Host = cachedTask.Workspace + "." + requestUrl.Host
+		l = l.WithField("workspace", env.Workspace)
+		requestUrl.Host = env.Workspace + "." + requestUrl.Host
 	}
 
 	// stopReason := getStoppedReason(*task)
@@ -192,36 +170,31 @@ func AbortTask(cachedTask *taskmap.Task, task *ecs.Task, reason string) {
 
 	body, err := json.Marshal(requestBody)
 	if err != nil {
-		log.WithError(err).Error("Failed to marshal abort data")
+		l.WithError(err).Error("Failed to marshal abort data")
 		return
 	}
 	req, err := http.NewRequest(http.MethodPost, requestUrl.String(), bytes.NewBuffer(body))
 	if err != nil {
-		log.WithError(err).Error("Failed to create request")
+		l.WithError(err).Error("Failed to create request")
 	}
 	req.SetBasicAuth(conf.ZebrunnerIntegrationUser, conf.ZebrunnerIntegrationPassword)
 	req.Header.Add("Content-Type", "application/json")
 
-	log.Trace("req: ", req)
+	l.Trace("req: ", req)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.WithError(err).Error("Failed to send request")
+		l.WithError(err).Error("Failed to send request")
 		return
 	}
 
 	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
 		data := map[string]interface{}{}
-		log.WithFields(log.Fields{
+		l.WithFields(log.Fields{
 			"status":   resp.Status,
 			"response": data,
 		}).Error("Failed to abort launch!")
-		return
 	} else {
-		l := log.WithFields(log.Fields{config.SessionIdKey: cachedTask.CurrentSessionID, config.TaskIdKey: cachedTask.TaskId, "comment": reason})
-		if !conf.SingleTenant {
-			l = l.WithField("workspace", cachedTask.Workspace)
-		}
 		l.Debug("launch aborted")
 	}
 }
