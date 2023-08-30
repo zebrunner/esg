@@ -288,25 +288,21 @@ func (starter basicStarter) StartService() (map[string]interface{}, *utils.Selen
 		starter.basis.Log = starter.basis.Log.WithField("attempt", i)
 		for j, p := range starter.basis.Phases {
 			reply, essential, nonEssential := p(ctx)
-			if essential != nil {
+			task, err := taskmap.FindByUuid(starter.basis.Env.UUID)
+			if err != nil && task != nil && task.StopReason == taskmap.TaskAborted {
+				seErr := utils.CreationErr(fmt.Errorf("service start has been aborted"))
+				starter.basis.Log.Info(seErr)
+				return nil, seErr
+			} else if essential != nil {
 				// stop service start, return error
-				task, err := taskmap.FindByUuid(starter.basis.Env.UUID)
 				if err == nil && task != nil {
 					StopTask(task.TaskId, taskmap.TaskStartupFailure)
 				}
 				return nil, essential
 			} else if nonEssential != nil {
 				// flush data, next retry
-				task, err := taskmap.FindByUuid(starter.basis.Env.UUID)
 				if err == nil && task != nil {
-					// stop service if task was aborted
-					if task.StopReason == taskmap.TaskAborted {
-						seErr := utils.CreationErr(fmt.Errorf("service start has been aborted"), nonEssential.Error())
-						starter.basis.Log.Info(seErr)
-						return nil, seErr
-					} else {
-						StopTask(task.TaskId, taskmap.TaskStartupFailure)
-					}
+					StopTask(task.TaskId, taskmap.TaskStartupFailure)
 				}
 				starter.basis.Log = &logCopy
 				starter.basis.GinCtx.Set(config.TaskIdKey, "")

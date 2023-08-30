@@ -9,7 +9,6 @@ import (
 
 	"github.com/aws/aws-sdk-go/service/ecs"
 	log "github.com/sirupsen/logrus"
-	"github.com/zebrunner/esg/cachemaps/taskmap"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/utils"
 )
@@ -101,20 +100,13 @@ func (w *waitWorker) start() {
 
 			if *task.LastStatus == "STOPPED" {
 				// #860: Api tests are reexecuted several times
-				if *task.StoppedReason == string(taskmap.TaskAborted) {
-					seErr := utils.CreationErr(fmt.Errorf("task has been aborted"))
-					l.WithError(seErr).Debug()
-					req.EssentialErrCh <- seErr
+				if strings.Contains(*task.TaskDefinitionArn, "generic") && isTaskFinishedSuccessfully(task) {
+					l.Info("task already finished")
+					req.ResponseCh <- task
 					delete(w.requests, taskId)
 					continue
-				} else if strings.Contains(*task.TaskDefinitionArn, "generic") {
-					if isTaskFinishedSuccessfully(task) {
-						l.Info("task already finished")
-						req.ResponseCh <- task
-						delete(w.requests, taskId)
-						continue
-					}
-				} 
+				}
+
 				l.Error("Task stopped: ", *task)
 				req.NonEssentialErrCh <- fmt.Errorf("task stopped with reason: %s", *task.StoppedReason)
 				delete(w.requests, taskId)

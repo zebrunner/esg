@@ -133,6 +133,7 @@ func Proxy(c *gin.Context) {
 		},
 	}).ServeHTTP(c.Writer, c.Request)
 }
+
 func CloseSession(c *gin.Context) {
 	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
 
