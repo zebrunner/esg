@@ -86,6 +86,11 @@ func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 				if err != nil {
 					l.WithError(err).Error("Failed to stop the task")
 				}
+
+				if cachedTask.Status == taskmap.TaskGeneric {
+					zebrunner.AbortTask(cachedTask.UUID, cachedTask.Workspace,
+						cachedTask.Capabilities.LaunchUUID.ToPrimitive(), "Task aborted due to UNHEALTHY HealthStatus")
+				}
 			} else {
 				maxTimeout := time.Duration(cachedTask.Capabilities.MaxTimeout) * time.Second
 				l.Trace("maxTimeout: ", maxTimeout)
@@ -99,6 +104,11 @@ func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 						if err != nil {
 							l.WithError(err).Error("Failed to stop task forcibly")
 						}
+					}
+
+					if cachedTask.Status == taskmap.TaskGeneric {
+						zebrunner.AbortTask(cachedTask.UUID, cachedTask.Workspace,
+							cachedTask.Capabilities.LaunchUUID.ToPrimitive(), "Task aborted due to the max timeout limit")
 					}
 				}
 			}
@@ -210,13 +220,6 @@ func TrackResourceUsage(tasks []*ecs.Task, wg *sync.WaitGroup) {
 		}
 
 		zebrunner.TrackResourcesUsage(cachedTask, task)
-
-		if !strings.HasPrefix(cachedTask.Capabilities.Image.ToPrimitive(), "public.ecr.aws/zebrunner/cypress-") && cachedTask.Status == taskmap.TaskGeneric {
-			// #503: суpress tests aborted automatically
-			// automatic abort of the public.ecr.aws/zebrunner/cypress-* should be prohibited as execution is control by parent cyserver process
-			zebrunner.AbortTask(cachedTask, task)
-		}
-
 	}
 	wg.Done()
 }

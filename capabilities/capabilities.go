@@ -255,6 +255,7 @@ type Capabilities struct {
 	Image         stringWrapper
 	LaunchCommand stringWrapper
 	EnvVariables  mapStrStrWrapper
+	LaunchUUID    stringWrapper
 }
 
 func (c *Capabilities) GetTimeZone() (*time.Location, error) {
@@ -395,6 +396,8 @@ func GetDefaultCaps() *Capabilities {
 		EnableVideo: true,
 		FrameRate:   12,
 		VideoCodec:  "libx264",
+
+		EnvVariables: make(mapStrStrWrapper, 0),
 	}
 }
 
@@ -452,9 +455,13 @@ func (c *Capabilities) ParseRequestCaps(reqCaps map[string]interface{}) error {
 	var err error
 	if len(errs) > 0 {
 		err = fmt.Errorf(strings.Join(errs, "\n"))
+	} else {
+		if launchUUID, ok := c.EnvVariables["ZEBRUNNER_LAUNCH_UUID"]; ok {
+			c.LaunchUUID.From(launchUUID)
+		}
+
+		c.GetIdleTimeout()
 	}
-	
-	c.GetIdleTimeout()
 
 	return err
 }
