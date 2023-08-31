@@ -96,11 +96,21 @@ func (w *waitWorker) start() {
 			if !ok {
 				continue
 			}
+			l := log.WithField(config.TaskIdKey, taskId)
 
 			if *task.LastStatus == "STOPPED" {
-				log.Error("Task stopped: ", *task)
+				// #860: Api tests are reexecuted several times
+				if strings.Contains(*task.TaskDefinitionArn, "generic") && isTaskFinishedSuccessfully(task) {
+					l.Info("task already finished")
+					req.ResponseCh <- task
+					delete(w.requests, taskId)
+					continue
+				}
+
+				l.Error("Task stopped: ", *task)
 				req.NonEssentialErrCh <- fmt.Errorf("task stopped with reason: %s", *task.StoppedReason)
 				delete(w.requests, taskId)
+				continue
 			}
 
 			if *task.LastStatus != "RUNNING" {
@@ -110,7 +120,7 @@ func (w *waitWorker) start() {
 
 			switch *task.HealthStatus {
 			case "UNHEALTHY":
-				log.Error("Task unhealthy: ", *task)
+				l.Error("Task unhealthy: ", *task)
 
 				var essential error
 				for _, container := range task.Containers {
@@ -136,6 +146,17 @@ func (w *waitWorker) start() {
 			}
 		}
 	}
+}
+
+func isTaskFinishedSuccessfully(task *ecs.Task) bool {
+	for _, container := range task.Containers {
+		// if container's exit code is nil it means that container doesn't even started
+		if container.ExitCode == nil || *container.ExitCode != 0{
+			return false
+		}
+	}
+
+	return true
 }
 
 func (w *waitWorker) waitFor(ctx context.Context, taskId string) *waitRequest {

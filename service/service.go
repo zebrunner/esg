@@ -99,8 +99,8 @@ func (s *startBasis) startTaskPhase(ctx context.Context) (reply map[string]inter
 		essential = utils.CreationErr(fmt.Errorf("request timed out waiting for a node to become available"))
 		return
 	case essentialReason := <-waitRequest.EssentialErrCh:
-		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to start task, stopping service...")
 		essential = utils.CreationErr(fmt.Errorf("failed to start task"), essentialReason.Error())
+		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to start task, stopping service...")
 		return
 	case nonEssential = <-waitRequest.NonEssentialErrCh:
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(nonEssential).Warn("Failed to start task, restarting...")
@@ -297,16 +297,21 @@ func (starter basicStarter) StartService() (map[string]interface{}, *utils.Selen
 		starter.basis.Log = starter.basis.Log.WithField("attempt", i)
 		for j, p := range starter.basis.Phases {
 			reply, essential, nonEssential := p(ctx)
-			if essential != nil {
+			task, err := taskmap.FindByUuid(starter.basis.Env.UUID)
+			if err == nil && task != nil && task.StopReason == taskmap.TaskAborted {
+				seErr := utils.CreationErr(fmt.Errorf("service start has been aborted"))
+				starter.basis.Log.Info(seErr)
+				return nil, seErr
+			} else if essential != nil {
 				// stop service start, return error
-				if starter.basis.CachedTask != nil {
-					StopTask(starter.basis.CachedTask.TaskId, taskmap.TaskStartupFailure)
+				if err == nil && task != nil {
+					StopTask(task.TaskId, taskmap.TaskStartupFailure)
 				}
 				return nil, essential
 			} else if nonEssential != nil {
 				// flush data, next retry
-				if starter.basis.CachedTask != nil {
-					StopTask(starter.basis.CachedTask.TaskId, taskmap.TaskStartupFailure)
+				if err == nil && task != nil {
+					StopTask(task.TaskId, taskmap.TaskStartupFailure)
 				}
 				starter.basis.Log = &logCopy
 				starter.basis.GinCtx.Set(config.TaskIdKey, "")
