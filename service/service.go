@@ -18,6 +18,7 @@ import (
 	"github.com/zebrunner/esg/environment"
 	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/utils"
+	"github.com/zebrunner/esg/zebrunner"
 )
 
 type ServiceStarter interface {
@@ -266,7 +267,15 @@ type genericStarter struct {
 func (starter genericStarter) StartService() (map[string]interface{}, *utils.SeleniumError) {
 	//override request context, as after response is sent, request context is canceled
 	starter.basis.Request = starter.basis.Request.WithContext(context.Background())
-	go basicStarter(starter).StartService()
+	go func() {
+		_, startErr := basicStarter(starter).StartService()
+
+		// abort launch if service startup returned error
+		if startErr != nil {
+			zebrunner.AbortTask(starter.basis.Env.UUID, starter.basis.Env.Workspace,
+				starter.basis.Env.Capabilities.LaunchUUID.ToPrimitive(), startErr.Error())
+		}
+	}()
 
 	return gin.H{"taskId": starter.basis.Env.UUID}, nil
 }
