@@ -74,12 +74,12 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 	provisioningTime := healthAt.Sub(startedAt) //diff between healthAt and startedAt provide task preparation time
 	l.Trace("provisioningSeconds: ", provisioningTime.Seconds())
 	netTime := duration.Seconds() - provisioningTime.Seconds()
-	// if task completed before it became healthy
+	// if task completed before it was marked as healthy (case for generic tasks)
 	if netTime <= 0 {
-		//task waiter sleep period time.Sleep(5 * time.Second)
-		//generic healthcheck Interval: 5 seconds,
+		// generic healthcheck Timeout: 10 second
+		// means that task could be executed in (0,10] interval (seconds)
 		l.WithField("netTime", netTime).Debug("Net time is smaller than 0")
-		netTime = 5
+		netTime = 10
 	}
 	platformName := strings.ToLower(cachedTask.Capabilities.PlatformName.ToPrimitive())
 	if platformName == "" || platformName == "generic" || platformName == "any" {

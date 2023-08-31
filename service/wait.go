@@ -150,12 +150,8 @@ func (w *waitWorker) start() {
 
 func isTaskFinishedSuccessfully(task *ecs.Task) bool {
 	for _, container := range task.Containers {
-		if container.ExitCode == nil {
-			return false
-		} else if *container.ExitCode != 0 {
-			if (*container.Name == "recorder" || *container.Name == "uploader") && *container.ExitCode == 137 {
-				continue
-			}
+		// if container's exit code is nil it means that container doesn't even started
+		if container.ExitCode == nil || *container.ExitCode != 0{
 			return false
 		}
 	}
