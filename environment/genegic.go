@@ -155,6 +155,8 @@ func buildGeneric(workspace string, uuid string, caps *capabilities.Capabilities
                 Privileged:  false,
                 Essential:   false,
                 Env: map[string]string{
+						"ROUTER_UUID":			 uuid,
+						"USE_UUID": 			 "true",
                         "ENABLE_VIDEO":          "false",
                         "ENABLE_REALTIME_LOGS":  "true",
                         "BASIC_AUTH":            basicAuthHeader,

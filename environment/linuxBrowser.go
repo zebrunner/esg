@@ -93,6 +93,8 @@ func buildBrowser(workspace string, uuid string, caps *capabilities.Capabilities
 		Privileged: false,
 		Essential:  false,
 		Env: map[string]string{
+			"ROUTER_UUID":          uuid,
+			"USE_UUID":             "false",
 			"LOG_DIR":              logDir,
 			"TASK_LOG":             logDir + "/task.log",
 			"LOG_FILE":             "session.log",
@@ -205,7 +207,7 @@ func buildBrowser(workspace string, uuid string, caps *capabilities.Capabilities
 			},
 		},
 		Workspace: workspace,
-		UUID: uuid,
+		UUID:      uuid,
 	}
 
 	if caps.BrowserName == "firefox" {
