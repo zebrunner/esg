@@ -7,6 +7,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/zebrunner/esg/cachemaps/mapper"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
@@ -48,12 +49,11 @@ type Task struct {
 }
 
 func CreateEntity(taskId string, env *environment.ExecutionEnvironment) (*Task, error) {
-	err := write(env.UUID, &UuidMapper{UUID: env.UUID, TaskId: taskId}, 0)
+	err := mapper.UpdateTaskId(env.UUID, taskId)
 	if err != nil {
 		log.WithError(err).Error("Task not cached!")
 		return nil, err
 	}
-
 	cachedTask := &Task{
 		TaskId:       taskId,
 		Capabilities: env.Capabilities,
@@ -71,8 +71,8 @@ func CreateEntity(taskId string, env *environment.ExecutionEnvironment) (*Task, 
 	return cachedTask, nil
 }
 
-func Find(id string) (*Task, error) {
-	sessionData, err := config.RedisTasksConnection.Get(context.Background(), id).Result()
+func Find(taskId string) (*Task, error) {
+	sessionData, err := config.RedisTasksConnection.Get(context.Background(), taskId).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +87,7 @@ func Find(id string) (*Task, error) {
 }
 
 func FindByUuid(uuid string) (*Task, error) {
-	taskId, err := findTaskId(uuid)
+	taskId, err := mapper.FindTaskId(uuid)
 	if err != nil {
 		return nil, err
 	}
@@ -95,35 +95,24 @@ func FindByUuid(uuid string) (*Task, error) {
 	return Find(*taskId)
 }
 
-func Write(id string, task *Task, expiration time.Duration) error {
+func Write(taskId string, task *Task, expiration time.Duration) error {
 	data, err := json.Marshal(task)
 	if err != nil {
 		return err
 	}
 
-	err = config.RedisTasksConnection.Set(context.Background(), id, data, expiration).Err()
+	err = config.RedisTasksConnection.Set(context.Background(), taskId, data, expiration).Err()
 	if err != nil {
 		return err
 	}
 
 	if expiration > 0 {
-		write(task.UUID, &UuidMapper{UUID: task.UUID, TaskId: task.TaskId}, expiration)
+		mapper.SetExpire(task.UUID, expiration)
 	}
 
 	return nil
 }
 
-func Remove(id string) error {
-	err := config.RedisTasksConnection.Del(context.Background(), id).Err()
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func Keys() ([]string, error) {
-	keys, err := config.RedisTasksConnection.Keys(context.Background(), "*").Result()
-
-	return keys, err
+func Keys() ([]string, error) {	
+	return config.RedisTasksConnection.Keys(context.Background(), "*").Result()
 }

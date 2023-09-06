@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/cachemaps/mapper"
 	"github.com/zebrunner/esg/cachemaps/sessionmap"
 	"github.com/zebrunner/esg/cachemaps/taskmap"
 	"github.com/zebrunner/esg/config"
@@ -218,7 +219,7 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (reply map[string]int
 		return
 	case reply = <-waitRequest.ResponseCh:
 		var sessionId string
-		sessionId, nonEssential = getSessionId(reply)
+		sessionId, nonEssential = getAndReplaceSessionId(reply, s.Env.UUID)
 		if sessionId == "" {
 			if nonEssential == nil {
 				nonEssential = fmt.Errorf("session id in driver response is empty")
@@ -291,6 +292,10 @@ func (starter basicStarter) StartService() (map[string]interface{}, *utils.Selen
 
 	starter.basis.ServiceStart = time.Now()
 	starter.basis.Log.Info("service starting")
+
+	if err := mapper.InitEntity(starter.basis.Env.UUID); err != nil {
+		return nil, utils.CreationErr(fmt.Errorf("service startup failed"), err.Error())
+	}
 
 	for i := 0; true; i++ {
 		logCopy := *starter.basis.Log
@@ -372,10 +377,11 @@ func searchHostPort(task *ecs.Task, containerPort int64) (port int64, ok bool) {
 	return 0, false
 }
 
-func getSessionId(resp map[string]interface{}) (string, error) {
+func getAndReplaceSessionId(resp map[string]interface{}, uuid string) (string, error) {
 	// Get sessionId from root. For unknown reason opera returns sessionId in root of object
 	sessionId, ok := resp["sessionId"].(string)
 	if ok {
+		resp["sessionId"] = uuid
 		return sessionId, nil
 	}
 
@@ -387,6 +393,7 @@ func getSessionId(resp map[string]interface{}) (string, error) {
 
 	sessionId, ok = value["sessionId"].(string)
 	if ok {
+		value["sessionId"] = uuid
 		return sessionId, nil
 	}
 

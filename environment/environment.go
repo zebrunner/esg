@@ -24,10 +24,11 @@ const (
 	genericPlatform = "generic"
 	cypressPlatform = "cypress"
 
-	imageRepo            = "public.ecr.aws/zebrunner/" //public zebrunner ECR docker registry
-	uploaderImage        = imageRepo + "uploader:3.3-beta2"
+	 //public zebrunner ECR docker registry
+	imageRepo            = "public.ecr.aws/zebrunner/"
+	uploaderImage        = imageRepo + "uploader:3.3-beta4"
 	mitmImage            = imageRepo + "mitmproxy:1.2"
-	recorderImage        = imageRepo + "recorder:1.4-beta1"
+	recorderImage        = imageRepo + "recorder:1.4-beta3"
 	cypressRecorderImage = imageRepo + "cypress-recorder:1.1"
 	appiumImage          = imageRepo + "appium:2.0.3"
 	cloneImage           = imageRepo + "git:latest"

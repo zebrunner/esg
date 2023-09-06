@@ -94,7 +94,7 @@ func SeleniumError(c *gin.Context) {
 
 	if sessionObject, ok := c.Get(config.SessionIdKey); ok {
 		if session, ok := sessionObject.(*sessionmap.Session); ok {
-			l = l.WithField(config.SessionIdKey, session.ID)
+			l = l.WithField(config.RouterUuid, session.UUID).WithField(config.SessionIdKey, session.SessionID)
 		} else {
 			l.Warn("SessionIdKey was used for storing something other than session cache!")
 		}
@@ -130,7 +130,7 @@ func SeleniumError(c *gin.Context) {
 }
 
 func getSession(id string) (*sessionmap.Session, *utils.SeleniumError) {
-	session, _ := sessionmap.Find(id, true)
+	session, _ := sessionmap.FindByUuid(id)
 	if session == nil {
 		return nil, utils.NoSuchSessionErr(fmt.Errorf("session timed out or not found"))
 	}

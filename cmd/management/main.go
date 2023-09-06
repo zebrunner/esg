@@ -250,7 +250,7 @@ func StopIdleTasks() {
 				continue
 			}
 
-			l := log.WithFields(log.Fields{config.TaskIdKey: session.TaskId, config.SessionIdKey: session.ID})
+			l := log.WithFields(log.Fields{config.TaskIdKey: session.TaskId, config.SessionIdKey: session.SessionID})
 			if !config.Conf.SingleTenant {
 				l = l.WithField("workspace", session.Workspace)
 			}

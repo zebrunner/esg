@@ -93,6 +93,7 @@ func buildBrowser(workspace string, uuid string, caps *capabilities.Capabilities
 		Privileged: false,
 		Essential:  false,
 		Env: map[string]string{
+			"ROUTER_UUID":          uuid,
 			"LOG_DIR":              logDir,
 			"TASK_LOG":             logDir + "/task.log",
 			"LOG_FILE":             "session.log",
