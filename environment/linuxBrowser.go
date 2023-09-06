@@ -13,7 +13,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func buildBrowser(workspace string, uuid string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
+func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
 	conf := &config.Conf
 
 	browserImage, err := buildImage(caps)
@@ -93,6 +93,7 @@ func buildBrowser(workspace string, uuid string, caps *capabilities.Capabilities
 		Privileged: false,
 		Essential:  false,
 		Env: map[string]string{
+			"ROUTER_UUID":          routerUUID,
 			"LOG_DIR":              logDir,
 			"TASK_LOG":             logDir + "/task.log",
 			"LOG_FILE":             "session.log",
@@ -204,8 +205,8 @@ func buildBrowser(workspace string, uuid string, caps *capabilities.Capabilities
 				"healthcheck": {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
 			},
 		},
-		Workspace: workspace,
-		UUID: uuid,
+		Workspace:  workspace,
+		RouterUUID: routerUUID,
 	}
 
 	if caps.BrowserName == "firefox" {

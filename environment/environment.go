@@ -24,10 +24,11 @@ const (
 	genericPlatform = "generic"
 	cypressPlatform = "cypress"
 
-	imageRepo            = "public.ecr.aws/zebrunner/" //public zebrunner ECR docker registry
-	uploaderImage        = imageRepo + "uploader:3.3-beta2"
+	//public zebrunner ECR docker registry
+	imageRepo            = "public.ecr.aws/zebrunner/"
+	uploaderImage        = imageRepo + "uploader:3.3-beta4"
 	mitmImage            = imageRepo + "mitmproxy:1.2"
-	recorderImage        = imageRepo + "recorder:1.4-beta1"
+	recorderImage        = imageRepo + "recorder:1.4-beta3"
 	cypressRecorderImage = imageRepo + "cypress-recorder:1.1"
 	appiumImage          = imageRepo + "appium:2.0.3"
 	cloneImage           = imageRepo + "git:latest"
@@ -65,7 +66,7 @@ type ExecutionEnvironment struct {
 	TaskDefinitionFamily string
 	Revision             int64
 	Schema               string
-	UUID                 string
+	RouterUUID           string
 	Containers           []*Container
 	Capabilities         *capabilities.Capabilities
 	ReqCapabilities      *capabilities.RequestCaps
@@ -304,6 +305,7 @@ func (env *ExecutionEnvironment) GetFamilyRevision() (string, error) {
 	return fmt.Sprint(env.TaskDefinitionFamily, ":", revision), nil
 }
 
+// build's new ExecutionEnvironment env with new router uuid
 func Build(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
 	return build(workspace, uuid.NewString(), caps)
 }
@@ -312,19 +314,19 @@ func BuildFromCaps(caps *capabilities.Capabilities) (*ExecutionEnvironment, erro
 	return build("", "", caps)
 }
 
-func build(workspace string, uuid string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
+func build(workspace string, routerUUID string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
 	platform := strings.ToLower(caps.PlatformName.ToPrimitive())
 	if platform == androidPlatform {
 		if strings.ToLower(caps.DeviceName.ToPrimitive()) == redroidDevice {
-			return buildAppiumRedroid(workspace, uuid, caps)
+			return buildAppiumRedroid(workspace, routerUUID, caps)
 		}
 		return nil, fmt.Errorf("device is not supported. deviceName=%s", caps.DeviceName)
 	} else if platform == genericPlatform {
-		return buildGeneric(workspace, uuid, caps)
+		return buildGeneric(workspace, routerUUID, caps)
 	} else if platform == cypressPlatform {
-		return buildCypress(workspace, uuid, caps)
+		return buildCypress(workspace, routerUUID, caps)
 	} else if platform == linuxPlatform || platform == "" || platform == anyPlatform {
-		return buildBrowser(workspace, uuid, caps)
+		return buildBrowser(workspace, routerUUID, caps)
 	}
 
 	return nil, fmt.Errorf("platform is not supported. platformName=%s", caps.PlatformName)

@@ -2,17 +2,18 @@ package config
 
 import (
 	"context"
+
 	redis "github.com/go-redis/redis/v8"
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
 )
 
 var (
-	RedisSessionsConnection    *redis.Client
-	RedisTasksConnection       *redis.Client
-	RedisTasksMapperConnection *redis.Client
-	RedisDefinitionConnection  *redis.Client
-	DbConnection               *sqlx.DB
+	RedisSessionsConnection   *redis.Client
+	RedisTasksConnection      *redis.Client
+	RedisIdMapperConnection   *redis.Client
+	RedisDefinitionConnection *redis.Client
+	DbConnection              *sqlx.DB
 )
 
 func InitCache() error {
@@ -56,13 +57,13 @@ func InitCache() error {
 	}
 
 	// DB 3 - for task's mapper
-	RedisTasksMapperConnection = redis.NewClient(&redis.Options{
+	RedisIdMapperConnection = redis.NewClient(&redis.Options{
 		Addr:     Conf.RedisConnectionString,
 		Password: "",
 		DB:       3,
 	})
 
-	_, err = RedisTasksMapperConnection.Ping(context.Background()).Result()
+	_, err = RedisIdMapperConnection.Ping(context.Background()).Result()
 	if err != nil {
 		log.WithError(err).Error("Failed to ping redis tasksmapper connection")
 		return err

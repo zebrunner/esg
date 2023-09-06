@@ -30,7 +30,7 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 		return
 	}
 
-	l := log.WithField(config.RouterUuid, cachedTask.UUID).WithField(config.TaskIdKey, cachedTask.TaskId)
+	l := log.WithField(config.RouterUuid, cachedTask.RouterUUID).WithField(config.TaskIdKey, cachedTask.TaskId)
 	if cachedTask.CurrentSessionID != "" {
 		l = l.WithField(config.SessionIdKey, cachedTask.CurrentSessionID)
 	}
@@ -106,7 +106,7 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 		"instant":   time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 		"seconds":   netTime, // register only net time without provisioning time
 		"platform":  platformName,
-		"taskId":    cachedTask.UUID,
+		"taskId":    cachedTask.RouterUUID,
 		"sessionId": cachedTask.CurrentSessionID,
 	}
 	l.Trace("request body to track resources: ", requestBody)
@@ -147,7 +147,7 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 	}
 }
 
-func AbortTask(uuid, workspace, launchUUID, reason string) {
+func AbortTask(routerUUID, workspace, launchUUID, reason string) {
 	conf := &config.Conf
 
 	if conf.ZebrunnerHost == "" {
@@ -155,7 +155,7 @@ func AbortTask(uuid, workspace, launchUUID, reason string) {
 		return
 	}
 
-	l := log.WithFields(log.Fields{config.RouterUuid: uuid, "comment": reason})
+	l := log.WithFields(log.Fields{config.RouterUuid: routerUUID, "comment": reason})
 
 	requestUrl, err := url.ParseRequestURI(
 		fmt.Sprintf("%s%s?ciRunId=%s", conf.ZebrunnerHost, ABORT_API_PATH, launchUUID))

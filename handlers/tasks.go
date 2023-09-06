@@ -81,7 +81,7 @@ func Create(c *gin.Context) {
 		return
 	}
 	env.ReqCapabilities = reqCaps
-	l = l.WithField("family", env.TaskDefinitionFamily).WithField(config.RouterUuid, env.UUID)
+	l = l.WithField("family", env.TaskDefinitionFamily).WithField(config.RouterUuid, env.RouterUUID)
 
 	l.Info("new request")
 	l.WithField("env", env).Debug("Env details")
@@ -105,6 +105,8 @@ func Create(c *gin.Context) {
 
 func Proxy(c *gin.Context) {
 	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
+	// c.Request.URL.Path contains router UUID which should be replaced by selenium/selenoid sess.SessionID
+	c.Request.URL.Path = rerouteProxy(c.Request.URL.Path, sess.SessionID)
 
 	(&httputil.ReverseProxy{
 		Director: func(r *http.Request) {
@@ -134,13 +136,26 @@ func Proxy(c *gin.Context) {
 	}).ServeHTTP(c.Writer, c.Request)
 }
 
+// replace inside c.Request.URL.Path Router UUID by actual selenium/selenoid sessionID for valid routing
+func rerouteProxy(path string, sessionId string) string {
+	splittedPath := strings.Split(path, "/")
+	// path /.../routerUUID/..../...
+	if len(splittedPath) < 3 {
+		log.Debug("Failed to replace routerUUID with sessionId")
+		return path
+	}
+
+	splittedPath[2] = sessionId
+	return strings.Join(splittedPath, "/")
+}
+
 func CloseSession(c *gin.Context) {
 	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
 
 	l := log.WithField(config.TaskIdKey, sess.TaskId)
 
 	selenium.CloseSession(sess, sessionmap.SessionFinished)
-	l = l.WithField(config.SessionIdKey, sess.ID)
+	l = l.WithField(config.SessionIdKey, sess.SessionID)
 
 	err := service.StopTask(sess.TaskId, taskmap.TaskFinished)
 	if err != nil {
@@ -154,7 +169,7 @@ func CloseSession(c *gin.Context) {
 func AbortTask(c *gin.Context) {
 	task := c.MustGet(config.TaskIdKey).(*taskmap.Task)
 
-	l := log.WithField(config.RouterUuid, task.UUID).WithField(config.TaskIdKey, task.TaskId)
+	l := log.WithField(config.RouterUuid, task.RouterUUID).WithField(config.TaskIdKey, task.TaskId)
 
 	if !config.Conf.SingleTenant {
 		l = l.WithField("workspace", task.Workspace)
@@ -229,8 +244,8 @@ func Logs(c *gin.Context) {
 		return
 	}
 
-	sessionID := c.Param("session")
-	logFile := strings.Join([]string{user, "artifacts", "test-sessions", sessionID, "session.log"}, "/")
+	routerUUID := c.Param("session")
+	logFile := strings.Join([]string{user, "artifacts", "test-sessions", routerUUID, "session.log"}, "/")
 	presignedUrl, err := service.GeneratePreSignedURL(logFile)
 	if err != nil {
 		log.Printf("[URL GENERATION FAILED] %v", err)
@@ -248,14 +263,14 @@ func Video(c *gin.Context) {
 		return
 	}
 
-	sessionID := c.Param("session")
-	videoFile := strings.Join([]string{user, "artifacts", "test-sessions", sessionID, "video.mp4"}, "/")
+	routerUUID := c.Param("session")
+	videoFile := strings.Join([]string{user, "artifacts", "test-sessions", routerUUID, "video.mp4"}, "/")
 	presignedUrl, err := service.GeneratePreSignedURL(videoFile)
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{
 			"user":              user,
 			"remote":            c.ClientIP(),
-			config.SessionIdKey: sessionID,
+			config.SessionIdKey: routerUUID,
 		}).Error("Failed to create pre signed url to session video")
 
 		c.Error(utils.NotFoundApiErr("resource not found")).SetType(gin.ErrorTypePublic)
@@ -272,8 +287,8 @@ func TaskLog(c *gin.Context) {
 		return
 	}
 
-	taskID := c.Param("task")
-	logFile := strings.Join([]string{user, "artifacts", "launches", taskID, "console.log"}, "/")
+	routerUUID := c.Param("task")
+	logFile := strings.Join([]string{user, "artifacts", "launches", routerUUID, "console.log"}, "/")
 	presignedUrl, err := service.GeneratePreSignedURL(logFile)
 	if err != nil {
 		log.Printf("[URL GENERATION FAILED] %v", err)
@@ -290,12 +305,11 @@ func TaskDescribe(c *gin.Context) {
 		c.Error(utils.AuthApiErr("auth data not provided")).SetType(gin.ErrorTypePublic)
 		return
 	}
-
-	uuid := c.Param("task")
-	l := log.WithField("user", user).WithField(config.RouterUuid, uuid)
+	routerUUID := c.Param("task")
+	l := log.WithField("user", user).WithField(config.RouterUuid, routerUUID)
 	l.Debug("Get task status")
 
-	task, seErr := getTask(uuid)
+	task, seErr := getTask(routerUUID)
 	if seErr != nil {
 		l.Error("Failed to get task status")
 		c.Error(utils.NotFoundApiErr(seErr.Error())).SetType(gin.ErrorTypePublic)
@@ -303,6 +317,7 @@ func TaskDescribe(c *gin.Context) {
 	}
 
 	result, err := service.DescribeTask(task.TaskId)
+
 	if err != nil {
 		l.Error("Failed to get task status")
 		c.Error(utils.UnknownApiErr(fmt.Sprintf("failed to get task status: %v", err.Error()))).
@@ -314,7 +329,6 @@ func TaskDescribe(c *gin.Context) {
 }
 
 func Downloads(c *gin.Context) {
-	filename := c.Param("file")
 	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
 
 	director := func(req *http.Request) {
@@ -323,7 +337,7 @@ func Downloads(c *gin.Context) {
 			url, _ := sess.Network.GetUrl("fileserver")
 			req.URL.Host = url.Host
 			req.Host = url.Host
-			req.URL.Path = "/" + filename
+			req.URL.Path = getRemainingPath(req.URL.Path)
 		}
 	}
 	proxy := &httputil.ReverseProxy{Director: director}

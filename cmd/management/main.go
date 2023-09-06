@@ -88,7 +88,7 @@ func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 				}
 
 				if cachedTask.Status == taskmap.TaskGeneric {
-					zebrunner.AbortTask(cachedTask.UUID, cachedTask.Workspace,
+					zebrunner.AbortTask(cachedTask.RouterUUID, cachedTask.Workspace,
 						cachedTask.Capabilities.LaunchUUID.ToPrimitive(), "Task aborted due to UNHEALTHY HealthStatus")
 				}
 			} else {
@@ -107,7 +107,7 @@ func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 					}
 
 					if cachedTask.Status == taskmap.TaskGeneric {
-						zebrunner.AbortTask(cachedTask.UUID, cachedTask.Workspace,
+						zebrunner.AbortTask(cachedTask.RouterUUID, cachedTask.Workspace,
 							cachedTask.Capabilities.LaunchUUID.ToPrimitive(), "Task aborted due to the max timeout limit")
 					}
 				}
@@ -250,7 +250,7 @@ func StopIdleTasks() {
 				continue
 			}
 
-			l := log.WithFields(log.Fields{config.TaskIdKey: session.TaskId, config.SessionIdKey: session.ID})
+			l := log.WithFields(log.Fields{config.TaskIdKey: session.TaskId, config.SessionIdKey: session.SessionID})
 			if !config.Conf.SingleTenant {
 				l = l.WithField("workspace", session.Workspace)
 			}

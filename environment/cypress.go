@@ -17,7 +17,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func buildCypress(workspace string, uuid string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
+func buildCypress(workspace string, routerUUID string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
 	conf := &config.Conf
 
 	workDir := "/tmp/zebrunner"
@@ -108,8 +108,8 @@ func buildCypress(workspace string, uuid string, caps *capabilities.Capabilities
 			"vnc": {vncPort, 0},
 		},
 		Env: map[string]string{
-			"COMMAND": 			 launchCommand,
-			"ZEBRUNNER_TASK_ID": uuid,
+			"COMMAND":           launchCommand,
+			"ZEBRUNNER_TASK_ID": routerUUID,
 		},
 		Mounts:           []string{entrypointVolume, taskVolume, logVolume, cypressVolume, shmVolume},
 		WorkingDirectory: workDir,
@@ -196,7 +196,7 @@ func buildCypress(workspace string, uuid string, caps *capabilities.Capabilities
 	uploaderContainer := Container{
 		Name:       "uploader",
 		Image:      uploaderImage,
-		cpu:        64, // with 32  uploading is aborted
+		cpu:        64,  // with 32  uploading is aborted
 		memory:     256, // 64 works for single thread. for backgroud copying it is not enough
 		Privileged: false,
 		Essential:  false,
@@ -239,8 +239,8 @@ func buildCypress(workspace string, uuid string, caps *capabilities.Capabilities
 				"vnc": {ContainerPort: vncPort, HostPort: 0, Path: "/"},
 			},
 		},
-		Workspace: workspace,
-		UUID: uuid,
+		Workspace:  workspace,
+		RouterUUID: routerUUID,
 	}
 
 	return &environment, nil

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/cachemaps/mapper"
 	"github.com/zebrunner/esg/cachemaps/taskmap"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
@@ -28,7 +29,8 @@ const (
 )
 
 type Session struct {
-	ID          string
+	SessionID   string
+	RouterUUID  string
 	StartedAt   time.Time
 	AccessedAt  time.Time
 	IdleTimeout float64
@@ -39,9 +41,16 @@ type Session struct {
 	Workspace   string
 }
 
-func CreateEntity(id string, env *environment.ExecutionEnvironment, task *taskmap.Task) (*Session, error) {
+func CreateEntity(sessionId string, env *environment.ExecutionEnvironment, task *taskmap.Task) (*Session, error) {
+	err := mapper.UpdateSessionId(env.RouterUUID, sessionId)
+	if err != nil {
+		log.WithError(err).Error("Session not cached!")
+		return nil, err
+	}
+
 	cachedSession := &Session{
-		ID:          id,
+		SessionID:   sessionId,
+		RouterUUID:  env.RouterUUID,
 		StartedAt:   time.Now(),
 		AccessedAt:  time.Now(),
 		IdleTimeout: float64(env.Capabilities.IdleTimeout),
@@ -51,13 +60,13 @@ func CreateEntity(id string, env *environment.ExecutionEnvironment, task *taskma
 		Workspace:   task.Workspace,
 	}
 
-	err := Write(cachedSession.ID, cachedSession, 0)
+	err = Write(cachedSession.SessionID, cachedSession, 0)
 	if err != nil {
 		log.WithError(err).Error("Session not cached!")
 		return nil, err
 	}
 
-	task.CurrentSessionID = id
+	task.CurrentSessionID = sessionId
 	err = taskmap.Write(task.TaskId, task, 0)
 	if err != nil {
 		log.WithError(err).Error("Session id not cached for task!")
@@ -67,8 +76,8 @@ func CreateEntity(id string, env *environment.ExecutionEnvironment, task *taskma
 	return cachedSession, nil
 }
 
-func Find(id string, rewriteAccessTime bool) (*Session, error) {
-	sessionData, err := config.RedisSessionsConnection.Get(context.Background(), id).Result()
+func Find(sessionId string, rewriteAccessTime bool) (*Session, error) {
+	sessionData, err := config.RedisSessionsConnection.Get(context.Background(), sessionId).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +90,7 @@ func Find(id string, rewriteAccessTime bool) (*Session, error) {
 
 	if rewriteAccessTime {
 		session.AccessedAt = time.Now()
-		err = Write(id, &session, 0)
+		err = Write(sessionId, &session, 0)
 
 		if err != nil {
 			log.WithError(err).Error("Failed to update last access time")
@@ -91,31 +100,33 @@ func Find(id string, rewriteAccessTime bool) (*Session, error) {
 	return &session, nil
 }
 
-func Write(id string, session *Session, expiration time.Duration) error {
+func FindByRouterUUID(routerUUID string) (*Session, error) {
+	sessionId, err := mapper.FindSessionId(routerUUID)
+	if err != nil {
+		return nil, err
+	}
+
+	return Find(*sessionId, true)
+}
+
+func Write(sessionId string, session *Session, expiration time.Duration) error {
 	data, err := json.Marshal(session)
 	if err != nil {
 		return err
 	}
 
-	err = config.RedisSessionsConnection.Set(context.Background(), id, data, expiration).Err()
+	err = config.RedisSessionsConnection.Set(context.Background(), sessionId, data, expiration).Err()
 	if err != nil {
 		return err
 	}
 
-	return nil
-}
-
-func Remove(id string) error {
-	err := config.RedisSessionsConnection.Del(context.Background(), id).Err()
-	if err != nil {
-		return err
+	if expiration > 0 {
+		mapper.SetExpire(session.RouterUUID, expiration)
 	}
 
 	return nil
 }
 
 func Keys() ([]string, error) {
-	keys, err := config.RedisSessionsConnection.Keys(context.Background(), "*").Result()
-
-	return keys, err
+	return config.RedisSessionsConnection.Keys(context.Background(), "*").Result()
 }
