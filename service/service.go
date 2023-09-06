@@ -378,7 +378,7 @@ func searchHostPort(task *ecs.Task, containerPort int64) (port int64, ok bool) {
 	return 0, false
 }
 
-// replaceSessionId returns actul driver's session id and changes it value in driverResponse map with router uuid.
+// replaceSessionId returns actual driver's session id and changes it value in driverResponse map with router uuid.
 func replaceSessionId(driverResponse map[string]interface{}, routerUUID string) (string, error) {
 	// Get driverSessionId from root. For unknown reason opera returns driverSessionId in root of object
 	driverSessionId, ok := driverResponse["sessionId"].(string)
