@@ -79,7 +79,7 @@ func CloseSession(session *sessionmap.Session, stopReason sessionmap.StoppedReas
 		log.WithError(err).Error("Driver session not marked as stopped!")
 	}
 
-	l := log.WithFields(log.Fields{config.TaskIdKey: session.TaskId, config.SessionIdKey: session.SessionID, config.RouterUuid: session.UUID})
+	l := log.WithFields(log.Fields{config.TaskIdKey: session.TaskId, config.SessionIdKey: session.SessionID, config.RouterUuid: session.RouterUUID})
 	if !config.Conf.SingleTenant {
 		l = l.WithField("workspace", session.Workspace)
 	}

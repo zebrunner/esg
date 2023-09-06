@@ -16,7 +16,7 @@ const (
 	appiumMemory = 1024
 )
 
-func buildAppiumRedroid(workspace string, uuid string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
+func buildAppiumRedroid(workspace string, routerUUID string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
 	browserVolume := "browser"
 
 	logDir := "/tmp/log"
@@ -103,8 +103,8 @@ func buildAppiumRedroid(workspace string, uuid string, caps *capabilities.Capabi
 				"healthcheck": {ContainerPort: appiumPort, HostPort: 0, Path: "/wd/hub/status-adb"},
 			},
 		},
-		Workspace: workspace,
-		UUID:      uuid,
+		Workspace:  workspace,
+		RouterUUID: routerUUID,
 	}
 
 	return &environment, nil

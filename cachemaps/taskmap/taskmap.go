@@ -41,7 +41,7 @@ type Task struct {
 	Status           TaskStatus
 	UsageTracked     bool
 	Workspace        string
-	UUID             string
+	RouterUUID       string
 	CurrentSessionID string                           `json:",omitempty"`
 	StopReason       StoppedReason                    `json:",omitempty"`
 	HealthAt         time.Time                        `json:",omitempty"`
@@ -49,7 +49,7 @@ type Task struct {
 }
 
 func CreateEntity(taskId string, env *environment.ExecutionEnvironment) (*Task, error) {
-	err := mapper.UpdateTaskId(env.UUID, taskId)
+	err := mapper.UpdateTaskId(env.RouterUUID, taskId)
 	if err != nil {
 		log.WithError(err).Error("Task not cached!")
 		return nil, err
@@ -58,7 +58,7 @@ func CreateEntity(taskId string, env *environment.ExecutionEnvironment) (*Task, 
 		TaskId:       taskId,
 		Capabilities: env.Capabilities,
 		Status:       TaskQueued,
-		UUID:         env.UUID,
+		RouterUUID:   env.RouterUUID,
 		Workspace:    env.Workspace,
 	}
 
@@ -86,8 +86,8 @@ func Find(taskId string) (*Task, error) {
 	return &task, nil
 }
 
-func FindByUuid(uuid string) (*Task, error) {
-	taskId, err := mapper.FindTaskId(uuid)
+func FindByRouterUUID(routerUUID string) (*Task, error) {
+	taskId, err := mapper.FindTaskId(routerUUID)
 	if err != nil {
 		return nil, err
 	}
@@ -107,12 +107,12 @@ func Write(taskId string, task *Task, expiration time.Duration) error {
 	}
 
 	if expiration > 0 {
-		mapper.SetExpire(task.UUID, expiration)
+		mapper.SetExpire(task.RouterUUID, expiration)
 	}
 
 	return nil
 }
 
-func Keys() ([]string, error) {	
+func Keys() ([]string, error) {
 	return config.RedisTasksConnection.Keys(context.Background(), "*").Result()
 }

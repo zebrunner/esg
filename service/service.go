@@ -82,7 +82,7 @@ func (s *startBasis) registerTaskPhase(ctx context.Context) (reply map[string]in
 
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Debug("task registered")
 		reply = make(map[string]interface{}, 0)
-		reply["taskId"] = s.Env.UUID
+		reply["taskId"] = s.Env.RouterUUID
 		return reply, nil, nil
 	}
 }
@@ -117,7 +117,7 @@ func (s *startBasis) startTaskPhase(ctx context.Context) (reply map[string]inter
 
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("task started")
 		reply = make(map[string]interface{}, 0)
-		reply["taskId"] = s.Env.UUID
+		reply["taskId"] = s.Env.RouterUUID
 		return reply, nil, nil
 	}
 }
@@ -164,7 +164,7 @@ func (s *startBasis) setNetworkPhase(ctx context.Context) (reply map[string]inte
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("network environment set")
 
 		reply = make(map[string]interface{}, 0)
-		reply["taskId"] = s.Env.UUID
+		reply["taskId"] = s.Env.RouterUUID
 		return reply, nil, nil
 	}
 }
@@ -219,7 +219,8 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (reply map[string]int
 		return
 	case reply = <-waitRequest.ResponseCh:
 		var sessionId string
-		sessionId, nonEssential = getAndReplaceSessionId(reply, s.Env.UUID)
+		// replace sessionId from driver response with router uuid
+		sessionId, nonEssential = replaceSessionId(reply, s.Env.RouterUUID)
 		if sessionId == "" {
 			if nonEssential == nil {
 				nonEssential = fmt.Errorf("session id in driver response is empty")
@@ -273,12 +274,12 @@ func (starter genericStarter) StartService() (map[string]interface{}, *utils.Sel
 
 		// abort launch if service startup returned error
 		if startErr != nil {
-			zebrunner.AbortTask(starter.basis.Env.UUID, starter.basis.Env.Workspace,
+			zebrunner.AbortTask(starter.basis.Env.RouterUUID, starter.basis.Env.Workspace,
 				starter.basis.Env.Capabilities.LaunchUUID.ToPrimitive(), startErr.Error())
 		}
 	}()
 
-	return gin.H{"taskId": starter.basis.Env.UUID}, nil
+	return gin.H{"taskId": starter.basis.Env.RouterUUID}, nil
 }
 
 type basicStarter struct {
@@ -293,7 +294,7 @@ func (starter basicStarter) StartService() (map[string]interface{}, *utils.Selen
 	starter.basis.ServiceStart = time.Now()
 	starter.basis.Log.Info("service starting")
 
-	if err := mapper.InitEntity(starter.basis.Env.UUID); err != nil {
+	if err := mapper.InitEntity(starter.basis.Env.RouterUUID); err != nil {
 		return nil, utils.CreationErr(fmt.Errorf("service startup failed"), err.Error())
 	}
 
@@ -302,7 +303,7 @@ func (starter basicStarter) StartService() (map[string]interface{}, *utils.Selen
 		starter.basis.Log = starter.basis.Log.WithField("attempt", i)
 		for j, p := range starter.basis.Phases {
 			reply, essential, nonEssential := p(ctx)
-			task, err := taskmap.FindByUuid(starter.basis.Env.UUID)
+			task, err := taskmap.FindByRouterUUID(starter.basis.Env.RouterUUID)
 			if err == nil && task != nil && task.StopReason == taskmap.TaskAborted {
 				seErr := utils.CreationErr(fmt.Errorf("service start has been aborted"))
 				starter.basis.Log.Info(seErr)
@@ -377,24 +378,29 @@ func searchHostPort(task *ecs.Task, containerPort int64) (port int64, ok bool) {
 	return 0, false
 }
 
-func getAndReplaceSessionId(resp map[string]interface{}, uuid string) (string, error) {
-	// Get sessionId from root. For unknown reason opera returns sessionId in root of object
-	sessionId, ok := resp["sessionId"].(string)
+// replaceSessionId returns actul driver's session id and changes it value in driverResponse map with router uuid.
+func replaceSessionId(driverResponse map[string]interface{}, routerUUID string) (string, error) {
+	// Get driverSessionId from root. For unknown reason opera returns driverSessionId in root of object
+	driverSessionId, ok := driverResponse["sessionId"].(string)
 	if ok {
-		resp["sessionId"] = uuid
-		return sessionId, nil
+		// if driverSessionId found, change it in response map with router UUID
+		driverResponse["sessionId"] = routerUUID
+		// return actual driverSessionId
+		return driverSessionId, nil
 	}
 
 	// Get session from value
-	value, ok := resp["value"].(map[string]interface{})
+	value, ok := driverResponse["value"].(map[string]interface{})
 	if !ok {
 		return "", fmt.Errorf("`value` must be an object")
 	}
 
-	sessionId, ok = value["sessionId"].(string)
+	driverSessionId, ok = value["sessionId"].(string)
 	if ok {
-		value["sessionId"] = uuid
-		return sessionId, nil
+		// if driverSessionId found, change it in response map with router UUID
+		value["sessionId"] = routerUUID
+		// return actual driverSessionId
+		return driverSessionId, nil
 	}
 
 	return "", fmt.Errorf("failed to find sessionId field in response")

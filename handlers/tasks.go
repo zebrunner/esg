@@ -81,7 +81,7 @@ func Create(c *gin.Context) {
 		return
 	}
 	env.ReqCapabilities = reqCaps
-	l = l.WithField("family", env.TaskDefinitionFamily).WithField(config.RouterUuid, env.UUID)
+	l = l.WithField("family", env.TaskDefinitionFamily).WithField(config.RouterUuid, env.RouterUUID)
 
 	l.Info("new request")
 	l.WithField("env", env).Debug("Env details")
@@ -105,7 +105,8 @@ func Create(c *gin.Context) {
 
 func Proxy(c *gin.Context) {
 	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
-	c.Request.URL.Path = replaceUUIDWithSessionID(c.Request.URL.Path, sess.SessionID)
+	// c.Request.URL.Path contains router UUID which should be replaced by selenium/selenoid sess.SessionID
+	c.Request.URL.Path = rerouteProxy(c.Request.URL.Path, sess.SessionID)
 
 	(&httputil.ReverseProxy{
 		Director: func(r *http.Request) {
@@ -135,11 +136,12 @@ func Proxy(c *gin.Context) {
 	}).ServeHTTP(c.Writer, c.Request)
 }
 
-func replaceUUIDWithSessionID(path string, sessionId string) string {
+// replace inside c.Request.URL.Path Router UUID by actual selenium/selenoid sessionID for valid routing
+func rerouteProxy(path string, sessionId string) string {
 	splittedPath := strings.Split(path, "/")
-	// path /.../uuid/..../...
+	// path /.../routerUUID/..../...
 	if len(splittedPath) < 3 {
-		log.Debug("Failed to replace uuid with sessionId")
+		log.Debug("Failed to replace routerUUID with sessionId")
 		return path
 	}
 
@@ -167,7 +169,7 @@ func CloseSession(c *gin.Context) {
 func AbortTask(c *gin.Context) {
 	task := c.MustGet(config.TaskIdKey).(*taskmap.Task)
 
-	l := log.WithField(config.RouterUuid, task.UUID).WithField(config.TaskIdKey, task.TaskId)
+	l := log.WithField(config.RouterUuid, task.RouterUUID).WithField(config.TaskIdKey, task.TaskId)
 
 	if !config.Conf.SingleTenant {
 		l = l.WithField("workspace", task.Workspace)
