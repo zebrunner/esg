@@ -8,19 +8,19 @@ import (
 	"github.com/zebrunner/esg/config"
 )
 
-type UuidMapper struct {
+type IdMapper struct {
 	RouterUUID string
 	TaskId     string `json:",omitempty"`
 	SessionID  string `json:",omitempty"`
 }
 
 func InitEntity(routerUUID string) error {
-	data, err := json.Marshal(&UuidMapper{RouterUUID: routerUUID})
+	data, err := json.Marshal(&IdMapper{RouterUUID: routerUUID})
 	if err != nil {
 		return err
 	}
 
-	err = config.RedisTasksMapperConnection.Set(context.Background(), routerUUID, data, 0).Err()
+	err = config.RedisIdMapperConnection.Set(context.Background(), routerUUID, data, 0).Err()
 	if err != nil {
 		return err
 	}
@@ -28,6 +28,7 @@ func InitEntity(routerUUID string) error {
 	return nil
 }
 
+// only internal usage (use methods from sessionmap/taskmap)
 func FindTaskId(routerUUID string) (*string, error) {
 	mapper, err := find(routerUUID)
 	if err != nil {
@@ -37,6 +38,7 @@ func FindTaskId(routerUUID string) (*string, error) {
 	return &mapper.TaskId, nil
 }
 
+// only internal usage (use methods from sessionmap/taskmap)
 func FindSessionId(routerUUID string) (*string, error) {
 	mapper, err := find(routerUUID)
 	if err != nil {
@@ -46,6 +48,7 @@ func FindSessionId(routerUUID string) (*string, error) {
 	return &mapper.SessionID, nil
 }
 
+// only internal usage (use methods from sessionmap/taskmap)
 func UpdateTaskId(routerUUID string, taskId string) error {
 	mapper, err := find(routerUUID)
 	if err != nil {
@@ -58,7 +61,7 @@ func UpdateTaskId(routerUUID string, taskId string) error {
 		return err
 	}
 
-	err = config.RedisTasksMapperConnection.Set(context.Background(), routerUUID, data, 0).Err()
+	err = config.RedisIdMapperConnection.Set(context.Background(), routerUUID, data, 0).Err()
 	if err != nil {
 		return err
 	}
@@ -66,6 +69,7 @@ func UpdateTaskId(routerUUID string, taskId string) error {
 	return nil
 }
 
+// only internal usage (use methods from sessionmap/taskmap)
 func UpdateSessionId(routerUUID string, sessionId string) error {
 	mapper, err := find(routerUUID)
 	if err != nil {
@@ -78,7 +82,7 @@ func UpdateSessionId(routerUUID string, sessionId string) error {
 		return err
 	}
 
-	err = config.RedisTasksMapperConnection.Set(context.Background(), routerUUID, data, 0).Err()
+	err = config.RedisIdMapperConnection.Set(context.Background(), routerUUID, data, 0).Err()
 	if err != nil {
 		return err
 	}
@@ -86,13 +90,13 @@ func UpdateSessionId(routerUUID string, sessionId string) error {
 	return nil
 }
 
-func find(routerUUID string) (*UuidMapper, error) {
-	data, err := config.RedisTasksMapperConnection.Get(context.Background(), routerUUID).Result()
+func find(routerUUID string) (*IdMapper, error) {
+	data, err := config.RedisIdMapperConnection.Get(context.Background(), routerUUID).Result()
 	if err != nil {
 		return nil, err
 	}
 
-	var mapper UuidMapper
+	var mapper IdMapper
 	err = json.Unmarshal([]byte(data), &mapper)
 	if err != nil {
 		return nil, err
@@ -101,6 +105,7 @@ func find(routerUUID string) (*UuidMapper, error) {
 	return &mapper, nil
 }
 
+// only internal usage (use methods from sessionmap/taskmap)
 func SetExpire(routerUUID string, expiration time.Duration) error {
-	return config.RedisTasksMapperConnection.Expire(context.Background(), routerUUID, expiration).Err()
+	return config.RedisIdMapperConnection.Expire(context.Background(), routerUUID, expiration).Err()
 }
