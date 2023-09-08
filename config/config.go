@@ -41,6 +41,7 @@ type Config struct {
 	// Timeouts
 	MaxIdleTimeout          time.Duration
 	IdleTimeout             time.Duration
+	CypressIdleTimeout		time.Duration
 	SessionDeleteTimeout    time.Duration
 	ServiceStartupTimeout   time.Duration
 	DriverStartupTimeout    time.Duration
@@ -83,6 +84,7 @@ func init() {
 
 	flag.DurationVar(&Conf.MaxIdleTimeout, "max-idle-timeout", 15*time.Minute, "Maximum session idle timeout time that could be set by user's capabilities")
 	flag.DurationVar(&Conf.IdleTimeout, "idle-timeout", 60*time.Second, "Session idle timeout in time.Duration format")
+	flag.DurationVar(&Conf.CypressIdleTimeout, "cypress-idle-timeout", 10*time.Second, "Cypress task idle timeout in time.Duration format")
 	flag.DurationVar(&Conf.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
 	flag.DurationVar(&Conf.ServiceStartupTimeout, "service-startup-timeout", 9*time.Minute, "Service startup timeout in time.Duration format")
 	flag.DurationVar(&Conf.DriverStartupTimeout, "driver-startup-timeout", 1*time.Minute, "Driver startup timeout in time.Duration format")

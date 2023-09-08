@@ -109,7 +109,7 @@ func (s *startBasis) startTaskPhase(ctx context.Context) (reply map[string]inter
 	case s.Task = <-waitRequest.ResponseCh:
 		s.CachedTask.HealthAt = time.Now()
 		s.CachedTask.Status = taskmap.TaskActive
-		nonEssential = taskmap.Write(s.CachedTask.TaskId, s.CachedTask, 0)
+		nonEssential = taskmap.Write(s.CachedTask.TaskId, s.CachedTask, -1)
 		if nonEssential != nil {
 			s.Log.WithError(nonEssential).Warn("Failed to cache task, restarting...")
 			return
@@ -128,7 +128,7 @@ func (s *startBasis) setNetworkPhase(ctx context.Context) (reply map[string]inte
 	select {
 	case <-s.Request.Context().Done():
 		essential = utils.CreationErr(fmt.Errorf("create request is canceled or timed out"))
-		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to get network configuration, stopping service...")
+		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to start task, stopping service...")
 		return
 	case <-ctx.Done():
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("Network configure timed out")
@@ -155,7 +155,7 @@ func (s *startBasis) setNetworkPhase(ctx context.Context) (reply map[string]inte
 		}
 
 		s.CachedTask.Network = *s.Env.Network
-		nonEssential = taskmap.Write(s.CachedTask.TaskId, s.CachedTask, 0)
+		nonEssential = taskmap.Write(s.CachedTask.TaskId, s.CachedTask, -1)
 		if nonEssential != nil {
 			s.Log.WithError(nonEssential).Warn("Failed to cache task, restarting...")
 			return
@@ -346,18 +346,20 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l 
 		Phases:  make([]phase, 0),
 	}
 
-	markAsGeneric := func(s *startBasis) {
-		s.CachedTask.Status = taskmap.TaskGeneric
-		taskmap.Write(s.CachedTask.TaskId, s.CachedTask, 0)
-	}
-
 	var starter ServiceStarter
 	if strings.Contains(env.TaskDefinitionFamily, "generic") {
 		s.appendPhase(s.registerTaskPhase).appendPhase(s.startTaskPhase)
-		starter = genericStarter{basis: s, finalize: markAsGeneric}
+		starter = genericStarter{basis: s, finalize: func(s *startBasis) {
+			s.CachedTask.Status = taskmap.TaskGeneric
+			taskmap.Write(s.CachedTask.TaskId, s.CachedTask, -1)
+		}}
 	} else if strings.Contains(env.TaskDefinitionFamily, "cypress") {
 		s.appendPhase(s.registerTaskPhase).appendPhase(s.startTaskPhase).appendPhase(s.setNetworkPhase)
-		starter = basicStarter{basis: s, finalize: markAsGeneric}
+		starter = basicStarter{basis: s, finalize: func(s *startBasis) {
+			s.CachedTask.Status = taskmap.TaskGeneric
+			taskmap.Write(s.CachedTask.TaskId, s.CachedTask, -1)
+			taskmap.AddToSet(s.CachedTask.TaskId)
+		}}
 	} else {
 		s.appendPhase(s.registerTaskPhase).appendPhase(s.startTaskPhase).appendPhase(s.setNetworkPhase).appendPhase(s.startDriverPhase)
 		starter = basicStarter{basis: s}

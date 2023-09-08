@@ -127,7 +127,7 @@ func StopTaskForcibly(taskId string, stopReason taskmap.StoppedReason) error {
 }
 
 func StopTask(taskId string, stopReason taskmap.StoppedReason) error {
-	cachedTask, _ := taskmap.Find(taskId)
+	cachedTask, _ := taskmap.Find(taskId, false)
 	if cachedTask == nil {
 		return StopTaskForcibly(taskId, stopReason)
 	}
@@ -141,15 +141,15 @@ func StopTask(taskId string, stopReason taskmap.StoppedReason) error {
 
 	// Set pendingToStop status so no new StopTask() call for current task would be performed
 	cachedTask.Status = taskmap.TaskPendingToStop
-	taskmap.Write(cachedTask.TaskId, cachedTask, 0)
+	taskmap.Write(cachedTask.TaskId, cachedTask,-1)
 
 	err := StopTaskForcibly(cachedTask.TaskId, stopReason)
 	if err != nil {
-		taskmap.Write(cachedTask.TaskId, &cachedTaskBak, 0)
+		taskmap.Write(cachedTask.TaskId, &cachedTaskBak, -1)
 	} else {
 		cachedTask.Status = taskmap.TaskStopped
 		cachedTask.StopReason = stopReason
-		taskmap.Write(cachedTask.TaskId, cachedTask, 10*time.Minute)
+		taskmap.Write(cachedTask.TaskId, cachedTask, -1)
 	}
 
 	return err
