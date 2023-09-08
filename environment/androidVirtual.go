@@ -52,6 +52,7 @@ func buildAppiumRedroid(workspace string, routerUUID string, caps *capabilities.
 			"driver": {appiumPort, 0},
 		},
 		Env: map[string]string{
+			"ROUTER_UUID":    routerUUID,
 			"RETAIN_TASK":    "false",
 			"DEVICE_NAME":    "ReDroid",
 			"ANDROID_DEVICE": "device:5555",
