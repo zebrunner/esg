@@ -69,7 +69,7 @@ func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 	for _, task := range tasks {
 		taskId := strings.Split(*task.TaskArn, "/")[2]
 
-		cachedTask, err := taskmap.Find(taskId)
+		cachedTask, err := taskmap.Find(taskId, false)
 		if err != nil {
 			log.WithError(err).Debug("StopUnhealthyTasks(): failed to get task's cache for: ", taskId)
 			continue
@@ -88,7 +88,7 @@ func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 				}
 
 				if cachedTask.Status == taskmap.TaskGeneric {
-					zebrunner.AbortTask(cachedTask.RouterUUID, cachedTask.Workspace,
+					zebrunner.AbortLaunch(cachedTask.RouterUUID, cachedTask.Workspace,
 						cachedTask.Capabilities.LaunchUUID.ToPrimitive(), "Task aborted due to UNHEALTHY HealthStatus")
 				}
 			} else {
@@ -107,7 +107,7 @@ func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 					}
 
 					if cachedTask.Status == taskmap.TaskGeneric {
-						zebrunner.AbortTask(cachedTask.RouterUUID, cachedTask.Workspace,
+						zebrunner.AbortLaunch(cachedTask.RouterUUID, cachedTask.Workspace,
 							cachedTask.Capabilities.LaunchUUID.ToPrimitive(), "Task aborted due to the max timeout limit")
 					}
 				}
@@ -188,22 +188,21 @@ func TrackResourceUsage(tasks []*ecs.Task, wg *sync.WaitGroup) {
 		}
 
 		// for tracking task should be cached
-		cachedTask, _ := taskmap.Find(taskId)
+		cachedTask, _ := taskmap.Find(taskId, false)
 		if cachedTask == nil {
 			l.Debug("Can't find non tracked stopped task in cache")
 			continue
 		}
 
-		// for tracking task should be:
-		// 1) not tracked
-		// 2) with stop or generic(workaround) status, because later we'll need a stop reason
-		if cachedTask.UsageTracked || !(cachedTask.Status == taskmap.TaskStopped || cachedTask.Status == taskmap.TaskGeneric) {
-			// TODO: delete cachedTask.Status != taskmap.TaskGeneric when CloseGeneric() for generic tasks will be called
+		// already tracked
+		if cachedTask.UsageTracked {
 			continue
 		}
 
-		if !config.Conf.SingleTenant {
-			l = l.WithField("workspace", cachedTask.Workspace)
+		// generic and cypress on success finish are not marked as stopped in cache after finish
+		if cachedTask.Status != taskmap.TaskStopped {
+			cachedTask.Status = taskmap.TaskStopped
+			cachedTask.StopReason = taskmap.TaskFinished
 		}
 
 		// track resources usage for STOPPED tasks
@@ -211,7 +210,11 @@ func TrackResourceUsage(tasks []*ecs.Task, wg *sync.WaitGroup) {
 		cachedTask.UsageTracked = true
 		taskmap.Write(taskId, cachedTask, 5*time.Minute)
 
-		// Don't track Unhealthy and StartupFailure tasks
+		if !config.Conf.SingleTenant {
+			l = l.WithField("workspace", cachedTask.Workspace)
+		}
+
+		// Don't track Unhealthy/StartupFailure/Lost tasks
 		if cachedTask.StopReason == taskmap.TaskStartupFailure ||
 			cachedTask.StopReason == taskmap.TaskUnhealthy ||
 			cachedTask.StopReason == taskmap.TaskLost {
@@ -242,7 +245,7 @@ func StopIdleTasks() {
 			session, _ := sessionmap.Find(key, false)
 
 			if session == nil {
-				log.WithField("session key", key).Warn("StopIdleTasks: Not found")
+				log.WithField(config.SessionIdKey, key).Warn("StopIdleTasks: Not found")
 				continue
 			}
 
@@ -266,6 +269,68 @@ func StopIdleTasks() {
 				} else {
 					l.Warn("task aborted due to the session idle timeout")
 				}
+			}
+		}
+	}
+}
+
+func StopCypressIdleTasks() {
+	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
+	if err != nil {
+		log.WithError(err).Error("Failed to create AWS session! Stopping scaler...")
+		os.Exit(1)
+	}
+
+	svc := ecs.New(session)
+	for {
+		time.Sleep(30 * time.Second)
+
+		keys, err := taskmap.CypressSetKeys()
+		if err != nil {
+			log.WithError(err).Error("Failed to get set of cypress keys!")
+			continue
+		}
+
+		if len(keys) == 0 {
+			continue
+		}
+
+		tasksToStop := make([]string, 0)
+		for _, key := range keys {
+			l := log.WithField(config.TaskIdKey, key)
+			cachedTask, _ := taskmap.Find(key, false)
+			if cachedTask == nil {
+				taskmap.RemoveFromCypressSet(key)
+				continue
+			}
+
+			idleTime := time.Since(cachedTask.AccessedAt).Seconds()
+			if idleTime > config.Conf.CypressIdleTimeout.Seconds() {
+				l.Debug("StopCypressIdleTasks: analyzing task for idleTimeout")
+				tasksToStop = append(tasksToStop, key)
+			}
+		}
+
+		if len(tasksToStop) == 0 {
+			continue
+		}
+
+		tasks := service.GetTasksByTaskIds(tasksToStop, svc)
+		for _, task := range tasks {
+			taskId := strings.Split(*task.TaskArn, "/")[2]
+			l := log.WithField(config.TaskIdKey, taskId)
+
+			if *task.LastStatus == "STOPPED" || *task.DesiredStatus == "STOPPED" {
+				taskmap.RemoveFromCypressSet(taskId)
+			} else {
+				err := service.StopTask(taskId, taskmap.TaskAborted)
+				if err != nil {
+					l.WithError(err).Error("Failed to stop cypress idle task!")
+					continue
+				}
+
+				taskmap.RemoveFromCypressSet(taskId)
+				l.Warn("cypress task aborted due to the idle timeout")
 			}
 		}
 	}
@@ -494,6 +559,8 @@ func main() {
 	go ClearTasks()
 
 	go StopIdleTasks()
+
+	go StopCypressIdleTasks()
 
 	go AddTaskDefinitions()
 

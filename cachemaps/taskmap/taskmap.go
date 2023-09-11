@@ -46,6 +46,7 @@ type Task struct {
 	StopReason       StoppedReason                    `json:",omitempty"`
 	HealthAt         time.Time                        `json:",omitempty"`
 	Network          environment.NetworkConfiguration `json:",omitempty"`
+	AccessedAt       time.Time                        `json:",omitempty"`
 }
 
 func CreateEntity(taskId string, env *environment.ExecutionEnvironment) (*Task, error) {
@@ -71,7 +72,7 @@ func CreateEntity(taskId string, env *environment.ExecutionEnvironment) (*Task, 
 	return cachedTask, nil
 }
 
-func Find(taskId string) (*Task, error) {
+func Find(taskId string, rewriteAccessTime bool) (*Task, error) {
 	sessionData, err := config.RedisTasksConnection.Get(context.Background(), taskId).Result()
 	if err != nil {
 		return nil, err
@@ -83,6 +84,16 @@ func Find(taskId string) (*Task, error) {
 		return nil, err
 	}
 
+	if rewriteAccessTime {
+		task.AccessedAt = time.Now()
+		// -1 keeps the same ttl
+		err = Write(taskId, &task, -1)
+
+		if err != nil {
+			log.WithError(err).Error("Failed to update last access time")
+		}
+	}
+
 	return &task, nil
 }
 
@@ -92,7 +103,7 @@ func FindByRouterUUID(routerUUID string) (*Task, error) {
 		return nil, err
 	}
 
-	return Find(*taskId)
+	return Find(*taskId, true)
 }
 
 func Write(taskId string, task *Task, expiration time.Duration) error {

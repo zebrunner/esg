@@ -67,7 +67,7 @@ func CreateEntity(sessionId string, env *environment.ExecutionEnvironment, task 
 	}
 
 	task.CurrentSessionID = sessionId
-	err = taskmap.Write(task.TaskId, task, 0)
+	err = taskmap.Write(task.TaskId, task, -1)
 	if err != nil {
 		log.WithError(err).Error("Session id not cached for task!")
 		return nil, err
@@ -90,7 +90,8 @@ func Find(sessionId string, rewriteAccessTime bool) (*Session, error) {
 
 	if rewriteAccessTime {
 		session.AccessedAt = time.Now()
-		err = Write(sessionId, &session, 0)
+		// -1 keeps the same ttl
+		err = Write(sessionId, &session, -1)
 
 		if err != nil {
 			log.WithError(err).Error("Failed to update last access time")
