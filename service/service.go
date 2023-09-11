@@ -35,17 +35,18 @@ type startBasis struct {
 	Phases       []phase
 	CachedTask   *taskmap.Task
 	Task         *ecs.Task
+	Reply        map[string]interface{}
 }
 
-// essential error -> stop service, non essential error -> retry service start, response chan -> successfull phase execution
-type phase func(ctx context.Context) (map[string]interface{}, *utils.SeleniumError, error)
+// essential error -> stop service, non essential error -> retry service start
+type phase func(ctx context.Context) (*utils.SeleniumError, error)
 
 func (s *startBasis) appendPhase(p phase) *startBasis {
 	s.Phases = append(s.Phases, p)
 	return s
 }
 
-func (s *startBasis) registerTaskPhase(ctx context.Context) (reply map[string]interface{}, essential *utils.SeleniumError, nonEssential error) {
+func (s *startBasis) registerTaskPhase(ctx context.Context) (essential *utils.SeleniumError, nonEssential error) {
 	s.Log.Debug("task registering")
 	waitRequest := WaitForTaskRegister(ctx, *s.Env)
 	select {
@@ -70,31 +71,20 @@ func (s *startBasis) registerTaskPhase(ctx context.Context) (reply map[string]in
 			StopTaskForcibly(taskId, taskmap.TaskStartupFailure)
 			return
 		}
-		// moved here as cancel on this phase still may produce healthy lost task
-		if s.Request.Context().Err() != nil {
-			essential = utils.CreationErr(fmt.Errorf("create request is canceled or timed out"))
-			s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to register task, stopping service...")
-			return
-		}
 
 		// add task to ctx, so we can add taskId to selenium err log if any failure will happen later
 		s.GinCtx.Set(config.TaskIdKey, s.CachedTask)
 
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Debug("task registered")
-		reply = make(map[string]interface{}, 0)
-		reply["taskId"] = s.Env.RouterUUID
-		return reply, nil, nil
+		s.Reply = map[string]interface{}{"taskId": s.Env.RouterUUID}
+		return nil, nil
 	}
 }
 
-func (s *startBasis) startTaskPhase(ctx context.Context) (reply map[string]interface{}, essential *utils.SeleniumError, nonEssential error) {
+func (s *startBasis) startTaskPhase(ctx context.Context) (essential *utils.SeleniumError, nonEssential error) {
 	s.Log.Info("task starting")
 	waitRequest := taskWaiter.waitFor(ctx, s.CachedTask.TaskId)
 	select {
-	case <-s.Request.Context().Done():
-		essential = utils.CreationErr(fmt.Errorf("create request is canceled or timed out"))
-		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to start task, stopping service...")
-		return
 	case <-ctx.Done():
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("Task startup timed out")
 		essential = utils.CreationErr(fmt.Errorf("request timed out waiting for a node to become available"))
@@ -116,20 +106,15 @@ func (s *startBasis) startTaskPhase(ctx context.Context) (reply map[string]inter
 		}
 
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("task started")
-		reply = make(map[string]interface{}, 0)
-		reply["taskId"] = s.Env.RouterUUID
-		return reply, nil, nil
+		s.Reply = map[string]interface{}{"taskId": s.Env.RouterUUID}
+		return nil, nil
 	}
 }
 
-func (s *startBasis) setNetworkPhase(ctx context.Context) (reply map[string]interface{}, essential *utils.SeleniumError, nonEssential error) {
+func (s *startBasis) setNetworkPhase(ctx context.Context) (essential *utils.SeleniumError, nonEssential error) {
 	s.Log.Debug("setting network environment")
 	waitRequest := instanceWorker.waitForInstance(ctx, s.Task)
 	select {
-	case <-s.Request.Context().Done():
-		essential = utils.CreationErr(fmt.Errorf("create request is canceled or timed out"))
-		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to start task, stopping service...")
-		return
 	case <-ctx.Done():
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("Network configure timed out")
 		essential = utils.CreationErr(fmt.Errorf("service startup timed out"))
@@ -163,13 +148,12 @@ func (s *startBasis) setNetworkPhase(ctx context.Context) (reply map[string]inte
 
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("network environment set")
 
-		reply = make(map[string]interface{}, 0)
-		reply["taskId"] = s.Env.RouterUUID
-		return reply, nil, nil
+		s.Reply = map[string]interface{}{"taskId": s.Env.RouterUUID}
+		return nil, nil
 	}
 }
 
-func (s *startBasis) startDriverPhase(ctx context.Context) (reply map[string]interface{}, essential *utils.SeleniumError, nonEssential error) {
+func (s *startBasis) startDriverPhase(ctx context.Context) (essential *utils.SeleniumError, nonEssential error) {
 	s.Log.Info("driver starting")
 
 	u, ok := s.Env.Network.GetUrl("driver")
@@ -202,10 +186,6 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (reply map[string]int
 
 	waitRequest := selenium.WaitForSessionStart(ctx, startSessionRequest)
 	select {
-	case <-s.Request.Context().Done():
-		essential = utils.CreationErr(fmt.Errorf("create request is canceled or timed out"))
-		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to start driver, stopping service...")
-		return
 	case <-ctx.Done():
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("driver startup timed out")
 		essential = utils.CreationErr(fmt.Errorf("service startup timed out"))
@@ -217,10 +197,10 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (reply map[string]int
 	case nonEssential = <-waitRequest.NonEssentialErrCh:
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(nonEssential).Warn("Failed to start driver, restarting...")
 		return
-	case reply = <-waitRequest.ResponseCh:
+	case s.Reply = <-waitRequest.ResponseCh:
 		var sessionId string
 		// replace sessionId from driver response with router uuid
-		sessionId, nonEssential = replaceSessionId(reply, s.Env.RouterUUID)
+		sessionId, nonEssential = replaceSessionId(s.Reply, s.Env.RouterUUID)
 		if sessionId == "" {
 			if nonEssential == nil {
 				nonEssential = fmt.Errorf("session id in driver response is empty")
@@ -241,7 +221,7 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (reply map[string]int
 		s.GinCtx.Set(config.SessionIdKey, sess)
 
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("driver started")
-		return reply, nil, nil
+		return nil, nil
 	}
 }
 
@@ -262,8 +242,8 @@ func (s *startBasis) setHostPort() error {
 }
 
 type genericStarter struct {
-	basis    *startBasis
-	finalize func(basis *startBasis)
+	basis        *startBasis
+	finalizeFunc func(basis *startBasis)
 }
 
 func (starter genericStarter) StartService() (map[string]interface{}, *utils.SeleniumError) {
@@ -274,7 +254,7 @@ func (starter genericStarter) StartService() (map[string]interface{}, *utils.Sel
 
 		// abort launch if service startup returned error
 		if startErr != nil {
-			zebrunner.AbortTask(starter.basis.Env.RouterUUID, starter.basis.Env.Workspace,
+			zebrunner.AbortLaunch(starter.basis.Env.RouterUUID, starter.basis.Env.Workspace,
 				starter.basis.Env.Capabilities.LaunchUUID.ToPrimitive(), startErr.Error())
 		}
 	}()
@@ -283,8 +263,14 @@ func (starter genericStarter) StartService() (map[string]interface{}, *utils.Sel
 }
 
 type basicStarter struct {
-	basis    *startBasis
-	finalize func(basis *startBasis)
+	basis        *startBasis
+	finalizeFunc func(basis *startBasis)
+}
+
+func (starter basicStarter) finalize() {
+	if starter.finalizeFunc != nil {
+		starter.finalizeFunc(starter.basis)
+	}
 }
 
 func (starter basicStarter) StartService() (map[string]interface{}, *utils.SeleniumError) {
@@ -301,20 +287,37 @@ func (starter basicStarter) StartService() (map[string]interface{}, *utils.Selen
 	for i := 0; true; i++ {
 		logCopy := *starter.basis.Log
 		starter.basis.Log = starter.basis.Log.WithField("attempt", i)
-		for j, p := range starter.basis.Phases {
-			reply, essential, nonEssential := p(ctx)
+		success := true
+
+		for _, p := range starter.basis.Phases {
+			essential, nonEssential := p(ctx)
+
+			// check context/abort status before any error validation
 			task, err := taskmap.FindByRouterUUID(starter.basis.Env.RouterUUID)
 			if err == nil && task != nil && task.StopReason == taskmap.TaskAborted {
+				// stop service starter, return error
 				seErr := utils.CreationErr(fmt.Errorf("service start has been aborted"))
-				starter.basis.Log.Info(seErr)
 				return nil, seErr
-			} else if essential != nil {
-				// stop service start, return error
+			}
+
+			if starter.basis.Request.Context().Err() != nil {
+				// stop service starter, return error
+				if err == nil && task != nil {
+					StopTask(task.TaskId, taskmap.TaskStartupFailure)
+				}
+				seErr := utils.CreationErr(fmt.Errorf("service start has been canceled"))
+				return nil, seErr
+			}
+
+			if essential != nil {
+				// stop service starter, return error
 				if err == nil && task != nil {
 					StopTask(task.TaskId, taskmap.TaskStartupFailure)
 				}
 				return nil, essential
-			} else if nonEssential != nil {
+			}
+
+			if nonEssential != nil {
 				// flush data, next retry
 				if err == nil && task != nil {
 					StopTask(task.TaskId, taskmap.TaskStartupFailure)
@@ -322,15 +325,17 @@ func (starter basicStarter) StartService() (map[string]interface{}, *utils.Selen
 				starter.basis.Log = &logCopy
 				starter.basis.GinCtx.Set(config.TaskIdKey, "")
 				starter.basis.GinCtx.Set(config.SessionIdKey, "")
+				// flag for retries execution
+				success = false
 				break
-			} else if j == len(starter.basis.Phases)-1 {
-				// last phase, no errors, finalize service start and return reply
-				if starter.finalize != nil {
-					starter.finalize(starter.basis)
-				}
-				starter.basis.Log.Info("service started")
-				return reply, nil
 			}
+		}
+
+		if success {
+			// all phases executed, no errors, finalize service start and return reply
+			starter.finalize()
+			starter.basis.Log.Info("service started")
+			return starter.basis.Reply, nil
 		}
 	}
 
@@ -338,31 +343,44 @@ func (starter basicStarter) StartService() (map[string]interface{}, *utils.Selen
 }
 
 func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l *log.Entry) ServiceStarter {
-	s := &startBasis{
+	basis := &startBasis{
 		Log:     l,
 		GinCtx:  c,
 		Request: c.Request,
 		Env:     env,
 		Phases:  make([]phase, 0),
+		Reply:   make(map[string]interface{}, 0),
 	}
 
 	var starter ServiceStarter
 	if strings.Contains(env.TaskDefinitionFamily, "generic") {
-		s.appendPhase(s.registerTaskPhase).appendPhase(s.startTaskPhase)
-		starter = genericStarter{basis: s, finalize: func(s *startBasis) {
-			s.CachedTask.Status = taskmap.TaskGeneric
-			taskmap.Write(s.CachedTask.TaskId, s.CachedTask, -1)
-		}}
+		basis.appendPhase(basis.registerTaskPhase).appendPhase(basis.startTaskPhase)
+
+		starter = genericStarter{
+			basis: basis,
+			finalizeFunc: func(s *startBasis) {
+				s.CachedTask.Status = taskmap.TaskGeneric
+				taskmap.Write(s.CachedTask.TaskId, s.CachedTask, -1)
+			},
+		}
 	} else if strings.Contains(env.TaskDefinitionFamily, "cypress") {
-		s.appendPhase(s.registerTaskPhase).appendPhase(s.startTaskPhase).appendPhase(s.setNetworkPhase)
-		starter = basicStarter{basis: s, finalize: func(s *startBasis) {
-			s.CachedTask.Status = taskmap.TaskGeneric
-			taskmap.Write(s.CachedTask.TaskId, s.CachedTask, -1)
-			taskmap.AddToSet(s.CachedTask.TaskId)
-		}}
+		basis.appendPhase(basis.registerTaskPhase).appendPhase(basis.startTaskPhase).appendPhase(basis.setNetworkPhase)
+
+		starter = basicStarter{
+			basis: basis,
+			finalizeFunc: func(s *startBasis) {
+				s.CachedTask.Status = taskmap.TaskGeneric
+				s.CachedTask.AccessedAt = time.Now()
+				taskmap.Write(s.CachedTask.TaskId, s.CachedTask, -1)
+				taskmap.AddToCypressSet(s.CachedTask.TaskId)
+			},
+		}
 	} else {
-		s.appendPhase(s.registerTaskPhase).appendPhase(s.startTaskPhase).appendPhase(s.setNetworkPhase).appendPhase(s.startDriverPhase)
-		starter = basicStarter{basis: s}
+		basis.appendPhase(basis.registerTaskPhase).appendPhase(basis.startTaskPhase).appendPhase(basis.setNetworkPhase).appendPhase(basis.startDriverPhase)
+
+		starter = basicStarter{
+			basis: basis,
+		}
 	}
 
 	return starter

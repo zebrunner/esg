@@ -147,7 +147,7 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 	}
 }
 
-func AbortTask(routerUUID, workspace, launchUUID, reason string) {
+func AbortLaunch(routerUUID, workspace, launchUUID, reason string) {
 	conf := &config.Conf
 
 	if conf.ZebrunnerHost == "" {

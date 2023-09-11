@@ -88,7 +88,7 @@ func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 				}
 
 				if cachedTask.Status == taskmap.TaskGeneric {
-					zebrunner.AbortTask(cachedTask.RouterUUID, cachedTask.Workspace,
+					zebrunner.AbortLaunch(cachedTask.RouterUUID, cachedTask.Workspace,
 						cachedTask.Capabilities.LaunchUUID.ToPrimitive(), "Task aborted due to UNHEALTHY HealthStatus")
 				}
 			} else {
@@ -107,7 +107,7 @@ func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 					}
 
 					if cachedTask.Status == taskmap.TaskGeneric {
-						zebrunner.AbortTask(cachedTask.RouterUUID, cachedTask.Workspace,
+						zebrunner.AbortLaunch(cachedTask.RouterUUID, cachedTask.Workspace,
 							cachedTask.Capabilities.LaunchUUID.ToPrimitive(), "Task aborted due to the max timeout limit")
 					}
 				}
@@ -300,7 +300,7 @@ func StopCypressIdleTasks() {
 			l := log.WithField(config.TaskIdKey, key)
 			cachedTask, _ := taskmap.Find(key, false)
 			if cachedTask == nil {
-				taskmap.RemoveFromSet(key)
+				taskmap.RemoveFromCypressSet(key)
 				continue
 			}
 
@@ -317,17 +317,20 @@ func StopCypressIdleTasks() {
 
 		tasks := service.GetTasksByTaskIds(tasksToStop, svc)
 		for _, task := range tasks {
-			if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
-				taskId := strings.Split(*task.TaskArn, "/")[2]
-				l := log.WithField(config.TaskIdKey, taskId)
+			taskId := strings.Split(*task.TaskArn, "/")[2]
+			l := log.WithField(config.TaskIdKey, taskId)
 
+			if *task.LastStatus == "STOPPED" || *task.DesiredStatus == "STOPPED" {
+				taskmap.RemoveFromCypressSet(taskId)
+			} else {
 				err := service.StopTask(taskId, taskmap.TaskAborted)
 				if err != nil {
-					l.WithError(err).Error("Failed to stop idle cypress task!")
-				} else {
-					l.Warn("cypress task aborted due to the idle timeout")
-					taskmap.RemoveFromSet(taskId)
+					l.WithError(err).Error("Failed to stop cypress idle task!")
+					continue
 				}
+
+				taskmap.RemoveFromCypressSet(taskId)
+				l.Warn("cypress task aborted due to the idle timeout")
 			}
 		}
 	}

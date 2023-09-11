@@ -9,7 +9,7 @@ import (
 
 var nameOfSet = "cypress"
 
-func AddToSet(cypressTaskId string) {
+func AddToCypressSet(cypressTaskId string) {
 	_, err := config.CypressSetConnection.SAdd(context.Background(), nameOfSet, cypressTaskId).Result()
 	if err != nil {
 		log.WithField(config.TaskIdKey, cypressTaskId).WithError(err).Warn("Failed to add cypress task to set")
@@ -20,7 +20,7 @@ func CypressSetKeys() ([]string, error) {
 	return config.CypressSetConnection.SMembers(context.Background(), nameOfSet).Result()
 }
 
-func RemoveFromSet(cypressTaskId string) {
+func RemoveFromCypressSet(cypressTaskId string) {
 	_, err := config.CypressSetConnection.SRem(context.Background(), nameOfSet, cypressTaskId).Result()
 	if err != nil {
 		log.WithField(config.TaskIdKey, cypressTaskId).WithError(err).Warn("Failed to remove cypress task from set")

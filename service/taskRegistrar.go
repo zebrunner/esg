@@ -94,7 +94,7 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 		}
 
 		if len(resultRunTask.Tasks) == 0 {
-			outputErr = fmt.Errorf("Response doesn't contain tasks")
+			outputErr = fmt.Errorf("response doesn't contain tasks")
 			l.WithError(outputErr).Debug("Task register failed")
 			continue
 		}
