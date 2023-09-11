@@ -149,7 +149,7 @@ func StopTask(taskId string, stopReason taskmap.StoppedReason) error {
 	} else {
 		cachedTask.Status = taskmap.TaskStopped
 		cachedTask.StopReason = stopReason
-		taskmap.Write(cachedTask.TaskId, cachedTask, -1)
+		taskmap.Write(cachedTask.TaskId, cachedTask, 10*time.Minute)
 	}
 
 	return err
