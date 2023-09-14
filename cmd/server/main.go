@@ -80,16 +80,19 @@ func CreateRouter() *gin.Engine {
 		seleniumHub.POST("/session", handlers.Create) // Auth logic moved to handler
 		seleniumHub.DELETE("/session/:session", handlers.CloseSession)
 		seleniumHub.Any("/session/:session/*action", handlers.Proxy)
-
-		seleniumHub.GET("/download/:session/:file", handlers.Downloads)
-		seleniumHub.GET("/download/:session", handlers.Downloads)
-		seleniumHub.DELETE("/download/:session/:file", handlers.Downloads)
-		seleniumHub.HEAD("/download/:session/:file", handlers.Downloads)
+		
+		seleniumHub.Any("/download/:session/*action", handlers.Downloads)
 
 		seleniumHub.GET("/clipboard/:session", handlers.Clipboard)
 		seleniumHub.POST("/clipboard/:session", handlers.Clipboard)
 
-		seleniumHub.GET("/devtools/:session", handlers.Devtools)
+		devtoolsHub := seleniumHub.Group("/devtools/:session", handlers.Devtools)
+		{
+			devtoolsHub.GET("/")
+			devtoolsHub.GET("/browser")
+			devtoolsHub.GET("/page")
+			devtoolsHub.GET("/page/:target-id")
+		}
 
 		seleniumHub.DELETE("/tasks/:task", handlers.AbortTask) // to be able to abort generic tasks by taskId
 	}

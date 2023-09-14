@@ -13,7 +13,7 @@ import (
 	"fmt"
 )
 
-func buildGeneric(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
+func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
 	conf := &config.Conf
 
 	workDir := "/tmp/zebrunner"
@@ -30,7 +30,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 
 	branchArg := ""
 	if caps.Branch != "" {
-		branchArg = "--branch=" + caps.Branch
+		branchArg = "--branch=" + caps.Branch.ToPrimitive()
 	}
 
 	if caps.RepositoryUrl == "" {
@@ -72,7 +72,7 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 		EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
 	}
 
-	includeMaven := strings.Contains(caps.Image, "maven")
+	includeMaven := strings.Contains(caps.Image.ToPrimitive(), "maven")
 	var mavenContainer *Container = nil
 	if includeMaven {
 		mavenContainer = &Container{
@@ -116,25 +116,25 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 	})
 	executorContainer := Container{
 		Name:       "executor",
-		Image:      executorImage,
+		Image:      executorImage.ToPrimitive(),
 		Privileged: false,
 		Essential:  true,
 		Env: map[string]string{
-			"COMMAND": launchCommand,
+			"COMMAND": launchCommand.ToPrimitive(),
 		},
 		Mounts:           mounts,
 		WorkingDirectory: workDir,
 		// we can't redirect logs from this place to support SIGTERM detection on trap
 		// actual redirection happens inside entrypoint container: https://github.com/zebrunner/entrypoint/issues/51
-		Command:     []string{entrypointDir + "/entrypoint.sh"},
-                HealthCheck: &ecs.HealthCheck{
-                        Command:     []*string{aws.String("CMD-SHELL"), aws.String("exit 0")}, // Healthy as container started
-                        Interval:    aws.Int64(5),
-                        Retries:     aws.Int64(3),
-                        Timeout:     aws.Int64(10),
-                        StartPeriod: aws.Int64(0),
-                },
-		DependsOn:        dependsOn,
+		Command: []string{entrypointDir + "/entrypoint.sh"},
+		HealthCheck: &ecs.HealthCheck{
+			Command:     []*string{aws.String("CMD-SHELL"), aws.String("exit 0")}, // Healthy as container started
+			Interval:    aws.Int64(5),
+			Retries:     aws.Int64(3),
+			Timeout:     aws.Int64(10),
+			StartPeriod: aws.Int64(0),
+		},
+		DependsOn: dependsOn,
 	}
 
 	if caps.EnvVariables != nil {
@@ -147,30 +147,31 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 	executorContainer.SetCpu(&caps.Cpu, 1024, conf.MaxCpu)
 	executorContainer.SetMemory(&caps.Memory, 1024, conf.MaxMemory)
 
-        recorderContainer := Container{
-                Name:        "recorder",
-                Image:       recorderImage,
-                cpu:         32,
-                memory:      256, // with 128 failed for cyserver "OutOfMemoryError: Container killed due to memory usage"
-                Privileged:  false,
-                Essential:   false,
-                Env: map[string]string{
-                        "ENABLE_VIDEO":          "false",
-                        "ENABLE_REALTIME_LOGS":  "true",
-                        "BASIC_AUTH":            basicAuthHeader,
-                        "LOG_FILE":              "console.log",
-                },
-                Mounts:      []string{logVolume},
-                Command:     []string{"-c", "/entrypoint.sh"}, // + taskLogRedirect}, //TODO: restore redirect
-                EntryPoint:  []string{"/bin/sh"},
-                HealthCheck: nil,
-        }
-        if caps.EnvVariables != nil {
-                for v, k := range caps.EnvVariables {
-                        //fmt.Printf("var: %v; %v\n", v, k)
-                        recorderContainer.Env[v] = k
-                }
-        }
+	recorderContainer := Container{
+		Name:       "recorder",
+		Image:      recorderImage,
+		cpu:        32,
+		memory:     256, // with 128 failed for cyserver "OutOfMemoryError: Container killed due to memory usage"
+		Privileged: false,
+		Essential:  false,
+		Env: map[string]string{
+			"ROUTER_UUID":          routerUUID,
+			"ENABLE_VIDEO":         "false",
+			"ENABLE_REALTIME_LOGS": "true",
+			"BASIC_AUTH":           basicAuthHeader,
+			"LOG_FILE":             "console.log",
+		},
+		Mounts:      []string{logVolume},
+		Command:     []string{"-c", "/entrypoint.sh"}, // + taskLogRedirect}, //TODO: restore redirect
+		EntryPoint:  []string{"/bin/sh"},
+		HealthCheck: nil,
+	}
+	if caps.EnvVariables != nil {
+		for v, k := range caps.EnvVariables {
+			//fmt.Printf("var: %v; %v\n", v, k)
+			recorderContainer.Env[v] = k
+		}
+	}
 
 	uploaderContainer := Container{
 		Name:       "uploader",
@@ -212,6 +213,8 @@ func buildGeneric(workspace string, caps *capabilities.Capabilities) (*Execution
 				"driver": {ContainerPort: genericPort, HostPort: 0, Path: "/"},
 			},
 		},
+		Workspace:  workspace,
+		RouterUUID: routerUUID,
 	}
 
 	return &environment, nil

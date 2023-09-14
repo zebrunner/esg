@@ -1,18 +1,15 @@
 package selenium
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps/sessionmap"
 	"github.com/zebrunner/esg/config"
-	//	"github.com/zebrunner/esg/zebrunner"
 )
 
 var (
@@ -23,21 +20,21 @@ var (
 	}
 )
 
-func StartSession(ctx context.Context, driverUrl *url.URL, header http.Header, body []byte) (map[string]interface{}, error) {
-	req, err := http.NewRequest(http.MethodPost, driverUrl.String(), bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	for key, values := range header {
-		for _, value := range values {
-			req.Header.Add(key, value)
-		}
-	}
+type startSessRequest struct {
+	EssentialErrCh    chan error
+	NonEssentialErrCh chan error
+	ResponseCh        chan map[string]interface{}
+}
+
+func startSession(ctx context.Context, req *http.Request, sessReq startSessRequest) {
+	req.Method = http.MethodPost
 	req.Host = "localhost"
 	req = req.WithContext(ctx)
+
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		sessReq.EssentialErrCh <- err
+		return
 	}
 
 	defer resp.Body.Close()
@@ -45,26 +42,44 @@ func StartSession(ctx context.Context, driverUrl *url.URL, header http.Header, b
 
 	err = json.NewDecoder(resp.Body).Decode(&reply)
 	if err != nil {
-		return nil, err
+		sessReq.EssentialErrCh <- err
+		return
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return reply, fmt.Errorf("unsuccessful response code. Status: %s", resp.Status)
+		if resp.StatusCode == http.StatusBadRequest {
+			sessReq.EssentialErrCh <- fmt.Errorf("%v", reply)
+		} else {
+			sessReq.NonEssentialErrCh <- fmt.Errorf("%v", reply)
+		}
+		return
 	}
 
-	return reply, nil
+	sessReq.ResponseCh <- reply
+}
+
+func WaitForSessionStart(ctx context.Context, request *http.Request) *startSessRequest {
+	sessReq := startSessRequest{
+		EssentialErrCh:    make(chan error),
+		NonEssentialErrCh: make(chan error),
+		ResponseCh:        make(chan map[string]interface{}),
+	}
+
+	go startSession(ctx, request, sessReq)
+
+	return &sessReq
 }
 
 func CloseSession(session *sessionmap.Session, stopReason sessionmap.StoppedReason) {
 	// Set SessionStopped status and expiration time 10 minutes to be able to return sessionID and stop reason for session
 	session.Status = sessionmap.SessionStopped
 	session.StopReason = stopReason
-	err := sessionmap.Write(session.ID, session, 10*time.Minute)
+	err := sessionmap.Write(session.SessionID, session, 10*time.Minute)
 	if err != nil {
 		log.WithError(err).Error("Driver session not marked as stopped!")
 	}
 
-	l := log.WithFields(log.Fields{"_taskId": session.TaskID, "sessionId": session.ID})
+	l := log.WithFields(log.Fields{config.TaskIdKey: session.TaskId, config.SessionIdKey: session.SessionID, config.RouterUuid: session.RouterUUID})
 	if !config.Conf.SingleTenant {
 		l = l.WithField("workspace", session.Workspace)
 	}
@@ -73,7 +88,7 @@ func CloseSession(session *sessionmap.Session, stopReason sessionmap.StoppedReas
 	client := http.Client{}
 	sessionUrl, ok := session.Network.GetUrl("driver")
 	if ok {
-		sessionUrl.Path = sessionUrl.Path + fmt.Sprintf("session/%s", session.ID)
+		sessionUrl.Path = sessionUrl.Path + fmt.Sprintf("session/%s", session.SessionID)
 		timeoutCtx, cancel := context.WithTimeout(context.Background(), conf.SessionDeleteTimeout)
 		defer cancel()
 		req, err := http.NewRequestWithContext(timeoutCtx, http.MethodDelete, sessionUrl.String(), nil)

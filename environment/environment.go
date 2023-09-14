@@ -10,6 +10,8 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
+	"github.com/google/uuid"
+	"github.com/zebrunner/esg/cachemaps/definitionmap"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/utils"
 )
@@ -22,14 +24,15 @@ const (
 	genericPlatform = "generic"
 	cypressPlatform = "cypress"
 
-	imageRepo            = "public.ecr.aws/zebrunner/" //public zebrunner ECR docker registry
-	uploaderImage        = imageRepo + "uploader:3.1"
-	mitmImage            = imageRepo + "mitmproxy:1.1"
-	recorderImage        = imageRepo + "recorder:1.3"
+	//public zebrunner ECR docker registry
+	imageRepo            = "public.ecr.aws/zebrunner/"
+	uploaderImage        = imageRepo + "uploader:3.3"
+	mitmImage            = imageRepo + "mitmproxy:1.2"
+	recorderImage        = imageRepo + "recorder:1.4"
 	cypressRecorderImage = imageRepo + "cypress-recorder:1.1"
-	appiumImage          = imageRepo + "appium:2.0"
+	appiumImage          = imageRepo + "appium:2.0.5"
 	cloneImage           = imageRepo + "git:latest"
-	entrypointImage      = imageRepo + "entrypoint:2.3"
+	entrypointImage      = imageRepo + "entrypoint:2.4"
 	mavenImage           = imageRepo + "m2-repo-carina:1.4"
 )
 
@@ -61,10 +64,12 @@ type Endpoint struct {
 
 type ExecutionEnvironment struct {
 	TaskDefinitionFamily string
+	Revision             int64
 	Schema               string
+	RouterUUID           string
 	Containers           []*Container
 	Capabilities         *capabilities.Capabilities
-	RawCapabilities      *capabilities.RequestCaps
+	ReqCapabilities      *capabilities.RequestCaps
 	Volumes              map[string]volume
 	Network              *NetworkConfiguration
 	Workspace            string
@@ -219,7 +224,7 @@ func (e *ExecutionEnvironment) HashOvverideDefinition() string {
 			DependsOn:        dependsOn,
 		})
 	}
-	
+
 	overrideDefinitionData := &ExecutionEnvironment{
 		TaskDefinitionFamily: e.TaskDefinitionFamily,
 		Containers:           overrideContainersData,
@@ -286,19 +291,42 @@ func (e *ExecutionEnvironment) HashRegisterDefinition() string {
 	return registerDefinitionHash
 }
 
+func (env *ExecutionEnvironment) GetFamilyRevision() (string, error) {
+	//used Contains() as task definition family could be org-generic/dev-generic etc.
+	if strings.Contains(env.TaskDefinitionFamily, "generic") {
+		return env.TaskDefinitionFamily, nil
+	}
+
+	revision, err := definitionmap.FindRevision(env.HashOvverideDefinition())
+	if err != nil {
+		return "", fmt.Errorf("revision not found for '%s'. %v", env.TaskDefinitionFamily, err)
+	}
+
+	return fmt.Sprint(env.TaskDefinitionFamily, ":", revision), nil
+}
+
+// build's new ExecutionEnvironment env with new router uuid
 func Build(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
-	platform := strings.ToLower(caps.PlatformName)
+	return build(workspace, uuid.NewString(), caps)
+}
+
+func BuildFromCaps(caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
+	return build("", "", caps)
+}
+
+func build(workspace string, routerUUID string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
+	platform := strings.ToLower(caps.PlatformName.ToPrimitive())
 	if platform == androidPlatform {
-		if strings.ToLower(caps.DeviceName) == redroidDevice {
-			return buildAppiumRedroid(workspace, caps)
+		if strings.ToLower(caps.DeviceName.ToPrimitive()) == redroidDevice {
+			return buildAppiumRedroid(workspace, routerUUID, caps)
 		}
 		return nil, fmt.Errorf("device is not supported. deviceName=%s", caps.DeviceName)
 	} else if platform == genericPlatform {
-		return buildGeneric(workspace, caps)
+		return buildGeneric(workspace, routerUUID, caps)
 	} else if platform == cypressPlatform {
-		return buildCypress(workspace, caps)
+		return buildCypress(workspace, routerUUID, caps)
 	} else if platform == linuxPlatform || platform == "" || platform == anyPlatform {
-		return buildBrowser(workspace, caps)
+		return buildBrowser(workspace, routerUUID, caps)
 	}
 
 	return nil, fmt.Errorf("platform is not supported. platformName=%s", caps.PlatformName)
@@ -341,8 +369,8 @@ func (n *NetworkConfiguration) GetUrl(endpointName string) (u *url.URL, ok bool)
 }
 
 func buildImage(caps *capabilities.Capabilities) (string, error) {
-	platformName := strings.ToLower(caps.PlatformName)
-	deviceName := strings.ToLower(caps.DeviceName)
+	platformName := strings.ToLower(caps.PlatformName.ToPrimitive())
+	deviceName := strings.ToLower(caps.DeviceName.ToPrimitive())
 
 	if platformName == anyPlatform || platformName == "" {
 		platformName = "linux"
@@ -354,31 +382,31 @@ func buildImage(caps *capabilities.Capabilities) (string, error) {
 		if version == "" {
 			version = "latest"
 		}
-		return imageRepo + name + ":" + version, nil
+		return imageRepo + name + ":" + version.ToPrimitive(), nil
 	} else if platformName == linuxPlatform {
-		name := strings.ToLower(caps.BrowserName)
+		name := strings.ToLower(caps.BrowserName.ToPrimitive())
 		name = remapName(name)
-		version := strings.ToLower(caps.BrowserVersion)
+		version := strings.ToLower(caps.BrowserVersion.ToPrimitive())
 		version = remapVersion(version)
 		return imageRepo + name + ":" + version, nil
 	} else if platformName == cypressPlatform {
 		if caps.Image != "" {
-			return caps.Image, nil
+			return caps.Image.ToPrimitive(), nil
 		}
 		//use-case for task definition generation
-		name := strings.ToLower(caps.BrowserName)
+		name := strings.ToLower(caps.BrowserName.ToPrimitive())
 		name = remapName(name)
-		version := strings.ToLower(caps.BrowserVersion)
+		version := strings.ToLower(caps.BrowserVersion.ToPrimitive())
 		version = remapVersion(version)
 		return imageRepo + name + ":" + version, nil
 	} else {
-		return "", fmt.Errorf("filed to build container image. unsupported platform specified. platformName=%s", caps.PlatformName)
+		return "", fmt.Errorf("failed to build container image. unsupported platform specified. platformName=%s", caps.PlatformName)
 	}
 }
 
 func buildTaskDefinitionFamily(caps *capabilities.Capabilities) string {
 	familyParts := []string{}
-	platformName := strings.ToLower(caps.PlatformName)
+	platformName := strings.ToLower(caps.PlatformName.ToPrimitive())
 
 	if caps.PlatformName == "" || platformName == "any" {
 		platformName = "linux"
@@ -386,21 +414,21 @@ func buildTaskDefinitionFamily(caps *capabilities.Capabilities) string {
 
 	familyParts = append(familyParts, platformName)
 
-	deviceName := strings.ToLower(caps.DeviceName)
+	deviceName := strings.ToLower(caps.DeviceName.ToPrimitive())
 	if deviceName != "" {
 		familyParts = append(familyParts, deviceName)
 		if deviceName == "redroid" {
-			platformVersion := strings.ToLower(caps.PlatformVersion)
+			platformVersion := strings.ToLower(caps.PlatformVersion.ToPrimitive())
 			platformVersion = remapVersion(platformVersion)
 			platformVersion = strings.Replace(platformVersion, ".", "-", -1)
 			familyParts = append(familyParts, platformVersion)
 		}
 	}
 
-	browserName := strings.ToLower(caps.BrowserName)
+	browserName := strings.ToLower(caps.BrowserName.ToPrimitive())
 	if browserName != "" && deviceName != "redroid" {
 		familyParts = append(familyParts, remapName(browserName))
-		browserVersion := strings.ToLower(caps.BrowserVersion)
+		browserVersion := strings.ToLower(caps.BrowserVersion.ToPrimitive())
 		browserVersion = remapVersion(browserVersion)
 		browserVersion = strings.Replace(browserVersion, ".", "-", -1)
 		familyParts = append(familyParts, browserVersion)

@@ -2,6 +2,7 @@ package environment
 
 import (
 	"fmt"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/zebrunner/esg/capabilities"
@@ -15,7 +16,7 @@ const (
 	appiumMemory = 1024
 )
 
-func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
+func buildAppiumRedroid(workspace string, routerUUID string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
 	browserVolume := "browser"
 
 	logDir := "/tmp/log"
@@ -51,21 +52,20 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities) (*Exe
 			"driver": {appiumPort, 0},
 		},
 		Env: map[string]string{
-			"RETAIN_TASK": 		"false",
-			"DEVICE_NAME": 		"ReDroid",
-			"ANDROID_DEVICES": 	"device:5555",
-			"REMOTE_ADB": 		"true",
-			"MCLOUD": 		"true", //candidate for removal
-			"LOG_DIR": 		logDir,
-			"TASK_LOG": 		logDir + "/appium.log",
+			"ROUTER_UUID":    routerUUID,
+			"RETAIN_TASK":    "false",
+			"DEVICE_NAME":    "ReDroid",
+			"ANDROID_DEVICE": "device:5555",
+			"LOG_DIR":        logDir,
+			"TASK_LOG":       logDir + "/appium.log",
 		},
 		Mounts: []string{browserVolume, logVolume},
 		Links:  []string{"device"},
 		HealthCheck: &ecs.HealthCheck{
 			Command:     []*string{aws.String("CMD-SHELL"), aws.String("healthcheck")},
-			Retries:     aws.Int64(4),
-			Interval:    aws.Int64(10),
-			StartPeriod: aws.Int64(60),
+			Retries:     aws.Int64(10),
+			Interval:    aws.Int64(24),
+			StartPeriod: aws.Int64(240),
 		},
 	}
 
@@ -77,16 +77,15 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities) (*Exe
 		Privileged: false,
 		Essential:  false,
 		Env: map[string]string{
-			"LOG_DIR": 		logDir,
-			"S3_KEY_PATTERN": 	fmt.Sprintf("s3://%s/%s/artifacts/test-sessions", conf.S3Bucket, workspace),
-			"AWS_ACCESS_KEY_ID": 	conf.S3AwsAccessKeyID,
+			"LOG_DIR":               logDir,
+			"S3_KEY_PATTERN":        fmt.Sprintf("s3://%s/%s/artifacts/test-sessions", conf.S3Bucket, workspace),
+			"AWS_ACCESS_KEY_ID":     conf.S3AwsAccessKeyID,
 			"AWS_SECRET_ACCESS_KEY": conf.S3AwsSecretAccessKey,
-			"AWS_DEFAULT_REGION": 	conf.S3Region,
+			"AWS_DEFAULT_REGION":    conf.S3Region,
 		},
 		Mounts:      []string{logVolume},
 		HealthCheck: nil,
 	}
-
 
 	containers := []*Container{&deviceContainer, &appiumContainer, &uploaderContainer}
 	environment := ExecutionEnvironment{
@@ -95,7 +94,7 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities) (*Exe
 		Containers:           containers,
 		Capabilities:         caps,
 		Volumes: map[string]volume{
-			logVolume: {ContainerPath: logDir, Driver: "local", Scope: "task", ReadOnly: false},
+			logVolume:     {ContainerPath: logDir, Driver: "local", Scope: "task", ReadOnly: false},
 			browserVolume: {ContainerPath: "/tmp/zebrunner/chrome", HostPath: "/opt/zebrunner/chrome", ReadOnly: false}, //TODO: think about path unification on host and inside container
 		},
 		Network: &NetworkConfiguration{
@@ -105,6 +104,8 @@ func buildAppiumRedroid(workspace string, caps *capabilities.Capabilities) (*Exe
 				"healthcheck": {ContainerPort: appiumPort, HostPort: 0, Path: "/wd/hub/status-adb"},
 			},
 		},
+		Workspace:  workspace,
+		RouterUUID: routerUUID,
 	}
 
 	return &environment, nil

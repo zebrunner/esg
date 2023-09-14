@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+
 	redis "github.com/go-redis/redis/v8"
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
@@ -10,6 +11,8 @@ import (
 var (
 	RedisSessionsConnection   *redis.Client
 	RedisTasksConnection      *redis.Client
+	CypressSetConnection 	  *redis.Client
+	RedisIdMapperConnection   *redis.Client
 	RedisDefinitionConnection *redis.Client
 	DbConnection              *sqlx.DB
 )
@@ -51,6 +54,32 @@ func InitCache() error {
 	_, err = RedisDefinitionConnection.Ping(context.Background()).Result()
 	if err != nil {
 		log.WithError(err).Error("Failed to ping redis definitions connection")
+		return err
+	}
+
+	// DB 3 - for task's mapper
+	RedisIdMapperConnection = redis.NewClient(&redis.Options{
+		Addr:     Conf.RedisConnectionString,
+		Password: "",
+		DB:       3,
+	})
+
+	_, err = RedisIdMapperConnection.Ping(context.Background()).Result()
+	if err != nil {
+		log.WithError(err).Error("Failed to ping redis tasksmapper connection")
+		return err
+	}
+
+	// DB 4 - for cypress set
+	CypressSetConnection = redis.NewClient(&redis.Options{
+		Addr:     Conf.RedisConnectionString,
+		Password: "",
+		DB:       4,
+	})
+
+	_, err = CypressSetConnection.Ping(context.Background()).Result()
+	if err != nil {
+		log.WithError(err).Error("Failed to ping redis cypressSet connection")
 		return err
 	}
 
