@@ -7,6 +7,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/zebrunner/esg/cachemaps/mapper"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
@@ -35,26 +36,34 @@ const (
 )
 
 type Task struct {
-	ID               string
+	TaskId           string
 	Capabilities     *capabilities.Capabilities
 	Status           TaskStatus
 	UsageTracked     bool
 	Workspace        string
+	RouterUUID       string
 	CurrentSessionID string                           `json:",omitempty"`
 	StopReason       StoppedReason                    `json:",omitempty"`
 	HealthAt         time.Time                        `json:",omitempty"`
 	Network          environment.NetworkConfiguration `json:",omitempty"`
+	AccessedAt       time.Time                        `json:",omitempty"`
 }
 
-func CreateEntity(id string, env *environment.ExecutionEnvironment) (*Task, error) {
+func CreateEntity(taskId string, env *environment.ExecutionEnvironment) (*Task, error) {
+	err := mapper.UpdateTaskId(env.RouterUUID, taskId)
+	if err != nil {
+		log.WithError(err).Error("Task not cached!")
+		return nil, err
+	}
 	cachedTask := &Task{
-		ID:           id,
+		TaskId:       taskId,
 		Capabilities: env.Capabilities,
 		Status:       TaskQueued,
+		RouterUUID:   env.RouterUUID,
 		Workspace:    env.Workspace,
 	}
 
-	err := Write(cachedTask.ID, cachedTask, 0)
+	err = Write(cachedTask.TaskId, cachedTask, 0)
 	if err != nil {
 		log.WithError(err).Error("Task not cached!")
 		return nil, err
@@ -63,8 +72,8 @@ func CreateEntity(id string, env *environment.ExecutionEnvironment) (*Task, erro
 	return cachedTask, nil
 }
 
-func Find(id string) (*Task, error) {
-	sessionData, err := config.RedisTasksConnection.Get(context.Background(), id).Result()
+func Find(taskId string, rewriteAccessTime bool) (*Task, error) {
+	sessionData, err := config.RedisTasksConnection.Get(context.Background(), taskId).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -75,34 +84,46 @@ func Find(id string) (*Task, error) {
 		return nil, err
 	}
 
+	if rewriteAccessTime {
+		task.AccessedAt = time.Now()
+		// -1 keeps the same ttl
+		err = Write(taskId, &task, -1)
+
+		if err != nil {
+			log.WithError(err).Error("Failed to update last access time")
+		}
+	}
+
 	return &task, nil
 }
 
-func Write(id string, task *Task, expiration time.Duration) error {
+func FindByRouterUUID(routerUUID string) (*Task, error) {
+	taskId, err := mapper.FindTaskId(routerUUID)
+	if err != nil {
+		return nil, err
+	}
+
+	return Find(*taskId, true)
+}
+
+func Write(taskId string, task *Task, expiration time.Duration) error {
 	data, err := json.Marshal(task)
 	if err != nil {
 		return err
 	}
 
-	err = config.RedisTasksConnection.Set(context.Background(), id, data, expiration).Err()
+	err = config.RedisTasksConnection.Set(context.Background(), taskId, data, expiration).Err()
 	if err != nil {
 		return err
 	}
 
-	return nil
-}
-
-func Remove(id string) error {
-	err := config.RedisTasksConnection.Del(context.Background(), id).Err()
-	if err != nil {
-		return err
+	if expiration > 0 {
+		mapper.SetExpire(task.RouterUUID, expiration)
 	}
 
 	return nil
 }
 
 func Keys() ([]string, error) {
-	keys, err := config.RedisTasksConnection.Keys(context.Background(), "*").Result()
-
-	return keys, err
+	return config.RedisTasksConnection.Keys(context.Background(), "*").Result()
 }

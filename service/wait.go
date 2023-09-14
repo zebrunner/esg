@@ -2,7 +2,8 @@ package service
 
 import (
 	"context"
-	"errors"
+	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,10 +24,11 @@ func InitWaitWorker() {
 }
 
 type waitRequest struct {
-	ctx          context.Context
-	responseChan chan *ecs.Task
-	errorChan    chan error
-	taskId       string
+	ctx               context.Context
+	taskId            string
+	EssentialErrCh    chan error
+	NonEssentialErrCh chan error
+	ResponseCh        chan *ecs.Task
 }
 
 type waitWorker struct {
@@ -89,15 +91,26 @@ func (w *waitWorker) start() {
 
 		// Send responses for running tasks
 		for _, task := range tasks {
-			req, ok := w.requests[*task.TaskArn]
+			taskId := strings.Split(*task.TaskArn, "/")[2]
+			req, ok := w.requests[taskId]
 			if !ok {
 				continue
 			}
+			l := log.WithField(config.TaskIdKey, taskId)
 
 			if *task.LastStatus == "STOPPED" {
-				log.Error("Task stopped: ", *task)
-				req.errorChan <- errors.New("task stopped with reason: " + *task.StoppedReason)
-				delete(w.requests, *task.TaskArn)
+				// #860: Api tests are reexecuted several times
+				if strings.Contains(*task.TaskDefinitionArn, "generic") && isTaskFinishedSuccessfully(task) {
+					l.Info("task already finished")
+					req.ResponseCh <- task
+					delete(w.requests, taskId)
+					continue
+				}
+
+				l.Error("Task stopped: ", *task)
+				req.NonEssentialErrCh <- fmt.Errorf("task stopped with reason: %s", *task.StoppedReason)
+				delete(w.requests, taskId)
+				continue
 			}
 
 			if *task.LastStatus != "RUNNING" {
@@ -107,23 +120,52 @@ func (w *waitWorker) start() {
 
 			switch *task.HealthStatus {
 			case "UNHEALTHY":
-				log.Error("Task unhealthy: ", *task)
-				req.errorChan <- errors.New("task unhealthy")
-				delete(w.requests, *task.TaskArn)
+				l.Error("Task unhealthy: ", *task)
+
+				var essential error
+				for _, container := range task.Containers {
+					if *container.Name == "mitm" && container.ExitCode != nil && *container.ExitCode != 0 {
+						essential = fmt.Errorf("failed to start proxy. exit code: %v", *container.ExitCode)
+						if container.Reason != nil {
+							essential = fmt.Errorf("%s. Reason: %s", essential, *container.Reason)
+						}
+						break
+					}
+				}
+
+				if essential != nil {
+					req.EssentialErrCh <- essential
+				} else {
+					req.NonEssentialErrCh <- fmt.Errorf("task unhealthy")
+				}
+
+				delete(w.requests, taskId)
 			case "HEALTHY":
-				req.responseChan <- task
-				delete(w.requests, *task.TaskArn)
+				req.ResponseCh <- task
+				delete(w.requests, taskId)
 			}
 		}
 	}
 }
 
+func isTaskFinishedSuccessfully(task *ecs.Task) bool {
+	for _, container := range task.Containers {
+		// if container's exit code is nil it means that container doesn't even started
+		if container.ExitCode == nil || *container.ExitCode != 0{
+			return false
+		}
+	}
+
+	return true
+}
+
 func (w *waitWorker) waitFor(ctx context.Context, taskId string) *waitRequest {
 	req := waitRequest{
-		ctx:          ctx,
-		responseChan: make(chan *ecs.Task),
-		errorChan:    make(chan error),
-		taskId:       taskId,
+		ctx:               ctx,
+		taskId:            taskId,
+		EssentialErrCh:    make(chan error),
+		NonEssentialErrCh: make(chan error),
+		ResponseCh:        make(chan *ecs.Task),
 	}
 
 	// https://medium.com/@luanrubensf/concurrent-map-access-in-go-a6a733c5ffd1

@@ -30,9 +30,9 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 		return
 	}
 
-	l := log.WithField("_taskId", cachedTask.ID)
+	l := log.WithField(config.RouterUuid, cachedTask.RouterUUID).WithField(config.TaskIdKey, cachedTask.TaskId)
 	if cachedTask.CurrentSessionID != "" {
-		l = l.WithField("sessionId", cachedTask.CurrentSessionID)
+		l = l.WithField(config.SessionIdKey, cachedTask.CurrentSessionID)
 	}
 
 	requestUrl, err := url.ParseRequestURI(conf.ZebrunnerHost)
@@ -52,9 +52,9 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 		}
 
 		if task.StoppingAt == nil {
-			l = l.WithField("StartedAt", task.StoppingAt) // nil
+			l = l.WithField("StoppingAt", task.StoppingAt) // nil
 		} else {
-			l = l.WithField("StartedAt", *task.StoppingAt) //time
+			l = l.WithField("StoppingAt", *task.StoppingAt) //time
 		}
 
 		l.Warn("Unable to track resourse usage!")
@@ -73,7 +73,14 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 
 	provisioningTime := healthAt.Sub(startedAt) //diff between healthAt and startedAt provide task preparation time
 	l.Trace("provisioningSeconds: ", provisioningTime.Seconds())
-
+	netTime := duration.Seconds() - provisioningTime.Seconds()
+	// if task completed before it was marked as healthy (case for generic tasks)
+	if netTime <= 0 {
+		// generic healthcheck Timeout: 10 second
+		// means that task could be executed in (0,10] interval (seconds)
+		l.WithField("netTime", netTime).Debug("Net time is smaller than 0")
+		netTime = 10
+	}
 	platformName := strings.ToLower(cachedTask.Capabilities.PlatformName.ToPrimitive())
 	if platformName == "" || platformName == "generic" || platformName == "any" {
 		platformName = "linux"
@@ -94,12 +101,12 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 	}
 	requestUrl.Path = USAGE_API_PATH
 	requestBody := map[string]interface{}{
-		"cpu": strconv.FormatInt(cpuUsage, 10) + " millicores",
-		"memory": strconv.FormatInt(memUsage, 10) + " MiB",
-		"instant": time.Now().UTC().Format("2006-01-02T15:04:05Z"),
-		"seconds": duration.Seconds() - provisioningTime.Seconds(), // register only net time without provisioning time
-		"platform": platformName,
-		"taskId": cachedTask.ID,
+		"cpu":       strconv.FormatInt(cpuUsage, 10) + " millicores",
+		"memory":    strconv.FormatInt(memUsage, 10) + " MiB",
+		"instant":   time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+		"seconds":   netTime, // register only net time without provisioning time
+		"platform":  platformName,
+		"taskId":    cachedTask.RouterUUID,
 		"sessionId": cachedTask.CurrentSessionID,
 	}
 	l.Trace("request body to track resources: ", requestBody)
@@ -140,34 +147,7 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 	}
 }
 
-func getAutomationRunId(task ecs.Task) string {
-	for _, containerOverride := range task.Overrides.ContainerOverrides {
-		for _, environment := range containerOverride.Environment {
-			if *environment.Name == "ZEBRUNNER_LAUNCH_UUID" {
-				return *environment.Value
-			}
-		}
-	}
-	return ""
-}
-
-func getStoppedReason(task ecs.Task) string {
-	// get failed reason if any from any task container
-	for _, container := range task.Containers {
-		if container.Reason != nil {
-			log.Trace(fmt.Sprintf("Container: %s; Reason: %s", *container.Name, *container.Reason))
-			return *container.Reason
-		}
-	}
-	return "Launch finished"
-}
-
-func AbortTask(cachedTask *taskmap.Task, task *ecs.Task) {
-	automationRunId := getAutomationRunId(*task)
-	if automationRunId == "" {
-		return
-	}
-
+func AbortLaunch(routerUUID, workspace, launchUUID, reason string) {
 	conf := &config.Conf
 
 	if conf.ZebrunnerHost == "" {
@@ -175,53 +155,51 @@ func AbortTask(cachedTask *taskmap.Task, task *ecs.Task) {
 		return
 	}
 
-	requestUrl, err := url.ParseRequestURI(fmt.Sprintf("%s%s?ciRunId=%s", conf.ZebrunnerHost, ABORT_API_PATH, automationRunId))
+	l := log.WithFields(log.Fields{config.RouterUuid: routerUUID, "comment": reason})
+
+	requestUrl, err := url.ParseRequestURI(
+		fmt.Sprintf("%s%s?ciRunId=%s", conf.ZebrunnerHost, ABORT_API_PATH, launchUUID))
 	if err != nil {
-		log.WithError(err).Error("Failed to parse zebrunner base url")
+		l.WithError(err).Error("Failed to parse zebrunner base url")
 		return
 	}
+
 	if !conf.SingleTenant {
-		// add workspace/tenant to the url
-		requestUrl.Host = cachedTask.Workspace + "." + requestUrl.Host
+		l = l.WithField("workspace", workspace)
+		requestUrl.Host = workspace + "." + requestUrl.Host
 	}
 
-	stopReason := getStoppedReason(*task)
 	requestBody := map[string]interface{}{
-		"comment": stopReason,
+		"comment": reason,
 	}
 
 	body, err := json.Marshal(requestBody)
 	if err != nil {
-		log.WithError(err).Error("Failed to marshal abort data")
+		l.WithError(err).Error("Failed to marshal abort data")
 		return
 	}
 	req, err := http.NewRequest(http.MethodPost, requestUrl.String(), bytes.NewBuffer(body))
 	if err != nil {
-		log.WithError(err).Error("Failed to create request")
+		l.WithError(err).Error("Failed to create request")
 	}
 	req.SetBasicAuth(conf.ZebrunnerIntegrationUser, conf.ZebrunnerIntegrationPassword)
 	req.Header.Add("Content-Type", "application/json")
 
-	log.Trace("req: ", req)
+	l.Trace("req: ", req)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.WithError(err).Error("Failed to send request")
+		l.WithError(err).Error("Failed to send request")
 		return
 	}
 
 	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
 		data := map[string]interface{}{}
-		log.WithFields(log.Fields{
+		l.WithFields(log.Fields{
 			"status":   resp.Status,
 			"response": data,
-		}).Error("Failed to abort task!")
-		return
+		}).Error("Failed to abort launch!")
 	} else {
-		l := log.WithFields(log.Fields{"sessionId": cachedTask.CurrentSessionID, "_taskId": cachedTask.ID, "comment": stopReason})
-		if !conf.SingleTenant {
-			l = l.WithField("workspace", cachedTask.Workspace)
-		}
-		l.Trace("task aborted")
+		l.Debug("launch aborted")
 	}
 }

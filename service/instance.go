@@ -2,10 +2,11 @@ package service
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"sync"
 	"time"
 
+	"github.com/aws/aws-sdk-go/service/autoscaling"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	log "github.com/sirupsen/logrus"
@@ -23,9 +24,10 @@ func InitInstanceWorker() {
 
 type instanceWaitRequest struct {
 	ctx                  context.Context
-	responseChan         chan *ec2.Instance
-	errorChan            chan error
 	containerInstanceArn *string
+	EssentialErrCh       chan error
+	NonEssentialErrCh    chan error
+	ResponseCh           chan *ec2.Instance
 }
 
 type instanceWatchWorker struct {
@@ -36,6 +38,7 @@ type instanceWatchWorker struct {
 func (w *instanceWatchWorker) start() {
 	svc := ecs.New(AwsSess)
 	ec2Svc := ec2.New(AwsSess)
+	autoScalingSvc := autoscaling.New(AwsSess)
 
 	for {
 		time.Sleep(5 * time.Second)
@@ -101,10 +104,10 @@ func (w *instanceWatchWorker) start() {
 
 		if len(unhealthyInstanceIdPtrs) != 0 {
 			// stop unhealthy instances
-			err := TerminateInstances(unhealthyInstanceIdPtrs, ec2Svc)
+			err := TerminateInstancesInASG(unhealthyInstanceIdPtrs, false, autoScalingSvc)
 			if err != nil {
 				log.WithError(err).Error("instanceWatchWorker: failed to terminate instances.")
-				break
+				continue
 			}
 
 			// send err to errorChan, so new task on new instance could be recreated
@@ -114,7 +117,7 @@ func (w *instanceWatchWorker) start() {
 					taskArns := ciArnTaskArnsMap[containerInstanceArn]
 					for _, taskArn := range taskArns {
 						req := w.requests[taskArn]
-						req.errorChan <- errors.New("instance unhealty, status: impaired")
+						req.NonEssentialErrCh <- fmt.Errorf("instance unhealty, status: impaired")
 						delete(w.requests, taskArn)
 					}
 				}
@@ -138,7 +141,7 @@ func (w *instanceWatchWorker) start() {
 				taskArns := ciArnTaskArnsMap[ciArn]
 				for _, taskArn := range taskArns {
 					req := w.requests[taskArn]
-					req.responseChan <- ec2Instance
+					req.ResponseCh <- ec2Instance
 					delete(w.requests, taskArn)
 				}
 			}
@@ -149,8 +152,9 @@ func (w *instanceWatchWorker) start() {
 func (w *instanceWatchWorker) waitForInstance(ctx context.Context, task *ecs.Task) *instanceWaitRequest {
 	req := instanceWaitRequest{
 		ctx:                  ctx,
-		responseChan:         make(chan *ec2.Instance),
-		errorChan:            make(chan error),
+		EssentialErrCh:       make(chan error),
+		NonEssentialErrCh:    make(chan error),
+		ResponseCh:           make(chan *ec2.Instance),
 		containerInstanceArn: task.ContainerInstanceArn,
 	}
 

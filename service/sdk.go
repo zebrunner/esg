@@ -2,8 +2,10 @@ package service
 
 import (
 	"math"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/autoscaling"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	log "github.com/sirupsen/logrus"
@@ -94,6 +96,32 @@ func GetTasksByTaskIds(taskIds []string, svc *ecs.ECS) []*ecs.Task {
 	return tasks
 }
 
+func ListContainerInstances(svc *ecs.ECS) ([]*string, error) {
+	containerInstancesArns := make([]*string, 0)
+	listContainerInstancesInput := ecs.ListContainerInstancesInput{
+		Cluster: &config.Conf.AwsCluster,
+	}
+	for {
+		listContainerInstancesResult, err := utils.RetryThrottling(svc.ListContainerInstances)(&listContainerInstancesInput)
+		if err != nil && len(listContainerInstancesResult.ContainerInstanceArns) != 0 {
+			return nil, err
+		}
+
+		if len(listContainerInstancesResult.ContainerInstanceArns) == 0 {
+			break
+		}
+
+		containerInstancesArns = append(containerInstancesArns, listContainerInstancesResult.ContainerInstanceArns...)
+
+		if listContainerInstancesResult.NextToken == nil {
+			break
+		}
+		listContainerInstancesInput = *listContainerInstancesInput.SetNextToken(*listContainerInstancesResult.NextToken)
+	}
+
+	return containerInstancesArns, nil
+}
+
 func DescribeContainerInstances(containerInstanceIdPtrs []*string, svc *ecs.ECS) ([]*ecs.ContainerInstance, error) {
 	pages := paginate(containerInstanceIdPtrs, 100)
 	containerInstances := make([]*ecs.ContainerInstance, 0)
@@ -182,6 +210,27 @@ func DescribeInstancesStatus(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) ([]*s
 	return healthyInstanceIdPtrs, unhealthyInstanceIdPtrs, nil
 }
 
+func TerminateInstancesInASG(ec2InstanceIdPtrs []*string, decrementDesiredCapacity bool, autoscalingSvc *autoscaling.AutoScaling) error {
+	for _, instanceId := range ec2InstanceIdPtrs {
+		stopInstanceInput := autoscaling.TerminateInstanceInAutoScalingGroupInput{
+			InstanceId:                     instanceId,
+			ShouldDecrementDesiredCapacity: aws.Bool(decrementDesiredCapacity),
+		}
+
+		_, err := utils.RetryThrottling(autoscalingSvc.TerminateInstanceInAutoScalingGroup)(&stopInstanceInput)
+		if err != nil {
+			log.WithError(err).Error("Failed to terminate instance")
+			return err
+		}
+
+		// as we terminating one by one
+		time.Sleep(250 * time.Millisecond)
+	}
+
+	return nil
+}
+
+// TerminateInstances need's permissons for performing ec2Svc.TerminateInstances call
 func TerminateInstances(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) error {
 	// ec2 constraints: Up to 1000 instance IDs. We recommend breaking up this request into smaller batches
 	// paginating only up to 100 instance IDs
