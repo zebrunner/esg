@@ -199,10 +199,14 @@ func TrackResourceUsage(tasks []*ecs.Task, wg *sync.WaitGroup) {
 			continue
 		}
 
-		// generic and cypress on success finish are not marked as stopped in cache after finish
 		if cachedTask.Status != taskmap.TaskStopped {
-			cachedTask.Status = taskmap.TaskStopped
-			cachedTask.StopReason = taskmap.TaskFinished
+			// generic and cypress on success finish are not marked as stopped in cache after finish
+			if cachedTask.Status == taskmap.TaskGeneric {
+				cachedTask.Status = taskmap.TaskStopped
+				cachedTask.StopReason = taskmap.TaskFinished
+			} else {
+				continue
+			}
 		}
 
 		// track resources usage for STOPPED tasks
