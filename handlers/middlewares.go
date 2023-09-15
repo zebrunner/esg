@@ -136,7 +136,7 @@ func getSession(id string) (*sessionmap.Session, *utils.SeleniumError) {
 	}
 
 	if session.Status == sessionmap.SessionStopped {
-		return nil, utils.SessionStoppedErr(fmt.Errorf(string(session.StopReason)))
+		return session, utils.SessionStoppedErr(fmt.Errorf(string(session.StopReason)))
 	}
 
 	return session, nil
@@ -149,7 +149,7 @@ func getTask(id string) (*taskmap.Task, *utils.SeleniumError) {
 	}
 
 	if task.Status == taskmap.TaskStopped {
-		return nil, utils.TaskStoppedErr(fmt.Errorf(string(task.StopReason)))
+		return task, utils.TaskStoppedErr(fmt.Errorf(string(task.StopReason)))
 	}
 
 	return task, nil
