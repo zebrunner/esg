@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/net/websocket"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps/definitionmap"
@@ -63,16 +62,8 @@ func CreateRouter() *gin.Engine {
 	{
 		hub.GET("/", handlers.Welcome)
 		hub.GET("/ping", handlers.Ping)
-
 		// sessionId passed for linux browsers and redroid session. taskId passed for cypress
-		hub.GET("/ws/vnc/:id", func(c *gin.Context) {
-			handler := websocket.Handler(handlers.Vnc)
-			c.Request.Header.Add("Access-Control-Allow-Origin", "*")
-			c.Request.Header.Add("X-Real-IP", c.Request.RemoteAddr)
-
-			log.WithField("request", c.Request).Debug("Vnc request")
-			handler.ServeHTTP(c.Writer, c.Request)
-		})
+		hub.GET("/ws/vnc/:uuid", handlers.Vnc)
 	}
 
 	seleniumHub := hub.Group("/", handlers.SeleniumError)
@@ -80,7 +71,7 @@ func CreateRouter() *gin.Engine {
 		seleniumHub.POST("/session", handlers.Create) // Auth logic moved to handler
 		seleniumHub.DELETE("/session/:session", handlers.CloseSession)
 		seleniumHub.Any("/session/:session/*action", handlers.Proxy)
-		
+
 		seleniumHub.Any("/download/:session/*action", handlers.Downloads)
 
 		seleniumHub.GET("/clipboard/:session", handlers.Clipboard)
