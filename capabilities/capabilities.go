@@ -18,7 +18,7 @@ var (
 	shortFromFullFormat   = regexp.MustCompile(`^[0-9]+x[0-9]+`)
 
 	// 40x30
-	minScrenResolution = []string{"40", "30"}
+	minScreenResolution = []string{"40", "30"}
 	// max aspect ratio 1:6 or 6:1
 	maxScreenAspectRation = 6
 	// added to deal with hardcoded recorder and uploader cpu/memory usage. Also should deal with the limited time for video upload after test
@@ -223,7 +223,7 @@ type Capabilities struct {
 	Proxy            mapStrInterfaceWrapper
 	Timeouts         stringWrapper
 	EnableVNC        boolWrapper
-	EnableLog        boolWrapper
+	EnableLog        boolWrapper // not implemented
 	EnableDebug      boolWrapper
 	ScreenResolution stringWrapper
 	DeviceName       stringWrapper
@@ -237,7 +237,7 @@ type Capabilities struct {
 	//Video related caps
 	EnableVideo     boolWrapper
 	VideoScreenSize stringWrapper
-	VideoCodec      stringWrapper
+	VideoCodec      stringWrapper // not implemented
 	FrameRate       int64Wrapper
 
 	//Vendor caps
@@ -295,14 +295,14 @@ func validateScreenResolution(resolution string) error {
 	}
 
 	minResArrInt := make([]int, 0)
-	for _, v := range minScrenResolution {
+	for _, v := range minScreenResolution {
 		resInt, _ := strconv.Atoi(v)
 		minResArrInt = append(minResArrInt, resInt)
 	}
 
 	for i := 0; i < len(minResArrInt); i++ {
 		if minResArrInt[i] > resArrInt[i] {
-			return fmt.Errorf("min resolution is %s", strings.Join(minScrenResolution, "x"))
+			return fmt.Errorf("min resolution is %s", strings.Join(minScreenResolution, "x"))
 		}
 	}
 
