@@ -184,57 +184,71 @@ func AbortTask(c *gin.Context) {
 	c.JSON(http.StatusNoContent, gin.H{})
 }
 
-func Vnc(wsconn *websocket.Conn) {
-	defer wsconn.Close()
-	fragments := strings.Split(wsconn.Request().URL.Path, "/")
-	id := fragments[len(fragments)-1]
-	l := log.NewEntry(log.StandardLogger())
+func Vnc(c *gin.Context) {
+	routerUUID := c.Param("uuid")
+	l := log.WithField(config.RouterUuid, routerUUID)
+	l.Debug("Vnc request")
 
 	var network environment.NetworkConfiguration
-
-	sess, seErr := getSession(id)
-	if seErr != nil {
-		task, taskErr := getTask(id)
-		if taskErr != nil {
-			l.WithError(seErr).WithField("id", id).Error("Vnc(): can't access session")
+	if sess, seErr := getSession(routerUUID); seErr == nil {
+		l = l.WithField(config.SessionIdKey, sess.SessionID).WithField(config.TaskIdKey, sess.TaskId)
+		network = sess.Network
+	} else if sess != nil {
+		// session found but stopped
+		l.WithError(seErr).Error("vnc error")
+		c.JSON(seErr.ResponseStatus, gin.H{"error": seErr.Error()})
+		return
+	} else {
+		task, seErr := getTask(routerUUID)
+		if seErr != nil {
+			l.WithError(seErr).Error("vnc error")
+			c.JSON(seErr.ResponseStatus, gin.H{"error": seErr.Error()})
 			return
 		}
-		l = l.WithField(config.RouterUuid, id).WithField(config.TaskIdKey, task.TaskId)
+		l = l.WithField(config.TaskIdKey, task.TaskId)
 		network = task.Network
-	} else {
-		l = l.WithField(config.SessionIdKey, id)
-		network = sess.Network
 	}
-	l.Debug("network: ", network)
 
 	vncUrl, ok := network.GetUrl("vnc")
 	if !ok {
-		l.Warn("Vnc url is not available: ", vncUrl)
+		err := fmt.Errorf("vnc url is not available")
+		l.WithError(err).WithField("url", vncUrl).Warn("vnc error")
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	l.Debug("Vnc enabled")
-	var d net.Dialer
-	conn, err := d.DialContext(wsconn.Request().Context(), "tcp", vncUrl.Host)
-	if err != nil {
-		l.WithError(err).Error("Vnc error")
-		return
-	}
-	defer conn.Close()
-	wsconn.PayloadType = websocket.BinaryFrame
-	go func() {
-		_, e := io.Copy(wsconn, conn)
-		if e != nil {
-			log.WithError(e).Debug("VNC WS Copy error")
-		}
-		wsconn.Close()
-		l.Debug("Vnc session closed")
-	}()
-	_, err = io.Copy(conn, wsconn)
-	if err != nil {
-		log.WithError(err).Debug("VNC WS Copy error")
-	}
-	l.Debug("Vnc client disconected")
+	c.Request.Header.Add("Access-Control-Allow-Origin", "*")
+	c.Request.Header.Add("X-Real-IP", c.Request.RemoteAddr)
+
+	websocket.Handler(
+		func(wsconn *websocket.Conn) {
+			defer wsconn.Close()
+
+			l.Debug("vnc enabled")
+			var d net.Dialer
+			conn, err := d.DialContext(wsconn.Request().Context(), "tcp", vncUrl.Host)
+			if err != nil {
+				l.WithError(err).Error("vnc error")
+				return
+			}
+			defer conn.Close()
+			wsconn.PayloadType = websocket.BinaryFrame
+			go func() {
+				defer wsconn.Close()
+				_, e := io.Copy(wsconn, conn)
+				if e != nil {
+					log.WithError(e).Debug("VNC WS Copy error")
+				}
+				l.Debug("vnc session closed")
+			}()
+			_, err = io.Copy(conn, wsconn)
+			if err != nil {
+				log.WithError(err).Debug("VNC WS Copy error")
+			}
+			l.Debug("vnc client disconected")
+		},
+	).ServeHTTP(c.Writer, c.Request)
 }
 
 func Logs(c *gin.Context) {
