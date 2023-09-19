@@ -91,4 +91,4 @@ fi
 
 echo "CMD_ARGS: $CMD_ARGS"
 
-./server -listen :$LISTEN_PORT $CMD_ARGS
+./router -listen :$LISTEN_PORT $CMD_ARGS
