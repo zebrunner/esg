@@ -12,7 +12,7 @@ RUN go mod download
 # Build esg
 COPY . /esg
 
-RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./cmd/management
+RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./cmd/scaler
 
 
 FROM alpine:latest
@@ -52,7 +52,7 @@ ENV ZEBRUNNER_INTEGRATION_PASSWORD=
 
 ENV EXCLUDE_BROWSERS=
 
-COPY --from=0 /esg/management /management
+COPY --from=0 /esg/scaler /scaler
 
 COPY ./build/entrypoint.scaler /entrypoint.sh
 
