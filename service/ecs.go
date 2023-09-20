@@ -141,7 +141,7 @@ func StopTask(taskId string, stopReason taskmap.StoppedReason) error {
 
 	// Set pendingToStop status so no new StopTask() call for current task would be performed
 	cachedTask.Status = taskmap.TaskPendingToStop
-	taskmap.Write(cachedTask.TaskId, cachedTask,-1)
+	taskmap.Write(cachedTask.TaskId, cachedTask, -1)
 
 	err := StopTaskForcibly(cachedTask.TaskId, stopReason)
 	if err != nil {
