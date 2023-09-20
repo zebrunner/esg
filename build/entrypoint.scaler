@@ -78,4 +78,4 @@ fi
 
 echo "CMD_ARGS: $CMD_ARGS"
 
-./management $CMD_ARGS
+./scaler $CMD_ARGS
