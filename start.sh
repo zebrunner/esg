@@ -1,3 +1,3 @@
 #!/bin/bash
 
-docker-compose up -d --scale router=2
+docker compose up -d --scale router=2

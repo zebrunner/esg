@@ -1,0 +1,41 @@
+version: "3.8"
+name: esg
+services:
+  db:
+    image: postgres:13
+    container_name: postgres
+    volumes:
+      - "pgdata-volume:/var/lib/postgresql/data"
+    environment:
+      POSTGRES_PASSWORD: postgres
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s  
+    networks:
+      - external-network
+  migration:
+    container_name: migration
+    build:
+      context: ./../
+      dockerfile: ./build/Dockerfile.migration
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - external-network
+  redis:
+    image: redis:6
+    container_name: redis
+    restart: always
+    networks:
+      - external-network
+volumes:
+  pgdata-volume:
+networks:
+  external-network:
+    external: true
+    name: storage-network

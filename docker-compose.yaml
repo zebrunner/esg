@@ -1,4 +1,5 @@
 version: "3.8"
+name: be
 services:
   router:
     build:
@@ -9,15 +10,14 @@ services:
       - router.env
     ports:
         - "4444-4445:4444"
-    links:
-      - redis
-      - db
-#    volumes:
-#      - "${HOME}/.aws:/root/.aws"
     logging:
      options:
       max-size: "512m"
+    networks:
+      - external-storage
     restart: always
+#    volumes:
+#      - "${HOME}/.aws:/root/.aws"
   scaler:
     container_name: scaler
     build:
@@ -26,26 +26,12 @@ services:
     image: public.ecr.aws/zebrunner/scaler:latest
     env_file:
       - scaler.env
-    links:
-      - redis
+    networks:
+      - external-storage
+    restart: always
 #    volumes:
 #      - "${HOME}/.aws:/root/.aws"
-    restart: always
-  db:
-    image: postgres:13
-    container_name: postgres
-    volumes:
-      - "pgdata-volume:/var/lib/postgresql/data"
-    environment:
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
-    restart: always
-  redis:
-    image: redis:6
-    container_name: redis
-    ports:
-      - "6379:6379"
-    restart: always
-volumes:
-  pgdata-volume:
+networks:
+  external-storage:
+    external: true
+    name: storage-network
