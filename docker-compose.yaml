@@ -1,15 +1,28 @@
 version: "3.8"
 name: be
 services:
-  router:
-    build:
-      context: .
-      dockerfile: ./build/Dockerfile.router
+  router_1:
+    container_name: router_1
     image: public.ecr.aws/zebrunner/router:latest
     env_file:
       - router.env
     ports:
-        - "4444-4445:4444"
+        - "4444:4444"
+    logging:
+     options:
+      max-size: "512m"
+    networks:
+      - external-storage
+    restart: always
+#    volumes:
+#      - "${HOME}/.aws:/root/.aws"
+  router_2:
+    container_name: router_2
+    image: public.ecr.aws/zebrunner/router:latest
+    env_file:
+      - router.env
+    ports:
+        - "4445:4444"
     logging:
      options:
       max-size: "512m"
@@ -20,9 +33,6 @@ services:
 #      - "${HOME}/.aws:/root/.aws"
   scaler:
     container_name: scaler
-    build:
-      context: .
-      dockerfile: build/Dockerfile.scaler
     image: public.ecr.aws/zebrunner/scaler:latest
     env_file:
       - scaler.env

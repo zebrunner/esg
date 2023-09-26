@@ -4,11 +4,6 @@ export REVISION=$(git rev-parse HEAD)
 export BUILD_TIME=$(date -Iseconds)
 export VERSION=$(git describe --tags $(git rev-list --tags --max-count=1))
 
-# Apply all up migrations
-#DATABASE="postgres://postgres:postgres@db/postgres?sslmode=disable"
-migrate -path migrations -database $DATABASE up
-
-
 CMD_ARGS=
 if [ ! -z ${AWS_REGION} ]; then
   CMD_ARGS="${CMD_ARGS} -aws-region ${AWS_REGION}"

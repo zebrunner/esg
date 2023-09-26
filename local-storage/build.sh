@@ -14,4 +14,4 @@ fi
 docker compose -f "$BASEDIR/docker-compose.yaml" build
 
 # start other services
-docker compose -f "$BASEDIR/../docker-compose.yaml" build
+docker compose -f "$BASEDIR/../build/docker-compose.yaml" build

@@ -21,7 +21,7 @@ services:
     container_name: migration
     build:
       context: ./../
-      dockerfile: ./build/Dockerfile.migration
+      dockerfile: ./local-storage/Dockerfile.migration
     depends_on:
       db:
         condition: service_healthy
