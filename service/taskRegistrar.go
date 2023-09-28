@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -17,8 +18,10 @@ import (
 
 // miliseconds
 var (
-	registerPause  int64 = 0
-	pauseIncrement int64 = 100
+	mt                      = sync.Mutex{}
+	provisioningCount int64 = 0
+	registerPause     int64 = 0
+	pauseIncrement    int64 = 60
 )
 
 func getPause() int64 {
@@ -68,7 +71,7 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 	// TODO: convert existing hard-coded 25 retries into the queue or provisioning timeout: https://github.com/zebrunner/esg/issues/72
 	// [VD] "i" retry should be ~15 if instances can be started in 1 min and 25 if ~2 min
 	var outputErr error
-	for i := 0; i < 25; i++ {
+	for i := 0; true; i++ {
 
 		l := l.WithField("retry", i)
 
@@ -84,6 +87,17 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 					time.Sleep(sleep)
 				}
 		*/
+
+		mt.Lock()
+		if provisioningCount >= 500 {
+			mt.Unlock()
+			l.Info("Reached max provisioning limit")
+			time.Sleep(time.Duration(10 + 5 * rand.Intn(5)))
+			continue
+		}
+
+		atomic.AddInt64(&provisioningCount, 1)
+		mt.Unlock()
 
 		pause := getPause()
 		time.Sleep(time.Duration(pause) * time.Millisecond)

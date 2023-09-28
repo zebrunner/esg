@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/aws/aws-sdk-go/service/ecs"
@@ -97,6 +98,9 @@ func (w *waitWorker) start() {
 				continue
 			}
 			l := log.WithField(config.TaskIdKey, taskId)
+			if *task.LastStatus != "PROVISIONING" {
+				atomic.AddInt64(&provisioningCount, -1)
+			}
 
 			if *task.LastStatus == "STOPPED" {
 				// #860: Api tests are reexecuted several times
