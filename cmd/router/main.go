@@ -186,16 +186,11 @@ func main() {
 
 	log.Info("Shutdown router ...")
 
-	shutdownTimeout := time.Duration(0)
-	if config.Conf.GracefulShutdown {
-		shutdownTimeout = config.Conf.ServiceStartupTimeout
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
 		log.WithError(err).Error("Failed to shutdown correctly")
 	}
 
-	log.Println("Router exited")
+	log.Info("Router exited")
 }

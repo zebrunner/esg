@@ -17,26 +17,24 @@ services:
       start_interval: 5s
       start_period: 5s  
     networks:
-      - external-network
+      - data-network
   migration:
+    image: public.ecr.aws/zebrunner/migration:latest
     container_name: migration
-    build:
-      context: ./../
-      dockerfile: ./local-storage/Dockerfile.migration
     depends_on:
       db:
         condition: service_healthy
     networks:
-      - external-network
+      - data-network
   redis:
     image: redis:6
     container_name: redis
     restart: always
     networks:
-      - external-network
+      - data-network
 volumes:
   pgdata-volume:
 networks:
-  external-network:
+  data-network:
     external: true
-    name: storage-network
+    name: e3s-network

@@ -67,9 +67,8 @@ type Config struct {
 
 	ExcludeBrowsers string
 
-	SingleTenant     bool
-	Imdsv2Enabled    bool
-	GracefulShutdown bool
+	SingleTenant  bool
+	Imdsv2Enabled bool
 }
 
 func init() {
@@ -112,7 +111,6 @@ func init() {
 
 	flag.BoolVar(&Conf.SingleTenant, "single-tenant", false, "Single tenant mode")
 	flag.BoolVar(&Conf.Imdsv2Enabled, "imdsv2-enabled", false, "Session-oriented method")
-	flag.BoolVar(&Conf.GracefulShutdown, "graceful-shutdown", true, "Finish all current requests in ServiceStartupTimeout time on exit")
 }
 
 func (c *Config) ParseLogLevel() logrus.Level {

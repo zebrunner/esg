@@ -1,5 +1,5 @@
 version: "3.8"
-name: be
+name: backend
 services:
   router_1:
     container_name: router_1
@@ -12,7 +12,7 @@ services:
      options:
       max-size: "512m"
     networks:
-      - external-storage
+      - service-network
     restart: always
 #    volumes:
 #      - "${HOME}/.aws:/root/.aws"
@@ -27,7 +27,7 @@ services:
      options:
       max-size: "512m"
     networks:
-      - external-storage
+      - service-network
     restart: always
 #    volumes:
 #      - "${HOME}/.aws:/root/.aws"
@@ -37,11 +37,11 @@ services:
     env_file:
       - scaler.env
     networks:
-      - external-storage
+      - service-network
     restart: always
 #    volumes:
 #      - "${HOME}/.aws:/root/.aws"
 networks:
-  external-storage:
+  service-network:
     external: true
-    name: storage-network
+    name: e3s-network

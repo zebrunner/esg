@@ -7,7 +7,7 @@ if [ -z "$service_name" ]; then
   exit 1
 fi
 
-docker compose -f "$BASEDIR/docker-compose.yaml" stop $service_name
+docker compose -f "$BASEDIR/docker-compose.yaml" stop $service_name -t 540
 ret=$?
 if [ $ret -ne 0 ]; then 
   echo "failed to stop service $service_name"

@@ -101,9 +101,6 @@ fi
 if [ ! -z ${IMDSV2_ENABLED} ]; then
   CMD_ARGS="${CMD_ARGS} -imdsv2-enabled=${IMDSV2_ENABLED}"
 fi
-if [ ! -z ${GRACEFUL_SHUTDOWN} ]; then
-  CMD_ARGS="${CMD_ARGS} -graceful-shutdown=${GRACEFUL_SHUTDOWN}"
-fi
 
 echo "CMD_ARGS: $CMD_ARGS"
 
