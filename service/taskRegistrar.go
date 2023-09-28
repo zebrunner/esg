@@ -20,7 +20,7 @@ import (
 var (
 	mt                         = sync.Mutex{}
 	provisioningCount    int64 = 0
-	maxProvisioningCount int64 = 500
+	maxProvisioningCount int64 = 240
 	registerPause        int64 = 0
 	pauseIncrement       int64 = 60
 )
