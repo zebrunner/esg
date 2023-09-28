@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -13,6 +14,27 @@ import (
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
 )
+
+// miliseconds
+var (
+	registerPause  int64 = 0
+	pauseIncrement int64 = 100
+)
+
+func getPause() int64 {
+	pause := registerPause
+	atomic.AddInt64(&registerPause, pauseIncrement)
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(pause+pauseIncrement)*time.Millisecond)
+		defer cancel()
+		<-ctx.Done()
+		atomic.AddInt64(&registerPause, -1*pauseIncrement)
+		log.WithField("pause", registerPause).Info("Decreased pause")
+	}()
+
+	return pause
+}
 
 type registerWaitRequest struct {
 	NonEssentialErrCh chan error
@@ -63,6 +85,10 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 					time.Sleep(sleep)
 				}
 		*/
+
+		pause := getPause()
+		l.WithField("pause", pause).Info("Sleep before request")
+		time.Sleep(time.Duration(pause) * time.Millisecond)
 
 		var resultRunTask *ecs.RunTaskOutput
 		resultRunTask, err := svc.RunTask(runTaskInput)
