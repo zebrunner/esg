@@ -93,7 +93,7 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 		if provisioningCount >= maxProvisioningCount {
 			mt.Unlock()
 			l.Info("Reached max provisioning limit")
-			time.Sleep(time.Duration(10 + 5*rand.Intn(5)))
+			time.Sleep(time.Duration(10+5*rand.Intn(5)) * time.Second)
 			continue
 		}
 
@@ -115,7 +115,7 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 			}
 
 			if errStr == "ClientException: Tasks provisioning capacity limit exceeded." || strings.Contains(errStr, "ThrottlingException: Rate exceeded") {
-				sleepRateLimit := time.Duration(15 + rand.Intn(15))
+				sleepRateLimit := time.Duration(15+rand.Intn(15)) * time.Second
 				time.Sleep(sleepRateLimit)
 			}
 
