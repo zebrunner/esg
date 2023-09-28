@@ -18,10 +18,11 @@ import (
 
 // miliseconds
 var (
-	mt                      = sync.Mutex{}
-	provisioningCount int64 = 0
-	registerPause     int64 = 0
-	pauseIncrement    int64 = 60
+	mt                         = sync.Mutex{}
+	provisioningCount    int64 = 0
+	maxProvisioningCount int64 = 500
+	registerPause        int64 = 0
+	pauseIncrement       int64 = 60
 )
 
 func getPause() int64 {
@@ -89,10 +90,10 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 		*/
 
 		mt.Lock()
-		if provisioningCount >= 500 {
+		if provisioningCount >= maxProvisioningCount {
 			mt.Unlock()
 			l.Info("Reached max provisioning limit")
-			time.Sleep(time.Duration(10 + 5 * rand.Intn(5)))
+			time.Sleep(time.Duration(10 + 5*rand.Intn(5)))
 			continue
 		}
 
