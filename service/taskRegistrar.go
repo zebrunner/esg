@@ -30,7 +30,6 @@ func getPause() int64 {
 		defer cancel()
 		<-ctx.Done()
 		atomic.AddInt64(&registerPause, -1*pauseIncrement)
-		log.WithField("pause", registerPause).Info("Decreased pause")
 	}()
 
 	return pause
@@ -87,7 +86,6 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 		*/
 
 		pause := getPause()
-		l.WithField("pause", pause).Info("Sleep before request")
 		time.Sleep(time.Duration(pause) * time.Millisecond)
 
 		var resultRunTask *ecs.RunTaskOutput
