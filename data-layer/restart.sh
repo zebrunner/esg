@@ -1,4 +1,6 @@
 #!/bin/bash
+
 BASEDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-docker compose -f "$BASEDIR/docker-compose.yaml" up -d 
+"$BASEDIR"/stop.sh
+"$BASEDIR"/start.sh

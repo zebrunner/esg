@@ -1,11 +1,6 @@
 FROM golang:1.18-alpine
 
-RUN apk add -U ca-certificates tzdata mailcap curl git && rm -Rf /var/cache/apk/*
-
-# Install migrate tool
-RUN curl -L https://github.com/golang-migrate/migrate/releases/download/v4.14.1/migrate.linux-amd64.tar.gz | tar -xvz
-RUN cp migrate.linux-amd64 /usr/bin/migrate
-RUN echo $PATH
+RUN apk add -U tzdata git && rm -Rf /var/cache/apk/*
 
 WORKDIR /esg
 
@@ -66,10 +61,8 @@ ENV EXCLUDE_BROWSERS=
 
 RUN apk add -U git tzdata
 COPY ./.git /
-COPY ./migrations/ /migrations/
 
 COPY --from=0 /esg/router /router
-COPY --from=0 /usr/bin/migrate /usr/bin/migrate
 
 COPY ./build/entrypoint.router /entrypoint.sh
 

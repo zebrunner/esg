@@ -41,7 +41,7 @@ type Config struct {
 	// Timeouts
 	MaxIdleTimeout          time.Duration
 	IdleTimeout             time.Duration
-	CypressIdleTimeout		time.Duration
+	CypressIdleTimeout      time.Duration
 	SessionDeleteTimeout    time.Duration
 	ServiceStartupTimeout   time.Duration
 	DriverStartupTimeout    time.Duration

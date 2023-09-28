@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"net/http"
 	"net/http/httputil"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -163,9 +166,31 @@ func main() {
 	service.InitInstanceWorker()
 	service.InitWaitWorker()
 
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
 	log.Infof("Listening on %s", listen)
-	err = router.Run(listen)
-	if err != nil {
-		log.WithError(err).Fatal("Failed to start server")
+	srv := &http.Server{
+		Addr:    listen,
+		Handler: router,
 	}
+
+	go func() {
+		// service connections
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.WithError(err).Fatal("Failed to start router")
+		}
+	}()
+
+	<-quit
+
+	log.Info("Shutdown router ...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.WithError(err).Error("Failed to shutdown correctly")
+	}
+
+	log.Info("Router exited")
 }
