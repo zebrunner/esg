@@ -41,8 +41,14 @@ type Session struct {
 	Workspace   string
 }
 
-func CreateEntity(sessionId string, env *environment.ExecutionEnvironment, task *taskmap.Task) (*Session, error) {
-	err := mapper.UpdateSessionId(env.RouterUUID, sessionId)
+func CreateEntity(sessionId string, env *environment.ExecutionEnvironment, taskId *string) (*Session, error) {
+	cachedTask, err := taskmap.Find(*taskId, false)
+	if err != nil {
+		log.WithError(err).Error("Failed to find task cache. Session not cached!")
+		return nil, err
+	}
+
+	err = mapper.UpdateSessionId(env.RouterUUID, sessionId)
 	if err != nil {
 		log.WithError(err).Error("Session not cached!")
 		return nil, err
@@ -55,9 +61,9 @@ func CreateEntity(sessionId string, env *environment.ExecutionEnvironment, task 
 		AccessedAt:  time.Now(),
 		IdleTimeout: float64(env.Capabilities.IdleTimeout),
 		Network:     *env.Network,
-		TaskId:      task.TaskId,
+		TaskId:      cachedTask.TaskId,
 		Status:      SessionActive,
-		Workspace:   task.Workspace,
+		Workspace:   cachedTask.Workspace,
 	}
 
 	err = Write(cachedSession.SessionID, cachedSession, 0)
@@ -66,8 +72,8 @@ func CreateEntity(sessionId string, env *environment.ExecutionEnvironment, task 
 		return nil, err
 	}
 
-	task.CurrentSessionID = sessionId
-	err = taskmap.Write(task.TaskId, task, -1)
+	cachedTask.CurrentSessionID = sessionId
+	err = taskmap.Write(cachedTask.TaskId, cachedTask, -1)
 	if err != nil {
 		log.WithError(err).Error("Session id not cached for task!")
 		return nil, err

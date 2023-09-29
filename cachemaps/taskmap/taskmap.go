@@ -63,7 +63,7 @@ func CreateEntity(taskId string, env *environment.ExecutionEnvironment) (*Task, 
 		Workspace:    env.Workspace,
 	}
 
-	err = Write(cachedTask.TaskId, cachedTask, 0)
+	err = Write(taskId, cachedTask, 0)
 	if err != nil {
 		log.WithError(err).Error("Task not cached!")
 		return nil, err
