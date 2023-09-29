@@ -1,7 +1,24 @@
 #!/bin/sh
 
-CMD_ARGS=
+finish() {
+  ppid=$1
+  if [ -n "$ppid" ]; then
+    kill -s TERM $ppid
+  fi
 
+  # wait until $ppid finished normally to provide more time for termination process
+  while [ true ]; do
+    ps -ef | grep $ppid | grep -v grep > /dev/null 2>&1
+    if [ $? -eq 1 ]; then
+      echo "process finished"
+      break
+    fi
+    sleep 2
+  done
+  return 0
+}
+
+CMD_ARGS=
 #scaler cli args:
 if [ ! -z ${AWS_ASG_NAME} ]; then
   CMD_ARGS="${CMD_ARGS} -aws-auto-scaling-group ${AWS_ASG_NAME}"
@@ -78,4 +95,9 @@ fi
 
 echo "CMD_ARGS: $CMD_ARGS"
 
-./scaler $CMD_ARGS
+./scaler $CMD_ARGS &
+PID=$!
+
+trap 'finish $PID' TERM INT
+
+wait $PID

@@ -73,14 +73,11 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 			if errStr == "ClientException: TaskDefinition not found." {
 				waitRequest.EssentialErrCh <- fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily)
 				return
-			} else if errStr == "ClientException: Tasks provisioning capacity limit exceeded." {
-				// wait for 15 seconds (repeated until new instances will be provided and provisioning tasks will get to the next phase)
-				time.Sleep(time.Duration(15 * time.Second))
-			} else if strings.Contains(errStr, "ThrottlingException: Rate exceeded") {
-				// increase average wait time based on retry count
-				// min -> 1 sec on first retry
-				// max -> 125 sec on last retry
-				time.Sleep(time.Duration((i+1)*(1+rand.Intn(5))) * time.Second)
+			}
+
+			if errStr == "ClientException: Tasks provisioning capacity limit exceeded." || strings.Contains(errStr, "ThrottlingException: Rate exceeded") {
+				sleepRateLimit := time.Duration(15 + rand.Intn(15))
+				time.Sleep(sleepRateLimit)
 			}
 
 			outputErr = err

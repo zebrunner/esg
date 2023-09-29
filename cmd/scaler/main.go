@@ -549,12 +549,12 @@ func main() {
 	defer config.RedisTasksConnection.Close()
 	defer config.RedisDefinitionConnection.Close()
 
-	RefreshTaskDefinitions()
-
 	service.InitScalingData()
 
 	var wg sync.WaitGroup
 	wg.Add(1)
+
+	go RefreshTaskDefinitions()
 
 	go ScaleCluster()
 

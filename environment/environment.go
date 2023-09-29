@@ -406,6 +406,11 @@ func buildImage(caps *capabilities.Capabilities) (string, error) {
 
 func buildTaskDefinitionFamily(caps *capabilities.Capabilities) string {
 	familyParts := []string{}
+
+	if zbrEnv := os.Getenv("ZEBRUNNER_ENV"); zbrEnv != "" {
+		familyParts = append(familyParts, zbrEnv)
+	}
+
 	platformName := strings.ToLower(caps.PlatformName.ToPrimitive())
 
 	if caps.PlatformName == "" || platformName == "any" {
@@ -435,11 +440,6 @@ func buildTaskDefinitionFamily(caps *capabilities.Capabilities) string {
 	}
 
 	taskDefFamily := strings.Join(familyParts, "-")
-
-	zbrEnv := os.Getenv("ZEBRUNNER_ENV")
-	if zbrEnv != "" {
-		taskDefFamily = zbrEnv + "-" + taskDefFamily
-	}
 
 	return taskDefFamily
 }
