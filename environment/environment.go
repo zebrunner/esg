@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/google/uuid"
 	"github.com/zebrunner/esg/cachemaps/definitionmap"
+	"github.com/zebrunner/esg/cachemaps/resourcesToAllocate"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/utils"
 )
@@ -289,6 +290,24 @@ func (e *ExecutionEnvironment) HashRegisterDefinition() string {
 	registerDefinitionHash := utils.EncodeToHash(registerDefinitionData)
 
 	return registerDefinitionHash
+}
+
+func (env *ExecutionEnvironment) CalculateResources() *resourcesToAllocate.Resources {
+	var cpu int64 = 0
+	var memory int64 = 0
+
+	for _, container := range env.Containers {
+		cpu += container.cpu
+		memory += container.memory
+	}
+
+	resources := resourcesToAllocate.Resources{
+		UUID:   env.RouterUUID,
+		Cpu:    cpu,
+		Memory: memory,
+	}
+
+	return &resources
 }
 
 func (env *ExecutionEnvironment) GetFamilyRevision() (string, error) {

@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/cachemaps/resourcesToAllocate"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/utils"
 )
@@ -96,6 +97,33 @@ func getTasksResources(tasks []*ecs.Task, status string) []*Resources {
 	return resources
 }
 
+func getFreeResources(tasks []*ecs.Task, currentCapacity int, statuses ...string) []*Resources {
+	// Generate list of resources for each instance
+	instanceResources := make([]*Resources, 0, currentCapacity)
+	for i := 0; i < int(currentCapacity); i++ {
+		instanceResources = append(instanceResources, &Resources{
+			CPU:    instanceTypeResources.CPU,
+			Memory: instanceTypeResources.Memory,
+		})
+	}
+
+	for _, status := range statuses {
+		tasksResourcesInUse := getTasksResources(tasks, status)
+		// Remove resources that already are using by tasks with passed status
+		for _, t := range tasksResourcesInUse {
+			for _, i := range instanceResources {
+				if i.CPU >= t.CPU && i.Memory >= t.Memory {
+					i.CPU -= t.CPU
+					i.Memory -= t.Memory
+					break
+				}
+			}
+		}
+	}
+
+	return instanceResources
+}
+
 func getAutoscalingGroup(autoscalingSvc *autoscaling.AutoScaling) (*autoscaling.Group, error) {
 	describeAutoScalingGroupsInput := &autoscaling.DescribeAutoScalingGroupsInput{
 		AutoScalingGroupNames: []*string{&config.Conf.AwsAutoScalingGroup},
@@ -141,32 +169,12 @@ func ScaleUp() {
 	}
 	currentCapacity := *asg.DesiredCapacity
 
-	// Generate list of resources for each instance
-	instanceResources := make([]*Resources, 0, int(currentCapacity))
-	for i := 0; i < int(currentCapacity); i++ {
-		instanceResources = append(instanceResources, &Resources{
-			CPU:    instanceTypeResources.CPU,
-			Memory: instanceTypeResources.Memory,
-		})
-	}
-
-	runningTasksResources := getTasksResources(tasks, "RUNNING")
-	// Remove resources that already are using by RUNNING tasks
-	for _, t := range runningTasksResources {
-		for _, i := range instanceResources {
-			if i.CPU >= t.CPU && i.Memory >= t.Memory {
-				i.CPU -= t.CPU
-				i.Memory -= t.Memory
-				break
-			}
-		}
-	}
-
+	freeResources := getFreeResources(tasks, int(currentCapacity), "RUNNING")
 	// Remove resources that might be used for PROVISSIONING tasks
 	requiredTaskResources := []*Resources{}
 	for _, t := range provisioningTasksResources {
 		enough := false
-		for _, i := range instanceResources {
+		for _, i := range freeResources {
 			if i.CPU >= t.CPU && i.Memory >= t.Memory {
 				i.CPU -= t.CPU
 				i.Memory -= t.Memory
@@ -251,6 +259,12 @@ func ScaleDown() {
 		return
 	}
 	svc := ecs.New(session)
+	tasks, err := GetClusterTasks(svc)
+	if err != nil {
+		log.WithError(err).Error("Failed to get list of running task")
+		return
+	}
+
 	autoscalingSvc := autoscaling.New(session)
 	if err != nil {
 		log.WithError(err).Error("Failed to get list of running task")
@@ -264,6 +278,35 @@ func ScaleDown() {
 	}
 	minSize := *asg.MinSize
 	newCapacity, currentCapacity := *asg.DesiredCapacity, *asg.DesiredCapacity
+
+	freeResources := getFreeResources(tasks, int(currentCapacity), "RUNNING", "PROVISIONING")
+
+	resourcesToAllocate, err := resourcesToAllocate.GetAllEntities()
+	if err != nil {
+		log.Info("Failed to get resources for allocation")
+	} else {
+		for _, desiredProvisioning := range resourcesToAllocate {
+			for _, instance := range freeResources {
+				if instance.CPU >= desiredProvisioning.Cpu && instance.Memory >= desiredProvisioning.Memory {
+					instance.CPU -= desiredProvisioning.Cpu
+					instance.Memory -= desiredProvisioning.Memory
+					break
+				}
+			}
+		}
+	}
+
+	removeCount := 0
+	for _, instance := range freeResources {
+		if instance.CPU >= instanceTypeResources.CPU && instance.Memory >= instanceTypeResources.Memory {
+			removeCount++
+		}
+	}
+
+	if removeCount == 0 {
+		log.Debug("All instances are busy, scale down not allowed")
+		return
+	}
 
 	ciArns, err := ListContainerInstances(svc)
 	if err != nil {
@@ -279,10 +322,15 @@ func ScaleDown() {
 
 	instancesToDelete := make([]*ecs.ContainerInstance, 0)
 	for _, instance := range containerInstances {
+		if removeCount == 0 {
+			break
+		}
+
 		if *instance.PendingTasksCount == 0 && *instance.RunningTasksCount == 0 {
 			instanceUptime := time.Since(*instance.RegisteredAt)
 			if instanceUptime > config.Conf.InstanceCooldownTimeout {
 				instancesToDelete = append(instancesToDelete, instance)
+				removeCount--
 			}
 		}
 	}
@@ -316,7 +364,7 @@ func ScaleDown() {
 		if err != nil {
 			l.WithError(err).Error("Failed to stop instance")
 		}
-		
+
 		newCapacity -= 1
 		maxInstancesToDelete -= 1
 		terminatedCount++
