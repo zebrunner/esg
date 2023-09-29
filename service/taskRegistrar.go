@@ -75,6 +75,9 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 			// Not good solution but aws doesn't give a choice
 			errStr := err.Error()
 			if errStr == "ClientException: TaskDefinition not found." {
+				if markedToAllocate {
+					resourcesToAllocate.RemoveEntity(env.RouterUUID)
+				}
 				waitRequest.EssentialErrCh <- fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily)
 				return
 			}
