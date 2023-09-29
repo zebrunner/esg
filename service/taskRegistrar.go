@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/cachemaps/resourcesToAllocate"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
 )
@@ -47,12 +48,15 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 	// TODO: convert existing hard-coded 25 retries into the queue or provisioning timeout: https://github.com/zebrunner/esg/issues/72
 	// [VD] "i" retry should be ~15 if instances can be started in 1 min and 25 if ~2 min
 	var outputErr error
-	for i := 0; i < 25; i++ {
-
+	markedToAllocate := false
+	for i := 0; true; i++ {
 		l := l.WithField("retry", i)
 
 		select {
 		case <-ctx.Done():
+			if markedToAllocate {
+				resourcesToAllocate.RemoveEntity(env.RouterUUID)
+			}
 			return
 		default:
 		}
@@ -76,7 +80,15 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 			}
 
 			if errStr == "ClientException: Tasks provisioning capacity limit exceeded." || strings.Contains(errStr, "ThrottlingException: Rate exceeded") {
-				sleepRateLimit := time.Duration(15 + rand.Intn(15))
+				if !markedToAllocate {
+					resources := env.CalculateResources()
+					err := resourcesToAllocate.AddEntity(resources)
+					if err != nil {
+						l.Info("Failed to cache resource allocation")
+					}
+					markedToAllocate = true
+				}
+				sleepRateLimit := time.Duration(20+rand.Intn(4)) * time.Second
 				time.Sleep(sleepRateLimit)
 			}
 
@@ -94,6 +106,10 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 			outputErr = fmt.Errorf("response doesn't contain tasks")
 			l.WithError(outputErr).Debug("Task register failed")
 			continue
+		}
+
+		if markedToAllocate {
+			resourcesToAllocate.RemoveEntity(env.RouterUUID)
 		}
 
 		// All is ok. We got task then we can return it.
