@@ -67,7 +67,7 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 		var resultRunTask *ecs.RunTaskOutput
 		resultRunTask, err := svc.RunTask(runTaskInput)
 		if err != nil {
-			l.WithError(err).Debug("Task register failed.")
+			l.WithError(err).Error("Task register failed.")
 			// Not good solution but aws doesn't give a choice
 			errStr := err.Error()
 			if errStr == "ClientException: TaskDefinition not found." {

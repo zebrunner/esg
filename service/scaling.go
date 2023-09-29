@@ -251,6 +251,20 @@ func ScaleDown() {
 		return
 	}
 	svc := ecs.New(session)
+	tasks, err := GetClusterTasks(svc)
+	if err != nil {
+		log.WithError(err).Error("Failed to get list of running task")
+		return
+	}
+
+	provisioningTasksResources := getTasksResources(tasks, "PROVISIONING")
+	// There is no task in provisioning state, no need to scale up
+	// TODO: refactor with resource per instance calculation
+	if len(provisioningTasksResources) > 0 {
+		log.Info("Found tasks in provisioning stage, scale down not allowed")
+		return
+	}
+
 	autoscalingSvc := autoscaling.New(session)
 	if err != nil {
 		log.WithError(err).Error("Failed to get list of running task")
