@@ -316,8 +316,16 @@ func (starter basicStarter) StartService() (map[string]interface{}, *utils.Selen
 			}
 
 			if nonEssential != nil {
+
 				// flush data, next retry
 				if starter.basis.TaskId != nil {
+					// check abort status in case of non esential error
+					task, err := taskmap.Find(*starter.basis.TaskId, false)
+					if err == nil && task.StopReason == taskmap.TaskAborted {
+						// stop service starter, return error
+						seErr := utils.CreationErr(fmt.Errorf("service start has been aborted"))
+						return nil, seErr
+					}
 					StopTask(*starter.basis.TaskId, taskmap.TaskStartupFailure)
 				}
 				starter.basis.Log = &logCopy
@@ -337,14 +345,6 @@ func (starter basicStarter) StartService() (map[string]interface{}, *utils.Selen
 			starter.finalize()
 			starter.basis.Log.Info("service started")
 			return starter.basis.Reply, nil
-		} else {
-			// check abort status in case of non esential error
-			task, err := taskmap.Find(*starter.basis.TaskId, false)
-			if err == nil && task != nil && task.StopReason == taskmap.TaskAborted {
-				// stop service starter, return error
-				seErr := utils.CreationErr(fmt.Errorf("service start has been aborted"))
-				return nil, seErr
-			}
 		}
 	}
 
