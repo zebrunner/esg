@@ -323,6 +323,7 @@ func (starter basicStarter) StartService() (map[string]interface{}, *utils.Selen
 				starter.basis.Log = &logCopy
 				starter.basis.Task = nil
 				starter.basis.TaskId = nil
+				starter.basis.CachedTask = nil
 				starter.basis.GinCtx.Set(config.TaskIdKey, "")
 				starter.basis.GinCtx.Set(config.SessionIdKey, "")
 				// flag for retries execution
