@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/cachemaps/resourcesToAllocate"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
 )
@@ -47,12 +48,15 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 	// TODO: convert existing hard-coded 25 retries into the queue or provisioning timeout: https://github.com/zebrunner/esg/issues/72
 	// [VD] "i" retry should be ~15 if instances can be started in 1 min and 25 if ~2 min
 	var outputErr error
-	for i := 0; i < 25; i++ {
-
+	markedToAllocate := false
+	for i := 0; true; i++ {
 		l := l.WithField("retry", i)
 
 		select {
 		case <-ctx.Done():
+			if markedToAllocate {
+				resourcesToAllocate.RemoveEntity(env.RouterUUID)
+			}
 			return
 		default:
 		}
@@ -71,16 +75,24 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 			// Not good solution but aws doesn't give a choice
 			errStr := err.Error()
 			if errStr == "ClientException: TaskDefinition not found." {
+				if markedToAllocate {
+					resourcesToAllocate.RemoveEntity(env.RouterUUID)
+				}
 				waitRequest.EssentialErrCh <- fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily)
 				return
-			} else if errStr == "ClientException: Tasks provisioning capacity limit exceeded." {
-				// wait for 15 seconds (repeated until new instances will be provided and provisioning tasks will get to the next phase)
-				time.Sleep(time.Duration(15 * time.Second))
-			} else if strings.Contains(errStr, "ThrottlingException: Rate exceeded") {
-				// increase average wait time based on retry count
-				// min -> 1 sec on first retry
-				// max -> 125 sec on last retry
-				time.Sleep(time.Duration((i+1)*(1+rand.Intn(5))) * time.Second)
+			}
+
+			if errStr == "ClientException: Tasks provisioning capacity limit exceeded." || strings.Contains(errStr, "ThrottlingException: Rate exceeded") {
+				if !markedToAllocate {
+					resources := env.CalculateResources()
+					err := resourcesToAllocate.AddEntity(resources)
+					if err != nil {
+						l.Info("Failed to cache resource allocation")
+					}
+					markedToAllocate = true
+				}
+				sleepRateLimit := time.Duration(20+rand.Intn(4)) * time.Second
+				time.Sleep(sleepRateLimit)
 			}
 
 			outputErr = err
@@ -97,6 +109,10 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 			outputErr = fmt.Errorf("response doesn't contain tasks")
 			l.WithError(outputErr).Debug("Task register failed")
 			continue
+		}
+
+		if markedToAllocate {
+			resourcesToAllocate.RemoveEntity(env.RouterUUID)
 		}
 
 		// All is ok. We got task then we can return it.

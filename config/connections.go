@@ -11,9 +11,10 @@ import (
 var (
 	RedisSessionsConnection   *redis.Client
 	RedisTasksConnection      *redis.Client
-	CypressSetConnection 	  *redis.Client
+	CypressSetConnection      *redis.Client
 	RedisIdMapperConnection   *redis.Client
 	RedisDefinitionConnection *redis.Client
+	ResourcesConnection       *redis.Client
 	DbConnection              *sqlx.DB
 )
 
@@ -75,6 +76,20 @@ func InitCache() error {
 		Addr:     Conf.RedisConnectionString,
 		Password: "",
 		DB:       4,
+	})
+
+	_, err = CypressSetConnection.Ping(context.Background()).Result()
+	if err != nil {
+		log.WithError(err).Error("Failed to ping redis cypressSet connection")
+		return err
+	}
+
+	// DB 5 - for tasks that are in register queue
+	// Such tasks cannot get into the provisioning pool, but still need to be calculated by scaler
+	ResourcesConnection = redis.NewClient(&redis.Options{
+		Addr:     Conf.RedisConnectionString,
+		Password: "",
+		DB:       5,
 	})
 
 	_, err = CypressSetConnection.Ping(context.Background()).Result()
