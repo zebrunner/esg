@@ -146,11 +146,10 @@ func DescribeContainerInstances(containerInstanceIdPtrs []*string, svc *ecs.ECS)
 
 func DescribeInstances(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) ([]*ec2.Instance, error) {
 	var ec2Instances []*ec2.Instance
+	input := ec2.DescribeInstancesInput{
+		InstanceIds: ec2InstanceIdPtrs,
+	}
 	for {
-		input := ec2.DescribeInstancesInput{
-			InstanceIds: ec2InstanceIdPtrs,
-		}
-
 		ec2Result, err := utils.RetryThrottling(ec2Svc.DescribeInstances)(&input)
 		if err != nil {
 			log.WithField("error", err).Error("Failed to DescribeInstances!")
