@@ -51,6 +51,7 @@ func Create(c *gin.Context) {
 	if err != nil {
 		l.Warnf("Workspace for user %s not found", user)
 		c.Error(utils.AuthErr(err)).SetType(gin.ErrorTypePublic)
+		return
 	}
 
 	// not adding workspace to logs because as for now user and workspace have the same value
@@ -90,6 +91,7 @@ func Create(c *gin.Context) {
 		_, err = service.CreateTaskDefinition(env)
 		if err != nil {
 			log.WithError(err).Error("Failed to create task definition")
+			c.Error(utils.UnknownErr(fmt.Errorf("failed to create task defenition for generic"), err.Error())).SetType(gin.ErrorTypePublic)
 			return
 		}
 	}
