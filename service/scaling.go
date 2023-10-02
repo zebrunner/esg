@@ -188,6 +188,27 @@ func ScaleUp() {
 		}
 	}
 
+	resourcesToAllocate, err := resourcesToAllocate.GetAllEntities()
+	if err != nil {
+		log.Info("Failed to get resources for allocation")
+	} else {
+		for _, resources := range resourcesToAllocate {
+			enough := false
+			for _, i := range freeResources {
+				if i.CPU >= resources.Cpu && i.Memory >= resources.Memory {
+					i.CPU -= resources.Cpu
+					i.Memory -= resources.Memory
+					enough = true
+					break
+				}
+			}
+
+			if !enough {
+				requiredTaskResources = append(requiredTaskResources, &Resources{CPU: resources.Cpu, Memory: resources.Memory})
+			}
+		}
+	}
+
 	// No new resources required right now
 	if len(requiredTaskResources) == 0 {
 		log.Trace("No new resources required")
