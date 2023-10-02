@@ -138,6 +138,23 @@ func DescribeContainerInstances(containerInstanceIdPtrs []*string, svc *ecs.ECS)
 			return nil, err
 		}
 
+		if describeResult.Failures != nil && len(describeResult.Failures) != 0 {
+			log.Error("Found failure in DescribeContainerInstances operation")
+			for _, failure := range describeResult.Failures {
+				l := log.NewEntry(log.StandardLogger())
+				if failure.Arn != nil {
+					l = l.WithField("Arn", &failure.Arn)
+				}
+				if failure.Reason != nil {
+					l = l.WithField("Reason", &failure.Reason)
+				}
+				if failure.Detail != nil {
+					l = l.WithField("Detail", &failure.Detail)
+				}
+				l.Error("Failure in DescribeContainerInstances")
+			}
+		}
+
 		containerInstances = append(containerInstances, describeResult.ContainerInstances...)
 	}
 
@@ -146,11 +163,11 @@ func DescribeContainerInstances(containerInstanceIdPtrs []*string, svc *ecs.ECS)
 
 func DescribeInstances(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) ([]*ec2.Instance, error) {
 	var ec2Instances []*ec2.Instance
-	for {
-		input := ec2.DescribeInstancesInput{
-			InstanceIds: ec2InstanceIdPtrs,
-		}
+	input := ec2.DescribeInstancesInput{
+		InstanceIds: ec2InstanceIdPtrs,
+	}
 
+	for {
 		ec2Result, err := utils.RetryThrottling(ec2Svc.DescribeInstances)(&input)
 		if err != nil {
 			log.WithField("error", err).Error("Failed to DescribeInstances!")
@@ -191,10 +208,10 @@ func DescribeInstancesStatus(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) ([]*s
 			l := log.WithField("_ec2Id", *is.InstanceId)
 
 			if *is.InstanceStatus.Status == ec2.SummaryStatusImpaired || *is.SystemStatus.Status == ec2.SummaryStatusImpaired {
-				l.Info("Unhealthy instance")
+				l.Error("Unhealthy instance")
 				unhealthyInstanceIdPtrs = append(unhealthyInstanceIdPtrs, is.InstanceId)
 			} else {
-				l.Trace("Healthy instance")
+				l.Info("Healthy instance")
 				healthyInstanceIdPtrs = append(healthyInstanceIdPtrs, is.InstanceId)
 			}
 		}
@@ -204,7 +221,6 @@ func DescribeInstancesStatus(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) ([]*s
 		} else {
 			break
 		}
-
 	}
 
 	return healthyInstanceIdPtrs, unhealthyInstanceIdPtrs, nil
