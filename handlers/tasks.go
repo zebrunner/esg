@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,6 +28,9 @@ import (
 )
 
 func Create(c *gin.Context) {
+	// start context with deadline before any other action
+	startupTime, _ := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout)
+
 	remote := c.ClientIP()
 	l := log.WithField("remote", remote)
 	user, password, ok := c.Request.BasicAuth()
@@ -88,15 +92,16 @@ func Create(c *gin.Context) {
 	l.WithField("env", env).Debug("Env details")
 
 	if strings.Contains(env.TaskDefinitionFamily, "generic") {
-		_, err = service.CreateTaskDefinition(env)
+		taskDefinition, err := service.CreateTaskDefinition(env)
 		if err != nil {
 			log.WithError(err).Error("Failed to create task definition")
 			c.Error(utils.UnknownErr(fmt.Errorf("failed to create task defenition for generic"), err.Error())).SetType(gin.ErrorTypePublic)
 			return
 		}
+		env.TaskDefinitionFamily = fmt.Sprintf("%s:%v", env.TaskDefinitionFamily, *taskDefinition.Revision)
 	}
 
-	resp, seErr := service.GetServiceStarter(env, c, l).StartService()
+	resp, seErr := service.GetServiceStarter(env, c, l).StartService(startupTime)
 	if seErr != nil {
 		c.Error(seErr).SetType(gin.ErrorTypePublic)
 	} else {
