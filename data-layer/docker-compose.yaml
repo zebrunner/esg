@@ -11,10 +11,9 @@ services:
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 30s
+      interval: 20s
       timeout: 5s
       retries: 3
-      start_interval: 5s
       start_period: 5s  
     networks:
       - data-network
@@ -27,7 +26,7 @@ services:
     networks:
       - data-network
   redis:
-    image: redis:6
+    image: redis:6.2.6
     container_name: redis
     restart: always
     networks:
