@@ -257,6 +257,18 @@ func (starter genericStarter) StartService(startupTime context.Context) (map[str
 	//override request context, as after response is sent, request context is canceled
 	starter.basis.Request = starter.basis.Request.WithContext(context.Background())
 	go func() {
+		// create new task definition for generic task
+		taskDefinition, err := CreateTaskDefinition(starter.basis.Env)
+		// abort launch if failed to create new task definition 
+		if err != nil {
+			log.WithError(err).Error("Failed to create task definition")
+			zebrunner.AbortLaunch(starter.basis.Env.RouterUUID, starter.basis.Env.Workspace,
+				starter.basis.Env.Capabilities.LaunchUUID.ToPrimitive(), fmt.Sprintf("failed to create task defenition for generic: %v", err.Error()))
+			return
+		}
+		// set revision of newly created task definition
+		starter.basis.Env.TaskDefinitionFamily = fmt.Sprintf("%s:%v", starter.basis.Env.TaskDefinitionFamily, *taskDefinition.Revision)
+
 		_, startErr := basicStarter(starter).StartService(startupTime)
 
 		// abort launch if service startup returned error
