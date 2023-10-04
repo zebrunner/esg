@@ -113,7 +113,8 @@ func (s *startBasis) startTaskPhase(ctx context.Context) (essential *utils.Selen
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(nonEssential).Warn("Failed to start task, restarting...")
 		return
 	case s.Task = <-waitRequest.ResponseCh:
-		s.CachedTask.HealthAt = time.Now()
+		healthyTime := time.Now()
+		s.CachedTask.HealthAt = &healthyTime
 		s.CachedTask.Status = taskmap.TaskActive
 
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("task started")
@@ -316,7 +317,6 @@ func (starter basicStarter) StartService() (map[string]interface{}, *utils.Selen
 			}
 
 			if nonEssential != nil {
-
 				// flush data, next retry
 				if starter.basis.TaskId != nil {
 					// check abort status in case of non esential error
