@@ -172,7 +172,7 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (essential *utils.Sel
 	requestBody, err := s.Env.ReqCapabilities.ToRequestBody()
 	if err != nil {
 		essential = utils.CreationErr(fmt.Errorf("failed to start driver"), err.Error())
-		s.Log.WithError(nonEssential).Warn("Failed to start driver, stopping service...")
+		s.Log.WithError(essential).Warn("Failed to start driver, stopping service...")
 		return
 	}
 
@@ -184,7 +184,7 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (essential *utils.Sel
 	startSessionRequest, err := http.NewRequest(http.MethodPost, reqUrl.String(), requestBody)
 	if err != nil {
 		essential = utils.CreationErr(fmt.Errorf("failed to start driver"), err.Error())
-		s.Log.WithError(nonEssential).Warn("Failed to start driver, stopping service...")
+		s.Log.WithError(essential).Warn("Failed to start driver, stopping service...")
 		return
 	}
 
@@ -197,7 +197,7 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (essential *utils.Sel
 		essential = utils.CreationErr(fmt.Errorf("service startup timed out"))
 		return
 	case essentialReason := <-waitRequest.EssentialErrCh:
-		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to start driver, stopping service...")
+		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essentialReason).Info("Failed to start driver, stopping service...")
 		essential = utils.CreationErr(fmt.Errorf("failed to start driver"), essentialReason.Error())
 		return
 	case nonEssential = <-waitRequest.NonEssentialErrCh:
