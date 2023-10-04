@@ -218,7 +218,7 @@ func buildCypress(workspace string, routerUUID string, caps *capabilities.Capabi
 	if zbrEnv != "" {
 		familyDefinition = zbrEnv + "-" + familyDefinition
 	}
-	log.Debug("Overidden TaskDefinitionFamily for cypress: " + familyDefinition)
+	log.Trace("Overidden TaskDefinitionFamily for cypress: " + familyDefinition)
 
 	containers := []*Container{&cloneContainer, &entrypointContainer, &cypressContainer, &recorderContainer, &uploaderContainer}
 	environment := ExecutionEnvironment{
