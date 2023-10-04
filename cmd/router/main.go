@@ -46,6 +46,8 @@ func ReverseProxy() gin.HandlerFunc {
 
 func CreateRouter() *gin.Engine {
 	r := gin.New()
+	r.ForwardedByClientIP = true
+
 	r.Use(gin.LoggerWithFormatter(utils.TraceLogFromating), gin.Recovery())
 
 	api := r.Group("/api", handlers.APIError, handlers.LowLvlAuthentication)
