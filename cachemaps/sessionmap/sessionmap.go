@@ -7,7 +7,6 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps/mapper"
-	"github.com/zebrunner/esg/cachemaps/taskmap"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
 )
@@ -41,7 +40,7 @@ type Session struct {
 	Workspace   string
 }
 
-func CreateEntity(sessionId string, env *environment.ExecutionEnvironment, task *taskmap.Task) (*Session, error) {
+func CreateEntity(sessionId string, env *environment.ExecutionEnvironment, taskId *string) (*Session, error) {
 	err := mapper.UpdateSessionId(env.RouterUUID, sessionId)
 	if err != nil {
 		log.WithError(err).Error("Session not cached!")
@@ -55,21 +54,14 @@ func CreateEntity(sessionId string, env *environment.ExecutionEnvironment, task 
 		AccessedAt:  time.Now(),
 		IdleTimeout: float64(env.Capabilities.IdleTimeout),
 		Network:     *env.Network,
-		TaskId:      task.TaskId,
+		TaskId:      *taskId,
 		Status:      SessionActive,
-		Workspace:   task.Workspace,
+		Workspace:   env.Workspace,
 	}
 
 	err = Write(cachedSession.SessionID, cachedSession, 0)
 	if err != nil {
 		log.WithError(err).Error("Session not cached!")
-		return nil, err
-	}
-
-	task.CurrentSessionID = sessionId
-	err = taskmap.Write(task.TaskId, task, -1)
-	if err != nil {
-		log.WithError(err).Error("Session id not cached for task!")
 		return nil, err
 	}
 

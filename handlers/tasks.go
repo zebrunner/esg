@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,6 +28,9 @@ import (
 )
 
 func Create(c *gin.Context) {
+	// start context with deadline before any other action
+	startupTime, _ := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout)
+
 	remote := c.ClientIP()
 	l := log.WithField("remote", remote)
 	user, password, ok := c.Request.BasicAuth()
@@ -51,6 +55,7 @@ func Create(c *gin.Context) {
 	if err != nil {
 		l.Warnf("Workspace for user %s not found", user)
 		c.Error(utils.AuthErr(err)).SetType(gin.ErrorTypePublic)
+		return
 	}
 
 	// not adding workspace to logs because as for now user and workspace have the same value
@@ -86,15 +91,7 @@ func Create(c *gin.Context) {
 	l.Info("new request")
 	l.WithField("env", env).Debug("Env details")
 
-	if strings.Contains(env.TaskDefinitionFamily, "generic") {
-		_, err = service.CreateTaskDefinition(env)
-		if err != nil {
-			log.WithError(err).Error("Failed to create task definition")
-			return
-		}
-	}
-
-	resp, seErr := service.GetServiceStarter(env, c, l).StartService()
+	resp, seErr := service.GetServiceStarter(env, c, l).StartService(startupTime)
 	if seErr != nil {
 		c.Error(seErr).SetType(gin.ErrorTypePublic)
 	} else {

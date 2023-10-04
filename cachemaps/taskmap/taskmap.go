@@ -42,9 +42,9 @@ type Task struct {
 	UsageTracked     bool
 	Workspace        string
 	RouterUUID       string
+	HealthAt         *time.Time
 	CurrentSessionID string                           `json:",omitempty"`
 	StopReason       StoppedReason                    `json:",omitempty"`
-	HealthAt         time.Time                        `json:",omitempty"`
 	Network          environment.NetworkConfiguration `json:",omitempty"`
 	AccessedAt       time.Time                        `json:",omitempty"`
 }
@@ -55,15 +55,17 @@ func CreateEntity(taskId string, env *environment.ExecutionEnvironment) (*Task, 
 		log.WithError(err).Error("Task not cached!")
 		return nil, err
 	}
+	creationTime := time.Now()
 	cachedTask := &Task{
 		TaskId:       taskId,
 		Capabilities: env.Capabilities,
 		Status:       TaskQueued,
 		RouterUUID:   env.RouterUUID,
 		Workspace:    env.Workspace,
+		HealthAt:     &creationTime,
 	}
 
-	err = Write(cachedTask.TaskId, cachedTask, 0)
+	err = Write(taskId, cachedTask, 0)
 	if err != nil {
 		log.WithError(err).Error("Task not cached!")
 		return nil, err
