@@ -80,6 +80,7 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 
 	provisioningTime := healthAt.Sub(startedAt) //diff between healthAt and startedAt provide task preparation time
 	l.Trace("provisioningSeconds: ", provisioningTime.Seconds())
+	l = l.WithField("provisioningSeconds", provisioningTime.Seconds())
 	netTime := int64(math.Ceil(duration.Seconds() - provisioningTime.Seconds()))
 	// if task completed before it was marked as healthy (case for generic tasks)
 	if netTime <= 0 {
