@@ -38,7 +38,7 @@ func startSession(req *http.Request, sessReq startSessRequest) {
 		if err == nil {
 			break
 		}
-		log.WithError(err).WithField("retry", i).Error("Failed to send request to ", req.URL.User.String())
+		log.WithError(err).WithField("retry", i).Error("Failed to send request to ", req.URL.String())
 	}
 
 	if err != nil {
