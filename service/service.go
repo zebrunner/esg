@@ -181,16 +181,15 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (essential *utils.Sel
 	reqUrl.Scheme = "http"
 	s.Log = s.Log.WithField("driver url", reqUrl)
 
-	startSessionRequest, err := http.NewRequest(http.MethodPost, reqUrl.String(), requestBody)
+	startSessionRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, reqUrl.String(), requestBody)
 	if err != nil {
 		essential = utils.CreationErr(fmt.Errorf("failed to start driver"), err.Error())
 		s.Log.WithError(essential).Warn("Failed to start driver, stopping service...")
 		return
 	}
-
 	startSessionRequest.Header = s.Request.Header
 
-	waitRequest := selenium.WaitForSessionStart(ctx, startSessionRequest)
+	waitRequest := selenium.WaitForSessionStart(startSessionRequest)
 	select {
 	case <-ctx.Done():
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("driver startup timed out")

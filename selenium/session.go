@@ -26,12 +26,21 @@ type startSessRequest struct {
 	ResponseCh        chan map[string]interface{}
 }
 
-func startSession(ctx context.Context, req *http.Request, sessReq startSessRequest) {
+func startSession(req *http.Request, sessReq startSessRequest) {
 	req.Method = http.MethodPost
 	req.Host = "localhost"
-	req = req.WithContext(ctx)
+	
+	retryCount := 2
+	var resp *http.Response
+	var err error
+	for i := 0; i < retryCount; i++ {
+		resp, err = httpClient.Do(req)
+		if err == nil {
+			break
+		}
+		log.WithError(err).WithField("retry", i).Error("Failed to send request to ", req.URL.User.String())
+	}
 
-	resp, err := httpClient.Do(req)
 	if err != nil {
 		sessReq.NonEssentialErrCh <- err
 		return
@@ -58,14 +67,14 @@ func startSession(ctx context.Context, req *http.Request, sessReq startSessReque
 	sessReq.ResponseCh <- reply
 }
 
-func WaitForSessionStart(ctx context.Context, request *http.Request) *startSessRequest {
+func WaitForSessionStart(request *http.Request) *startSessRequest {
 	sessReq := startSessRequest{
 		EssentialErrCh:    make(chan error),
 		NonEssentialErrCh: make(chan error),
 		ResponseCh:        make(chan map[string]interface{}),
 	}
 
-	go startSession(ctx, request, sessReq)
+	go startSession(request, sessReq)
 
 	return &sessReq
 }
