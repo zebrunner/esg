@@ -33,7 +33,7 @@ func startSession(ctx context.Context, req *http.Request, sessReq startSessReque
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		sessReq.EssentialErrCh <- err
+		sessReq.NonEssentialErrCh <- err
 		return
 	}
 
