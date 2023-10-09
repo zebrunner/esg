@@ -29,7 +29,7 @@ const (
 	imageRepo            = "public.ecr.aws/zebrunner/"
 	uploaderImage        = imageRepo + "uploader:3.3"
 	mitmImage            = imageRepo + "mitmproxy:1.2"
-	recorderImage        = imageRepo + "recorder:1.4"
+	recorderImage        = imageRepo + "recorder:1.5"
 	cypressRecorderImage = imageRepo + "cypress-recorder:1.2"
 	appiumImage          = imageRepo + "appium:2.0.5"
 	cloneImage           = imageRepo + "git:2.36.2"
