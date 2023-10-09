@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/zebrunner/esg/config"
 )
 
@@ -37,10 +38,13 @@ func GetAllEntities() ([]*Resources, error) {
 		return nil, err
 	}
 
-	resources := make([]*Resources, len(keys))
+	resources := make([]*Resources, 0, len(keys))
 	for _, uuid := range keys {
 		data, err := config.ResourcesConnection.Get(context.Background(), uuid).Result()
 		if err != nil {
+			if err == redis.Nil {
+				continue
+			}
 			return nil, err
 		}
 

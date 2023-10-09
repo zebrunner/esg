@@ -1,7 +1,5 @@
 FROM golang:1.18-alpine
 
-RUN apk add -U ca-certificates tzdata mailcap curl git && rm -Rf /var/cache/apk/*
-
 WORKDIR /esg
 
 # Download dependencies

@@ -93,8 +93,6 @@ func StopUnhealthyTasks(tasks []*ecs.Task, wg *sync.WaitGroup) {
 				}
 			} else {
 				maxTimeout := time.Duration(cachedTask.Capabilities.MaxTimeout) * time.Second
-				l.Trace("maxTimeout: ", maxTimeout)
-
 				if task.CreatedAt != nil && time.Since(*task.CreatedAt) > maxTimeout {
 					l.WithField("maxTimeout", maxTimeout).Warn("Aborting task due to the max timeout")
 					err := service.StopTask(cachedTask.TaskId, taskmap.TaskMaxTimeout)
@@ -549,12 +547,12 @@ func main() {
 	defer config.RedisTasksConnection.Close()
 	defer config.RedisDefinitionConnection.Close()
 
-	RefreshTaskDefinitions()
-
 	service.InitScalingData()
 
 	var wg sync.WaitGroup
 	wg.Add(1)
+
+	go RefreshTaskDefinitions()
 
 	go ScaleCluster()
 

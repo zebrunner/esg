@@ -1,7 +1,10 @@
 package service
 
 import (
+	"context"
 	"fmt"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"math/rand"
@@ -51,7 +54,26 @@ func InitAws() (*awsSession.Session, error) {
 	return sess, nil
 }
 
-func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDefinition *ecs.TaskDefinition, err error) {
+var (
+	definitionRegisterPause int64 = 0
+	pauseIncrement          int64 = 250
+)
+
+func getPreRequestPause() time.Duration {
+	pause := definitionRegisterPause
+	atomic.AddInt64(&definitionRegisterPause, pauseIncrement)
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(pause+pauseIncrement)*time.Millisecond)
+		defer cancel()
+		<-ctx.Done()
+		atomic.AddInt64(&definitionRegisterPause, -1*pauseIncrement)
+	}()
+
+	return time.Duration(pause) * time.Millisecond
+}
+
+func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (*ecs.TaskDefinition, error) {
 	svc := ecs.New(AwsSess)
 
 	networkMode := "bridge"
@@ -80,15 +102,26 @@ func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (taskDe
 			})
 		}
 	}
-
 	input.Volumes = volumes
 
-	resultTaskDefinition, err := utils.RetryThrottling(svc.RegisterTaskDefinition)(&input)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create task definition: %v", err)
-	}
+	var err error
+	i := 0
+	for ; i < 10; i++ {
+		time.Sleep(getPreRequestPause())
 
-	return resultTaskDefinition.TaskDefinition, nil
+		var resultTaskDefinition *ecs.RegisterTaskDefinitionOutput
+		resultTaskDefinition, err = utils.RetryThrottling(svc.RegisterTaskDefinition)(&input)
+
+		if err != nil {
+			log.WithField("retry", i).WithError(err).Warn("failed to create task definition")
+			if !strings.Contains(err.Error(), "ClientException") {
+				return nil, err
+			}
+		} else {
+			return resultTaskDefinition.TaskDefinition, nil
+		}
+	}
+	return nil, fmt.Errorf("failed to create task definition in %v retries: %v", i, err)
 }
 
 func ConstDelay(t time.Duration) func(int) time.Duration {
@@ -141,7 +174,7 @@ func StopTask(taskId string, stopReason taskmap.StoppedReason) error {
 
 	// Set pendingToStop status so no new StopTask() call for current task would be performed
 	cachedTask.Status = taskmap.TaskPendingToStop
-	taskmap.Write(cachedTask.TaskId, cachedTask,-1)
+	taskmap.Write(cachedTask.TaskId, cachedTask, -1)
 
 	err := StopTaskForcibly(cachedTask.TaskId, stopReason)
 	if err != nil {

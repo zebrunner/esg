@@ -325,7 +325,7 @@ func ScaleDown() {
 	}
 
 	if removeCount == 0 {
-		log.Debug("All instances are busy, scale down not allowed")
+		log.Trace("All instances are busy, scale down not allowed")
 		return
 	}
 

@@ -166,7 +166,6 @@ func DescribeInstances(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) ([]*ec2.Ins
 	input := ec2.DescribeInstancesInput{
 		InstanceIds: ec2InstanceIdPtrs,
 	}
-
 	for {
 		ec2Result, err := utils.RetryThrottling(ec2Svc.DescribeInstances)(&input)
 		if err != nil {
@@ -211,7 +210,7 @@ func DescribeInstancesStatus(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) ([]*s
 				l.Error("Unhealthy instance")
 				unhealthyInstanceIdPtrs = append(unhealthyInstanceIdPtrs, is.InstanceId)
 			} else {
-				l.Info("Healthy instance")
+				l.Trace("Healthy instance")
 				healthyInstanceIdPtrs = append(healthyInstanceIdPtrs, is.InstanceId)
 			}
 		}

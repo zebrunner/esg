@@ -23,7 +23,7 @@ import (
 )
 
 type ServiceStarter interface {
-	StartService() (map[string]interface{}, *utils.SeleniumError)
+	StartService(context.Context) (map[string]interface{}, *utils.SeleniumError)
 }
 
 type startBasis struct {
@@ -113,7 +113,8 @@ func (s *startBasis) startTaskPhase(ctx context.Context) (essential *utils.Selen
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(nonEssential).Warn("Failed to start task, restarting...")
 		return
 	case s.Task = <-waitRequest.ResponseCh:
-		s.CachedTask.HealthAt = time.Now()
+		healthyTime := time.Now()
+		s.CachedTask.HealthAt = &healthyTime
 		s.CachedTask.Status = taskmap.TaskActive
 
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("task started")
@@ -171,7 +172,7 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (essential *utils.Sel
 	requestBody, err := s.Env.ReqCapabilities.ToRequestBody()
 	if err != nil {
 		essential = utils.CreationErr(fmt.Errorf("failed to start driver"), err.Error())
-		s.Log.WithError(nonEssential).Warn("Failed to start driver, stopping service...")
+		s.Log.WithError(essential).Warn("Failed to start driver, stopping service...")
 		return
 	}
 
@@ -183,7 +184,7 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (essential *utils.Sel
 	startSessionRequest, err := http.NewRequest(http.MethodPost, reqUrl.String(), requestBody)
 	if err != nil {
 		essential = utils.CreationErr(fmt.Errorf("failed to start driver"), err.Error())
-		s.Log.WithError(nonEssential).Warn("Failed to start driver, stopping service...")
+		s.Log.WithError(essential).Warn("Failed to start driver, stopping service...")
 		return
 	}
 
@@ -196,7 +197,7 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (essential *utils.Sel
 		essential = utils.CreationErr(fmt.Errorf("service startup timed out"))
 		return
 	case essentialReason := <-waitRequest.EssentialErrCh:
-		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to start driver, stopping service...")
+		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essentialReason).Info("Failed to start driver, stopping service...")
 		essential = utils.CreationErr(fmt.Errorf("failed to start driver"), essentialReason.Error())
 		return
 	case nonEssential = <-waitRequest.NonEssentialErrCh:
@@ -253,11 +254,23 @@ type genericStarter struct {
 	finalizeFunc func(basis *startBasis)
 }
 
-func (starter genericStarter) StartService() (map[string]interface{}, *utils.SeleniumError) {
+func (starter genericStarter) StartService(startupTime context.Context) (map[string]interface{}, *utils.SeleniumError) {
 	//override request context, as after response is sent, request context is canceled
 	starter.basis.Request = starter.basis.Request.WithContext(context.Background())
 	go func() {
-		_, startErr := basicStarter(starter).StartService()
+		// create new task definition for generic task
+		taskDefinition, err := CreateTaskDefinition(starter.basis.Env)
+		// abort launch if failed to create new task definition 
+		if err != nil {
+			log.WithError(err).Error("Failed to create task definition")
+			zebrunner.AbortLaunch(starter.basis.Env.RouterUUID, starter.basis.Env.Workspace,
+				starter.basis.Env.Capabilities.LaunchUUID.ToPrimitive(), fmt.Sprintf("failed to create task defenition for generic: %v", err.Error()))
+			return
+		}
+		// set revision of newly created task definition
+		starter.basis.Env.TaskDefinitionFamily = fmt.Sprintf("%s:%v", starter.basis.Env.TaskDefinitionFamily, *taskDefinition.Revision)
+
+		_, startErr := basicStarter(starter).StartService(startupTime)
 
 		// abort launch if service startup returned error
 		if startErr != nil {
@@ -280,10 +293,7 @@ func (starter basicStarter) finalize() {
 	}
 }
 
-func (starter basicStarter) StartService() (map[string]interface{}, *utils.SeleniumError) {
-	ctx, ctxCancel := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout)
-	defer ctxCancel()
-
+func (starter basicStarter) StartService(startupTime context.Context) (map[string]interface{}, *utils.SeleniumError) {
 	starter.basis.ServiceStart = time.Now()
 	starter.basis.Log.Info("service starting")
 
@@ -296,8 +306,8 @@ func (starter basicStarter) StartService() (map[string]interface{}, *utils.Selen
 		starter.basis.Log = starter.basis.Log.WithField("attempt", i)
 		success := true
 
-		for _, p := range starter.basis.Phases {
-			essential, nonEssential := p(ctx)
+		for _, phase := range starter.basis.Phases {
+			essential, nonEssential := phase(startupTime)
 			if starter.basis.Request.Context().Err() != nil {
 				// stop service starter, return error
 				if starter.basis.TaskId != nil {
@@ -316,7 +326,6 @@ func (starter basicStarter) StartService() (map[string]interface{}, *utils.Selen
 			}
 
 			if nonEssential != nil {
-
 				// flush data, next retry
 				if starter.basis.TaskId != nil {
 					// check abort status in case of non esential error
