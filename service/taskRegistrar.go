@@ -60,13 +60,8 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 			return
 		default:
 		}
-		// Random sleep to fix problems with parallel 100+ threads startup. Not applicable for generic tasks!
-		//TODO: uncomment before release!
-		/*		if env.TaskDefinitionFamily != "generic" {
-					sleep := time.Duration(rand.Intn(30)) * time.Second
-					time.Sleep(sleep)
-				}
-		*/
+
+		// do not pause after ctx deadline check and before ecs call
 
 		var resultRunTask *ecs.RunTaskOutput
 		resultRunTask, err := svc.RunTask(runTaskInput)
@@ -126,9 +121,9 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 
 func WaitForTaskRegister(ctx context.Context, env environment.ExecutionEnvironment) *registerWaitRequest {
 	waitReq := registerWaitRequest{
-		NonEssentialErrCh: make(chan error),
-		EssentialErrCh:    make(chan error),
-		ResponseCh:        make(chan string),
+		NonEssentialErrCh: make(chan error, 1),
+		EssentialErrCh:    make(chan error, 1),
+		ResponseCh:        make(chan string, 1),
 	}
 
 	go registerTask(ctx, env, waitReq)

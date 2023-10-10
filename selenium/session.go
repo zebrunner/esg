@@ -60,9 +60,9 @@ func startSession(ctx context.Context, req *http.Request, sessReq startSessReque
 
 func WaitForSessionStart(ctx context.Context, request *http.Request) *startSessRequest {
 	sessReq := startSessRequest{
-		EssentialErrCh:    make(chan error),
-		NonEssentialErrCh: make(chan error),
-		ResponseCh:        make(chan map[string]interface{}),
+		EssentialErrCh:    make(chan error, 1),
+		NonEssentialErrCh: make(chan error, 1),
+		ResponseCh:        make(chan map[string]interface{}, 1),
 	}
 
 	go startSession(ctx, request, sessReq)
