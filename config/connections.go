@@ -3,7 +3,7 @@ package config
 import (
 	"context"
 
-	redis "github.com/go-redis/redis/v8"
+	redis "github.com/redis/go-redis/v9"
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
 )
