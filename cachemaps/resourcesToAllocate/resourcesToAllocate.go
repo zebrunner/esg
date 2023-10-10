@@ -20,7 +20,7 @@ func AddEntity(resources *Resources) error {
 		return err
 	}
 
-	err = config.ResourcesConnection.Set(context.Background(), resources.UUID, data, 0).Err()
+	err = config.ResourcesConnection.Set(context.Background(), resources.UUID, data, config.Conf.ServiceStartupTimeout).Err()
 	if err != nil {
 		return err
 	}
