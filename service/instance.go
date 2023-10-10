@@ -162,9 +162,9 @@ func (w *instanceWatchWorker) start() {
 func (w *instanceWatchWorker) waitForInstance(ctx context.Context, task *ecs.Task) *instanceWaitRequest {
 	req := instanceWaitRequest{
 		ctx:                  ctx,
-		EssentialErrCh:       make(chan error),
-		NonEssentialErrCh:    make(chan error),
-		ResponseCh:           make(chan *ec2.Instance),
+		EssentialErrCh:       make(chan error, 1),
+		NonEssentialErrCh:    make(chan error, 1),
+		ResponseCh:           make(chan *ec2.Instance, 1),
 		containerInstanceArn: task.ContainerInstanceArn,
 	}
 
