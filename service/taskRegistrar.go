@@ -80,8 +80,7 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 			if errStr == "ClientException: Tasks provisioning capacity limit exceeded." || strings.Contains(errStr, "ThrottlingException: Rate exceeded") {
 				l.WithError(err).Trace("Task register failed.")
 				if !markedToAllocate {
-					resources := env.CalculateResources()
-					err := resourcesToAllocate.AddEntity(resources)
+					resourcesToAllocate.AddEntity(env.CalculateResources())
 					if err != nil {
 						l.Info("Failed to cache resource allocation")
 					}

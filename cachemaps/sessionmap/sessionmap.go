@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps/mapper"
 	"github.com/zebrunner/esg/config"
@@ -69,7 +70,7 @@ func CreateEntity(sessionId string, env *environment.ExecutionEnvironment, taskI
 }
 
 func Find(sessionId string, rewriteAccessTime bool) (*Session, error) {
-	sessionData, err := config.RedisSessionsConnection.Get(context.Background(), sessionId).Result()
+	sessionData, err := config.RedisSessionsClient.Get(context.Background(), sessionId).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +109,7 @@ func Write(sessionId string, session *Session, expiration time.Duration) error {
 		return err
 	}
 
-	err = config.RedisSessionsConnection.Set(context.Background(), sessionId, data, expiration).Err()
+	err = config.RedisSessionsClient.Set(context.Background(), sessionId, data, expiration).Err()
 	if err != nil {
 		return err
 	}
@@ -120,6 +121,37 @@ func Write(sessionId string, session *Session, expiration time.Duration) error {
 	return nil
 }
 
-func Keys() ([]string, error) {
-	return config.RedisSessionsConnection.Keys(context.Background(), "*").Result()
+func Sessions() ([]Session, error) {
+	keys, err := config.RedisSessionsClient.Keys(context.Background(), "*").Result()
+	if err != nil {
+		return nil, err
+	}
+
+	rdbPipe := config.RedisSessionsClient.Pipeline()
+	for _, key := range keys {
+		rdbPipe.Get(context.Background(), key)
+	}
+
+	cmds, err := rdbPipe.Exec(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	sessions := make([]Session, 0)
+	for _, cmd := range cmds {
+		data, err := cmd.(*redis.StringCmd).Result()
+		if err != nil {
+			log.WithError(err).Warn("Failed to get cached session")
+			continue
+		}
+
+		var session Session
+		err = json.Unmarshal([]byte(data), &session)
+		if err != nil {
+			return nil, err
+		}
+		sessions = append(sessions, session)
+	}
+
+	return sessions, nil
 }

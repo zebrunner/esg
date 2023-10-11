@@ -20,7 +20,7 @@ func InitEntity(routerUUID string) error {
 		return err
 	}
 
-	err = config.RedisIdMapperConnection.Set(context.Background(), routerUUID, data, 0).Err()
+	err = config.RedisIdMapperClient.Set(context.Background(), routerUUID, data, config.Conf.ServiceStartupTimeout).Err()
 	if err != nil {
 		return err
 	}
@@ -61,7 +61,7 @@ func UpdateTaskId(routerUUID string, taskId string) error {
 		return err
 	}
 
-	err = config.RedisIdMapperConnection.Set(context.Background(), routerUUID, data, 0).Err()
+	err = config.RedisIdMapperClient.Set(context.Background(), routerUUID, data, 0).Err()
 	if err != nil {
 		return err
 	}
@@ -82,7 +82,7 @@ func UpdateSessionId(routerUUID string, sessionId string) error {
 		return err
 	}
 
-	err = config.RedisIdMapperConnection.Set(context.Background(), routerUUID, data, 0).Err()
+	err = config.RedisIdMapperClient.Set(context.Background(), routerUUID, data, 0).Err()
 	if err != nil {
 		return err
 	}
@@ -91,7 +91,7 @@ func UpdateSessionId(routerUUID string, sessionId string) error {
 }
 
 func find(routerUUID string) (*IdMapper, error) {
-	data, err := config.RedisIdMapperConnection.Get(context.Background(), routerUUID).Result()
+	data, err := config.RedisIdMapperClient.Get(context.Background(), routerUUID).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -107,5 +107,5 @@ func find(routerUUID string) (*IdMapper, error) {
 
 // only internal usage (use methods from sessionmap/taskmap)
 func SetExpire(routerUUID string, expiration time.Duration) error {
-	return config.RedisIdMapperConnection.Expire(context.Background(), routerUUID, expiration).Err()
+	return config.RedisIdMapperClient.Expire(context.Background(), routerUUID, expiration).Err()
 }

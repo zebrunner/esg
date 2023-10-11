@@ -1,10 +1,8 @@
 package service
 
 import (
-	"context"
 	"fmt"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"math/rand"
@@ -27,7 +25,8 @@ const (
 )
 
 var (
-	AwsSess *awsSession.Session
+	AwsSess          *awsSession.Session
+	progressivePause utils.ProgressivePause
 )
 
 func init() {
@@ -36,6 +35,7 @@ func init() {
 		log.Fatal("failed to init aws session")
 	}
 	AwsSess = sess
+	progressivePause = utils.CreateProgressivePause(0, 350)
 }
 
 func InitAws() (*awsSession.Session, error) {
@@ -52,25 +52,6 @@ func InitAws() (*awsSession.Session, error) {
 	}
 
 	return sess, nil
-}
-
-var (
-	definitionRegisterPause int64 = 0
-	pauseIncrement          int64 = 250
-)
-
-func getPreRequestPause() time.Duration {
-	pause := definitionRegisterPause
-	atomic.AddInt64(&definitionRegisterPause, pauseIncrement)
-
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(pause+pauseIncrement)*time.Millisecond)
-		defer cancel()
-		<-ctx.Done()
-		atomic.AddInt64(&definitionRegisterPause, -1*pauseIncrement)
-	}()
-
-	return time.Duration(pause) * time.Millisecond
 }
 
 func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (*ecs.TaskDefinition, error) {
@@ -107,7 +88,7 @@ func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (*ecs.T
 	var err error
 	i := 0
 	for ; i < 10; i++ {
-		time.Sleep(getPreRequestPause())
+		time.Sleep(progressivePause.GetPause())
 
 		var resultTaskDefinition *ecs.RegisterTaskDefinitionOutput
 		resultTaskDefinition, err = utils.RetryThrottling(svc.RegisterTaskDefinition)(&input)

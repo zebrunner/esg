@@ -289,7 +289,7 @@ type basicStarter struct {
 
 func (starter basicStarter) finalize() {
 	if starter.finalizeFunc != nil {
-		starter.finalizeFunc(starter.basis)
+		go starter.finalizeFunc(starter.basis)
 	}
 }
 

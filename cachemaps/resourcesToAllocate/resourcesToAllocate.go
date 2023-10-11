@@ -3,9 +3,18 @@ package resourcesToAllocate
 import (
 	"context"
 	"encoding/json"
+	"sync"
+	"time"
+
 	"github.com/redis/go-redis/v9"
+	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 )
+
+type ResourceWatchWorker struct {
+	resourcesToAdd    map[string]Resources
+	resourcesToDelete map[string]string
+}
 
 type Resources struct {
 	UUID   string
@@ -13,33 +22,83 @@ type Resources struct {
 	Memory int64
 }
 
-func AddEntity(resources *Resources) error {
-	data, err := json.Marshal(&resources)
-	if err != nil {
-		return err
-	}
+var (
+	resourceWorker ResourceWatchWorker
+	mutex          = &sync.RWMutex{}
+)
 
-	err = config.ResourcesConnection.Set(context.Background(), resources.UUID, data, config.Conf.ServiceStartupTimeout).Err()
-	if err != nil {
-		return err
+func InitResourceWatchWorker() {
+	resourceWorker = ResourceWatchWorker{
+		resourcesToAdd:    make(map[string]Resources, 0),
+		resourcesToDelete: make(map[string]string, 0),
 	}
-
-	return nil
+	go sendToRedis()
 }
 
-func RemoveEntity(uuid string) error {
-	return config.ResourcesConnection.Del(context.Background(), uuid).Err()
+func sendToRedis() {
+	for {
+		time.Sleep(15 * time.Second)
+		// save arr to new pointer and flush from resourceWatchWorker
+		mutex.Lock()
+		toAdd := resourceWorker.resourcesToAdd
+		toDelete := resourceWorker.resourcesToDelete
+		resourceWorker.resourcesToAdd = make(map[string]Resources, 0)
+		resourceWorker.resourcesToDelete = make(map[string]string, 0)
+		mutex.Unlock()
+
+		for uuid := range toDelete {
+			if _, ok := toAdd[uuid]; ok {
+				delete(toAdd, uuid)
+				delete(toDelete, uuid)
+			}
+		}
+
+		if len(toAdd) == 0 && len(toDelete) == 0 {
+			continue
+		}
+
+		rdbPipe := config.RedisResourcesClient.Pipeline()
+		for _, resource := range toAdd {
+			data, err := json.Marshal(resource)
+			if err != nil {
+				log.WithError(err).WithField(config.RouterUuid, resource.UUID).Warn("Failed to marshal resource")
+				continue
+			}
+			rdbPipe.Set(context.Background(), resource.UUID, data, 10*time.Minute)
+		}
+
+		for uuid := range toDelete {
+			rdbPipe.Del(context.Background(), uuid)
+		}
+
+		_, err := rdbPipe.Exec(context.Background())
+		if err != nil {
+			log.Warn("Failed to updated resources cache")
+		}
+	}
+}
+
+func AddEntity(resources *Resources) {
+	mutex.Lock()
+	resourceWorker.resourcesToAdd[resources.UUID] = *resources
+	mutex.Unlock()
+}
+
+func RemoveEntity(uuid string) {
+	mutex.Lock()
+	resourceWorker.resourcesToDelete[uuid] = uuid
+	mutex.Unlock()
 }
 
 func GetAllEntities() ([]*Resources, error) {
-	keys, err := config.ResourcesConnection.Keys(context.Background(), "*").Result()
+	keys, err := config.RedisResourcesClient.Keys(context.Background(), "*").Result()
 	if err != nil {
 		return nil, err
 	}
 
 	resources := make([]*Resources, 0, len(keys))
 	for _, uuid := range keys {
-		data, err := config.ResourcesConnection.Get(context.Background(), uuid).Result()
+		data, err := config.RedisResourcesClient.Get(context.Background(), uuid).Result()
 		if err != nil {
 			if err == redis.Nil {
 				continue

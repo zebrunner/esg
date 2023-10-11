@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/zebrunner/esg/cachemaps/mapper"
@@ -75,7 +76,7 @@ func CreateEntity(taskId string, env *environment.ExecutionEnvironment) (*Task, 
 }
 
 func Find(taskId string, rewriteAccessTime bool) (*Task, error) {
-	sessionData, err := config.RedisTasksConnection.Get(context.Background(), taskId).Result()
+	sessionData, err := config.RedisTasksClient.Get(context.Background(), taskId).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +115,7 @@ func Write(taskId string, task *Task, expiration time.Duration) error {
 		return err
 	}
 
-	err = config.RedisTasksConnection.Set(context.Background(), taskId, data, expiration).Err()
+	err = config.RedisTasksClient.Set(context.Background(), taskId, data, expiration).Err()
 	if err != nil {
 		return err
 	}
@@ -126,6 +127,51 @@ func Write(taskId string, task *Task, expiration time.Duration) error {
 	return nil
 }
 
+func WriteAll(tasks []Task, expiration time.Duration) error {
+	rdbPipe := config.RedisTasksClient.Pipeline()
+	for _, task := range tasks {
+		data, err := json.Marshal(task)
+		if err != nil {
+			return err
+		}
+		rdbPipe.Set(context.Background(), task.TaskId, data, expiration)
+	}
+
+	_, err := rdbPipe.Exec(context.Background())
+	return err
+}
+
 func Keys() ([]string, error) {
-	return config.RedisTasksConnection.Keys(context.Background(), "*").Result()
+	return config.RedisTasksClient.Keys(context.Background(), "*").Result()
+}
+
+func Tasks(taskIdArr []string) ([]Task, error) {
+	rdbPipe := config.RedisTasksClient.Pipeline()
+
+	for _, taskId := range taskIdArr {
+		rdbPipe.Get(context.Background(), taskId)
+	}
+
+	cmds, err := rdbPipe.Exec(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	tasks := make([]Task, 0)
+	for _, cmd := range cmds {
+		data, err := cmd.(*redis.StringCmd).Result()
+		if err != nil {
+			log.WithError(err).Warn("Failed to get cached task")
+			continue
+		}
+
+		var task Task
+		err = json.Unmarshal([]byte(data), &task)
+		if err != nil {
+			return nil, err
+		}
+		tasks = append(tasks, task)
+	}
+
+	return tasks, nil
 }
