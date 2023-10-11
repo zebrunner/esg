@@ -81,9 +81,6 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 				l.WithError(err).Trace("Task register failed.")
 				if !markedToAllocate {
 					resourcesToAllocate.AddEntity(env.CalculateResources())
-					if err != nil {
-						l.Info("Failed to cache resource allocation")
-					}
 					markedToAllocate = true
 				}
 				sleepRateLimit := time.Duration(20+rand.Intn(4)) * time.Second

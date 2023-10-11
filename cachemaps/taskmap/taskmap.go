@@ -128,13 +128,43 @@ func Write(taskId string, task *Task, expiration time.Duration) error {
 }
 
 func WriteAll(tasks []Task, expiration time.Duration) error {
+	if expiration < 0 {
+		return writeAllWithoutUuidUpdate(tasks)
+	} else {
+		return writeAllWithUuidUpdate(tasks, expiration)
+	}
+}
+
+func writeAllWithUuidUpdate(tasks []Task, expiration time.Duration) error {
+	rdbPipe := config.RedisTasksClient.Pipeline()
+	uuidList := make([]string, 0, len(tasks))
+	for _, task := range tasks {
+		uuidList = append(uuidList, task.RouterUUID)
+
+		data, err := json.Marshal(task)
+		if err != nil {
+			return err
+		}
+		rdbPipe.Set(context.Background(), task.TaskId, data, expiration)
+	}
+
+	_, err := rdbPipe.Exec(context.Background())
+	if err != nil {
+		return err
+	}
+
+	err = mapper.SetExpireForSeveralRecords(uuidList, expiration)
+	return err
+}
+
+func writeAllWithoutUuidUpdate(tasks []Task) error {
 	rdbPipe := config.RedisTasksClient.Pipeline()
 	for _, task := range tasks {
 		data, err := json.Marshal(task)
 		if err != nil {
 			return err
 		}
-		rdbPipe.Set(context.Background(), task.TaskId, data, expiration)
+		rdbPipe.Set(context.Background(), task.TaskId, data, -1)
 	}
 
 	_, err := rdbPipe.Exec(context.Background())

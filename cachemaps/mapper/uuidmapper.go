@@ -109,3 +109,13 @@ func find(routerUUID string) (*IdMapper, error) {
 func SetExpire(routerUUID string, expiration time.Duration) error {
 	return config.RedisIdMapperClient.Expire(context.Background(), routerUUID, expiration).Err()
 }
+
+func SetExpireForSeveralRecords(routerUUIDs []string, expiration time.Duration) error {
+	rdbPipe := config.RedisIdMapperClient.Pipeline()
+	for _, routerUUID := range routerUUIDs {
+		rdbPipe.Expire(context.Background(), routerUUID, expiration)
+	}
+
+	_, err := rdbPipe.Exec(context.Background())
+	return err
+}

@@ -79,6 +79,10 @@ func getAllDefinitions() (map[string]int64, error) {
 			continue
 		}
 
+		if data == taskDefenititonRefreshDone {
+			continue
+		}
+		
 		var hr hashRevision
 		err = json.Unmarshal([]byte(data), &hr)
 		if err != nil {
