@@ -15,14 +15,16 @@ type IdMapper struct {
 }
 
 func InitEntity(routerUUID string) error {
-	data, err := json.Marshal(&IdMapper{RouterUUID: routerUUID})
-	if err != nil {
-		return err
+	uuidMapper := WriteItme{
+		Mapper:     IdMapper{RouterUUID: routerUUID},
+		Expiration: 10 * time.Minute,
 	}
 
-	err = config.RedisIdMapperClient.Set(context.Background(), routerUUID, data, config.Conf.ServiceStartupTimeout).Err()
-	if err != nil {
+	responseCh, errCh := WriteMapper(routerUUID, uuidMapper)
+	select {
+	case err := <-errCh:
 		return err
+	case <-responseCh:
 	}
 
 	return nil
@@ -46,48 +48,6 @@ func FindSessionId(routerUUID string) (*string, error) {
 	}
 
 	return &mapper.SessionID, nil
-}
-
-// only internal usage (use methods from sessionmap/taskmap)
-func UpdateTaskId(routerUUID string, taskId string) error {
-	mapper, err := find(routerUUID)
-	if err != nil {
-		return err
-	}
-
-	mapper.TaskId = taskId
-	data, err := json.Marshal(mapper)
-	if err != nil {
-		return err
-	}
-
-	err = config.RedisIdMapperClient.Set(context.Background(), routerUUID, data, 0).Err()
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// only internal usage (use methods from sessionmap/taskmap)
-func UpdateSessionId(routerUUID string, sessionId string) error {
-	mapper, err := find(routerUUID)
-	if err != nil {
-		return err
-	}
-
-	mapper.SessionID = sessionId
-	data, err := json.Marshal(mapper)
-	if err != nil {
-		return err
-	}
-
-	err = config.RedisIdMapperClient.Set(context.Background(), routerUUID, data, 0).Err()
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func find(routerUUID string) (*IdMapper, error) {

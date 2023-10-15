@@ -42,10 +42,16 @@ type Session struct {
 }
 
 func CreateEntity(sessionId string, env *environment.ExecutionEnvironment, taskId *string) (*Session, error) {
-	err := mapper.UpdateSessionId(env.RouterUUID, sessionId)
-	if err != nil {
+	uuidMapper := mapper.WriteItme{
+		Mapper:     mapper.IdMapper{RouterUUID: env.RouterUUID, TaskId: *taskId, SessionID: sessionId},
+		Expiration: 0,
+	}
+	responseCh, errCh := mapper.WriteMapper(env.RouterUUID, uuidMapper)
+	select {
+	case err := <-errCh:
 		log.WithError(err).Error("Session not cached!")
 		return nil, err
+	case <-responseCh:
 	}
 
 	cachedSession := &Session{
@@ -60,7 +66,7 @@ func CreateEntity(sessionId string, env *environment.ExecutionEnvironment, taskI
 		Workspace:   env.Workspace,
 	}
 
-	err = Write(cachedSession.SessionID, cachedSession, 0)
+	err := Write(cachedSession.SessionID, cachedSession, 0)
 	if err != nil {
 		log.WithError(err).Error("Session not cached!")
 		return nil, err
@@ -112,10 +118,6 @@ func Write(sessionId string, session *Session, expiration time.Duration) error {
 	err = config.RedisSessionsClient.Set(context.Background(), sessionId, data, expiration).Err()
 	if err != nil {
 		return err
-	}
-
-	if expiration > 0 {
-		mapper.SetExpire(session.RouterUUID, expiration)
 	}
 
 	return nil

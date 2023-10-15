@@ -140,33 +140,23 @@ func StopTaskForcibly(taskId string, stopReason taskmap.StoppedReason) error {
 	return err
 }
 
-func StopTask(taskId string, stopReason taskmap.StoppedReason) error {
-	cachedTask, _ := taskmap.Find(taskId, false)
-	if cachedTask == nil {
-		return StopTaskForcibly(taskId, stopReason)
-	}
-
-	if cachedTask.Status == taskmap.TaskStopped || cachedTask.Status == taskmap.TaskPendingToStop {
-		return fmt.Errorf("can't stop task that is stopped/pending to stop. Task status: %v", cachedTask.Status)
-	}
-
-	// Cache bakup on task stop fail
-	cachedTaskBak := *cachedTask
-
-	// Set pendingToStop status so no new StopTask() call for current task would be performed
-	cachedTask.Status = taskmap.TaskPendingToStop
-	taskmap.Write(cachedTask.TaskId, cachedTask, -1)
-
+func StopTask(cachedTask taskmap.Task, stopReason taskmap.StoppedReason) error {
 	err := StopTaskForcibly(cachedTask.TaskId, stopReason)
 	if err != nil {
-		taskmap.Write(cachedTask.TaskId, &cachedTaskBak, -1)
-	} else {
-		cachedTask.Status = taskmap.TaskStopped
-		cachedTask.StopReason = stopReason
-		taskmap.Write(cachedTask.TaskId, cachedTask, 10*time.Minute)
+		log.WithError(err).WithField(config.TaskIdKey, cachedTask.TaskId).Error("Failed to stop task!")
+		return err
 	}
 
-	return err
+	cachedTask.Status = taskmap.TaskStopped
+	cachedTask.StopReason = stopReason
+	responseCh, errCh := taskmap.UpdateTask(cachedTask.TaskId, taskmap.WriteItem{CachedTask: cachedTask, Expiration: 10 * time.Minute})
+	select {
+	case err := <-errCh:
+		return err
+	case <-responseCh:
+	}
+
+	return nil
 }
 
 func DescribeTask(taskArn string) (*ecs.DescribeTasksOutput, error) {

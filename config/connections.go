@@ -2,7 +2,7 @@ package config
 
 import (
 	"context"
-	// "time"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	redis "github.com/redis/go-redis/v9"
@@ -20,12 +20,14 @@ var (
 )
 
 func InitCache() error {
+	//default PoolTimeout - 4 seconds
+
 	// DB 0 - for sessions
 	RedisSessionsClient = redis.NewClient(&redis.Options{
 		Addr:        Conf.RedisConnectionString,
 		Password:    "",
 		DB:          0,
-//		PoolTimeout: 15 * time.Second,
+		PoolTimeout: 10 * time.Second,
 	})
 
 	_, err := RedisSessionsClient.Ping(context.Background()).Result()
@@ -39,7 +41,7 @@ func InitCache() error {
 		Addr:        Conf.RedisConnectionString,
 		Password:    "",
 		DB:          1,
-//		PoolTimeout: 15 * time.Second,
+		PoolTimeout: 10 * time.Second,
 	})
 
 	_, err = RedisTasksClient.Ping(context.Background()).Result()
@@ -53,7 +55,7 @@ func InitCache() error {
 		Addr:        Conf.RedisConnectionString,
 		Password:    "",
 		DB:          2,
-//		PoolTimeout: 15 * time.Second,
+		PoolTimeout: 10 * time.Second,
 	})
 
 	_, err = RedisDefinitionClient.Ping(context.Background()).Result()
@@ -67,7 +69,7 @@ func InitCache() error {
 		Addr:        Conf.RedisConnectionString,
 		Password:    "",
 		DB:          3,
-//		PoolTimeout: 15 * time.Second,
+		PoolTimeout: 10 * time.Second,
 	})
 
 	_, err = RedisIdMapperClient.Ping(context.Background()).Result()
@@ -81,7 +83,7 @@ func InitCache() error {
 		Addr:        Conf.RedisConnectionString,
 		Password:    "",
 		DB:          4,
-//		PoolTimeout: 15 * time.Second,
+		PoolTimeout: 10 * time.Second,
 	})
 
 	_, err = RedisCypressSetClient.Ping(context.Background()).Result()
@@ -96,7 +98,7 @@ func InitCache() error {
 		Addr:        Conf.RedisConnectionString,
 		Password:    "",
 		DB:          5,
-//		PoolTimeout: 15 * time.Second,
+		PoolTimeout: 10 * time.Second,
 	})
 
 	_, err = RedisResourcesClient.Ping(context.Background()).Result()

@@ -15,7 +15,9 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps/definitionmap"
+	"github.com/zebrunner/esg/cachemaps/mapper"
 	"github.com/zebrunner/esg/cachemaps/resourcesToAllocate"
+	"github.com/zebrunner/esg/cachemaps/taskmap"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/handlers"
 	"github.com/zebrunner/esg/service"
@@ -148,6 +150,8 @@ func main() {
 	defer config.RedisCypressSetClient.Close()
 	defer config.RedisIdMapperClient.Close()
 	defer config.RedisResourcesClient.Close()
+	mapper.InitUuidmapWorkers()
+	taskmap.InitTaskmapWorkers()
 
 	aws, err := service.InitAws()
 	if err != nil {

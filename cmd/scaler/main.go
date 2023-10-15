@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/zebrunner/esg/cachemaps/definitionmap"
+	"github.com/zebrunner/esg/cachemaps/mapper"
 	"github.com/zebrunner/esg/cachemaps/sessionmap"
 	"github.com/zebrunner/esg/cachemaps/taskmap"
 	"github.com/zebrunner/esg/capabilities"
@@ -94,7 +95,7 @@ func StopUnhealthyTasks(tasks []*ecs.Task, cachedTasksMap map[string]taskmap.Tas
 
 			if *task.HealthStatus == "UNHEALTHY" {
 				l.Warn("Aborting task due to UNHEALTHY HealthStatus")
-				err := service.StopTask(taskId, taskmap.TaskUnhealthy)
+				err := service.StopTask(cachedTask, taskmap.TaskUnhealthy)
 				if err != nil {
 					l.WithError(err).Error("Failed to stop the task")
 				}
@@ -107,7 +108,7 @@ func StopUnhealthyTasks(tasks []*ecs.Task, cachedTasksMap map[string]taskmap.Tas
 				maxTimeout := time.Duration(cachedTask.Capabilities.MaxTimeout) * time.Second
 				if task.CreatedAt != nil && time.Since(*task.CreatedAt) > maxTimeout {
 					l.WithField("maxTimeout", maxTimeout).Warn("Aborting task due to the max timeout")
-					err := service.StopTask(cachedTask.TaskId, taskmap.TaskMaxTimeout)
+					err := service.StopTask(cachedTask, taskmap.TaskMaxTimeout)
 					if err != nil {
 						l.WithError(err).Error("Failed to stop task. Trying to stop forcibly")
 						err := service.StopTaskForcibly(cachedTask.TaskId, taskmap.TaskMaxTimeout)
@@ -165,18 +166,14 @@ func StopLostTasks(keys []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 
 	for _, task := range tasks {
 		if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
+			if time.Since(*task.StartedAt) <= config.Conf.TaskUncachedTimeout {
+				continue
+			}
 			taskId := strings.Split(*task.TaskArn, "/")[2]
 			l := log.WithField(config.TaskIdKey, taskId)
 			l.Warn("Unrecognized task detected! Aborting")
 
-			cachedTask := &taskmap.Task{
-				TaskId: taskId,
-				Status: taskmap.TaskActive,
-			}
-			// maybe we can track lost task's session and restore lost cache
-			taskmap.Write(cachedTask.TaskId, cachedTask, 0)
-
-			err := service.StopTask(taskId, taskmap.TaskLost)
+			err := service.StopTaskForcibly(taskId, taskmap.TaskLost)
 			if err != nil {
 				l.WithError(err).Error("Failed to stop the task")
 			}
@@ -189,6 +186,7 @@ func StopLostTasks(keys []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 func TrackResourceUsage(tasks []*ecs.Task, cachedTasksMap map[string]taskmap.Task, wg *sync.WaitGroup) {
 	// analyze tasks response
 	tasksCacheToUpdate := make([]taskmap.Task, 0)
+	tasksToTrack := make(map[*taskmap.Task]*ecs.Task)
 	for _, task := range tasks {
 		taskId := strings.Split(*task.TaskArn, "/")[2]
 		l := log.WithField(config.TaskIdKey, taskId)
@@ -236,13 +234,17 @@ func TrackResourceUsage(tasks []*ecs.Task, cachedTasksMap map[string]taskmap.Tas
 			continue
 		}
 
-		zebrunner.TrackResourcesUsage(&cachedTask, task)
+		tasksToTrack[&cachedTask] = task
 	}
 
 	// Set tracked status and expiration time 5 minutes to be able to return taskId and stop reason for task
 	err := taskmap.WriteAll(tasksCacheToUpdate, 5*time.Minute)
 	if err != nil {
 		log.WithError(err).Error("Failed to update tracked tasks!")
+	} else {
+		for cachedTask, task := range tasksToTrack {
+			zebrunner.TrackResourcesUsage(cachedTask, task)
+		}
 	}
 
 	wg.Done()
@@ -276,8 +278,18 @@ func StopIdleTasks() {
 
 			idleTime := time.Since(session.AccessedAt).Seconds()
 			if idleTime > session.IdleTimeout {
+				sess, err := sessionmap.Find(session.SessionID, false)
+				if err != nil || time.Since(sess.AccessedAt).Seconds() <= sess.IdleTimeout {
+					continue
+				}
+
 				selenium.CloseSession(&session, sessionmap.SessionIdleTimeout)
-				err := service.StopTask(session.TaskId, taskmap.TaskAborted)
+				cachedTask, err := taskmap.Find(session.TaskId, false)
+				if err != nil {
+					l.WithError(err).Error("Failed find cached task with idle session!")
+					continue
+				}
+				err = service.StopTask(*cachedTask, taskmap.TaskAborted)
 				if err != nil {
 					l.WithError(err).Error("Failed to stop idle driver task!")
 				} else {
@@ -316,12 +328,14 @@ func StopCypressIdleTasks() {
 		}
 
 		tasksToStop := make([]string, 0)
+		cachedTasksMap := make(map[string]taskmap.Task)
 		for _, cachedTask := range cachedTasks {
 			l := log.WithField(config.TaskIdKey, cachedTask.TaskId)
 			idleTime := time.Since(cachedTask.AccessedAt).Seconds()
 			if idleTime > config.Conf.CypressIdleTimeout.Seconds() {
 				l.Debug("StopCypressIdleTasks: analyzing task for idleTimeout")
 				tasksToStop = append(tasksToStop, cachedTask.TaskId)
+				cachedTasksMap[cachedTask.TaskId] = cachedTask
 			}
 		}
 
@@ -337,7 +351,7 @@ func StopCypressIdleTasks() {
 			if *task.LastStatus == "STOPPED" || *task.DesiredStatus == "STOPPED" {
 				taskmap.RemoveFromCypressSet(taskId)
 			} else {
-				err := service.StopTask(taskId, taskmap.TaskAborted)
+				err := service.StopTask(cachedTasksMap[taskId], taskmap.TaskAborted)
 				if err != nil {
 					l.WithError(err).Error("Failed to stop cypress idle task!")
 					continue
@@ -561,6 +575,9 @@ func main() {
 	defer config.RedisCypressSetClient.Close()
 	defer config.RedisIdMapperClient.Close()
 	defer config.RedisResourcesClient.Close()
+
+	mapper.InitUuidmapWorkers()
+	taskmap.InitTaskmapWorkers()
 
 	service.InitScalingData()
 

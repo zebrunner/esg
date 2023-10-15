@@ -149,14 +149,18 @@ func rerouteProxy(path string, sessionId string) string {
 func CloseSession(c *gin.Context) {
 	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
 
-	l := log.WithField(config.TaskIdKey, sess.TaskId)
+	l := log.WithField(config.TaskIdKey, sess.TaskId).WithField(config.SessionIdKey, sess.SessionID)
 
 	selenium.CloseSession(sess, sessionmap.SessionFinished)
-	l = l.WithField(config.SessionIdKey, sess.SessionID)
 
-	err := service.StopTask(sess.TaskId, taskmap.TaskFinished)
+	cachedTask, err := taskmap.Find(sess.TaskId, false)
 	if err != nil {
-		l.WithError(err).Warn("Failed to stop task")
+		l.WithError(err).Warn("Failed to find task")
+	} else {
+		err = service.StopTask(*cachedTask, taskmap.TaskFinished)
+		if err != nil {
+			l.WithError(err).Warn("Failed to stop task")
+		}
 	}
 
 	l.Info("task closed")
@@ -172,7 +176,7 @@ func AbortTask(c *gin.Context) {
 		l = l.WithField("workspace", task.Workspace)
 	}
 
-	err := service.StopTask(task.TaskId, taskmap.TaskAborted)
+	err := service.StopTask(*task, taskmap.TaskAborted)
 	if err != nil {
 		l.WithError(err).Warn("Failed to stop task")
 	}

@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/zebrunner/esg/cachemaps"
 	"github.com/zebrunner/esg/cachemaps/mapper"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
@@ -51,11 +51,17 @@ type Task struct {
 }
 
 func CreateEntity(taskId string, env *environment.ExecutionEnvironment) (*Task, error) {
-	err := mapper.UpdateTaskId(env.RouterUUID, taskId)
-	if err != nil {
-		log.WithError(err).Error("Task not cached!")
-		return nil, err
+	uuidMapper := mapper.WriteItme{
+		Mapper:     mapper.IdMapper{RouterUUID: env.RouterUUID, TaskId: taskId},
+		Expiration: 0,
 	}
+	responseCh, errCh := mapper.WriteMapper(env.RouterUUID, uuidMapper)
+	select {
+	case err := <-errCh:
+		return nil, err
+	case <-responseCh:
+	}
+
 	creationTime := time.Now()
 	cachedTask := &Task{
 		TaskId:       taskId,
@@ -66,10 +72,11 @@ func CreateEntity(taskId string, env *environment.ExecutionEnvironment) (*Task, 
 		HealthAt:     &creationTime,
 	}
 
-	err = Write(taskId, cachedTask, 0)
-	if err != nil {
-		log.WithError(err).Error("Task not cached!")
+	responseCh, errCh = WriteTask(taskId, WriteItem{CachedTask: *cachedTask, Expiration: 0})
+	select {
+	case err := <-errCh:
 		return nil, err
+	case <-responseCh:
 	}
 
 	return cachedTask, nil
@@ -128,47 +135,27 @@ func Write(taskId string, task *Task, expiration time.Duration) error {
 }
 
 func WriteAll(tasks []Task, expiration time.Duration) error {
-	if expiration < 0 {
-		return writeAllWithoutUuidUpdate(tasks)
+	rdbPipe := config.RedisTasksClient.Pipeline()
+	tasksMap := make(map[string]Task, len(tasks))
+	if expiration > 0 {
+		uuidList := make([]string, 0, len(tasksMap))
+		for _, task := range tasks {
+			uuidList = append(uuidList, task.RouterUUID)
+			tasksMap[task.TaskId] = task
+		}
+
+		err := cachemaps.WriteAll(rdbPipe, tasksMap, expiration)
+		if err != nil {
+			return err
+		}
+
+		return mapper.SetExpireForSeveralRecords(uuidList, expiration)
 	} else {
-		return writeAllWithUuidUpdate(tasks, expiration)
-	}
-}
-
-func writeAllWithUuidUpdate(tasks []Task, expiration time.Duration) error {
-	rdbPipe := config.RedisTasksClient.Pipeline()
-	uuidList := make([]string, 0, len(tasks))
-	for _, task := range tasks {
-		uuidList = append(uuidList, task.RouterUUID)
-
-		data, err := json.Marshal(task)
-		if err != nil {
-			return err
+		for _, task := range tasks {
+			tasksMap[task.TaskId] = task
 		}
-		rdbPipe.Set(context.Background(), task.TaskId, data, expiration)
+		return cachemaps.WriteAll(rdbPipe, tasksMap, expiration)
 	}
-
-	_, err := rdbPipe.Exec(context.Background())
-	if err != nil {
-		return err
-	}
-
-	err = mapper.SetExpireForSeveralRecords(uuidList, expiration)
-	return err
-}
-
-func writeAllWithoutUuidUpdate(tasks []Task) error {
-	rdbPipe := config.RedisTasksClient.Pipeline()
-	for _, task := range tasks {
-		data, err := json.Marshal(task)
-		if err != nil {
-			return err
-		}
-		rdbPipe.Set(context.Background(), task.TaskId, data, -1)
-	}
-
-	_, err := rdbPipe.Exec(context.Background())
-	return err
 }
 
 func Keys() ([]string, error) {
@@ -178,30 +165,5 @@ func Keys() ([]string, error) {
 func Tasks(taskIdArr []string) ([]Task, error) {
 	rdbPipe := config.RedisTasksClient.Pipeline()
 
-	for _, taskId := range taskIdArr {
-		rdbPipe.Get(context.Background(), taskId)
-	}
-
-	cmds, err := rdbPipe.Exec(context.Background())
-	if err != nil {
-		return nil, err
-	}
-
-	tasks := make([]Task, 0)
-	for _, cmd := range cmds {
-		data, err := cmd.(*redis.StringCmd).Result()
-		if err != nil {
-			log.WithError(err).Warn("Failed to get cached task")
-			continue
-		}
-
-		var task Task
-		err = json.Unmarshal([]byte(data), &task)
-		if err != nil {
-			return nil, err
-		}
-		tasks = append(tasks, task)
-	}
-
-	return tasks, nil
+	return cachemaps.FindAll[Task](rdbPipe, taskIdArr)
 }

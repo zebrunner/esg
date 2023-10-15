@@ -83,7 +83,7 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 					resourcesToAllocate.AddEntity(env.CalculateResources())
 					markedToAllocate = true
 				}
-				sleepRateLimit := time.Duration(20+rand.Intn(4)) * time.Second
+				sleepRateLimit := time.Duration(20+rand.Intn(10)) * time.Second
 				time.Sleep(sleepRateLimit)
 			}
 
@@ -94,6 +94,8 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 		if len(resultRunTask.Failures) != 0 {
 			outputErr = fmt.Errorf(*resultRunTask.Failures[0].Reason)
 			l.WithError(outputErr).Debug("Task register failed. Response contains failures")
+			sleepRateLimit := time.Duration(5+(rand.Intn(15))) * time.Second
+			time.Sleep(sleepRateLimit)
 			continue
 		}
 

@@ -81,11 +81,14 @@ func (s *startBasis) registerTaskPhase(ctx context.Context) (essential *utils.Se
 		s.Log = s.Log.WithField(config.TaskIdKey, taskId)
 		s.TaskId = &taskId
 
-		s.CachedTask, nonEssential = taskmap.CreateEntity(taskId, s.Env)
-		if nonEssential != nil {
-			s.Log.WithError(nonEssential).Warn("Failed to cache task, restarting...")
-			StopTaskForcibly(taskId, taskmap.TaskStartupFailure)
-			return
+		var err error
+		for {
+			s.CachedTask, err = taskmap.CreateEntity(taskId, s.Env)
+			if err == nil {
+				break
+			}
+			s.Log.WithError(err).Error("Failed to cach task")
+			time.Sleep(5 * time.Second)
 		}
 
 		// add task to ctx, so we can add taskId to selenium err log if any failure will happen later
@@ -260,7 +263,7 @@ func (starter genericStarter) StartService(startupTime context.Context) (map[str
 	go func() {
 		// create new task definition for generic task
 		taskDefinition, err := CreateTaskDefinition(starter.basis.Env)
-		// abort launch if failed to create new task definition 
+		// abort launch if failed to create new task definition
 		if err != nil {
 			log.WithError(err).Error("Failed to create task definition")
 			zebrunner.AbortLaunch(starter.basis.Env.RouterUUID, starter.basis.Env.Workspace,
@@ -289,7 +292,7 @@ type basicStarter struct {
 
 func (starter basicStarter) finalize() {
 	if starter.finalizeFunc != nil {
-		go starter.finalizeFunc(starter.basis)
+		starter.finalizeFunc(starter.basis)
 	}
 }
 
@@ -310,8 +313,8 @@ func (starter basicStarter) StartService(startupTime context.Context) (map[strin
 			essential, nonEssential := phase(startupTime)
 			if starter.basis.Request.Context().Err() != nil {
 				// stop service starter, return error
-				if starter.basis.TaskId != nil {
-					StopTask(*starter.basis.TaskId, taskmap.TaskStartupFailure)
+				if starter.basis.CachedTask != nil {
+					StopTask(*starter.basis.CachedTask, taskmap.TaskStartupFailure)
 				}
 				seErr := utils.CreationErr(fmt.Errorf("service start has been canceled"))
 				return nil, seErr
@@ -319,23 +322,23 @@ func (starter basicStarter) StartService(startupTime context.Context) (map[strin
 
 			if essential != nil {
 				// stop service starter, return error
-				if starter.basis.TaskId != nil {
-					StopTask(*starter.basis.TaskId, taskmap.TaskStartupFailure)
+				if starter.basis.CachedTask != nil {
+					StopTask(*starter.basis.CachedTask, taskmap.TaskStartupFailure)
 				}
 				return nil, essential
 			}
 
 			if nonEssential != nil {
 				// flush data, next retry
-				if starter.basis.TaskId != nil {
+				if starter.basis.CachedTask != nil {
 					// check abort status in case of non esential error
-					task, err := taskmap.Find(*starter.basis.TaskId, false)
+					task, err := taskmap.Find(*&starter.basis.CachedTask.TaskId, false)
 					if err == nil && task.StopReason == taskmap.TaskAborted {
 						// stop service starter, return error
 						seErr := utils.CreationErr(fmt.Errorf("service start has been aborted"))
 						return nil, seErr
 					}
-					StopTask(*starter.basis.TaskId, taskmap.TaskStartupFailure)
+					StopTask(*starter.basis.CachedTask, taskmap.TaskStartupFailure)
 				}
 				starter.basis.Log = &logCopy
 				starter.basis.Task = nil
@@ -378,9 +381,11 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l 
 			basis: basis,
 			finalizeFunc: func(s *startBasis) {
 				s.CachedTask.Status = taskmap.TaskGeneric
-				err := taskmap.Write(s.CachedTask.TaskId, s.CachedTask, -1)
-				if err != nil {
+				responseCh, errCh := taskmap.UpdateTask(s.CachedTask.TaskId, taskmap.WriteItem{CachedTask: *s.CachedTask, Expiration: 0})
+				select {
+				case err := <-errCh:
 					basis.Log.WithError(err).Error("Failed to recache task on finalize!")
+				case <-responseCh:
 				}
 			},
 		}
@@ -392,11 +397,12 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l 
 			finalizeFunc: func(s *startBasis) {
 				s.CachedTask.Status = taskmap.TaskGeneric
 				s.CachedTask.AccessedAt = time.Now()
-				err := taskmap.Write(s.CachedTask.TaskId, s.CachedTask, -1)
-				if err != nil {
+				responseCh, errCh := taskmap.UpdateTask(s.CachedTask.TaskId, taskmap.WriteItem{CachedTask: *s.CachedTask, Expiration: 0})
+				select {
+				case err := <-errCh:
 					basis.Log.WithError(err).Error("Failed to recache task on finalize!")
+				case <-responseCh:
 				}
-				taskmap.AddToCypressSet(s.CachedTask.TaskId)
 			},
 		}
 	} else {
@@ -405,9 +411,11 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l 
 			basis: basis,
 			finalizeFunc: func(s *startBasis) {
 				//cache all collected data during startup
-				err := taskmap.Write(s.CachedTask.TaskId, s.CachedTask, -1)
-				if err != nil {
+				responseCh, errCh := taskmap.UpdateTask(s.CachedTask.TaskId, taskmap.WriteItem{CachedTask: *s.CachedTask, Expiration: 0})
+				select {
+				case err := <-errCh:
 					basis.Log.WithError(err).Error("Failed to recache task on finalize!")
+				case <-responseCh:
 				}
 			},
 		}
