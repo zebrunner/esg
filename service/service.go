@@ -89,6 +89,10 @@ func (s *startBasis) registerTaskPhase(ctx context.Context) (essential *utils.Se
 			}
 			s.Log.WithError(err).Error("Failed to cach task")
 			time.Sleep(5 * time.Second)
+			if ctx.Err() != nil {
+				nonEssential = err
+				return
+			}
 		}
 
 		// add task to ctx, so we can add taskId to selenium err log if any failure will happen later
@@ -221,10 +225,17 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (essential *utils.Sel
 		s.Log = s.Log.WithField(config.SessionIdKey, sessionId)
 
 		var sess *sessionmap.Session
-		sess, nonEssential = sessionmap.CreateEntity(sessionId, s.Env, s.TaskId)
-		if err != nil {
-			s.Log.WithError(err).Error("Failed to cache driver session")
-			return
+		for {
+			sess, err = sessionmap.CreateEntity(sessionId, s.Env, s.TaskId)
+			if err == nil {
+				break
+			}
+			s.Log.WithError(err).Error("Failed to cach session")
+			time.Sleep(5 * time.Second)
+			if ctx.Err() != nil {
+				nonEssential = err
+				return
+			}
 		}
 		s.CachedTask.CurrentSessionID = sessionId
 

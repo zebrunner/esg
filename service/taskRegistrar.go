@@ -26,7 +26,11 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 
 	family, err := env.GetFamilyRevision()
 	if err != nil {
-		waitRequest.EssentialErrCh <- fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily)
+		select {
+		case waitRequest.EssentialErrCh <- fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily):
+		default:
+		}
+
 		return
 	}
 	l := log.WithField("family", env.TaskDefinitionFamily)
@@ -73,7 +77,12 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 				if markedToAllocate {
 					resourcesToAllocate.RemoveEntity(env.RouterUUID)
 				}
-				waitRequest.EssentialErrCh <- fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily)
+
+				select {
+				case waitRequest.EssentialErrCh <- fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily):
+				default:
+				}
+
 				return
 			}
 
@@ -110,18 +119,24 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 		}
 
 		// All is ok. We got task then we can return it.
-		waitRequest.ResponseCh <- *resultRunTask.Tasks[0].TaskArn
+		select {
+		case waitRequest.ResponseCh <- *resultRunTask.Tasks[0].TaskArn:
+		default:
+		}
 		return
 	}
 
-	waitRequest.NonEssentialErrCh <- outputErr
+	select {
+	case waitRequest.NonEssentialErrCh <- outputErr:
+	default:
+	}
 }
 
 func WaitForTaskRegister(ctx context.Context, env environment.ExecutionEnvironment) *registerWaitRequest {
 	waitReq := registerWaitRequest{
-		NonEssentialErrCh: make(chan error, 1),
-		EssentialErrCh:    make(chan error, 1),
-		ResponseCh:        make(chan string, 1),
+		NonEssentialErrCh: make(chan error),
+		EssentialErrCh:    make(chan error),
+		ResponseCh:        make(chan string),
 	}
 
 	go registerTask(ctx, env, waitReq)
