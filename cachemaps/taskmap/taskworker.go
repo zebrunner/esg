@@ -102,5 +102,5 @@ To wait for response implement select switch construction
 	}
 */
 func WriteTask(cachedTask Task, expiration time.Duration) (<-chan interface{}, <-chan error) {
-	return updateWorker.AppendToWorker(config.TaskIdKey, TaskItem{CachedTask: cachedTask, Expiration: expiration})
+	return writeWorker.AppendToWorker(config.TaskIdKey, TaskItem{CachedTask: cachedTask, Expiration: expiration})
 }
