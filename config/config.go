@@ -20,7 +20,7 @@ var (
 	}
 	VendorPrefix = "zebrunner"
 	Conf         = Config{}
-	RouterUuid   = "_uuid"
+	RouterUUID   = "_uuid"
 	TaskIdKey    = "_taskId"
 	SessionIdKey = "sessionId"
 )

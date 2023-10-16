@@ -41,12 +41,9 @@ type Session struct {
 	Workspace   string
 }
 
+// Creates a new record in sessions redis db. Updates mapper's record with taskId, sessionId and resets expiration
 func CreateEntity(sessionId string, env *environment.ExecutionEnvironment, taskId *string) (*Session, error) {
-	uuidMapper := mapper.WriteItme{
-		Mapper:     mapper.IdMapper{RouterUUID: env.RouterUUID, TaskId: *taskId, SessionID: sessionId},
-		Expiration: 0,
-	}
-	responseCh, errCh := mapper.WriteMapper(env.RouterUUID, uuidMapper)
+	responseCh, errCh := mapper.WriteMapper(mapper.IdMapper{RouterUUID: env.RouterUUID, TaskId: *taskId, SessionID: sessionId}, 0)
 	select {
 	case err := <-errCh:
 		log.WithError(err).Error("Session not cached!")
@@ -66,13 +63,13 @@ func CreateEntity(sessionId string, env *environment.ExecutionEnvironment, taskI
 		Workspace:   env.Workspace,
 	}
 
-	err := Write(cachedSession.SessionID, cachedSession, 0)
-	if err != nil {
-		log.WithError(err).Error("Session not cached!")
+	responseCh, errCh = WriteSession(*cachedSession, 0)
+	select {
+	case err := <-errCh:
 		return nil, err
+	case <-responseCh:
+		return cachedSession, nil
 	}
-
-	return cachedSession, nil
 }
 
 func Find(sessionId string, rewriteAccessTime bool) (*Session, error) {
@@ -123,6 +120,7 @@ func Write(sessionId string, session *Session, expiration time.Duration) error {
 	return nil
 }
 
+// Returns all sessions from redis
 func Sessions() ([]Session, error) {
 	keys, err := config.RedisSessionsClient.Keys(context.Background(), "*").Result()
 	if err != nil {

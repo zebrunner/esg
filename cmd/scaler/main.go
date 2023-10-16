@@ -278,6 +278,7 @@ func StopIdleTasks() {
 
 			idleTime := time.Since(session.AccessedAt).Seconds()
 			if idleTime > session.IdleTimeout {
+				// refresh cached record and validate it one more time
 				sess, err := sessionmap.Find(session.SessionID, false)
 				if err != nil || time.Since(sess.AccessedAt).Seconds() <= sess.IdleTimeout {
 					continue
@@ -420,7 +421,7 @@ func RefreshTaskDefinition(image string) error {
 					return err
 				}
 
-				err = definitionmap.AddDefinition(newDefinition.OverrideDefinitionHash, newDefinition.RevisionTag)
+				err = definitionmap.AddRevision(newDefinition.OverrideDefinitionHash, newDefinition.RevisionTag)
 				if err != nil {
 					return err
 				}
@@ -453,7 +454,7 @@ func RefreshTaskDefinition(image string) error {
 				return err
 			}
 
-			err = definitionmap.AddDefinition(updatedDefinition.OverrideDefinitionHash, updatedDefinition.RevisionTag)
+			err = definitionmap.AddRevision(updatedDefinition.OverrideDefinitionHash, updatedDefinition.RevisionTag)
 			if err != nil {
 				return err
 			}
@@ -462,7 +463,7 @@ func RefreshTaskDefinition(image string) error {
 		}
 
 		l.Trace("Definition record is up-to-date")
-		err = definitionmap.AddDefinition(dbDefinition.OverrideDefinitionHash, dbDefinition.RevisionTag)
+		err = definitionmap.AddRevision(dbDefinition.OverrideDefinitionHash, dbDefinition.RevisionTag)
 		if err != nil {
 			return err
 		}
@@ -575,9 +576,11 @@ func main() {
 	defer config.RedisCypressSetClient.Close()
 	defer config.RedisIdMapperClient.Close()
 	defer config.RedisResourcesClient.Close()
-
-	mapper.InitUuidmapWorkers()
+	mapper.InitUUIDMapWorkers()
 	taskmap.InitTaskmapWorkers()
+	sessionmap.InitSessionmapWorker()
+	// scaler don't need ResourceWorker
+	// resourcesToAllocate.InitResourceWorker()
 
 	service.InitScalingData()
 

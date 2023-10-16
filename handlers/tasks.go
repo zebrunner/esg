@@ -86,7 +86,7 @@ func Create(c *gin.Context) {
 		return
 	}
 	env.ReqCapabilities = reqCaps
-	l = l.WithField("family", env.TaskDefinitionFamily).WithField(config.RouterUuid, env.RouterUUID)
+	l = l.WithField("family", env.TaskDefinitionFamily).WithField(config.RouterUUID, env.RouterUUID)
 
 	l.Info("new request")
 	l.WithField("env", env).Debug("Env details")
@@ -170,7 +170,7 @@ func CloseSession(c *gin.Context) {
 func AbortTask(c *gin.Context) {
 	task := c.MustGet(config.TaskIdKey).(*taskmap.Task)
 
-	l := log.WithField(config.RouterUuid, task.RouterUUID).WithField(config.TaskIdKey, task.TaskId)
+	l := log.WithField(config.RouterUUID, task.RouterUUID).WithField(config.TaskIdKey, task.TaskId)
 
 	if !config.Conf.SingleTenant {
 		l = l.WithField("workspace", task.Workspace)
@@ -187,7 +187,7 @@ func AbortTask(c *gin.Context) {
 
 func Vnc(c *gin.Context) {
 	routerUUID := c.Param("uuid")
-	l := log.WithField(config.RouterUuid, routerUUID)
+	l := log.WithField(config.RouterUUID, routerUUID)
 	l.Debug("Vnc request")
 
 	var network environment.NetworkConfiguration
@@ -321,7 +321,7 @@ func TaskDescribe(c *gin.Context) {
 		return
 	}
 	routerUUID := c.Param("task")
-	l := log.WithField("user", user).WithField(config.RouterUuid, routerUUID)
+	l := log.WithField("user", user).WithField(config.RouterUUID, routerUUID)
 	l.Debug("Get task status")
 
 	task, seErr := getTask(routerUUID)

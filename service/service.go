@@ -343,7 +343,7 @@ func (starter basicStarter) StartService(startupTime context.Context) (map[strin
 				// flush data, next retry
 				if starter.basis.CachedTask != nil {
 					// check abort status in case of non esential error
-					task, err := taskmap.Find(*&starter.basis.CachedTask.TaskId, false)
+					task, err := taskmap.Find(starter.basis.CachedTask.TaskId, false)
 					if err == nil && task.StopReason == taskmap.TaskAborted {
 						// stop service starter, return error
 						seErr := utils.CreationErr(fmt.Errorf("service start has been aborted"))
@@ -392,7 +392,7 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l 
 			basis: basis,
 			finalizeFunc: func(s *startBasis) {
 				s.CachedTask.Status = taskmap.TaskGeneric
-				responseCh, errCh := taskmap.UpdateTask(s.CachedTask.TaskId, taskmap.WriteItem{CachedTask: *s.CachedTask, Expiration: 0})
+				responseCh, errCh := taskmap.UpdateTask(*s.CachedTask, 0)
 				select {
 				case err := <-errCh:
 					basis.Log.WithError(err).Error("Failed to recache task on finalize!")
@@ -408,12 +408,13 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l 
 			finalizeFunc: func(s *startBasis) {
 				s.CachedTask.Status = taskmap.TaskGeneric
 				s.CachedTask.AccessedAt = time.Now()
-				responseCh, errCh := taskmap.UpdateTask(s.CachedTask.TaskId, taskmap.WriteItem{CachedTask: *s.CachedTask, Expiration: 0})
+				responseCh, errCh := taskmap.UpdateTask(*s.CachedTask, 0)
 				select {
 				case err := <-errCh:
 					basis.Log.WithError(err).Error("Failed to recache task on finalize!")
 				case <-responseCh:
 				}
+				taskmap.AddToCypressSet(s.CachedTask.TaskId)
 			},
 		}
 	} else {
@@ -422,7 +423,7 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l 
 			basis: basis,
 			finalizeFunc: func(s *startBasis) {
 				//cache all collected data during startup
-				responseCh, errCh := taskmap.UpdateTask(s.CachedTask.TaskId, taskmap.WriteItem{CachedTask: *s.CachedTask, Expiration: 0})
+				responseCh, errCh := taskmap.UpdateTask(*s.CachedTask, 0)
 				select {
 				case err := <-errCh:
 					basis.Log.WithError(err).Error("Failed to recache task on finalize!")

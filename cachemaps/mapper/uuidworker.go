@@ -3,130 +3,81 @@ package mapper
 import (
 	"context"
 	"encoding/json"
-	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps"
 	"github.com/zebrunner/esg/config"
 )
 
 var (
-	writeMutex   = sync.Mutex{}
-	expireMutex  = sync.Mutex{}
-	writeWorker  worker
-	expireWorker worker
+	writeWorker  cachemaps.RedisWorker[MapperItem]
+	expireWorker cachemaps.RedisWorker[MapperItem]
 )
 
-type WriteItme struct {
+type MapperItem struct {
 	Mapper     IdMapper
 	Expiration time.Duration
 }
 
-type worker struct {
-	conn         *redis.Conn
-	itemsToWrite map[string]WriteItme
-	// signals that work is done. Recieved item should not be used
-	responseCh chan interface{}
-	errCh      chan error
+// Inits 2 workers and starts them in new thread (write and expire worker).
+// Write worker -> creates new records/rewrites existing ones.
+// Expire worker -> sets expiration time for existing records. Expiration value of <= 0 deletes the record immediately
+func InitUUIDMapWorkers() {
+	writeWorker = cachemaps.CreateRedisWorker[MapperItem](config.RedisIdMapperClient, writeRecords)
+	go writeWorker.Start(1 * time.Second)
+
+	expireWorker = cachemaps.CreateRedisWorker[MapperItem](config.RedisIdMapperClient, expireRecords)
+	go expireWorker.Start(1 * time.Second)
 }
 
-func InitUuidmapWorkers() {
-	writeWorker = worker{
-		conn:         config.RedisIdMapperClient.Conn(),
-		itemsToWrite: make(map[string]WriteItme, 0),
-		responseCh:   make(chan interface{}),
-		errCh:        make(chan error),
-	}
-	go startWriteWorker()
-
-	expireWorker = worker{
-		conn:         config.RedisIdMapperClient.Conn(),
-		itemsToWrite: make(map[string]WriteItme, 0),
-		responseCh:   make(chan interface{}),
-		errCh:        make(chan error),
-	}
-
-	go startExpireWorker()
-}
-
-func (w *worker) flush() {
-	w.itemsToWrite = make(map[string]WriteItme, 0)
-	w.responseCh = make(chan interface{})
-	w.errCh = make(chan error)
-}
-
-func startWriteWorker() {
-	for {
-		time.Sleep(1 * time.Second)
-		writeMutex.Lock()
-		items := writeWorker.itemsToWrite
-		responseCh := writeWorker.responseCh
-		errCh := writeWorker.errCh
-		writeWorker.flush()
-		writeMutex.Unlock()
-
-		if len(items) == 0 {
+func writeRecords(rdsConn *redis.Conn, items map[string]MapperItem) error {
+	rdbWritePipeline := rdsConn.Pipeline()
+	for routerUUID, item := range items {
+		data, err := json.Marshal(&item.Mapper)
+		if err != nil {
+			log.WithError(err).WithField(config.RouterUUID, routerUUID).Error("Failed to marshal record")
 			continue
 		}
 
-		rdbWritePipeline := writeWorker.conn.Pipeline()
-		for _, item := range items {
-			data, _ := json.Marshal(&item.Mapper)
-			rdbWritePipeline.Set(context.Background(), item.Mapper.RouterUUID, data, item.Expiration)
-		}
-
-		_, err := rdbWritePipeline.Exec(context.Background())
-		if err != nil {
-			cachemaps.SendMessageToAllChanns(errCh, err)
-		} else {
-			cachemaps.SendMessageToAllChanns(responseCh, 0)
-		}
+		rdbWritePipeline.Set(context.Background(), routerUUID, data, item.Expiration)
 	}
+
+	_, err := rdbWritePipeline.Exec(context.Background())
+	return err
 }
 
-func startExpireWorker() {
-	for {
-		time.Sleep(1 * time.Second)
-		expireMutex.Lock()
-		items := expireWorker.itemsToWrite
-		responseCh := expireWorker.responseCh
-		errCh := expireWorker.errCh
-		expireWorker.flush()
-		expireMutex.Unlock()
-
-		if len(items) == 0 {
-			continue
-		}
-
-		rdbExpirePipe := expireWorker.conn.Pipeline()
-		for routerUuid, item := range items {
-			rdbExpirePipe.Expire(context.Background(), routerUuid, item.Expiration)
-		}
-
-		_  , err := rdbExpirePipe.Exec(context.Background())
-		if err != nil {
-			cachemaps.SendMessageToAllChanns(errCh, err)
-		} else {
-			cachemaps.SendMessageToAllChanns(responseCh, 0)
-		}
+func expireRecords(rdsConn *redis.Conn, items map[string]MapperItem) error {
+	rdbExpirePipe := rdsConn.Pipeline()
+	for routerUUID, item := range items {
+		rdbExpirePipe.Expire(context.Background(), routerUUID, item.Expiration)
 	}
+
+	_, err := rdbExpirePipe.Exec(context.Background())
+	return err
 }
 
-func WriteMapper(routerUuid string, item WriteItme) (<-chan interface{}, <-chan error) {
-	writeMutex.Lock()
-	writeWorker.itemsToWrite[routerUuid] = item
-	responseCh := writeWorker.responseCh
-	errCh := writeWorker.errCh
-	writeMutex.Unlock()
-	return responseCh, errCh
+/*
+To wait for response implement select switch construction
+	select {
+	case err := <-errCh:
+		...
+	case <-responseCh:
+	}
+*/
+func WriteMapper(mapper IdMapper, expiration time.Duration) (<-chan interface{}, <-chan error) {
+	return writeWorker.AppendToWorker(mapper.RouterUUID, MapperItem{Mapper: mapper, Expiration: expiration})
 }
 
-func ExpireMapper(routerUuid string, item WriteItme) (<-chan interface{}, <-chan error) {
-	expireMutex.Lock()
-	expireWorker.itemsToWrite[routerUuid] = item
-	responseCh := expireWorker.responseCh
-	errCh := expireWorker.errCh
-	expireMutex.Unlock()
-	return responseCh, errCh
+/*
+To wait for response implement select switch construction
+	select {
+	case err := <-errCh:
+		...
+	case <-responseCh:
+	}
+*/
+func ExpireMapper(routerUUID string, expiration time.Duration) (<-chan interface{}, <-chan error) {
+	return expireWorker.AppendToWorker(routerUUID, MapperItem{Expiration: expiration})
 }

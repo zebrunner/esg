@@ -50,12 +50,9 @@ type Task struct {
 	AccessedAt       time.Time                        `json:",omitempty"`
 }
 
+// Creates new record in tasks redis db and updates mapper uuid record with new taskId. Resets existing expiration on mapper uuid record
 func CreateEntity(taskId string, env *environment.ExecutionEnvironment) (*Task, error) {
-	uuidMapper := mapper.WriteItme{
-		Mapper:     mapper.IdMapper{RouterUUID: env.RouterUUID, TaskId: taskId},
-		Expiration: 0,
-	}
-	responseCh, errCh := mapper.WriteMapper(env.RouterUUID, uuidMapper)
+	responseCh, errCh := mapper.WriteMapper(mapper.IdMapper{RouterUUID: env.RouterUUID, TaskId: taskId}, 0)
 	select {
 	case err := <-errCh:
 		return nil, err
@@ -72,7 +69,7 @@ func CreateEntity(taskId string, env *environment.ExecutionEnvironment) (*Task, 
 		HealthAt:     &creationTime,
 	}
 
-	responseCh, errCh = WriteTask(taskId, WriteItem{CachedTask: *cachedTask, Expiration: 0})
+	responseCh, errCh = WriteTask(*cachedTask, 0)
 	select {
 	case err := <-errCh:
 		return nil, err
@@ -134,6 +131,7 @@ func Write(taskId string, task *Task, expiration time.Duration) error {
 	return nil
 }
 
+// Writes all passed tasks to redis db by pipeline.
 func WriteAll(tasks []Task, expiration time.Duration) error {
 	rdbPipe := config.RedisTasksClient.Pipeline()
 	tasksMap := make(map[string]Task, len(tasks))
@@ -162,8 +160,7 @@ func Keys() ([]string, error) {
 	return config.RedisTasksClient.Keys(context.Background(), "*").Result()
 }
 
+// Returns cached tasks by passed taskIdArr from tasks redis db
 func Tasks(taskIdArr []string) ([]Task, error) {
-	rdbPipe := config.RedisTasksClient.Pipeline()
-
-	return cachemaps.FindAll[Task](rdbPipe, taskIdArr)
+	return cachemaps.FindAll[Task](config.RedisTasksClient.Pipeline(), taskIdArr)
 }

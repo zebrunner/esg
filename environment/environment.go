@@ -302,9 +302,9 @@ func (env *ExecutionEnvironment) CalculateResources() *resourcesToAllocate.Resou
 	}
 
 	resources := resourcesToAllocate.Resources{
-		UUID:   env.RouterUUID,
-		Cpu:    cpu,
-		Memory: memory,
+		RouterUUID: env.RouterUUID,
+		Cpu:        cpu,
+		Memory:     memory,
 	}
 
 	return &resources

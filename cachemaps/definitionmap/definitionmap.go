@@ -22,6 +22,7 @@ type hashRevision struct {
 	Revision int64
 }
 
+// Find revision in definitionsMap (without redis usage).
 func FindRevision(hash string) (int64, bool) {
 	if definitionsMap == nil {
 		return -1, false
@@ -34,7 +35,8 @@ func FindRevision(hash string) (int64, bool) {
 	return revision, ok
 }
 
-func AddDefinition(overrideDefenititonHash string, revision int64) error {
+// Add revision to redis
+func AddRevision(overrideDefenititonHash string, revision int64) error {
 	hr := hashRevision{
 		Hash:     overrideDefenititonHash,
 		Revision: revision,
@@ -53,7 +55,8 @@ func AddDefinition(overrideDefenititonHash string, revision int64) error {
 	return nil
 }
 
-func getAllDefinitions() (map[string]int64, error) {
+// Returns all definitions from redis as map[hash]revision
+func getDefinitions() (map[string]int64, error) {
 	keys, err := config.RedisDefinitionClient.Keys(context.Background(), "*").Result()
 	if err != nil {
 		log.WithError(err).Error("Failed to get all keys")
@@ -82,7 +85,7 @@ func getAllDefinitions() (map[string]int64, error) {
 		if data == taskDefenititonRefreshDone {
 			continue
 		}
-		
+
 		var hr hashRevision
 		err = json.Unmarshal([]byte(data), &hr)
 		if err != nil {
@@ -94,10 +97,13 @@ func getAllDefinitions() (map[string]int64, error) {
 	return definitionsMap, nil
 }
 
+// Remove definition from redis by overrideDefenititonHash
 func RemoveDefinitionHash(overrideDefenititonHash string) error {
 	return config.RedisDefinitionClient.Del(context.Background(), overrideDefenititonHash).Err()
 }
 
+// Adds to redis taskDefenititonRefreshDone record,
+// which means that refresh was successfully performed and all supported task definition revisions are placed in redis
 func SetRefreshDone() error {
 	err := config.RedisDefinitionClient.Set(context.Background(), taskDefenititonRefreshDone, taskDefenititonRefreshDone, 0).Err()
 	if err != nil {
@@ -106,6 +112,10 @@ func SetRefreshDone() error {
 	return nil
 }
 
+// Checks for existing of taskDefenititonRefreshDone record.
+// If found:
+// 1) Initializes definitionsMap, that will be used for revision search on task create calls. One for every router
+// 2) Launches new thread, in which every 10 minutes definitionsMap is updated by definitions from redis
 func IsRefreshDone() bool {
 	exists, err := config.RedisDefinitionClient.Exists(context.Background(), taskDefenititonRefreshDone).Result()
 	if err != nil {
@@ -116,7 +126,7 @@ func IsRefreshDone() bool {
 		return false
 	}
 
-	defMap, err := getAllDefinitions()
+	defMap, err := getDefinitions()
 	if err != nil {
 		log.WithError(err).Warn("Failed to get all definitions")
 		return false
@@ -126,7 +136,7 @@ func IsRefreshDone() bool {
 	go func() {
 		for {
 			time.Sleep(10 * time.Minute)
-			defMap, err := getAllDefinitions()
+			defMap, err := getDefinitions()
 			if err != nil {
 				log.Warn("Failed to update definitions info")
 				continue

@@ -149,7 +149,7 @@ func StopTask(cachedTask taskmap.Task, stopReason taskmap.StoppedReason) error {
 
 	cachedTask.Status = taskmap.TaskStopped
 	cachedTask.StopReason = stopReason
-	responseCh, errCh := taskmap.UpdateTask(cachedTask.TaskId, taskmap.WriteItem{CachedTask: cachedTask, Expiration: 10 * time.Minute})
+	responseCh, errCh := taskmap.UpdateTask(cachedTask, 10*time.Minute)
 	select {
 	case err := <-errCh:
 		return err

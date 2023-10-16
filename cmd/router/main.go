@@ -17,6 +17,7 @@ import (
 	"github.com/zebrunner/esg/cachemaps/definitionmap"
 	"github.com/zebrunner/esg/cachemaps/mapper"
 	"github.com/zebrunner/esg/cachemaps/resourcesToAllocate"
+	"github.com/zebrunner/esg/cachemaps/sessionmap"
 	"github.com/zebrunner/esg/cachemaps/taskmap"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/handlers"
@@ -150,8 +151,10 @@ func main() {
 	defer config.RedisCypressSetClient.Close()
 	defer config.RedisIdMapperClient.Close()
 	defer config.RedisResourcesClient.Close()
-	mapper.InitUuidmapWorkers()
+	mapper.InitUUIDMapWorkers()
 	taskmap.InitTaskmapWorkers()
+	sessionmap.InitSessionmapWorker()
+	resourcesToAllocate.InitResourceWorker()
 
 	aws, err := service.InitAws()
 	if err != nil {
@@ -175,7 +178,6 @@ func main() {
 
 	service.InitInstanceWorker()
 	service.InitWaitWorker()
-	resourcesToAllocate.InitResourceWatchWorker()
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)

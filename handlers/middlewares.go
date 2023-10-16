@@ -67,7 +67,7 @@ func SeleniumError(c *gin.Context) {
 	if routerUUID := c.Param("task"); routerUUID != "" {
 		task, seErr := getTask(routerUUID)
 		if seErr != nil {
-			l.WithField(config.RouterUuid, routerUUID).WithError(seErr).Error("can't access task")
+			l.WithField(config.RouterUUID, routerUUID).WithError(seErr).Error("can't access task")
 			c.Error(seErr).SetType(gin.ErrorTypePublic)
 			c.Abort()
 		} else {
@@ -86,7 +86,7 @@ func SeleniumError(c *gin.Context) {
 		if task, ok := taskObject.(*taskmap.Task); ok {
 			// Capabilities.EnableDebug by default - false
 			enableDebug = task.Capabilities.EnableDebug.ToPrimitive()
-			l = l.WithField(config.RouterUuid, task.RouterUUID).WithField(config.TaskIdKey, task.TaskId)
+			l = l.WithField(config.RouterUUID, task.RouterUUID).WithField(config.TaskIdKey, task.TaskId)
 		} else {
 			l.Warn("TaskIdKey was used for storing something other than task cache!")
 		}
@@ -94,7 +94,7 @@ func SeleniumError(c *gin.Context) {
 
 	if sessionObject, ok := c.Get(config.SessionIdKey); ok {
 		if session, ok := sessionObject.(*sessionmap.Session); ok {
-			l = l.WithField(config.RouterUuid, session.RouterUUID).WithField(config.SessionIdKey, session.SessionID)
+			l = l.WithField(config.RouterUUID, session.RouterUUID).WithField(config.SessionIdKey, session.SessionID)
 		} else {
 			l.Warn("SessionIdKey was used for storing something other than session cache!")
 		}
@@ -120,10 +120,10 @@ func SeleniumError(c *gin.Context) {
 	}
 
 	l.WithFields(log.Fields{
-		"status":       seErr.ResponseStatus,
-		"error":        seErr.Error(),
-		"debug":        enableDebug,
-		"request": 		fmt.Sprintf("%s: %s",c.Request.Method, c.Request.URL.Path),
+		"status":  seErr.ResponseStatus,
+		"error":   seErr.Error(),
+		"debug":   enableDebug,
+		"request": fmt.Sprintf("%s: %s", c.Request.Method, c.Request.URL.Path),
 	}).Warn("Error sent to selenium")
 
 	seErr.SendEncodedResponse(c, enableDebug)

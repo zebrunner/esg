@@ -4,146 +4,103 @@ import (
 	"context"
 	"encoding/json"
 
-	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps"
 	"github.com/zebrunner/esg/cachemaps/mapper"
 	"github.com/zebrunner/esg/config"
 )
 
 var (
-	updateMutex  = sync.Mutex{}
-	writeMutex   = sync.Mutex{}
-	updateWorker worker
-	writeWorker  worker
+	updateWorker cachemaps.RedisWorker[TaskItem]
+	writeWorker  cachemaps.RedisWorker[TaskItem]
 )
 
-type WriteItem struct {
+type TaskItem struct {
 	CachedTask Task
 	Expiration time.Duration
 }
 
-type worker struct {
-	rdsConn       *redis.Conn
-	tasksToUpdate map[string]WriteItem
-	// signals that work is done. Recieved item should not be used
-	responseCh chan interface{}
-	errCh      chan error
-}
-
+// Inits 2 workers and starts them in new thread (update and write workers).
+// Update worker -> tries to find records by keys from tasksToUpdate field. Updates records for only found ones.
+// Write worker -> creates new records/rewrites existing.
 func InitTaskmapWorkers() {
-	updateWorker = worker{
-		rdsConn:       config.RedisTasksClient.Conn(),
-		tasksToUpdate: make(map[string]WriteItem, 0),
-		responseCh:    make(chan interface{}),
-		errCh:         make(chan error),
-	}
-	go startUpdateWorker()
+	updateWorker = cachemaps.CreateRedisWorker[TaskItem](config.RedisTasksClient, updateRecords)
+	go updateWorker.Start(time.Second * 1)
 
-	writeWorker = worker{
-		rdsConn:       config.RedisTasksClient.Conn(),
-		tasksToUpdate: make(map[string]WriteItem, 0),
-		responseCh:    make(chan interface{}),
-		errCh:         make(chan error),
-	}
-	go startWriteWorker()
+	writeWorker = cachemaps.CreateRedisWorker[TaskItem](config.RedisTasksClient, writeRecords)
+	go writeWorker.Start(time.Second * 1)
 }
 
-func (w *worker) flush() {
-	w.tasksToUpdate = make(map[string]WriteItem, 0)
-	w.responseCh = make(chan interface{})
-	w.errCh = make(chan error)
+func updateRecords(rdsConn *redis.Conn, items map[string]TaskItem) error {
+	rdbFindPipe := rdsConn.Pipeline()
+	taskIds := make([]string, 0, len(items))
+	for taskId := range items {
+		taskIds = append(taskIds, taskId)
+	}
+
+	tasks, err := cachemaps.FindAll[Task](rdbFindPipe, taskIds)
+	if err != nil {
+		log.WithError(err).Error("Failed to find all cached tasks")
+		return err
+	}
+
+	rdbWritePipeline := rdsConn.Pipeline()
+	// always -> len(tasks) <= len(items)
+	for _, task := range tasks {
+		item := items[task.TaskId]
+		data, _ := json.Marshal(&item.CachedTask)
+		rdbWritePipeline.Set(context.Background(), task.TaskId, data, item.Expiration)
+		if item.Expiration > 0 {
+			mapper.ExpireMapper(task.RouterUUID, item.Expiration)
+		}
+	}
+
+	_, err = rdbWritePipeline.Exec(context.Background())
+	return err
 }
 
-func startUpdateWorker() {
-	for {
-		time.Sleep(1 * time.Second)
-		updateMutex.Lock()
-		tasksToUpdate := updateWorker.tasksToUpdate
-		responseCh := updateWorker.responseCh
-		errCh := updateWorker.errCh
-		updateWorker.flush()
-		updateMutex.Unlock()
-
-		if len(tasksToUpdate) == 0 {
+func writeRecords(rdsConn *redis.Conn, items map[string]TaskItem) error {
+	rdbWritePipeline := rdsConn.Pipeline()
+	for _, item := range items {
+		data, err := json.Marshal(&item.CachedTask)
+		if err != nil {
+			log.WithError(err).WithField(config.TaskIdKey, item.CachedTask.TaskId).Error("Failed to marshal record")
 			continue
 		}
 
-		rdbFindPipe := updateWorker.rdsConn.Pipeline()
-		taskIds := make([]string, 0, len(tasksToUpdate))
-		for taskId := range tasksToUpdate {
-			taskIds = append(taskIds, taskId)
-		}
-
-		tasks, err := cachemaps.FindAll[Task](rdbFindPipe, taskIds)
-		if err != nil {
-			cachemaps.SendMessageToAllChanns(errCh, err)
-			continue
-		}
-
-		rdbWritePipeline := updateWorker.rdsConn.Pipeline()
-		for _, task := range tasks {
-			item := tasksToUpdate[task.TaskId]
-			data, _ := json.Marshal(item.CachedTask)
-			rdbWritePipeline.Set(context.Background(), task.TaskId, data, item.Expiration)
-			if item.Expiration > 0 {
-				mapper.ExpireMapper(task.RouterUUID, mapper.WriteItme{Expiration: item.Expiration})
-			}
-		}
-
-		_, err = rdbWritePipeline.Exec(context.Background())
-		if err != nil {
-			cachemaps.SendMessageToAllChanns(errCh, err)
-		}
-		cachemaps.SendMessageToAllChanns(responseCh, 0)
-	}
-}
-
-func startWriteWorker() {
-	for {
-		time.Sleep(1 * time.Second)
-		writeMutex.Lock()
-		tasksToWrite := writeWorker.tasksToUpdate
-		responseCh := writeWorker.responseCh
-		errCh := writeWorker.errCh
-		writeWorker.flush()
-		writeMutex.Unlock()
-
-		if len(tasksToWrite) == 0 {
-			continue
-		}
-
-		rdbWritePipeline := writeWorker.rdsConn.Pipeline()
-		for _, item := range tasksToWrite {
-			data, _ := json.Marshal(item.CachedTask)
-			rdbWritePipeline.Set(context.Background(), item.CachedTask.TaskId, data, item.Expiration)
-		}
-
-		_, err := rdbWritePipeline.Exec(context.Background())
-		if err != nil {
-			cachemaps.SendMessageToAllChanns(errCh, err)
-		} else {
-			cachemaps.SendMessageToAllChanns(responseCh, 0)
+		rdbWritePipeline.Set(context.Background(), item.CachedTask.TaskId, data, item.Expiration)
+		if item.Expiration > 0 {
+			mapper.ExpireMapper(item.CachedTask.RouterUUID, item.Expiration)
 		}
 	}
+
+	_, err := rdbWritePipeline.Exec(context.Background())
+	return err
 }
 
-func UpdateTask(taskId string, item WriteItem) (<-chan interface{}, <-chan error) {
-	updateMutex.Lock()
-	updateWorker.tasksToUpdate[taskId] = item
-	responseCh := updateWorker.responseCh
-	errCh := updateWorker.errCh
-	updateMutex.Unlock()
-	return responseCh, errCh
+/*
+To wait for response implement select switch construction
+	select {
+	case err := <-errCh:
+		...
+	case <-responseCh:
+	}
+*/
+func UpdateTask(cachedTask Task, expiration time.Duration) (<-chan interface{}, <-chan error) {
+	return updateWorker.AppendToWorker(config.TaskIdKey, TaskItem{CachedTask: cachedTask, Expiration: expiration})
 }
 
-func WriteTask(taskId string, item WriteItem) (<-chan interface{}, <-chan error) {
-	writeMutex.Lock()
-	writeWorker.tasksToUpdate[taskId] = item
-	responseCh := writeWorker.responseCh
-	errCh := writeWorker.errCh
-	writeMutex.Unlock()
-	return responseCh, errCh
+/*
+To wait for response implement select switch construction
+	select {
+	case err := <-errCh:
+		...
+	case <-responseCh:
+	}
+*/
+func WriteTask(cachedTask Task, expiration time.Duration) (<-chan interface{}, <-chan error) {
+	return updateWorker.AppendToWorker(config.TaskIdKey, TaskItem{CachedTask: cachedTask, Expiration: expiration})
 }

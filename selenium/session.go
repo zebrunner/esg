@@ -89,12 +89,14 @@ func CloseSession(session *sessionmap.Session, stopReason sessionmap.StoppedReas
 	// Set SessionStopped status and expiration time 10 minutes to be able to return sessionID and stop reason for session
 	session.Status = sessionmap.SessionStopped
 	session.StopReason = stopReason
-	err := sessionmap.Write(session.SessionID, session, 10*time.Minute)
-	if err != nil {
+	responseCh, errCh := sessionmap.WriteSession(*session, 10*time.Minute)
+	select {
+	case err := <-errCh:
 		log.WithError(err).Error("Driver session not marked as stopped!")
+	case <-responseCh:		
 	}
 
-	l := log.WithFields(log.Fields{config.TaskIdKey: session.TaskId, config.SessionIdKey: session.SessionID, config.RouterUuid: session.RouterUUID})
+	l := log.WithFields(log.Fields{config.TaskIdKey: session.TaskId, config.SessionIdKey: session.SessionID, config.RouterUUID: session.RouterUUID})
 	if !config.Conf.SingleTenant {
 		l = l.WithField("workspace", session.Workspace)
 	}
