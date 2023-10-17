@@ -43,7 +43,7 @@ func updateRecords(rdsConn *redis.Conn, items map[string]TaskItem) error {
 
 	tasks, err := cachemaps.FindAll[Task](rdbFindPipe, taskIds)
 	if err != nil {
-		log.WithField("taskIds", taskIds).WithError(err).Error("Failed to find all cached tasks")
+		log.WithField("taskIds", taskIds).WithError(err).Error("Failed to find cached tasks")
 		return err
 	}
 
