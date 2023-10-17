@@ -69,7 +69,7 @@ func (s *startBasis) registerTaskPhase(ctx context.Context) (essential *utils.Se
 		}()
 		return
 	case essentialReason := <-waitRequest.EssentialErrCh:
-		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to register task, stopping service...")
+		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essentialReason).Info("Failed to register task, stopping service...")
 		essential = utils.CreationErr(fmt.Errorf("failed to create task"), essentialReason.Error())
 		return
 	case nonEssential = <-waitRequest.NonEssentialErrCh:
@@ -139,7 +139,7 @@ func (s *startBasis) setNetworkPhase(ctx context.Context) (essential *utils.Sele
 		essential = utils.CreationErr(fmt.Errorf("service startup timed out"))
 		return
 	case essentialReason := <-waitRequest.EssentialErrCh:
-		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essential).Info("Failed to get network configuration, stopping service...")
+		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(essentialReason).Info("Failed to get network configuration, stopping service...")
 		essential = utils.CreationErr(fmt.Errorf("failed to set network configuration"), essentialReason.Error())
 		return
 	case nonEssential = <-waitRequest.NonEssentialErrCh:
