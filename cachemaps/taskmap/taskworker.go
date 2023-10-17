@@ -43,7 +43,7 @@ func updateRecords(rdsConn *redis.Conn, items map[string]TaskItem) error {
 
 	tasks, err := cachemaps.FindAll[Task](rdbFindPipe, taskIds)
 	if err != nil {
-		log.WithError(err).Error("Failed to find all cached tasks")
+		log.WithField("taskIds", taskIds).WithError(err).Error("Failed to find all cached tasks")
 		return err
 	}
 
@@ -90,7 +90,7 @@ To wait for response implement select switch construction
 	}
 */
 func UpdateTask(cachedTask Task, expiration time.Duration) (<-chan interface{}, <-chan error) {
-	return updateWorker.AppendToWorker(config.TaskIdKey, TaskItem{CachedTask: cachedTask, Expiration: expiration})
+	return updateWorker.AppendToWorker(cachedTask.TaskId, TaskItem{CachedTask: cachedTask, Expiration: expiration})
 }
 
 /*
@@ -102,5 +102,5 @@ To wait for response implement select switch construction
 	}
 */
 func WriteTask(cachedTask Task, expiration time.Duration) (<-chan interface{}, <-chan error) {
-	return writeWorker.AppendToWorker(config.TaskIdKey, TaskItem{CachedTask: cachedTask, Expiration: expiration})
+	return writeWorker.AppendToWorker(cachedTask.TaskId, TaskItem{CachedTask: cachedTask, Expiration: expiration})
 }
