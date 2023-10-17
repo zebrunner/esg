@@ -84,7 +84,7 @@ func init() {
 
 	flag.DurationVar(&Conf.MaxIdleTimeout, "max-idle-timeout", 20*time.Minute, "Maximum session idle timeout time that could be set by user's capabilities")
 	flag.DurationVar(&Conf.IdleTimeout, "idle-timeout", 60*time.Second, "Session idle timeout in time.Duration format")
-	flag.DurationVar(&Conf.CypressIdleTimeout, "cypress-idle-timeout", 10*time.Second, "Cypress task idle timeout in time.Duration format") // cyserver get task's status every 5 seconds
+	flag.DurationVar(&Conf.CypressIdleTimeout, "cypress-idle-timeout", 30*time.Second, "Cypress task idle timeout in time.Duration format") // cyserver get task's status every 5 seconds
 	flag.DurationVar(&Conf.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
 	flag.DurationVar(&Conf.ServiceStartupTimeout, "service-startup-timeout", 10*time.Minute, "Service startup timeout in time.Duration format")
 	flag.DurationVar(&Conf.TaskUncachedTimeout, "task-uncached-timeout", 30*time.Second, "Time for task to be cached on start in time.Duration format")

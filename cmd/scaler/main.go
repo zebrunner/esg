@@ -251,6 +251,15 @@ func TrackResourceUsage(tasks []*ecs.Task, cachedTasksMap map[string]taskmap.Tas
 }
 
 func StopIdleTasks() {
+	isSessionIdle := func(sess sessionmap.Session) bool {
+		if sess.Status != sessionmap.SessionActive {
+			return false
+		}
+
+		idleTime := time.Since(sess.AccessedAt).Seconds()
+		return idleTime > sess.IdleTimeout
+	}
+
 	for {
 		time.Sleep(1 * time.Minute)
 
@@ -265,36 +274,35 @@ func StopIdleTasks() {
 		}
 
 		for _, session := range Sessions {
-			if session.Status != sessionmap.SessionActive {
-				continue
-			}
+			timedOut := isSessionIdle(session)
 
-			l := log.WithFields(log.Fields{config.TaskIdKey: session.TaskId, config.SessionIdKey: session.SessionID})
-			if !config.Conf.SingleTenant {
-				l = l.WithField("workspace", session.Workspace)
-			}
+			if timedOut {
+				l := log.WithFields(log.Fields{config.TaskIdKey: session.TaskId, config.SessionIdKey: session.SessionID})
+				if !config.Conf.SingleTenant {
+					l = l.WithField("workspace", session.Workspace)
+				}
 
-			l.Debug("StopIdleTasks: analyzing session for idleTimeout")
-
-			idleTime := time.Since(session.AccessedAt).Seconds()
-			if idleTime > session.IdleTimeout {
-				// refresh cached record and validate it one more time
+				// get actual record of the session and validate idle timeout one more time
 				sess, err := sessionmap.Find(session.SessionID, false)
-				if err != nil || time.Since(sess.AccessedAt).Seconds() <= sess.IdleTimeout {
+				if err != nil {
 					continue
 				}
 
-				selenium.CloseSession(&session, sessionmap.SessionIdleTimeout)
-				cachedTask, err := taskmap.Find(session.TaskId, false)
-				if err != nil {
-					l.WithError(err).Error("Failed find cached task with idle session!")
-					continue
-				}
-				err = service.StopTask(*cachedTask, taskmap.TaskAborted)
-				if err != nil {
-					l.WithError(err).Error("Failed to stop idle driver task!")
-				} else {
-					l.Warn("task aborted due to the session idle timeout")
+				timedOut = isSessionIdle(*sess)
+				if timedOut {
+					selenium.CloseSession(&session, sessionmap.SessionIdleTimeout)
+					cachedTask, err := taskmap.Find(session.TaskId, false)
+					if err != nil {
+						l.WithError(err).Error("Failed to find cached task with idle session!")
+						continue
+					}
+
+					err = service.StopTask(*cachedTask, taskmap.TaskAborted)
+					if err != nil {
+						l.WithError(err).Error("Failed to stop idle driver task!")
+					} else {
+						l.Warn("task aborted due to the session idle timeout")
+					}
 				}
 			}
 		}
