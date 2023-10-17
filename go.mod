@@ -6,12 +6,12 @@ require (
 	github.com/aerokube/util v0.0.0-20190701120823-161c21b50f69
 	github.com/aws/aws-sdk-go v1.39.2
 	github.com/gin-gonic/gin v1.8.2
-	github.com/go-redis/redis/v8 v8.8.0
 	github.com/google/uuid v1.2.0
 	github.com/imdario/mergo v0.3.6
 	github.com/jackc/pgtype v1.7.0
 	github.com/jackc/pgx/v4 v4.11.0
 	github.com/jmoiron/sqlx v1.3.3
+	github.com/redis/go-redis/v9 v9.2.1
 	github.com/sethvargo/go-password v0.2.0
 	github.com/sirupsen/logrus v1.8.1
 	golang.org/x/crypto v0.0.0-20211215153901-e495a2d5b3d3
@@ -22,7 +22,7 @@ require (
 require github.com/davegardnerisme/deephash v0.0.0-20210406090112-6d072427d830
 
 require (
-	github.com/cespare/xxhash/v2 v2.1.1 // indirect
+	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/gin-contrib/sse v0.1.0 // indirect
 	github.com/go-playground/locales v0.14.0 // indirect

@@ -103,10 +103,17 @@ func (w *waitWorker) start() {
 				// #860: Api tests are reexecuted several times
 				if strings.Contains(*task.TaskDefinitionArn, "generic") && isTaskFinishedSuccessfully(task) {
 					l.Info("task already finished")
-					req.ResponseCh <- task
+					select {
+					case req.ResponseCh <- task:
+					default:
+					}
+
 				} else {
 					l.Error("Task stopped: ", *task)
-					req.NonEssentialErrCh <- fmt.Errorf("task stopped with reason: %s", *task.StoppedReason)				
+					select {
+					case req.NonEssentialErrCh <- fmt.Errorf("task stopped with reason: %s", *task.StoppedReason):
+					default:
+					}
 				}
 				delete(w.requests, taskId)
 				continue
@@ -133,14 +140,24 @@ func (w *waitWorker) start() {
 				}
 
 				if essential != nil {
-					req.EssentialErrCh <- essential
+					select {
+					case req.EssentialErrCh <- essential:
+					default:
+					}
 				} else {
-					req.NonEssentialErrCh <- fmt.Errorf("task unhealthy")
+					select {
+					case req.NonEssentialErrCh <- fmt.Errorf("task unhealthy"):
+					default:
+					}
 				}
 
 				delete(w.requests, taskId)
 			case "HEALTHY":
-				req.ResponseCh <- task
+				select {
+				case req.ResponseCh <- task:
+				default:
+				}
+
 				delete(w.requests, taskId)
 			}
 		}
@@ -162,9 +179,9 @@ func (w *waitWorker) waitFor(ctx context.Context, taskId string) *waitRequest {
 	req := waitRequest{
 		ctx:               ctx,
 		taskId:            taskId,
-		EssentialErrCh:    make(chan error, 1),
-		NonEssentialErrCh: make(chan error, 1),
-		ResponseCh:        make(chan *ecs.Task, 1),
+		EssentialErrCh:    make(chan error),
+		NonEssentialErrCh: make(chan error),
+		ResponseCh:        make(chan *ecs.Task),
 	}
 
 	// https://medium.com/@luanrubensf/concurrent-map-access-in-go-a6a733c5ffd1

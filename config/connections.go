@@ -2,83 +2,91 @@ package config
 
 import (
 	"context"
+	"time"
 
-	redis "github.com/go-redis/redis/v8"
 	"github.com/jmoiron/sqlx"
+	redis "github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
 )
 
 var (
-	RedisSessionsConnection   *redis.Client
-	RedisTasksConnection      *redis.Client
-	CypressSetConnection      *redis.Client
-	RedisIdMapperConnection   *redis.Client
-	RedisDefinitionConnection *redis.Client
-	ResourcesConnection       *redis.Client
-	DbConnection              *sqlx.DB
+	RedisSessionsClient   *redis.Client
+	RedisTasksClient      *redis.Client
+	RedisCypressSetClient *redis.Client
+	RedisIdMapperClient   *redis.Client
+	RedisDefinitionClient *redis.Client
+	RedisResourcesClient  *redis.Client
+	DbConnection          *sqlx.DB
 )
 
 func InitCache() error {
+	//default PoolTimeout - 4 seconds
+
 	// DB 0 - for sessions
-	RedisSessionsConnection = redis.NewClient(&redis.Options{
-		Addr:     Conf.RedisConnectionString,
-		Password: "",
-		DB:       0,
+	RedisSessionsClient = redis.NewClient(&redis.Options{
+		Addr:        Conf.RedisConnectionString,
+		Password:    "",
+		DB:          0,
+		PoolTimeout: 10 * time.Second,
 	})
 
-	_, err := RedisSessionsConnection.Ping(context.Background()).Result()
+	_, err := RedisSessionsClient.Ping(context.Background()).Result()
 	if err != nil {
 		log.WithError(err).Error("Failed to ping redis sessions connection")
 		return err
 	}
 
 	// DB 1 - for tasks
-	RedisTasksConnection = redis.NewClient(&redis.Options{
-		Addr:     Conf.RedisConnectionString,
-		Password: "",
-		DB:       1,
+	RedisTasksClient = redis.NewClient(&redis.Options{
+		Addr:        Conf.RedisConnectionString,
+		Password:    "",
+		DB:          1,
+		PoolTimeout: 10 * time.Second,
 	})
 
-	_, err = RedisTasksConnection.Ping(context.Background()).Result()
+	_, err = RedisTasksClient.Ping(context.Background()).Result()
 	if err != nil {
 		log.WithError(err).Error("Failed to ping redis tasks connection")
 		return err
 	}
 
 	// DB 2 - for definitions
-	RedisDefinitionConnection = redis.NewClient(&redis.Options{
-		Addr:     Conf.RedisConnectionString,
-		Password: "",
-		DB:       2,
+	RedisDefinitionClient = redis.NewClient(&redis.Options{
+		Addr:        Conf.RedisConnectionString,
+		Password:    "",
+		DB:          2,
+		PoolTimeout: 10 * time.Second,
 	})
 
-	_, err = RedisDefinitionConnection.Ping(context.Background()).Result()
+	_, err = RedisDefinitionClient.Ping(context.Background()).Result()
 	if err != nil {
 		log.WithError(err).Error("Failed to ping redis definitions connection")
 		return err
 	}
 
 	// DB 3 - for task's mapper
-	RedisIdMapperConnection = redis.NewClient(&redis.Options{
-		Addr:     Conf.RedisConnectionString,
-		Password: "",
-		DB:       3,
+	RedisIdMapperClient = redis.NewClient(&redis.Options{
+		Addr:        Conf.RedisConnectionString,
+		Password:    "",
+		DB:          3,
+		PoolTimeout: 10 * time.Second,
 	})
 
-	_, err = RedisIdMapperConnection.Ping(context.Background()).Result()
+	_, err = RedisIdMapperClient.Ping(context.Background()).Result()
 	if err != nil {
 		log.WithError(err).Error("Failed to ping redis tasksmapper connection")
 		return err
 	}
 
 	// DB 4 - for cypress set
-	CypressSetConnection = redis.NewClient(&redis.Options{
-		Addr:     Conf.RedisConnectionString,
-		Password: "",
-		DB:       4,
+	RedisCypressSetClient = redis.NewClient(&redis.Options{
+		Addr:        Conf.RedisConnectionString,
+		Password:    "",
+		DB:          4,
+		PoolTimeout: 10 * time.Second,
 	})
 
-	_, err = CypressSetConnection.Ping(context.Background()).Result()
+	_, err = RedisCypressSetClient.Ping(context.Background()).Result()
 	if err != nil {
 		log.WithError(err).Error("Failed to ping redis cypressSet connection")
 		return err
@@ -86,15 +94,16 @@ func InitCache() error {
 
 	// DB 5 - for tasks that are in register queue
 	// Such tasks cannot get into the provisioning pool, but still need to be calculated by scaler
-	ResourcesConnection = redis.NewClient(&redis.Options{
-		Addr:     Conf.RedisConnectionString,
-		Password: "",
-		DB:       5,
+	RedisResourcesClient = redis.NewClient(&redis.Options{
+		Addr:        Conf.RedisConnectionString,
+		Password:    "",
+		DB:          5,
+		PoolTimeout: 10 * time.Second,
 	})
 
-	_, err = CypressSetConnection.Ping(context.Background()).Result()
+	_, err = RedisResourcesClient.Ping(context.Background()).Result()
 	if err != nil {
-		log.WithError(err).Error("Failed to ping redis cypressSet connection")
+		log.WithError(err).Error("Failed to ping redis resources connection")
 		return err
 	}
 

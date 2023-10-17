@@ -14,21 +14,18 @@ type IdMapper struct {
 	SessionID  string `json:",omitempty"`
 }
 
+// Create new record with ServiceStartupTimeout timeout, that contains only router uuid.
 func InitEntity(routerUUID string) error {
-	data, err := json.Marshal(&IdMapper{RouterUUID: routerUUID})
-	if err != nil {
+	responseCh, errCh := WriteMapper(IdMapper{RouterUUID: routerUUID}, config.Conf.ServiceStartupTimeout)
+	select {
+	case err := <-errCh:
 		return err
+	case <-responseCh:
+		return nil
 	}
-
-	err = config.RedisIdMapperConnection.Set(context.Background(), routerUUID, data, 0).Err()
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
-// only internal usage (use methods from sessionmap/taskmap)
+// Only internal usage (use methods from sessionmap/taskmap)
 func FindTaskId(routerUUID string) (*string, error) {
 	mapper, err := find(routerUUID)
 	if err != nil {
@@ -38,7 +35,7 @@ func FindTaskId(routerUUID string) (*string, error) {
 	return &mapper.TaskId, nil
 }
 
-// only internal usage (use methods from sessionmap/taskmap)
+// Only internal usage (use methods from sessionmap/taskmap)
 func FindSessionId(routerUUID string) (*string, error) {
 	mapper, err := find(routerUUID)
 	if err != nil {
@@ -48,50 +45,8 @@ func FindSessionId(routerUUID string) (*string, error) {
 	return &mapper.SessionID, nil
 }
 
-// only internal usage (use methods from sessionmap/taskmap)
-func UpdateTaskId(routerUUID string, taskId string) error {
-	mapper, err := find(routerUUID)
-	if err != nil {
-		return err
-	}
-
-	mapper.TaskId = taskId
-	data, err := json.Marshal(mapper)
-	if err != nil {
-		return err
-	}
-
-	err = config.RedisIdMapperConnection.Set(context.Background(), routerUUID, data, 0).Err()
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// only internal usage (use methods from sessionmap/taskmap)
-func UpdateSessionId(routerUUID string, sessionId string) error {
-	mapper, err := find(routerUUID)
-	if err != nil {
-		return err
-	}
-
-	mapper.SessionID = sessionId
-	data, err := json.Marshal(mapper)
-	if err != nil {
-		return err
-	}
-
-	err = config.RedisIdMapperConnection.Set(context.Background(), routerUUID, data, 0).Err()
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func find(routerUUID string) (*IdMapper, error) {
-	data, err := config.RedisIdMapperConnection.Get(context.Background(), routerUUID).Result()
+	data, err := config.RedisIdMapperClient.Get(context.Background(), routerUUID).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -107,5 +62,17 @@ func find(routerUUID string) (*IdMapper, error) {
 
 // only internal usage (use methods from sessionmap/taskmap)
 func SetExpire(routerUUID string, expiration time.Duration) error {
-	return config.RedisIdMapperConnection.Expire(context.Background(), routerUUID, expiration).Err()
+	return config.RedisIdMapperClient.Expire(context.Background(), routerUUID, expiration).Err()
+}
+
+// Updates expiration time for passed record ids.
+// Expiration value of <= 0 deletes the record immediately.
+func SetExpireForSeveralRecords(routerUUIDs []string, expiration time.Duration) error {
+	rdbPipe := config.RedisIdMapperClient.Pipeline()
+	for _, routerUUID := range routerUUIDs {
+		rdbPipe.Expire(context.Background(), routerUUID, expiration)
+	}
+
+	_, err := rdbPipe.Exec(context.Background())
+	return err
 }

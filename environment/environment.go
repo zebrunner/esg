@@ -302,9 +302,9 @@ func (env *ExecutionEnvironment) CalculateResources() *resourcesToAllocate.Resou
 	}
 
 	resources := resourcesToAllocate.Resources{
-		UUID:   env.RouterUUID,
-		Cpu:    cpu,
-		Memory: memory,
+		RouterUUID: env.RouterUUID,
+		Cpu:        cpu,
+		Memory:     memory,
 	}
 
 	return &resources
@@ -316,9 +316,9 @@ func (env *ExecutionEnvironment) GetFamilyRevision() (string, error) {
 		return env.TaskDefinitionFamily, nil
 	}
 
-	revision, err := definitionmap.FindRevision(env.HashOvverideDefinition())
-	if err != nil {
-		return "", fmt.Errorf("revision not found for '%s'. %v", env.TaskDefinitionFamily, err)
+	revision, found := definitionmap.FindRevision(env.HashOvverideDefinition())
+	if !found {
+		return "", fmt.Errorf("revision not found for '%s'", env.TaskDefinitionFamily)
 	}
 
 	return fmt.Sprint(env.TaskDefinitionFamily, ":", revision), nil

@@ -26,7 +26,11 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 
 	family, err := env.GetFamilyRevision()
 	if err != nil {
-		waitRequest.EssentialErrCh <- fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily)
+		select {
+		case waitRequest.EssentialErrCh <- fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily):
+		default:
+		}
+
 		return
 	}
 	l := log.WithField("family", env.TaskDefinitionFamily)
@@ -73,21 +77,22 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 				if markedToAllocate {
 					resourcesToAllocate.RemoveEntity(env.RouterUUID)
 				}
-				waitRequest.EssentialErrCh <- fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily)
+
+				select {
+				case waitRequest.EssentialErrCh <- fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily):
+				default:
+				}
+
 				return
 			}
 
 			if errStr == "ClientException: Tasks provisioning capacity limit exceeded." || strings.Contains(errStr, "ThrottlingException: Rate exceeded") {
 				l.WithError(err).Trace("Task register failed.")
 				if !markedToAllocate {
-					resources := env.CalculateResources()
-					err := resourcesToAllocate.AddEntity(resources)
-					if err != nil {
-						l.Info("Failed to cache resource allocation")
-					}
+					resourcesToAllocate.AddEntity(env.CalculateResources())
 					markedToAllocate = true
 				}
-				sleepRateLimit := time.Duration(20+rand.Intn(4)) * time.Second
+				sleepRateLimit := time.Duration(20+rand.Intn(10)) * time.Second
 				time.Sleep(sleepRateLimit)
 			}
 
@@ -98,6 +103,8 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 		if len(resultRunTask.Failures) != 0 {
 			outputErr = fmt.Errorf(*resultRunTask.Failures[0].Reason)
 			l.WithError(outputErr).Debug("Task register failed. Response contains failures")
+			sleepRateLimit := time.Duration(5+(rand.Intn(15))) * time.Second
+			time.Sleep(sleepRateLimit)
 			continue
 		}
 
@@ -112,18 +119,24 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 		}
 
 		// All is ok. We got task then we can return it.
-		waitRequest.ResponseCh <- *resultRunTask.Tasks[0].TaskArn
+		select {
+		case waitRequest.ResponseCh <- *resultRunTask.Tasks[0].TaskArn:
+		default:
+		}
 		return
 	}
 
-	waitRequest.NonEssentialErrCh <- outputErr
+	select {
+	case waitRequest.NonEssentialErrCh <- outputErr:
+	default:
+	}
 }
 
 func WaitForTaskRegister(ctx context.Context, env environment.ExecutionEnvironment) *registerWaitRequest {
 	waitReq := registerWaitRequest{
-		NonEssentialErrCh: make(chan error, 1),
-		EssentialErrCh:    make(chan error, 1),
-		ResponseCh:        make(chan string, 1),
+		NonEssentialErrCh: make(chan error),
+		EssentialErrCh:    make(chan error),
+		ResponseCh:        make(chan string),
 	}
 
 	go registerTask(ctx, env, waitReq)

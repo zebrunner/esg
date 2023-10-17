@@ -31,7 +31,7 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 		return
 	}
 
-	l := log.WithField(config.RouterUuid, cachedTask.RouterUUID).WithField(config.TaskIdKey, cachedTask.TaskId)
+	l := log.WithField(config.RouterUUID, cachedTask.RouterUUID).WithField(config.TaskIdKey, cachedTask.TaskId)
 	if cachedTask.CurrentSessionID != "" {
 		l = l.WithField(config.SessionIdKey, cachedTask.CurrentSessionID)
 	}
@@ -163,7 +163,7 @@ func AbortLaunch(routerUUID, workspace, launchUUID, reason string) {
 		return
 	}
 
-	l := log.WithFields(log.Fields{config.RouterUuid: routerUUID, "comment": reason})
+	l := log.WithFields(log.Fields{config.RouterUUID: routerUUID, "comment": reason})
 
 	requestUrl, err := url.ParseRequestURI(
 		fmt.Sprintf("%s%s?ciRunId=%s", conf.ZebrunnerHost, ABORT_API_PATH, launchUUID))

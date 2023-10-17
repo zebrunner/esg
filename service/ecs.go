@@ -1,10 +1,8 @@
 package service
 
 import (
-	"context"
 	"fmt"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"math/rand"
@@ -27,7 +25,8 @@ const (
 )
 
 var (
-	AwsSess *awsSession.Session
+	AwsSess          *awsSession.Session
+	progressivePause utils.ProgressivePause
 )
 
 func init() {
@@ -36,6 +35,7 @@ func init() {
 		log.Fatal("failed to init aws session")
 	}
 	AwsSess = sess
+	progressivePause = utils.CreateProgressivePause(0, 350)
 }
 
 func InitAws() (*awsSession.Session, error) {
@@ -52,25 +52,6 @@ func InitAws() (*awsSession.Session, error) {
 	}
 
 	return sess, nil
-}
-
-var (
-	definitionRegisterPause int64 = 0
-	pauseIncrement          int64 = 250
-)
-
-func getPreRequestPause() time.Duration {
-	pause := definitionRegisterPause
-	atomic.AddInt64(&definitionRegisterPause, pauseIncrement)
-
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(pause+pauseIncrement)*time.Millisecond)
-		defer cancel()
-		<-ctx.Done()
-		atomic.AddInt64(&definitionRegisterPause, -1*pauseIncrement)
-	}()
-
-	return time.Duration(pause) * time.Millisecond
 }
 
 func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (*ecs.TaskDefinition, error) {
@@ -107,7 +88,7 @@ func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (*ecs.T
 	var err error
 	i := 0
 	for ; i < 10; i++ {
-		time.Sleep(getPreRequestPause())
+		time.Sleep(progressivePause.GetPause())
 
 		var resultTaskDefinition *ecs.RegisterTaskDefinitionOutput
 		resultTaskDefinition, err = utils.RetryThrottling(svc.RegisterTaskDefinition)(&input)
@@ -159,33 +140,23 @@ func StopTaskForcibly(taskId string, stopReason taskmap.StoppedReason) error {
 	return err
 }
 
-func StopTask(taskId string, stopReason taskmap.StoppedReason) error {
-	cachedTask, _ := taskmap.Find(taskId, false)
-	if cachedTask == nil {
-		return StopTaskForcibly(taskId, stopReason)
-	}
-
-	if cachedTask.Status == taskmap.TaskStopped || cachedTask.Status == taskmap.TaskPendingToStop {
-		return fmt.Errorf("can't stop task that is stopped/pending to stop. Task status: %v", cachedTask.Status)
-	}
-
-	// Cache bakup on task stop fail
-	cachedTaskBak := *cachedTask
-
-	// Set pendingToStop status so no new StopTask() call for current task would be performed
-	cachedTask.Status = taskmap.TaskPendingToStop
-	taskmap.Write(cachedTask.TaskId, cachedTask, -1)
-
+func StopTask(cachedTask taskmap.Task, stopReason taskmap.StoppedReason) error {
 	err := StopTaskForcibly(cachedTask.TaskId, stopReason)
 	if err != nil {
-		taskmap.Write(cachedTask.TaskId, &cachedTaskBak, -1)
-	} else {
-		cachedTask.Status = taskmap.TaskStopped
-		cachedTask.StopReason = stopReason
-		taskmap.Write(cachedTask.TaskId, cachedTask, 10*time.Minute)
+		log.WithError(err).WithField(config.TaskIdKey, cachedTask.TaskId).Error("Failed to stop task!")
+		return err
 	}
 
-	return err
+	cachedTask.Status = taskmap.TaskStopped
+	cachedTask.StopReason = stopReason
+	responseCh, errCh := taskmap.UpdateTask(cachedTask, 10*time.Minute)
+	select {
+	case err := <-errCh:
+		return err
+	case <-responseCh:
+	}
+
+	return nil
 }
 
 func DescribeTask(taskArn string) (*ecs.DescribeTasksOutput, error) {
