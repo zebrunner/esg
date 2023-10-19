@@ -22,12 +22,14 @@ func (pp *ProgressivePause) GetPause() time.Duration {
 	pause := pp.pause
 	atomic.AddInt64(&pp.pause, pp.pauseIncrement)
 
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(pause+pp.pauseIncrement)*time.Millisecond)
-		defer cancel()
-		<-ctx.Done()
-		atomic.AddInt64(&pp.pause, pp.pauseIncrement)
-	}()
+	go pp.decreasePause(time.Duration(pause+pp.pauseIncrement) * time.Millisecond)
 
 	return time.Duration(pause) * time.Millisecond
+}
+
+func (pp *ProgressivePause) decreasePause(delayBerforeDeacrease time.Duration) {
+	ctx, cancel := context.WithTimeout(context.Background(), delayBerforeDeacrease)
+	defer cancel()
+	<-ctx.Done()
+	atomic.AddInt64(&pp.pause, -pp.pauseIncrement)
 }
