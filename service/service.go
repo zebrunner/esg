@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go/service/ecs"
@@ -21,6 +22,34 @@ import (
 	"github.com/zebrunner/esg/utils"
 	"github.com/zebrunner/esg/zebrunner"
 )
+
+var (
+	GenericCtxWorker CtxWorker
+)
+
+func init() {
+	GenericCtxWorker = CtxWorker{
+		ctxMutex: sync.Mutex{},
+		CtxMap:   make(map[string]context.Context, 0),
+	}
+}
+
+type CtxWorker struct {
+	ctxMutex sync.Mutex
+	CtxMap   map[string]context.Context
+}
+
+func (ctxWorker *CtxWorker) append(routerUUID string, ctx context.Context) {
+	ctxWorker.ctxMutex.Lock()
+	ctxWorker.CtxMap[routerUUID] = ctx
+	ctxWorker.ctxMutex.Unlock()
+	go func(genericUUID string, ctx context.Context) {
+		<-ctx.Done()
+		ctxWorker.ctxMutex.Lock()
+		delete(ctxWorker.CtxMap, genericUUID)
+		ctxWorker.ctxMutex.Unlock()
+	}(routerUUID, ctx)
+}
 
 type ServiceStarter interface {
 	StartService(context.Context) (map[string]interface{}, *utils.SeleniumError)
@@ -269,8 +298,11 @@ type genericStarter struct {
 }
 
 func (starter genericStarter) StartService(startupTime context.Context) (map[string]interface{}, *utils.SeleniumError) {
-	//override request context, as after response is sent, request context is canceled
-	starter.basis.Request = starter.basis.Request.WithContext(context.Background())
+	genericCtx, genericCtxCancel := context.WithCancel(context.Background())
+	// add to genericCtxMap
+	GenericCtxWorker.append(starter.basis.Env.RouterUUID, genericCtx)
+	// override request context, as after response is sent, request context is canceled
+	starter.basis.Request = starter.basis.Request.WithContext(genericCtx)
 	go func() {
 		// create new task definition for generic task
 		taskDefinition, err := CreateTaskDefinition(starter.basis.Env)
@@ -279,6 +311,8 @@ func (starter genericStarter) StartService(startupTime context.Context) (map[str
 			log.WithError(err).Error("Failed to create task definition")
 			zebrunner.AbortLaunch(starter.basis.Env.RouterUUID, starter.basis.Env.Workspace,
 				starter.basis.Env.Capabilities.LaunchUUID.ToPrimitive(), fmt.Sprintf("failed to create task defenition for generic: %v", err.Error()))
+
+			genericCtxCancel()
 			return
 		}
 		// set revision of newly created task definition
@@ -291,6 +325,8 @@ func (starter genericStarter) StartService(startupTime context.Context) (map[str
 			zebrunner.AbortLaunch(starter.basis.Env.RouterUUID, starter.basis.Env.Workspace,
 				starter.basis.Env.Capabilities.LaunchUUID.ToPrimitive(), startErr.Error())
 		}
+		// stop generic context
+		genericCtxCancel()
 	}()
 
 	return gin.H{"taskId": starter.basis.Env.RouterUUID}, nil

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -205,5 +206,18 @@ func main() {
 		log.WithError(err).Error("Failed to shutdown correctly")
 	}
 
+	var wg sync.WaitGroup
+
+	for routerUUID, ctx := range service.GenericCtxWorker.CtxMap {
+		wg.Add(1)
+		go func(routerUUID string, ctx context.Context) {
+			log.WithField(config.RouterUUID, routerUUID).Info("Waiting for task to start")
+			<-ctx.Done()
+			log.WithField(config.RouterUUID, routerUUID).Info("Task started")
+			wg.Done()
+		}(routerUUID, ctx)
+	}
+
+	wg.Wait()
 	log.Info("Router exited")
 }
