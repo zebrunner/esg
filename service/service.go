@@ -311,6 +311,8 @@ func (starter genericStarter) StartService(startupTime context.Context) (map[str
 			log.WithError(err).Error("Failed to create task definition")
 			zebrunner.AbortLaunch(starter.basis.Env.RouterUUID, starter.basis.Env.Workspace,
 				starter.basis.Env.Capabilities.LaunchUUID.ToPrimitive(), fmt.Sprintf("failed to create task defenition for generic: %v", err.Error()))
+
+			genericCtxCancel()
 			return
 		}
 		// set revision of newly created task definition
