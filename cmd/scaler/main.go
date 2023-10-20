@@ -4,8 +4,10 @@ import (
 	"database/sql"
 	"flag"
 	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -592,9 +594,6 @@ func main() {
 
 	service.InitScalingData()
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-
 	go RefreshTaskDefinitions()
 
 	go ScaleCluster()
@@ -613,6 +612,14 @@ func main() {
 		go refreshIMDSV2Token()
 	}
 
-	wg.Wait()
-	log.Fatal("Background worker stopped!")
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	log.Info("Shutdown scaler ...")
+
+	// on shutdown actions
+	err = definitionmap.Remove(definitionmap.TaskDefenititonRefreshDone)
+	if err != nil {
+		log.WithError(err).Error("Failed to unmark task definition refresh")
+	}
 }

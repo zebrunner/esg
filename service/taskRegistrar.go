@@ -26,6 +26,7 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 
 	family, err := env.GetFamilyRevision()
 	if err != nil {
+		log.WithError(err).Error("image not found")
 		select {
 		case waitRequest.EssentialErrCh <- fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily):
 		default:
