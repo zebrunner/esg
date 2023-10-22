@@ -86,7 +86,7 @@ func Create(c *gin.Context) {
 		return
 	}
 	env.ReqCapabilities = reqCaps
-	l = l.WithField("family", env.TaskDefinitionFamily).WithField(config.RouterUuid, env.RouterUUID)
+	l = l.WithField("family", env.TaskDefinitionFamily).WithField(config.RouterUUID, env.RouterUUID)
 
 	l.Info("new request")
 	l.WithField("env", env).Debug("Env details")
@@ -149,14 +149,18 @@ func rerouteProxy(path string, sessionId string) string {
 func CloseSession(c *gin.Context) {
 	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
 
-	l := log.WithField(config.TaskIdKey, sess.TaskId)
+	l := log.WithField(config.TaskIdKey, sess.TaskId).WithField(config.SessionIdKey, sess.SessionID)
 
 	selenium.CloseSession(sess, sessionmap.SessionFinished)
-	l = l.WithField(config.SessionIdKey, sess.SessionID)
 
-	err := service.StopTask(sess.TaskId, taskmap.TaskFinished)
+	cachedTask, err := taskmap.Find(sess.TaskId, false)
 	if err != nil {
-		l.WithError(err).Warn("Failed to stop task")
+		l.WithError(err).Warn("Failed to find task")
+	} else {
+		err = service.StopTask(*cachedTask, taskmap.TaskFinished)
+		if err != nil {
+			l.WithError(err).Warn("Failed to stop task")
+		}
 	}
 
 	l.Info("task closed")
@@ -166,13 +170,13 @@ func CloseSession(c *gin.Context) {
 func AbortTask(c *gin.Context) {
 	task := c.MustGet(config.TaskIdKey).(*taskmap.Task)
 
-	l := log.WithField(config.RouterUuid, task.RouterUUID).WithField(config.TaskIdKey, task.TaskId)
+	l := log.WithField(config.RouterUUID, task.RouterUUID).WithField(config.TaskIdKey, task.TaskId)
 
 	if !config.Conf.SingleTenant {
 		l = l.WithField("workspace", task.Workspace)
 	}
 
-	err := service.StopTask(task.TaskId, taskmap.TaskAborted)
+	err := service.StopTask(*task, taskmap.TaskAborted)
 	if err != nil {
 		l.WithError(err).Warn("Failed to stop task")
 	}
@@ -183,7 +187,7 @@ func AbortTask(c *gin.Context) {
 
 func Vnc(c *gin.Context) {
 	routerUUID := c.Param("uuid")
-	l := log.WithField(config.RouterUuid, routerUUID)
+	l := log.WithField(config.RouterUUID, routerUUID)
 	l.Debug("Vnc request")
 
 	var network environment.NetworkConfiguration
@@ -317,7 +321,7 @@ func TaskDescribe(c *gin.Context) {
 		return
 	}
 	routerUUID := c.Param("task")
-	l := log.WithField("user", user).WithField(config.RouterUuid, routerUUID)
+	l := log.WithField("user", user).WithField(config.RouterUUID, routerUUID)
 	l.Debug("Get task status")
 
 	task, seErr := getTask(routerUUID)

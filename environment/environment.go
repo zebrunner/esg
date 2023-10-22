@@ -27,10 +27,10 @@ const (
 
 	//public zebrunner ECR docker registry
 	imageRepo            = "public.ecr.aws/zebrunner/"
-	uploaderImage        = imageRepo + "uploader:3.3"
+	uploaderImage        = imageRepo + "uploader:3.4"
 	mitmImage            = imageRepo + "mitmproxy:1.2"
 	recorderImage        = imageRepo + "recorder:1.5"
-	cypressRecorderImage = imageRepo + "cypress-recorder:1.2"
+	cypressRecorderImage = imageRepo + "cypress-recorder:1.3"
 	appiumImage          = imageRepo + "appium:2.0.5"
 	cloneImage           = imageRepo + "git:2.36.2"
 	entrypointImage      = imageRepo + "entrypoint:2.4"
@@ -302,9 +302,9 @@ func (env *ExecutionEnvironment) CalculateResources() *resourcesToAllocate.Resou
 	}
 
 	resources := resourcesToAllocate.Resources{
-		UUID:   env.RouterUUID,
-		Cpu:    cpu,
-		Memory: memory,
+		RouterUUID: env.RouterUUID,
+		Cpu:        cpu,
+		Memory:     memory,
 	}
 
 	return &resources
@@ -316,9 +316,9 @@ func (env *ExecutionEnvironment) GetFamilyRevision() (string, error) {
 		return env.TaskDefinitionFamily, nil
 	}
 
-	revision, err := definitionmap.FindRevision(env.HashOvverideDefinition())
-	if err != nil {
-		return "", fmt.Errorf("revision not found for '%s'. %v", env.TaskDefinitionFamily, err)
+	revision, found := definitionmap.FindRevision(env.HashOvverideDefinition())
+	if !found {
+		return "", fmt.Errorf("revision not found for '%s'", env.TaskDefinitionFamily)
 	}
 
 	return fmt.Sprint(env.TaskDefinitionFamily, ":", revision), nil

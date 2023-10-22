@@ -125,7 +125,10 @@ func (w *instanceWatchWorker) start() {
 						log.WithField("taskArn", taskArn).WithError(err).Trace("instanceWatchWorker: error sent back to request")
 
 						req := w.requests[taskArn]
-						req.NonEssentialErrCh <- err
+						select {
+						case req.NonEssentialErrCh <- err:
+						default:
+						}
 						delete(w.requests, taskArn)
 					}
 				}
@@ -151,7 +154,10 @@ func (w *instanceWatchWorker) start() {
 				for _, taskArn := range taskArns {
 					log.WithField("taskArn", taskArn).WithError(err).Trace("instanceWatchWorker: described instance is sent back to request")
 					req := w.requests[taskArn]
-					req.ResponseCh <- ec2Instance
+					select {
+					case req.ResponseCh <- ec2Instance:
+					default:
+					}
 					delete(w.requests, taskArn)
 				}
 			}

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -15,6 +16,10 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps/definitionmap"
+	"github.com/zebrunner/esg/cachemaps/mapper"
+	"github.com/zebrunner/esg/cachemaps/resourcesToAllocate"
+	"github.com/zebrunner/esg/cachemaps/sessionmap"
+	"github.com/zebrunner/esg/cachemaps/taskmap"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/handlers"
 	"github.com/zebrunner/esg/service"
@@ -141,9 +146,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	defer config.RedisSessionsConnection.Close()
-	defer config.RedisTasksConnection.Close()
-	defer config.RedisDefinitionConnection.Close()
+	defer config.RedisSessionsClient.Close()
+	defer config.RedisTasksClient.Close()
+	defer config.RedisDefinitionClient.Close()
+	defer config.RedisCypressSetClient.Close()
+	defer config.RedisIdMapperClient.Close()
+	defer config.RedisResourcesClient.Close()
+	mapper.InitUUIDMapWorkers()
+	taskmap.InitTaskmapWorkers()
+	sessionmap.InitSessionmapWorker()
+	resourcesToAllocate.InitResourceWorker()
 
 	aws, err := service.InitAws()
 	if err != nil {
@@ -194,5 +206,18 @@ func main() {
 		log.WithError(err).Error("Failed to shutdown correctly")
 	}
 
+	var wg sync.WaitGroup
+
+	for routerUUID, ctx := range service.GenericCtxWorker.CtxMap {
+		wg.Add(1)
+		go func(routerUUID string, ctx context.Context) {
+			log.WithField(config.RouterUUID, routerUUID).Info("Waiting for task to start")
+			<-ctx.Done()
+			log.WithField(config.RouterUUID, routerUUID).Info("Task started")
+			wg.Done()
+		}(routerUUID, ctx)
+	}
+
+	wg.Wait()
 	log.Info("Router exited")
 }
