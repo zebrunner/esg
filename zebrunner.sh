@@ -33,17 +33,19 @@ cd "${BASEDIR}" || exit
   }
 
   shutdown() {
-    echo
-    # stop services
-    docker compose -f "$BASEDIR/docker-compose.yaml" down -v -t 540
-    # stop postgres and redis
-    docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" down -v
+    read -p "All volumes will be deleted. Do you want to continue? (y/n) [y]: "
+    if [[ $REPLY =~ ^[Yy]*$ ]]; then
+      # stop services
+      docker compose -f "$BASEDIR/docker-compose.yaml" down -v
+      # stop postgres and redis
+      docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" down -v
 
-    networkName="e3s-network"
-    networkDescription=$(docker network ls -f name=$networkName | grep $networkName)
-    if [ ! -z "$networkDescription" ]; then
-      # delete network with name $networkName
-      docker network rm $networkName
+      networkName="e3s-network"
+      networkDescription=$(docker network ls -f name=$networkName | grep $networkName)
+      if [ ! -z "$networkDescription" ]; then
+        # delete network with name $networkName
+        docker network rm $networkName
+      fi
     fi
   }
 
