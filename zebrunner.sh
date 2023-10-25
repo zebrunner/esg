@@ -95,6 +95,10 @@ cd "${BASEDIR}" || exit
     echo
   }
 
+  status() {
+    watch -n 2 "docker ps --format '{{.Names}}   \t{{.Status}}'"
+  }
+
   echo_warning() {
     echo "
       WARNING! $1"
@@ -116,10 +120,13 @@ cd "${BASEDIR}" || exit
       	  down                              Stop and remove containers for all layers
       	  restart                           Restart containers for all layers
       	  shutdown                          Stop and remove containers for all layers, clear volumes
+      	  status                            Show all containers statuses
       	  build                             Build images
       	  service_start <service_name>      Start one all service layer containers
       	  service_stop  <service_name>      Stop one or all service layer containers
       	  service_restart <service_name>    Restart one or all service layer containers
+      	  tasks_list                        All cluster's tasks list
+      	  tasks_describe                    All cluster's tasks description
       	  "
       echo_telegram
       exit 0
@@ -158,6 +165,15 @@ case "$1" in
         ;;
     version)
         version
+        ;;
+    tasks_list)
+        ./scripts/list-tasks.sh
+        ;;
+    tasks_describe)
+        ./scripts/describe-tasks.sh
+        ;;
+    status)
+        status
         ;;
     --help | -h)
         echo_help
