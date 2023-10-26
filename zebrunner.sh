@@ -91,10 +91,6 @@ cd "${BASEDIR}" || exit
     fi
   }
 
-  version() {
-    echo
-  }
-
   status() {
     watch -n 2 "docker ps --format '{{.Names}}   \t{{.Status}}'"
   }
@@ -114,7 +110,7 @@ cd "${BASEDIR}" || exit
     echo "
       Usage: ./zebrunner.sh [option]
       Flags:
-          --help | -h    Print help
+          --help | -h                       Print help
       Arguments:
       	  start                             Start containers for all layers
       	  down                              Stop and remove containers for all layers
@@ -162,9 +158,6 @@ case "$1" in
     service_restart)
         service_stop "$2"
         service_start "$2"
-        ;;
-    version)
-        version
         ;;
     tasks_list)
         ./scripts/list-tasks.sh
