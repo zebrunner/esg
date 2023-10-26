@@ -3,13 +3,16 @@
 BASEDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${BASEDIR}" || exit
 
+graceful_timeout=600
+networkName="e3s-network"
+
 
   start() {
-    networkName="e3s-network"
     networkDescription=$(docker network ls -f name=$networkName | grep $networkName)
     if [ -z "$networkDescription" ]; then
       # create network with name $networkName
-      docker network create -d bridge "$networkName"
+      docker network create -d bridge "$networkName" > /dev/null
+      echo "Network $networkName Created"
     fi
 
     # start postgres and redis
@@ -20,15 +23,15 @@ cd "${BASEDIR}" || exit
 
   down() {
     # stop services
-    docker compose -f "$BASEDIR/docker-compose.yaml" down -t 540
+    docker compose -f "$BASEDIR/docker-compose.yaml" down -t $graceful_timeout
     # stop postgres and redis
     docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" down
 
-    networkName="e3s-network"
     networkDescription=$(docker network ls -f name=$networkName | grep $networkName)
     if [ ! -z "$networkDescription" ]; then
       # delete network with name $networkName
-      docker network rm $networkName
+      docker network rm $networkName > /dev/null
+      echo "Network $networkName Removed"
     fi
   }
 
@@ -40,7 +43,6 @@ cd "${BASEDIR}" || exit
       # stop postgres and redis
       docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" down -v
 
-      networkName="e3s-network"
       networkDescription=$(docker network ls -f name=$networkName | grep $networkName)
       if [ ! -z "$networkDescription" ]; then
         # delete network with name $networkName
@@ -77,12 +79,12 @@ cd "${BASEDIR}" || exit
      if [ -z "$service_name" ]; then
       read -p "Service name is not passed. Do you want to stop all services? (y/n) [y]: "
       if [[ $REPLY =~ ^[Yy]*$ ]]; then
-        docker compose -f "$BASEDIR/docker-compose.yaml" down -t 540
+        docker compose -f "$BASEDIR/docker-compose.yaml" down -t $graceful_timeout
       else
         exit 1
       fi
     else
-      docker compose -f "$BASEDIR/docker-compose.yaml" stop $service_name -t 540
+      docker compose -f "$BASEDIR/docker-compose.yaml" stop $service_name -t $graceful_timeout
       ret=$?
       if [ $ret -ne 0 ]; then
         echo "failed to stop service $service_name"
@@ -121,8 +123,12 @@ cd "${BASEDIR}" || exit
       	  service_start <service_name>      Start one all service layer containers
       	  service_stop  <service_name>      Stop one or all service layer containers
       	  service_restart <service_name>    Restart one or all service layer containers
+          cluster_describe                  Cluster's description
       	  tasks_list                        All cluster's tasks list
       	  tasks_describe                    All cluster's tasks description
+          tasks_stop                        Stop all running tasks
+          instances_list                    All cluster's container-instances list
+          instances_describe                All cluster's container-instances description
       	  "
       echo_telegram
       exit 0
@@ -159,11 +165,23 @@ case "$1" in
         service_stop "$2"
         service_start "$2"
         ;;
+    cluster_describe)
+        ./scripts/describe-cluster.sh
+        ;;
     tasks_list)
         ./scripts/list-tasks.sh
         ;;
     tasks_describe)
         ./scripts/describe-tasks.sh
+        ;;
+    tasks_stop)
+        ./scripts/stop-tasks.sh
+        ;;
+    instances_list)
+        ./scripts/list-instances.sh
+        ;;
+    instances_describe)
+        ./scripts/describe-instances.sh
         ;;
     status)
         status
