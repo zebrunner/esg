@@ -163,7 +163,7 @@ case "$1" in
         ;;
     service_restart)
         service_stop "$2"
-        service_start "$2"
+        echo y | service_start "$2"
         ;;
     cluster_describe)
         ./scripts/describe-cluster.sh
