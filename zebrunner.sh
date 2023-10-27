@@ -8,93 +8,260 @@ networkName="e3s-network"
 
 
   start() {
+    # Create network if not exist
     networkDescription=$(docker network ls -f name=$networkName | grep $networkName)
     if [ -z "$networkDescription" ]; then
-      # create network with name $networkName
+      # Create network with name $networkName
       docker network create -d bridge "$networkName" > /dev/null
       echo "Network $networkName Created"
     fi
 
-    # start postgres and redis
-    docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" up -d
-    # start other services
-    docker compose -f "$BASEDIR/docker-compose.yaml" up -d
+    case "$1" in
+      all)
+        # start postgres and redis
+        docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" up -d
+        # start other services
+        docker compose -f "$BASEDIR/docker-compose.yaml" up -d
+        ;;
+
+      data)
+        data_name=$2
+        if [ -z "$data_name" ]; then
+            docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" up -d
+        else
+          docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" up -d --no-deps "$data_name"
+          ret=$?
+          if [ $ret -ne 0 ]; then
+            echo "Failed to start data $data_name"
+            exit 1
+          fi
+        fi
+        ;;
+
+      service)
+        service_name=$2
+        if [ -z "$service_name" ]; then
+            docker compose -f "$BASEDIR/docker-compose.yaml" up -d
+        else
+          docker compose -f "$BASEDIR/docker-compose.yaml" up -d --no-deps "$service_name"
+          ret=$?
+          if [ $ret -ne 0 ]; then
+            echo "Failed to start service $service_name"
+            exit 1
+          fi
+        fi
+        ;;
+
+      *)
+        echo -e "/nWrong input/n"
+        exit 1
+        ;;
+    esac
+  }
+
+  stop() {
+    case "$1" in
+      all)
+        # stop services
+        docker compose -f "$BASEDIR/docker-compose.yaml" stop -t $graceful_timeout
+        # stop postgres and redis
+        docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" stop
+        ;;
+
+      data)
+        data_name=$2
+        if [ -z "$data_name" ]; then
+            docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" stop
+        else
+          docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" stop "$data_name"
+          ret=$?
+          if [ $ret -ne 0 ]; then
+            echo "Failed to stop data $data_name"
+            exit 1
+          fi
+        fi
+        ;;
+
+      service)
+        service_name=$2
+        if [ -z "$service_name" ]; then
+            docker compose -f "$BASEDIR/docker-compose.yaml" stop -t $graceful_timeout
+        else
+          docker compose -f "$BASEDIR/docker-compose.yaml" stop -t $graceful_timeout "$service_name"
+          ret=$?
+          if [ $ret -ne 0 ]; then
+            echo "Failed to stop service $service_name"
+            exit 1
+          fi
+        fi
+        ;;
+
+      *)
+        echo -e "/nWrong input/n"
+        exit 1
+        ;;
+    esac
   }
 
   down() {
-    # stop services
-    docker compose -f "$BASEDIR/docker-compose.yaml" down -t $graceful_timeout
-    # stop postgres and redis
-    docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" down
+    case "$1" in
+      all)
+        # down services
+        docker compose -f "$BASEDIR/docker-compose.yaml" down -t $graceful_timeout
+        # down postgres and redis
+        docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" down
+        ;;
 
-    networkDescription=$(docker network ls -f name=$networkName | grep $networkName)
-    if [ ! -z "$networkDescription" ]; then
-      # delete network with name $networkName
-      docker network rm $networkName > /dev/null
-      echo "Network $networkName Removed"
-    fi
+      data)
+        data_name=$2
+        if [ -z "$data_name" ]; then
+            docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" down
+        else
+          docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" down "$data_name"
+          ret=$?
+          if [ $ret -ne 0 ]; then
+            echo "Failed to down data $data_name"
+            exit 1
+          fi
+        fi
+        ;;
+
+      service)
+        service_name=$2
+        if [ -z "$service_name" ]; then
+            docker compose -f "$BASEDIR/docker-compose.yaml" down -t $graceful_timeout
+        else
+          docker compose -f "$BASEDIR/docker-compose.yaml" down -t $graceful_timeout "$service_name"
+          ret=$?
+          if [ $ret -ne 0 ]; then
+            echo "Failed to down service $service_name"
+            exit 1
+          fi
+        fi
+        ;;
+
+      *)
+        echo -e "/nWrong input/n"
+        exit 1
+        ;;
+    esac
   }
 
   shutdown() {
-    read -p "All volumes will be deleted. Do you want to continue? (y/n) [y]: "
-    if [[ $REPLY =~ ^[Yy]*$ ]]; then
-      # stop services
-      docker compose -f "$BASEDIR/docker-compose.yaml" down -v
-      # stop postgres and redis
-      docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" down -v
+    case "$1" in
+      all)
+        read -r -p "All volumes will be deleted. Do you want to continue? (y/n) [y]: "
+        if [[ $REPLY =~ ^[Yy]*$ ]]; then
+          # shutdown services
+          docker compose -f "$BASEDIR/docker-compose.yaml" down -v
+          # shutdown postgres and redis
+          docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" down -v
 
-      networkDescription=$(docker network ls -f name=$networkName | grep $networkName)
-      if [ ! -z "$networkDescription" ]; then
-        # delete network with name $networkName
-        docker network rm $networkName
-      fi
-    fi
+          networkDescription=$(docker network ls -f name=$networkName | grep $networkName)
+          if [ ! -z "$networkDescription" ]; then
+            # delete network with name $networkName
+            docker network rm $networkName
+          fi
+        fi
+        ;;
+
+      data)
+        data_name=$2
+        if [ -z "$data_name" ]; then
+            read -r -p "The entire data layer and its volumes will be deleted. Do you want to continue? (y/n) [y]: "
+            if [[ $REPLY =~ ^[Yy]*$ ]]; then
+              docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" down -v
+            fi
+        else
+          read -r -p "$2 and its volumes will be deleted. Do you want to continue? (y/n) [y]: "
+            if [[ $REPLY =~ ^[Yy]*$ ]]; then
+              docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" down -v "$data_name"
+              ret=$?
+              if [ $ret -ne 0 ]; then
+                echo "Failed to shutdown data $data_name"
+                exit 1
+              fi
+            fi
+        fi
+        ;;
+
+      service)
+        service_name=$2
+        if [ -z "$service_name" ]; then
+            read -r -p "The entire service layer and its volumes will be deleted. Do you want to continue? (y/n) [y]: "
+            if [[ $REPLY =~ ^[Yy]*$ ]]; then
+              docker compose -f "$BASEDIR/docker-compose.yaml" down -v -t $graceful_timeout
+            fi
+        else
+          read -r -p "$2 and its volumes will be deleted. Do you want to continue? (y/n) [y]: "
+            if [[ $REPLY =~ ^[Yy]*$ ]]; then
+              docker compose -f "$BASEDIR/docker-compose.yaml" down -v -t $graceful_timeout "$service_name"
+              ret=$?
+              if [ $ret -ne 0 ]; then
+                echo "Failed to shutdown data $data_name"
+                exit 1
+              fi
+            fi
+        fi
+        ;;
+      *)
+        echo -e "/nWrong input/n"
+        exit 1
+        ;;
+    esac
   }
 
   build() {
     docker compose -f "$BASEDIR/build/docker-compose.yaml" build
   }
 
-  service_start() {
-    service_name=$1
-    if [ -z "$service_name" ]; then
-      read -p "Service name is not passed. Do you want to start all services? (y/n) [y]: "
-      if [[ $REPLY =~ ^[Yy]*$ ]]; then
-        docker compose -f "$BASEDIR/docker-compose.yaml" up -d
-      else
-        exit 1
-      fi
-    else
-      docker compose -f "$BASEDIR/docker-compose.yaml" up -d --no-deps $service_name
-      ret=$?
-      if [ $ret -ne 0 ]; then
-        echo "failed to start service $service_name"
-        exit 1
-      fi
-    fi
-  }
-
-  service_stop() {
-    service_name=$1
-     if [ -z "$service_name" ]; then
-      read -p "Service name is not passed. Do you want to stop all services? (y/n) [y]: "
-      if [[ $REPLY =~ ^[Yy]*$ ]]; then
-        docker compose -f "$BASEDIR/docker-compose.yaml" down -t $graceful_timeout
-      else
-        exit 1
-      fi
-    else
-      docker compose -f "$BASEDIR/docker-compose.yaml" stop $service_name -t $graceful_timeout
-      ret=$?
-      if [ $ret -ne 0 ]; then
-        echo "failed to stop service $service_name"
-        exit 1
-      fi
-    fi
-  }
-
   status() {
     watch -n 2 "docker ps --format '{{.Names}}   \t{{.Status}}'"
+  }
+
+  tasks() {
+    case "$1" in
+      list)
+        ./scripts/list-tasks.sh
+        ;;
+      stop)
+        ./scripts/stop-tasks.sh
+        ;;
+      *)
+        echo -e "/nWrong input/n"
+        exit 1
+        ;;
+    esac
+  }
+
+  describe() {
+    case "$1" in
+      cluster)
+        ./scripts/describe-cluster.sh
+        ;;
+      instance)
+        ./scripts/describe-instances.sh
+        ;;
+      task)
+        ./scripts/describe-tasks.sh
+        ;;
+      *)
+        echo -e "/nWrong input/n"
+        exit 1
+        ;;
+    esac
+  }
+
+  instances() {
+    case "$1" in
+      list)
+        ./scripts/list-instances.sh
+        ;;
+      *)
+        echo -e "/nWrong input/n"
+        exit 1
+        ;;
+    esac
   }
 
   echo_warning() {
@@ -114,21 +281,16 @@ networkName="e3s-network"
       Flags:
           --help | -h                       Print help
       Arguments:
-      	  start                             Start containers for all layers
-      	  down                              Stop and remove containers for all layers
-      	  restart                           Restart containers for all layers
-      	  shutdown                          Stop and remove containers for all layers, clear volumes
-      	  status                            Show all containers statuses
-      	  build                             Build images
-      	  service_start <service_name>      Start one all service layer containers
-      	  service_stop  <service_name>      Stop one or all service layer containers
-      	  service_restart <service_name>    Restart one or all service layer containers
-          cluster_describe                  Cluster's description
-      	  tasks_list                        All cluster's tasks list
-      	  tasks_describe                    All cluster's tasks description
-          tasks_stop                        Stop all running tasks
-          instances_list                    All cluster's container-instances list
-          instances_describe                All cluster's container-instances description
+      	  start     [all|data|service] <name>     Start containers for selected layers
+      	  stop      [all|data|service] <name>     Stop containers for selected layers
+      	  down      [all|data|service] <name>     Stop and remove containers for selected layers
+      	  shutdown  [all|data|service] <name>     Stop, remove containers, clear volumes for selected layers and
+      	  restart   [all|data|service] <name>     Restart containers for selected layers
+      	  build                                   Build images
+      	  status                                  Show all containers statuses
+          tasks     [list|stop]                   List all tasks or stop them
+      	  describe  [cluster|instance|task]       Describe selected items
+          instances [list]                        All cluster's container-instances list
       	  "
       echo_telegram
       exit 0
@@ -136,61 +298,42 @@ networkName="e3s-network"
 
 
 case "$1" in
-    setup)
-        setup
-        ;;
     start)
-	      start
-        ;;
-    restart)
-        down
-        start
-        ;;
+      start "$2" "$3"
+      ;;
+    stop)
+      stop "$2" "$3"
+      ;;
     down)
-        down
-        ;;
+      down "$2" "$3"
+      ;;
     shutdown)
-        shutdown
-        ;;
+      shutdown "$2" "$3"
+      ;;
+    restart)
+      down "$2" "$3"
+      start "$2" "$3"
+      ;;
     build)
-        build
-        ;;
-    service_start)
-        service_start "$2"
-        ;;
-    service_stop)
-        service_stop "$2"
-        ;;
-    service_restart)
-        service_stop "$2"
-        echo y | service_start "$2"
-        ;;
-    cluster_describe)
-        ./scripts/describe-cluster.sh
-        ;;
-    tasks_list)
-        ./scripts/list-tasks.sh
-        ;;
-    tasks_describe)
-        ./scripts/describe-tasks.sh
-        ;;
-    tasks_stop)
-        ./scripts/stop-tasks.sh
-        ;;
-    instances_list)
-        ./scripts/list-instances.sh
-        ;;
-    instances_describe)
-        ./scripts/describe-instances.sh
-        ;;
+      build
+      ;;
     status)
-        status
-        ;;
+      status
+      ;;
+    tasks)
+      tasks "$2"
+      ;;
+    describe)
+      describe "$2"
+      ;;
+    instances)
+      instances "$2"
+      ;;
     --help | -h)
-        echo_help
-        ;;
+      echo_help
+      ;;
     *)
-        echo_help
-        exit 1
-        ;;
+      echo_help
+      exit 1
+      ;;
 esac
