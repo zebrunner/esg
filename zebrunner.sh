@@ -53,7 +53,7 @@ networkName="e3s-network"
         ;;
 
       *)
-        echo -e "/nWrong input/n"
+        echo -e "\nWrong input\n"
         exit 1
         ;;
     esac
@@ -97,7 +97,7 @@ networkName="e3s-network"
         ;;
 
       *)
-        echo -e "/nWrong input/n"
+        echo -e "\nWrong input\n"
         exit 1
         ;;
     esac
@@ -141,7 +141,7 @@ networkName="e3s-network"
         ;;
 
       *)
-        echo -e "/nWrong input/n"
+        echo -e "\nWrong input\n"
         exit 1
         ;;
     esac
@@ -205,7 +205,7 @@ networkName="e3s-network"
         fi
         ;;
       *)
-        echo -e "/nWrong input/n"
+        echo -e "\nWrong input\n"
         exit 1
         ;;
     esac
@@ -228,7 +228,7 @@ networkName="e3s-network"
         ./scripts/stop-tasks.sh
         ;;
       *)
-        echo -e "/nWrong input/n"
+        echo -e "\nWrong input\n"
         exit 1
         ;;
     esac
@@ -246,7 +246,7 @@ networkName="e3s-network"
         ./scripts/describe-tasks.sh
         ;;
       *)
-        echo -e "/nWrong input/n"
+        echo -e "\nWrong input\n"
         exit 1
         ;;
     esac
@@ -258,7 +258,7 @@ networkName="e3s-network"
         ./scripts/list-instances.sh
         ;;
       *)
-        echo -e "/nWrong input/n"
+        echo -e "\nWrong input\n"
         exit 1
         ;;
     esac
