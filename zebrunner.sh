@@ -284,7 +284,7 @@ networkName="e3s-network"
       	  start     [all|data|service] <name>     Start containers for selected layers
       	  stop      [all|data|service] <name>     Stop containers for selected layers
       	  down      [all|data|service] <name>     Stop and remove containers for selected layers
-      	  shutdown  [all|data|service] <name>     Stop, remove containers, clear volumes for selected layers and
+      	  shutdown  [all|data|service] <name>     Stop, remove containers, clear volumes for selected layers
       	  restart   [all|data|service] <name>     Down and start containers for selected layers
       	  build                                   Build images
       	  status                                  Show all containers statuses
