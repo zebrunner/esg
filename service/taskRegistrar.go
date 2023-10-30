@@ -36,6 +36,13 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 	}
 	l := log.WithField("family", env.TaskDefinitionFamily)
 
+	var capacityProvider string
+	if strings.Contains(strings.ToLower(env.Capabilities.PlatformName.ToPrimitive()), "winodws") {
+		capacityProvider = config.Conf.AwsWinCP
+	} else {
+		capacityProvider = config.Conf.AwsLinuxCP
+	}
+
 	runTaskInput := &ecs.RunTaskInput{
 		Cluster:        &config.Conf.AwsCluster,
 		TaskDefinition: &family,
@@ -46,6 +53,7 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 				Type:  aws.String("binpack"),
 			},
 		},
+		CapacityProviderStrategy: []*ecs.CapacityProviderStrategyItem{{CapacityProvider: &capacityProvider}},
 	}
 	l.WithField("runTaskInput", runTaskInput).Trace("Res runTaskInput")
 

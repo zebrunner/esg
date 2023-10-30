@@ -24,6 +24,7 @@ const (
 	anyPlatform     = "any"
 	genericPlatform = "generic"
 	cypressPlatform = "cypress"
+	windowsPlatform = "windows"
 
 	//public zebrunner ECR docker registry
 	imageRepo            = "public.ecr.aws/zebrunner/"
@@ -344,6 +345,8 @@ func build(workspace string, routerUUID string, caps *capabilities.Capabilities)
 		return buildGeneric(workspace, routerUUID, caps)
 	} else if platform == cypressPlatform {
 		return buildCypress(workspace, routerUUID, caps)
+	} else if platform == windowsPlatform {
+		return buildWindowsBrowser(workspace, routerUUID, caps)
 	} else if platform == linuxPlatform || platform == "" || platform == anyPlatform {
 		return buildBrowser(workspace, routerUUID, caps)
 	}
@@ -418,6 +421,12 @@ func buildImage(caps *capabilities.Capabilities) (string, error) {
 		version := strings.ToLower(caps.BrowserVersion.ToPrimitive())
 		version = remapVersion(version)
 		return imageRepo + name + ":" + version, nil
+	} else if platformName == windowsPlatform {
+		name := strings.ToLower(caps.BrowserName.ToPrimitive())
+		name = remapName(name)
+		version := strings.ToLower(caps.BrowserVersion.ToPrimitive())
+		version = remapVersion(version)
+		return imageRepo + windowsPlatform + "/" + name + ":" + version, nil
 	} else {
 		return "", fmt.Errorf("failed to build container image. unsupported platform specified. platformName=%s", caps.PlatformName)
 	}

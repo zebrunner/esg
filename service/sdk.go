@@ -13,7 +13,7 @@ import (
 	"github.com/zebrunner/esg/utils"
 )
 
-func GetClusterTasks(svc *ecs.ECS) ([]*ecs.Task, error) {
+func GetCapacityProviderTasks(svc *ecs.ECS, capacityProviderName string) ([]*ecs.Task, error) {
 	tasks := []*ecs.Task{}
 	listTasksInput := &ecs.ListTasksInput{
 		Cluster: &config.Conf.AwsCluster,
@@ -36,7 +36,12 @@ func GetClusterTasks(svc *ecs.ECS) ([]*ecs.Task, error) {
 			log.WithError(err).Warn("Failed to get all tasks. Only partial results returned")
 			break
 		}
-		tasks = append(tasks, describeTasksResult.Tasks...)
+
+		for _, task := range describeTasksResult.Tasks {
+			if *task.CapacityProviderName == capacityProviderName {
+				tasks = append(tasks, task)
+			}
+		}
 
 		if listTasksResult.NextToken == nil {
 			break

@@ -32,6 +32,12 @@ fi
 if [ ! -z ${AWS_CLUSTER} ]; then
   CMD_ARGS="${CMD_ARGS} -aws-cluster ${AWS_CLUSTER}"
 fi
+if [ ! -z ${AWS_LINUX_CP} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-linux-capacity-provider ${AWS_LINUX_CP}"
+fi
+if [ ! -z ${AWS_WIN_CP} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-win-capacity-provider ${AWS_WIN_CP}"
+fi
 if [ ! -z ${USE_PUBLIC_IP} ]; then
   CMD_ARGS="${CMD_ARGS} -use-public-ip=${USE_PUBLIC_IP}"
 fi

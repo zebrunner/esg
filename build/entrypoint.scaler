@@ -23,6 +23,9 @@ CMD_ARGS=
 if [ ! -z ${AWS_ASG_NAME} ]; then
   CMD_ARGS="${CMD_ARGS} -aws-auto-scaling-group ${AWS_ASG_NAME}"
 fi
+if [ ! -z ${AWS_ASG_WIN_NAME} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-win-auto-scaling-group ${AWS_ASG_WIN_NAME}"
+fi
 if [ ! -z ${RESERVE_INSTANCES_PERCENT} ]; then
   CMD_ARGS="${CMD_ARGS} -reserve-instances-percent ${RESERVE_INSTANCES_PERCENT}"
 fi
@@ -43,6 +46,12 @@ if [ ! -z ${AWS_RETRY} ]; then
 fi
 if [ ! -z ${AWS_CLUSTER} ]; then
   CMD_ARGS="${CMD_ARGS} -aws-cluster ${AWS_CLUSTER}"
+fi
+if [ ! -z ${AWS_LINUX_CP} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-linux-capacity-provider ${AWS_LINUX_CP}"
+fi
+if [ ! -z ${AWS_WIN_CP} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-win-capacity-provider ${AWS_WIN_CP}"
 fi
 if [ ! -z ${AWS_ACESS_KEY_ID} ]; then
   CMD_ARGS="${CMD_ARGS} -aws-access-key-id ${AWS_ACESS_KEY_ID}"
