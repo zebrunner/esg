@@ -17,7 +17,7 @@ networkName="e3s-network"
     fi
 
     case "$1" in
-      all)
+      "")
         # start postgres and redis
         docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" up -d
         # start other services
@@ -105,7 +105,7 @@ networkName="e3s-network"
 
   down() {
     case "$1" in
-      all)
+      "")
         # down services
         docker compose -f "$BASEDIR/docker-compose.yaml" down -t $graceful_timeout
         # down postgres and redis
@@ -149,8 +149,9 @@ networkName="e3s-network"
 
   shutdown() {
     case "$1" in
-      all)
-        read -r -p "All volumes will be deleted. Do you want to continue? (y/n) [y]: "
+      "")
+        echo_warning "Shutdown will erase all settings and data for \"${BASEDIR}\"!"
+        read -r -p "Do you want to continue? (y/n) [y]: "
         if [[ $REPLY =~ ^[Yy]*$ ]]; then
           # shutdown services
           docker compose -f "$BASEDIR/docker-compose.yaml" down -v
