@@ -32,7 +32,7 @@ networkName="e3s-network"
           docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" up -d --no-deps "$data_name"
           ret=$?
           if [ $ret -ne 0 ]; then
-            echo "Failed to start data $data_name"
+            echo_warning "Failed to start data $data_name"
             exit 1
           fi
         fi
@@ -46,7 +46,7 @@ networkName="e3s-network"
           docker compose -f "$BASEDIR/docker-compose.yaml" up -d --no-deps "$service_name"
           ret=$?
           if [ $ret -ne 0 ]; then
-            echo "Failed to start service $service_name"
+            echo_warning "Failed to start service $service_name"
             exit 1
           fi
         fi
@@ -76,7 +76,7 @@ networkName="e3s-network"
           docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" stop "$data_name"
           ret=$?
           if [ $ret -ne 0 ]; then
-            echo "Failed to stop data $data_name"
+            echo_warning "Failed to stop data $data_name"
             exit 1
           fi
         fi
@@ -90,7 +90,7 @@ networkName="e3s-network"
           docker compose -f "$BASEDIR/docker-compose.yaml" stop -t $graceful_timeout "$service_name"
           ret=$?
           if [ $ret -ne 0 ]; then
-            echo "Failed to stop service $service_name"
+            echo_warning "Failed to stop service $service_name"
             exit 1
           fi
         fi
@@ -120,7 +120,7 @@ networkName="e3s-network"
           docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" down "$data_name"
           ret=$?
           if [ $ret -ne 0 ]; then
-            echo "Failed to down data $data_name"
+            echo_warning "Failed to down data $data_name"
             exit 1
           fi
         fi
@@ -134,7 +134,7 @@ networkName="e3s-network"
           docker compose -f "$BASEDIR/docker-compose.yaml" down -t $graceful_timeout "$service_name"
           ret=$?
           if [ $ret -ne 0 ]; then
-            echo "Failed to down service $service_name"
+            echo_warning "Failed to down service $service_name"
             exit 1
           fi
         fi
@@ -169,17 +169,19 @@ networkName="e3s-network"
       data)
         data_name=$2
         if [ -z "$data_name" ]; then
+            echo_warning
             read -r -p "The entire data layer and its volumes will be deleted. Do you want to continue? (y/n) [y]: "
             if [[ $REPLY =~ ^[Yy]*$ ]]; then
               docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" down -v
             fi
         else
+          echo_warning
           read -r -p "$2 and its volumes will be deleted. Do you want to continue? (y/n) [y]: "
             if [[ $REPLY =~ ^[Yy]*$ ]]; then
               docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" down -v "$data_name"
               ret=$?
               if [ $ret -ne 0 ]; then
-                echo "Failed to shutdown data $data_name"
+                echo_warning "Failed to shutdown data $data_name"
                 exit 1
               fi
             fi
@@ -199,7 +201,7 @@ networkName="e3s-network"
               docker compose -f "$BASEDIR/docker-compose.yaml" down -v -t $graceful_timeout "$service_name"
               ret=$?
               if [ $ret -ne 0 ]; then
-                echo "Failed to shutdown data $data_name"
+                echo_warning "Failed to shutdown data $data_name"
                 exit 1
               fi
             fi
