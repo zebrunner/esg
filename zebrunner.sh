@@ -61,7 +61,7 @@ networkName="e3s-network"
 
   stop() {
     case "$1" in
-      all)
+      "")
         # stop services
         docker compose -f "$BASEDIR/docker-compose.yaml" stop -t $graceful_timeout
         # stop postgres and redis
@@ -282,11 +282,11 @@ networkName="e3s-network"
       Flags:
           --help | -h                       Print help
       Arguments:
-      	  start     [all|data|service] <name>     Start containers for selected layers
-      	  stop      [all|data|service] <name>     Stop containers for selected layers
-      	  down      [all|data|service] <name>     Stop and remove containers for selected layers
-      	  shutdown  [all|data|service] <name>     Stop, remove containers, clear volumes for selected layers
-      	  restart   [all|data|service] <name>     Down and start containers for selected layers
+      	  start     [data|service] <name>         Start containers for selected layers
+      	  stop      [data|service] <name>         Stop containers for selected layers
+      	  down      [data|service] <name>         Stop and remove containers for selected layers
+      	  shutdown  [data|service] <name>         Stop, remove containers, clear volumes for selected layers
+      	  restart   [data|service] <name>         Down and start containers for selected layers
       	  build                                   Build images
       	  status                                  Show all containers statuses
           tasks     [list|stop]                   List all tasks or stop them
