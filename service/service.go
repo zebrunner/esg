@@ -207,7 +207,7 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (essential *utils.Sel
 
 	requestBody, err := s.Env.ReqCapabilities.ToRequestBody()
 	if err != nil {
-		essential = utils.CreationErr(fmt.Errorf("failed to start driver"), err.Error())
+		essential = utils.CreationErr(fmt.Errorf("failed to get request body for driver start"), err.Error())
 		s.Log.WithError(essential).Warn("Failed to start driver, stopping service...")
 		return
 	}
@@ -219,7 +219,7 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (essential *utils.Sel
 
 	startSessionRequest, err := http.NewRequest(http.MethodPost, reqUrl.String(), requestBody)
 	if err != nil {
-		essential = utils.CreationErr(fmt.Errorf("failed to start driver"), err.Error())
+		essential = utils.CreationErr(fmt.Errorf("failed to create start driver request"), err.Error())
 		s.Log.WithError(essential).Warn("Failed to start driver, stopping service...")
 		return
 	}

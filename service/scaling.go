@@ -20,7 +20,8 @@ import (
 )
 
 var (
-	scalersMap map[string]scaler
+	scalersMap       map[string]scaler
+	allocationResMap map[string][]resourcesToAllocate.ResourcesToAllocate
 )
 
 type scaler struct {
@@ -36,20 +37,35 @@ type Resources struct {
 
 func InitScalingData() {
 	var err error
-	scalersMap = make(map[string]scaler)
-	linuxScaler, err := initScaler(config.Conf.AwsLinuxCP)
+	scalersMap, err = initScalers()
 	if err != nil {
-		log.WithError(err).Error("Failed to get create linux scaler instance. Stopping scaler")
+		log.WithError(err).Error("Failed to create scaler instances. Stopping scaler")
 		os.Exit(1)
 	}
-	scalersMap[linuxScaler.autoscalingGroupName] = *linuxScaler
 
-	windowsScaler, err := initScaler(config.Conf.AwsLinuxCP)
-	if err != nil {
-		log.WithError(err).Error("Failed to get create windows scaler instance. Stopping scaler")
-		os.Exit(1)
-	}
-	scalersMap[windowsScaler.autoscalingGroupName] = *windowsScaler
+	allocationResMap = make(map[string][]resourcesToAllocate.ResourcesToAllocate)
+	go func() {
+		for {
+			time.Sleep(10 * time.Second)
+			resources, err := resourcesToAllocate.GetAllEntities()
+			if err != nil {
+				log.WithError(err).Error("Failed to get resources for allocation")
+				continue
+			}
+			tmpResourcesMap := make(map[string][]resourcesToAllocate.ResourcesToAllocate)
+			for _, resToAllocate := range resources {
+				if resourcesArr, ok := tmpResourcesMap[resToAllocate.CapacityProvider]; ok {
+					resourcesArr = append(resourcesArr, *resToAllocate)
+					tmpResourcesMap[resToAllocate.CapacityProvider] = resourcesArr
+				} else {
+					resourcesArr = []resourcesToAllocate.ResourcesToAllocate{*resToAllocate}
+					tmpResourcesMap[resToAllocate.CapacityProvider] = resourcesArr
+				}
+			}
+
+			allocationResMap = tmpResourcesMap
+		}
+	}()
 }
 
 func StartScalers() {
@@ -67,93 +83,84 @@ func StartScalers() {
 				s.ScaleDown()
 			}
 		}(s)
+
+		log.WithField("instanceResources", s.instanceTypeResources).WithField("capacityProvider", s.capacityProviderName).WithField("asg", s.autoscalingGroupName).Info("Started scaler")
 	}
 }
 
-func initScaler(capacityProviderName string) (*scaler, error) {
+func initScalers() (map[string]scaler, error) {
 	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
 	if err != nil {
 		return nil, err
 	}
 
-	// could be used if ecs:DescribeClusters action will be shared for esg-role
-	// ecsSvc := ecs.New(session, &aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
-	// describeClusterInput := ecs.DescribeClustersInput{
-	// 	Clusters: []*string{&config.Conf.AwsCluster},
-	// }
-	// describeClusterOutput, err := ecsSvc.DescribeClusters(&describeClusterInput)
-	// if err != nil {
-	// 	return nil, err
-	// } else if len(describeClusterOutput.Clusters) == 0 {
-	// 	return nil, fmt.Errorf("Failed to describe cluster: %s", config.Conf.AwsCluster)
-	// }
-
-	// describeCapacityProvidersInput := ecs.DescribeCapacityProvidersInput{
-	// 	CapacityProviders: describeClusterOutput.Clusters[0].CapacityProviders,
-	// }
-
-	// describeCapacityProvidersOutput, err = ecsSvc.DescribeCapacityProviders(&describeCapacityProvidersInput)
-	// if err != nil {
-	// 	return nil, err
-	// } else if len(describeCapacityProvidersOutput.CapacityProviders) == 0 {
-	// 	return nil, fmt.Errorf("Failed to describe capacity providers:")
-	// }
-
-	// for _, _ := range describeCapacityProvidersOutput.CapacityProviders {
-	//init scaler per dataprovider and add it to map/array
-	// }
-
-	ecsSvc := ecs.New(session, &aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
-	describeCapacityProvidersInput := ecs.DescribeCapacityProvidersInput{
-		CapacityProviders: []*string{&capacityProviderName},
+	ecsSvc := ecs.New(session)
+	describeClusterInput := ecs.DescribeClustersInput{
+		Clusters: []*string{&config.Conf.AwsCluster},
+	}
+	describeClusterOutput, err := utils.RetryThrottling(ecsSvc.DescribeClusters)(&describeClusterInput)
+	if err != nil {
+		return nil, err
+	} else if len(describeClusterOutput.Clusters) == 0 {
+		return nil, fmt.Errorf("failed to describe cluster: %s", config.Conf.AwsCluster)
 	}
 
-	describeCapacityProvidersOutput, err := ecsSvc.DescribeCapacityProviders(&describeCapacityProvidersInput)
+	describeCapacityProvidersInput := ecs.DescribeCapacityProvidersInput{
+		CapacityProviders: describeClusterOutput.Clusters[0].CapacityProviders,
+	}
+	describeCapacityProvidersOutput, err := utils.RetryThrottling(ecsSvc.DescribeCapacityProviders)(&describeCapacityProvidersInput)
 	if err != nil {
 		return nil, err
 	} else if len(describeCapacityProvidersOutput.CapacityProviders) == 0 {
-		return nil, fmt.Errorf("Failed to describe capacity provider: %s", capacityProviderName)
+		return nil, fmt.Errorf("failed to describe capacity providers")
 	}
 
-	asgArn := describeCapacityProvidersOutput.CapacityProviders[0].AutoScalingGroupProvider.AutoScalingGroupArn
-	asgArnSplited := strings.Split(*asgArn, "/")
-	asgName := asgArnSplited[len(asgArnSplited)-1]
+	scalers := make(map[string]scaler)
+	for _, capacityProvider := range describeCapacityProvidersOutput.CapacityProviders {
+		asgArn := capacityProvider.AutoScalingGroupProvider.AutoScalingGroupArn
+		asgArnSplited := strings.Split(*asgArn, "/")
+		asgName := asgArnSplited[len(asgArnSplited)-1]
 
-	autoscalingSvc := autoscaling.New(session, &aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
-	describeGroupInput := autoscaling.DescribeAutoScalingGroupsInput{
-		AutoScalingGroupNames: []*string{aws.String(asgName)},
-	}
-	describeGroupOutput, err := utils.RetryThrottling(autoscalingSvc.DescribeAutoScalingGroups)(&describeGroupInput)
-	if err != nil {
-		return nil, err
+		autoscalingSvc := autoscaling.New(session)
+		describeGroupInput := autoscaling.DescribeAutoScalingGroupsInput{
+			AutoScalingGroupNames: []*string{aws.String(asgName)},
+		}
+		describeGroupOutput, err := utils.RetryThrottling(autoscalingSvc.DescribeAutoScalingGroups)(&describeGroupInput)
+		if err != nil {
+			return nil, err
+		}
+
+		launchConfiguration := describeGroupOutput.AutoScalingGroups[0].LaunchConfigurationName
+		describeLaunchConfigInput := autoscaling.DescribeLaunchConfigurationsInput{
+			LaunchConfigurationNames: []*string{launchConfiguration},
+		}
+		result, err := utils.RetryThrottling(autoscalingSvc.DescribeLaunchConfigurations)(&describeLaunchConfigInput)
+		if err != nil {
+			return nil, err
+		}
+
+		instanceType := result.LaunchConfigurations[0].InstanceType
+		ec2Svc := ec2.New(session)
+		describeInstanceTypeInput := ec2.DescribeInstanceTypesInput{
+			InstanceTypes: []*string{instanceType},
+		}
+		instanceTypesResult, err := utils.RetryThrottling(ec2Svc.DescribeInstanceTypes)(&describeInstanceTypeInput)
+		if err != nil {
+			return nil, err
+		}
+
+		instanceInfo := instanceTypesResult.InstanceTypes[0]
+
+		s := scaler{
+			capacityProviderName:  *capacityProvider.Name,
+			autoscalingGroupName:  asgName,
+			instanceTypeResources: Resources{CPU: *instanceInfo.VCpuInfo.DefaultVCpus * 1024, Memory: *instanceInfo.MemoryInfo.SizeInMiB},
+		}
+
+		scalers[s.capacityProviderName] = s
 	}
 
-	launchConfiguration := describeGroupOutput.AutoScalingGroups[0].LaunchConfigurationName
-	describeLaunchConfigInput := autoscaling.DescribeLaunchConfigurationsInput{
-		LaunchConfigurationNames: []*string{launchConfiguration},
-	}
-	result, err := utils.RetryThrottling(autoscalingSvc.DescribeLaunchConfigurations)(&describeLaunchConfigInput)
-	if err != nil {
-		return nil, err
-	}
-
-	instanceType := result.LaunchConfigurations[0].InstanceType
-	ec2Svc := ec2.New(session, &aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
-	describeInstanceTypeInput := ec2.DescribeInstanceTypesInput{
-		InstanceTypes: []*string{instanceType},
-	}
-	instanceTypesResult, err := utils.RetryThrottling(ec2Svc.DescribeInstanceTypes)(&describeInstanceTypeInput)
-	if err != nil {
-		return nil, err
-	}
-
-	instanceInfo := instanceTypesResult.InstanceTypes[0]
-
-	return &scaler{
-		capacityProviderName:  capacityProviderName,
-		autoscalingGroupName:  asgName,
-		instanceTypeResources: Resources{CPU: *instanceInfo.VCpuInfo.DefaultVCpus * 1024, Memory: *instanceInfo.MemoryInfo.SizeInMiB},
-	}, nil
+	return scalers, nil
 }
 
 func getTasksResources(tasks []*ecs.Task, status string) []*Resources {
@@ -218,16 +225,17 @@ func (s *scaler) getAutoscalingGroup(autoscalingSvc *autoscaling.AutoScaling) (*
 }
 
 func (s *scaler) ScaleUp() {
+	l := log.WithField("asg", s.autoscalingGroupName)
 	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
 	if err != nil {
-		log.WithError(err).Error("Failed to create AWS session")
+		l.WithError(err).Error("Failed to create AWS session")
 		return
 	}
 	svc := ecs.New(session)
 	autoscalingSvc := autoscaling.New(session)
 	tasks, err := GetCapacityProviderTasks(svc, s.capacityProviderName)
 	if err != nil {
-		log.WithError(err).Error("Failed to get list of running task")
+		l.WithError(err).Error("Failed to get list of running task")
 		return
 	}
 
@@ -239,7 +247,7 @@ func (s *scaler) ScaleUp() {
 
 	asg, err := s.getAutoscalingGroup(autoscalingSvc)
 	if err != nil {
-		log.WithError(err).Error("Failed to get autoscaling group")
+		l.WithError(err).Error("Failed to get autoscaling group")
 		return
 	}
 	currentCapacity := *asg.DesiredCapacity
@@ -263,10 +271,7 @@ func (s *scaler) ScaleUp() {
 		}
 	}
 
-	resourcesToAllocate, err := resourcesToAllocate.GetAllEntities()
-	if err != nil {
-		log.Info("Failed to get resources for allocation")
-	} else {
+	if resourcesToAllocate, ok := allocationResMap[s.capacityProviderName]; ok && resourcesToAllocate != nil {
 		for _, resources := range resourcesToAllocate {
 			enough := false
 			for _, i := range freeResources {
@@ -286,7 +291,7 @@ func (s *scaler) ScaleUp() {
 
 	// No new resources required right now
 	if len(requiredTaskResources) == 0 {
-		log.Trace("No new resources required")
+		l.Trace("No new resources required")
 		return
 	}
 
@@ -298,7 +303,7 @@ func (s *scaler) ScaleUp() {
 		totalRequiredResources.CPU += t.CPU
 		totalRequiredResources.Memory += t.Memory
 	}
-	log.WithFields(log.Fields{
+	l.WithFields(log.Fields{
 		"CPU":    totalRequiredResources.CPU,
 		"Memory": totalRequiredResources.Memory,
 	}).Debug("Total required resources")
@@ -310,7 +315,7 @@ func (s *scaler) ScaleUp() {
 	desiredReservationCapacity := desiredCapacity * (1 + config.Conf.ReserveInstancesPercent)
 
 	if desiredReservationCapacity-desiredCapacity > float64(config.Conf.ReserveMaxCapacity) {
-		log.WithFields(log.Fields{
+		l.WithFields(log.Fields{
 			"desired reservation capacity": math.Ceil(desiredReservationCapacity),
 			"desired capacity":             math.Ceil(desiredCapacity),
 			"max reservation capacity":     config.Conf.ReserveMaxCapacity,
@@ -321,7 +326,7 @@ func (s *scaler) ScaleUp() {
 	newCapacity := int64(math.Ceil(desiredReservationCapacity))
 
 	if newCapacity > *asg.MaxSize {
-		log.WithFields(log.Fields{
+		l.WithFields(log.Fields{
 			"maxCapacity":     *asg.MaxSize,
 			"desiredCapacity": newCapacity,
 		}).Warn("ASG desired size reached limit!")
@@ -339,11 +344,10 @@ func (s *scaler) ScaleUp() {
 	}
 	_, err = utils.RetryThrottling(autoscalingSvc.UpdateAutoScalingGroup)(updateGroupInput)
 	if err != nil {
-		log.WithError(err).Error("Failed to update auto scaling group")
+		l.WithError(err).Error("Failed to update auto scaling group")
 		return
 	}
-	log.WithFields(log.Fields{
-		"asg":         s.autoscalingGroupName,
+	l.WithFields(log.Fields{
 		"oldCapacity": currentCapacity,
 		"newCapacity": newCapacity,
 	}).Info("Capacity updated")
@@ -379,10 +383,7 @@ func (s *scaler) ScaleDown() {
 
 	freeResources := s.getFreeResources(tasks, int(currentCapacity), "RUNNING", "PROVISIONING")
 
-	resourcesToAllocate, err := resourcesToAllocate.GetAllEntities()
-	if err != nil {
-		l.Info("Failed to get resources for allocation")
-	} else {
+	if resourcesToAllocate, ok := allocationResMap[s.capacityProviderName]; ok && resourcesToAllocate != nil {
 		for _, desiredProvisioning := range resourcesToAllocate {
 			for _, instance := range freeResources {
 				if instance.CPU >= desiredProvisioning.Cpu && instance.Memory >= desiredProvisioning.Memory {
@@ -412,7 +413,7 @@ func (s *scaler) ScaleDown() {
 		return
 	}
 
-	containerInstances, err := DescribeContainerInstances(ciArns, svc)
+	containerInstances, err := DescribeContainerInstancesOfCapacityProvider(ciArns, svc, s.capacityProviderName)
 	if err != nil {
 		l.WithError(err).Error("Failed to describe container instances")
 		return

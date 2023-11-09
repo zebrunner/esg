@@ -37,7 +37,7 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 	l := log.WithField("family", env.TaskDefinitionFamily)
 
 	var capacityProvider string
-	if strings.Contains(strings.ToLower(env.Capabilities.PlatformName.ToPrimitive()), "winodws") {
+	if strings.Contains(strings.ToLower(env.Capabilities.PlatformName.ToPrimitive()), "windows") {
 		capacityProvider = config.Conf.AwsWinCP
 	} else {
 		capacityProvider = config.Conf.AwsLinuxCP
@@ -98,7 +98,9 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 			if errStr == "ClientException: Tasks provisioning capacity limit exceeded." || strings.Contains(errStr, "ThrottlingException: Rate exceeded") {
 				l.WithError(err).Trace("Task register failed.")
 				if !markedToAllocate {
-					resourcesToAllocate.AddEntity(env.CalculateResources())
+					res := env.CalculateResources()
+					res.CapacityProvider = capacityProvider
+					resourcesToAllocate.AddEntity(res)
 					markedToAllocate = true
 				}
 				sleepRateLimit := time.Duration(20+rand.Intn(10)) * time.Second

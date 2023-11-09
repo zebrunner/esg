@@ -38,7 +38,7 @@ func GetCapacityProviderTasks(svc *ecs.ECS, capacityProviderName string) ([]*ecs
 		}
 
 		for _, task := range describeTasksResult.Tasks {
-			if *task.CapacityProviderName == capacityProviderName {
+			if task.CapacityProviderName != nil && *task.CapacityProviderName == capacityProviderName {
 				tasks = append(tasks, task)
 			}
 		}
@@ -164,6 +164,22 @@ func DescribeContainerInstances(containerInstanceIdPtrs []*string, svc *ecs.ECS)
 	}
 
 	return containerInstances, nil
+}
+
+func DescribeContainerInstancesOfCapacityProvider(containerInstanceIdPtrs []*string, svc *ecs.ECS, capacityProviderName string) ([]*ecs.ContainerInstance, error) {
+	ciArr, err := DescribeContainerInstances(containerInstanceIdPtrs, svc)
+	if err != nil {
+		return nil, err
+	}
+
+	cpCIArr := make([]*ecs.ContainerInstance, 0)
+	for _, containerInstance := range ciArr {
+		if containerInstance.CapacityProviderName != nil && *containerInstance.CapacityProviderName == capacityProviderName {
+			cpCIArr = append(cpCIArr, containerInstance)
+		}
+	}
+
+	return cpCIArr, nil
 }
 
 func DescribeInstances(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) ([]*ec2.Instance, error) {

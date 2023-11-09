@@ -74,6 +74,10 @@ func ListDrivers(c *gin.Context) {
 		"cypress-firefox":  "cypress",
 	}
 
+	windowsPlatforms := map[string]string{
+		"windows-chrome": "windows",
+	}
+
 	for _, image := range images {
 		name := strings.Split(image, ":")[0]
 		version := strings.Split(image, ":")[1]
@@ -105,6 +109,11 @@ func ListDrivers(c *gin.Context) {
 		if _, ok := cypressPlatforms[name]; ok {
 			browserData["image"] = "public.ecr.aws/zebrunner/" + image
 			browserData["platform"] = cypressPlatforms[name]
+		}
+
+		if platform, ok := windowsPlatforms[name]; ok {
+			browserData["name"] = strings.TrimPrefix(name, "windows-")
+			browserData["platform"] = platform
 		}
 
 		browsersResponse = append(browsersResponse, browserData)

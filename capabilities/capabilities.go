@@ -487,9 +487,10 @@ func capsForAndroid(executor string, version string) ([]*Capabilities, error) {
 
 func capsForWindows(executor string, version string) ([]*Capabilities, error) {
 	capsList := make([]*Capabilities, 0)
+
 	reqCaps := map[string]interface{}{
 		"platformName":   "windows",
-		"browserName":    executor,
+		"browserName":    strings.TrimPrefix(executor, "windows-"),
 		"browserVersion": version,
 	}
 	capsWithoutMitm := GetDefaultCaps()
