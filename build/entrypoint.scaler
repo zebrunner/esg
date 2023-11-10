@@ -20,9 +20,6 @@ finish() {
 
 CMD_ARGS=
 #scaler cli args:
-if [ ! -z ${AWS_ASG_NAME} ]; then
-  CMD_ARGS="${CMD_ARGS} -aws-auto-scaling-group ${AWS_ASG_NAME}"
-fi
 if [ ! -z ${RESERVE_INSTANCES_PERCENT} ]; then
   CMD_ARGS="${CMD_ARGS} -reserve-instances-percent ${RESERVE_INSTANCES_PERCENT}"
 fi

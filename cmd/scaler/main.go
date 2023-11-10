@@ -375,20 +375,6 @@ func StopCypressIdleTasks() {
 	}
 }
 
-func ScaleCluster() {
-	for {
-		time.Sleep(10 * time.Second)
-		service.ScaleUp()
-	}
-}
-
-func ScaleDownCluster() {
-	for {
-		time.Sleep(30 * time.Second)
-		service.ScaleDown()
-	}
-}
-
 func RefreshTaskDefinition(image string) error {
 	capsList, err := capabilities.FromImage(image)
 	l := log.WithField("image", image)
@@ -593,12 +579,9 @@ func main() {
 	// resourcesToAllocate.InitResourceWorker()
 
 	service.InitScalingData()
+	service.StartScalers()
 
 	go RefreshTaskDefinitions()
-
-	go ScaleCluster()
-
-	go ScaleDownCluster()
 
 	go ClearTasks()
 

@@ -13,7 +13,7 @@ import (
 	"github.com/zebrunner/esg/utils"
 )
 
-func GetClusterTasks(svc *ecs.ECS) ([]*ecs.Task, error) {
+func GetCapacityProviderTasks(svc *ecs.ECS, capacityProviderName string) ([]*ecs.Task, error) {
 	tasks := []*ecs.Task{}
 	listTasksInput := &ecs.ListTasksInput{
 		Cluster: &config.Conf.AwsCluster,
@@ -36,7 +36,12 @@ func GetClusterTasks(svc *ecs.ECS) ([]*ecs.Task, error) {
 			log.WithError(err).Warn("Failed to get all tasks. Only partial results returned")
 			break
 		}
-		tasks = append(tasks, describeTasksResult.Tasks...)
+
+		for _, task := range describeTasksResult.Tasks {
+			if task.CapacityProviderName != nil && *task.CapacityProviderName == capacityProviderName {
+				tasks = append(tasks, task)
+			}
+		}
 
 		if listTasksResult.NextToken == nil {
 			break
@@ -159,6 +164,22 @@ func DescribeContainerInstances(containerInstanceIdPtrs []*string, svc *ecs.ECS)
 	}
 
 	return containerInstances, nil
+}
+
+func DescribeContainerInstancesOfCapacityProvider(containerInstanceIdPtrs []*string, svc *ecs.ECS, capacityProviderName string) ([]*ecs.ContainerInstance, error) {
+	ciArr, err := DescribeContainerInstances(containerInstanceIdPtrs, svc)
+	if err != nil {
+		return nil, err
+	}
+
+	cpCIArr := make([]*ecs.ContainerInstance, 0)
+	for _, containerInstance := range ciArr {
+		if containerInstance.CapacityProviderName != nil && *containerInstance.CapacityProviderName == capacityProviderName {
+			cpCIArr = append(cpCIArr, containerInstance)
+		}
+	}
+
+	return cpCIArr, nil
 }
 
 func DescribeInstances(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) ([]*ec2.Instance, error) {

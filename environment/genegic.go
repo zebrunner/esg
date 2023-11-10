@@ -213,8 +213,9 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 				"driver": {ContainerPort: genericPort, HostPort: 0, Path: "/"},
 			},
 		},
-		Workspace:  workspace,
-		RouterUUID: routerUUID,
+		Workspace:        workspace,
+		RouterUUID:       routerUUID,
+		CapacityProvider: config.Conf.AwsLinuxCapacityProvider,
 	}
 
 	return &environment, nil

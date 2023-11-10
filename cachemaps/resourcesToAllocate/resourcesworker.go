@@ -16,7 +16,7 @@ var (
 )
 
 type ResourceItem struct {
-	resourceToAdd    *Resources
+	resourceToAdd    *ResourcesToAllocate
 	resourceToDelete *string
 }
 
@@ -55,7 +55,7 @@ To wait for response implement select switch construction
 	case <-responseCh:
 	}
 */
-func AddEntity(resources *Resources) (<-chan interface{}, <-chan error) {
+func AddEntity(resources *ResourcesToAllocate) (<-chan interface{}, <-chan error) {
 	return resourceWorker.AppendToWorker(resources.RouterUUID, ResourceItem{resourceToAdd: resources})
 }
 

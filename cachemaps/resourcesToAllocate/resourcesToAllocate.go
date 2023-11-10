@@ -8,19 +8,20 @@ import (
 	"github.com/zebrunner/esg/config"
 )
 
-type Resources struct {
-	RouterUUID string
-	Cpu        int64
-	Memory     int64
+type ResourcesToAllocate struct {
+	RouterUUID       string
+	Cpu              int64
+	Memory           int64
+	CapacityProvider string
 }
 
-func GetAllEntities() ([]*Resources, error) {
+func GetAllEntities() ([]*ResourcesToAllocate, error) {
 	keys, err := config.RedisResourcesClient.Keys(context.Background(), "*").Result()
 	if err != nil {
 		return nil, err
 	}
 
-	resources := make([]*Resources, 0, len(keys))
+	resources := make([]*ResourcesToAllocate, 0, len(keys))
 	for _, uuid := range keys {
 		data, err := config.RedisResourcesClient.Get(context.Background(), uuid).Result()
 		if err != nil {
@@ -30,7 +31,7 @@ func GetAllEntities() ([]*Resources, error) {
 			return nil, err
 		}
 
-		var resource Resources
+		var resource ResourcesToAllocate
 		err = json.Unmarshal([]byte(data), &resource)
 		if err != nil {
 			return nil, err

@@ -17,6 +17,7 @@ var (
 		"cypress-chromium",
 		"cypress-edge",
 		"cypress-firefox",
+		"windows-chrome",
 	}
 	VendorPrefix = "zebrunner"
 	Conf         = Config{}
@@ -27,12 +28,13 @@ var (
 
 type Config struct {
 	// AWS settings
-	AwsRegion           string
-	AwsRetry            int
-	AwsCluster          string
-	AwsAutoScalingGroup string
-	AwsAccessKeyID      string
-	AwsSecretAccessKey  string
+	AwsRegion                string
+	AwsRetry                 int
+	AwsCluster               string
+	AwsLinuxCapacityProvider string
+	AwsWinCapacityProvider   string
+	AwsAccessKeyID           string
+	AwsSecretAccessKey       string
 
 	// Session resource limitations
 	MaxMemory int64
@@ -75,7 +77,8 @@ func init() {
 	flag.StringVar(&Conf.AwsRegion, "aws-region", "us-east-1", "AWS region name")
 	flag.IntVar(&Conf.AwsRetry, "aws-retry", 10, "AWS client retry count")
 	flag.StringVar(&Conf.AwsCluster, "aws-cluster", "esg", "AWS ECS cluster name")
-	flag.StringVar(&Conf.AwsAutoScalingGroup, "aws-auto-scaling-group", "esg-asg", "AWS auto scaling group name")
+	flag.StringVar(&Conf.AwsLinuxCapacityProvider, "aws-linux-capacity-provider", "esg-linux-capacityprovider", "AWS capacity provider for linux instances")
+	flag.StringVar(&Conf.AwsWinCapacityProvider, "aws-win-capacity-provider", "esg-win-capacityprovider", "AWS capacity provicer for windows instances")
 	flag.StringVar(&Conf.AwsAccessKeyID, "aws-access-key-id", "", "Access key for AWS services")
 	flag.StringVar(&Conf.AwsSecretAccessKey, "aws-secret-access-key", "", "Secret key for AWS services")
 

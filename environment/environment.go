@@ -24,6 +24,7 @@ const (
 	anyPlatform     = "any"
 	genericPlatform = "generic"
 	cypressPlatform = "cypress"
+	windowsPlatform = "windows"
 
 	//public zebrunner ECR docker registry
 	imageRepo            = "public.ecr.aws/zebrunner/"
@@ -74,6 +75,7 @@ type ExecutionEnvironment struct {
 	Volumes              map[string]volume
 	Network              *NetworkConfiguration
 	Workspace            string
+	CapacityProvider     string
 }
 
 func (e *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefinition {
@@ -83,15 +85,18 @@ func (e *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefinition
 		cpu := c.Cpu()
 		memory := c.Memory()
 		definition := ecs.ContainerDefinition{
-			Name:              &c.Name,
-			Image:             &c.Image,
-			Cpu:               &cpu,
-			Memory:            &memory,
-			MemoryReservation: &memory,
-			Essential:         &c.Essential,
-			Privileged:        &c.Privileged,
-			HealthCheck:       c.HealthCheck,
-			DependsOn:         c.DependsOn,
+			Name:        &c.Name,
+			Image:       &c.Image,
+			Cpu:         &cpu,
+			Memory:      &memory,
+			Essential:   &c.Essential,
+			HealthCheck: c.HealthCheck,
+			DependsOn:   c.DependsOn,
+		}
+
+		if strings.ToLower(e.Capabilities.PlatformName.ToPrimitive()) != windowsPlatform {
+			definition.MemoryReservation = &memory
+			definition.Privileged = &c.Privileged
 		}
 
 		if c.WorkingDirectory != "" {
@@ -155,10 +160,13 @@ func (e *ExecutionEnvironment) ContainerOverrides() []*ecs.ContainerOverride {
 		cpu := container.Cpu()
 		memory := container.Memory()
 		override := ecs.ContainerOverride{
-			Name:              &container.Name,
-			Cpu:               &cpu,
-			Memory:            &memory,
-			MemoryReservation: &memory,
+			Name:   &container.Name,
+			Cpu:    &cpu,
+			Memory: &memory,
+		}
+
+		if strings.ToLower(e.Capabilities.PlatformName.ToPrimitive()) != windowsPlatform {
+			override.MemoryReservation = &memory
 		}
 
 		env := []*ecs.KeyValuePair{}
@@ -286,13 +294,14 @@ func (e *ExecutionEnvironment) HashRegisterDefinition() string {
 		TaskDefinitionFamily: e.TaskDefinitionFamily,
 		Containers:           containers,
 		Volumes:              e.Volumes,
+		Network:              e.Network,
 	}
 	registerDefinitionHash := utils.EncodeToHash(registerDefinitionData)
 
 	return registerDefinitionHash
 }
 
-func (env *ExecutionEnvironment) CalculateResources() *resourcesToAllocate.Resources {
+func (env *ExecutionEnvironment) GetAllocationResources() *resourcesToAllocate.ResourcesToAllocate {
 	var cpu int64 = 0
 	var memory int64 = 0
 
@@ -301,10 +310,11 @@ func (env *ExecutionEnvironment) CalculateResources() *resourcesToAllocate.Resou
 		memory += container.memory
 	}
 
-	resources := resourcesToAllocate.Resources{
-		RouterUUID: env.RouterUUID,
-		Cpu:        cpu,
-		Memory:     memory,
+	resources := resourcesToAllocate.ResourcesToAllocate{
+		RouterUUID:       env.RouterUUID,
+		Cpu:              cpu,
+		Memory:           memory,
+		CapacityProvider: env.CapacityProvider,
 	}
 
 	return &resources
@@ -344,6 +354,8 @@ func build(workspace string, routerUUID string, caps *capabilities.Capabilities)
 		return buildGeneric(workspace, routerUUID, caps)
 	} else if platform == cypressPlatform {
 		return buildCypress(workspace, routerUUID, caps)
+	} else if platform == windowsPlatform {
+		return buildWindowsBrowser(workspace, routerUUID, caps)
 	} else if platform == linuxPlatform || platform == "" || platform == anyPlatform {
 		return buildBrowser(workspace, routerUUID, caps)
 	}
@@ -418,6 +430,12 @@ func buildImage(caps *capabilities.Capabilities) (string, error) {
 		version := strings.ToLower(caps.BrowserVersion.ToPrimitive())
 		version = remapVersion(version)
 		return imageRepo + name + ":" + version, nil
+	} else if platformName == windowsPlatform {
+		name := strings.ToLower(caps.BrowserName.ToPrimitive())
+		name = remapName(name)
+		version := strings.ToLower(caps.BrowserVersion.ToPrimitive())
+		version = remapVersion(version)
+		return imageRepo + windowsPlatform + "-" + name + ":" + version, nil
 	} else {
 		return "", fmt.Errorf("failed to build container image. unsupported platform specified. platformName=%s", caps.PlatformName)
 	}
