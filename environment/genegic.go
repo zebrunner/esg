@@ -215,6 +215,7 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 		},
 		Workspace:  workspace,
 		RouterUUID: routerUUID,
+		CapacityProvider: config.Conf.AwsLinuxCP,
 	}
 
 	return &environment, nil

@@ -36,13 +36,6 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 	}
 	l := log.WithField("family", env.TaskDefinitionFamily)
 
-	var capacityProvider string
-	if strings.Contains(strings.ToLower(env.Capabilities.PlatformName.ToPrimitive()), "windows") {
-		capacityProvider = config.Conf.AwsWinCP
-	} else {
-		capacityProvider = config.Conf.AwsLinuxCP
-	}
-
 	runTaskInput := &ecs.RunTaskInput{
 		Cluster:        &config.Conf.AwsCluster,
 		TaskDefinition: &family,
@@ -53,7 +46,7 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 				Type:  aws.String("binpack"),
 			},
 		},
-		CapacityProviderStrategy: []*ecs.CapacityProviderStrategyItem{{CapacityProvider: &capacityProvider}},
+		CapacityProviderStrategy: []*ecs.CapacityProviderStrategyItem{{CapacityProvider: &env.CapacityProvider}},
 	}
 	l.WithField("runTaskInput", runTaskInput).Trace("Res runTaskInput")
 
@@ -98,9 +91,7 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 			if errStr == "ClientException: Tasks provisioning capacity limit exceeded." || strings.Contains(errStr, "ThrottlingException: Rate exceeded") {
 				l.WithError(err).Trace("Task register failed.")
 				if !markedToAllocate {
-					res := env.CalculateResources()
-					res.CapacityProvider = capacityProvider
-					resourcesToAllocate.AddEntity(res)
+					resourcesToAllocate.AddEntity(env.GetAllocationResources())
 					markedToAllocate = true
 				}
 				sleepRateLimit := time.Duration(20+rand.Intn(10)) * time.Second

@@ -75,6 +75,7 @@ type ExecutionEnvironment struct {
 	Volumes              map[string]volume
 	Network              *NetworkConfiguration
 	Workspace            string
+	CapacityProvider     string
 }
 
 func (e *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefinition {
@@ -300,7 +301,7 @@ func (e *ExecutionEnvironment) HashRegisterDefinition() string {
 	return registerDefinitionHash
 }
 
-func (env *ExecutionEnvironment) CalculateResources() *resourcesToAllocate.ResourcesToAllocate {
+func (env *ExecutionEnvironment) GetAllocationResources() *resourcesToAllocate.ResourcesToAllocate {
 	var cpu int64 = 0
 	var memory int64 = 0
 
@@ -310,9 +311,10 @@ func (env *ExecutionEnvironment) CalculateResources() *resourcesToAllocate.Resou
 	}
 
 	resources := resourcesToAllocate.ResourcesToAllocate{
-		RouterUUID: env.RouterUUID,
-		Cpu:        cpu,
-		Memory:     memory,
+		RouterUUID:       env.RouterUUID,
+		Cpu:              cpu,
+		Memory:           memory,
+		CapacityProvider: env.CapacityProvider,
 	}
 
 	return &resources

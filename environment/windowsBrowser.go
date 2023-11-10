@@ -68,7 +68,7 @@ func buildWindowsBrowser(workspace string, routerUUID string, caps *capabilities
 	browserContainer.SetCpu(&caps.Cpu, 1024, conf.MaxCpu)
 	browserContainer.SetMemory(&caps.Memory, 1024, conf.MaxMemory)
 
-	containers := []*Container{&browserContainer} 
+	containers := []*Container{&browserContainer}
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
 		Schema:               buildSchema(containers),
@@ -85,8 +85,9 @@ func buildWindowsBrowser(workspace string, routerUUID string, caps *capabilities
 				"healthcheck": {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
 			},
 		},
-		Workspace:  workspace,
-		RouterUUID: routerUUID,
+		Workspace:        workspace,
+		RouterUUID:       routerUUID,
+		CapacityProvider: config.Conf.AwsWinCP,
 	}
 
 	// if caps.BrowserName == "firefox" {

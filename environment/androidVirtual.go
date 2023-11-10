@@ -106,6 +106,7 @@ func buildAppiumRedroid(workspace string, routerUUID string, caps *capabilities.
 		},
 		Workspace:  workspace,
 		RouterUUID: routerUUID,
+		CapacityProvider: config.Conf.AwsLinuxCP,
 	}
 
 	return &environment, nil

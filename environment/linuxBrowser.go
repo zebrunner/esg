@@ -207,6 +207,7 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 		},
 		Workspace:  workspace,
 		RouterUUID: routerUUID,
+		CapacityProvider: config.Conf.AwsLinuxCP,
 	}
 
 	if caps.BrowserName == "firefox" {
