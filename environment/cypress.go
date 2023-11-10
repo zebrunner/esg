@@ -239,9 +239,9 @@ func buildCypress(workspace string, routerUUID string, caps *capabilities.Capabi
 				"vnc": {ContainerPort: vncPort, HostPort: 0, Path: "/"},
 			},
 		},
-		Workspace:  workspace,
-		RouterUUID: routerUUID,
-		CapacityProvider: config.Conf.AwsLinuxCP,
+		Workspace:        workspace,
+		RouterUUID:       routerUUID,
+		CapacityProvider: config.Conf.AwsLinuxCapacityProvider,
 	}
 
 	return &environment, nil
