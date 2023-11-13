@@ -63,20 +63,13 @@ func Create(c *gin.Context) {
 	// l = l.WithField("workspace", workspace)
 	// }
 
-	reqCaps, err := capabilities.ParseRequestCapabilities(c.Request.Body)
+	reqCaps, configurationCaps, err := capabilities.ParseRequestCapabilities(c.Request.Body)
 	if err != nil {
 		l.WithError(err).Error("Failed to process capabilities")
 		c.Error(utils.InvalidArgErr(fmt.Errorf("failed to process capabilities"), err.Error())).SetType(gin.ErrorTypePublic)
 		return
 	}
 	log.Trace("Request capabilitites: ", reqCaps.ToMap())
-
-	configurationCaps, err := reqCaps.GetContainerConfiguration()
-	if err != nil {
-		l.WithError(err).Error("Failed to process zebrunner container configuration")
-		c.Error(utils.InvalidArgErr(fmt.Errorf("failed to process capabilities"), err.Error())).SetType(gin.ErrorTypePublic)
-		return
-	}
 	log.Trace("Container configuration: ", configurationCaps)
 
 	env, err := environment.Build(workspace, configurationCaps)

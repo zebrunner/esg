@@ -14,11 +14,122 @@ import (
 	"github.com/zebrunner/esg/config"
 )
 
-type CapProcessor struct {
-	KeyProcessor        func(string) string
-	ValueProcessor      func(interface{}) interface{}
-	KeyByValueProcessor func(interface{}) string
-	Validator           func(interface{}) error
+var (
+	preConfigurationCapsProcessor  CapsProcessor
+	postConfigurationCapsProcessor CapsProcessor
+	vendorCapNames                 = []string{
+		"enableVNC",
+		"enableVideo",
+		"enableLog",
+		"enableDebug",
+		"idleTimeout",
+		"maxTimeout",
+		"screenResolution",
+		"videoScreenSize",
+		"videoCodec",
+		"frameRate",
+		"deviceName",
+		"cpu", "Cpu", //to support lower case and camel case
+		"memory", "Memory", //to support lower case and camel case
+		"timeZone",
+		"env",
+		"hostEntries",
+		"dnsServers",
+		"mitm", "Mitm", //to support lower case and camel case
+		"mitmArgs", "MitmArgs", "mitmargs",
+		"mitmCpu", "MitmCpu", "mitmcpu",
+		"mitmMemory", "MitmMemory", "mitmmemory",
+	}
+)
+
+func init() {
+	preConfigurationCapsProcessor = CapsProcessor{
+		"platform": {
+			KeyProcessor:   replaceName("platformName"),
+			ValueProcessor: func(x interface{}) interface{} { return strings.ToLower(x.(string)) },
+			Validator:      validatePlatforms("linux", "windows", "any"),
+		},
+		"name": {
+			KeyProcessor: replaceName("browserName"),
+		},
+		"version": {
+			KeyProcessor: replaceName("browserVersion"),
+		},
+		"goog:chromeOptions": {
+			ValueProcessor: deletePref("download.default_directory"),
+		},
+		"ms:edgeOptions": {
+			ValueProcessor: deletePref("download.default_directory"),
+		},
+		"prefs": {
+			ValueProcessor: deletePref("download.default_directory"),
+		},
+		"moz:firefoxOptions": {
+			ValueProcessor: deletePrefFromProfile("browser.download.dir"),
+		},
+	}
+
+	for _, name := range vendorCapNames {
+		preConfigurationCapsProcessor[config.VendorPrefix+":"+name] = &Processors{
+			KeyProcessor: replaceName(name),
+		}
+	}
+
+	postConfigurationCapsProcessor = CapsProcessor{
+		"goog:chromeOptions": {
+			ValueProcessor: addArg("remote-allow-origins", "--remote-allow-origins=*"),
+		},
+		"mitm": {
+			NewCapabilitiesGenerator: func(value interface{}) (bool, map[string]interface{}) {
+				if boolValue, ok := value.(bool); ok && boolValue {
+					capabilityToAdd := map[string]interface{}{
+						"proxy": map[string]interface{}{
+							"httpProxy": "mitm:8080",
+							"sslProxy":  "mitm:8080",
+							"proxyType": "manual",
+						},
+					}
+
+					return true, capabilityToAdd
+				}
+				return false, nil
+			},
+		},
+		"browserVersion": {
+			DeleteCapabilityProcessor: func(value interface{}) bool {
+				if version, ok := value.(string); ok {
+					version = strings.ToLower(version)
+					return version == "latest" || version == "null" || version == ""
+				}
+
+				return true
+			},
+		},
+		"platformName": {
+			NewCapabilitiesGenerator: func(value interface{}) (bool, map[string]interface{}) {
+				if platform, ok := value.(string); ok {
+					platform = strings.ToLower(platform)
+					if platform == "windows" {
+						return true, map[string]interface{}{
+							"browserVersion": "*",
+						}
+					}
+				}
+				return false, nil
+			},
+		},
+	}
+}
+
+type CapsProcessor map[string]*Processors
+
+type Processors struct {
+	// replace capabilites key by passed func
+	KeyProcessor              func(string) string
+	ValueProcessor            func(interface{}) interface{}
+	Validator                 func(interface{}) error
+	DeleteCapabilityProcessor func(interface{}) bool
+	NewCapabilitiesGenerator  func(value interface{}) (bool, map[string]interface{})
 }
 
 func replaceName(name string) func(string) string {
@@ -27,9 +138,14 @@ func replaceName(name string) func(string) string {
 	}
 }
 
-func addPrefix(prefix string) func(string) string {
-	return func(name string) string {
-		return prefix + ":" + name
+func validatePlatforms(allowedPlatforms ...string) func(interface{}) error {
+	return func(value interface{}) error {
+		for _, platform := range allowedPlatforms {
+			if platform == value.(string) {
+				return nil
+			}
+		}
+		return fmt.Errorf("platform not allowed")
 	}
 }
 
@@ -53,20 +169,69 @@ func deletePref(prefKey string) func(interface{}) interface{} {
 	}
 }
 
-func applyProcessor(caps map[string]interface{}, processors map[string]*CapProcessor) error {
+func deletePrefFromProfile(prefKey string) func(interface{}) interface{} {
+	return func(options interface{}) interface{} {
+		if optionsMap, ok := options.(map[string]interface{}); ok {
+			if profileEncoded, ok := optionsMap["profile"].(string); ok {
+				profileBytes, err := base64.StdEncoding.DecodeString(profileEncoded)
+				if err != nil {
+					return options
+				}
+
+				profilesMap, err := unzipFFProfile(profileBytes)
+				if err != nil {
+					return options
+				}
+
+				for name, prefernces := range profilesMap {
+					for i := 0; i < len(prefernces); i++ {
+						if strings.Contains(prefernces[i], prefKey) {
+							profilesMap[name] = append(prefernces[:i], prefernces[i+1:]...)
+							break
+						}
+					}
+				}
+
+				zippedBuf, err := zipFFProfile(profilesMap)
+				if err != nil {
+					return options
+				}
+				optionsMap["profile"] = base64.StdEncoding.EncodeToString(zippedBuf.Bytes())
+			}
+		}
+		return options
+	}
+}
+
+func addArg(argToRewrite string, fullArg string) func(interface{}) interface{} {
+	return func(options interface{}) interface{} {
+		if optionsMap, ok := options.(map[string]interface{}); ok {
+			if args, ok := optionsMap["args"].([]interface{}); ok {
+				for i, v := range args {
+					argStr := v.(string)
+					if strings.Contains(argStr, argToRewrite) {
+						args[i] = fullArg
+						return options
+					}
+				}
+				optionsMap["args"] = append(args, fullArg)
+			}
+		}
+		return options
+	}
+}
+
+func (capsProcessor CapsProcessor) applyProcessors(caps map[string]interface{}) error {
 	for name, value := range caps {
 		newKey := name
 		newValue := value
 
-		if processor := processors[name]; processor != nil {
+		if processor := capsProcessor[name]; processor != nil {
 			if processor.KeyProcessor != nil {
 				newKey = processor.KeyProcessor(name)
 			}
 			if processor.ValueProcessor != nil {
 				newValue = processor.ValueProcessor(value)
-			}
-			if processor.KeyByValueProcessor != nil {
-				newKey = processor.KeyByValueProcessor(value)
 			}
 			if processor.Validator != nil {
 				err := processor.Validator(newValue)
@@ -74,17 +239,53 @@ func applyProcessor(caps map[string]interface{}, processors map[string]*CapProce
 					return err
 				}
 			}
-		}
+			if processor.NewCapabilitiesGenerator != nil {
+				if toAdd, capabilities := processor.NewCapabilitiesGenerator(newValue); toAdd {
+					for k, v := range capabilities {
+						caps[k] = v
+					}
+				}
+			}
 
-		if newKey != name {
-			delete(caps, name)
-		}
-
-		if newKey != "" {
-			caps[newKey] = newValue
+			toDelete := processor.DeleteCapabilityProcessor != nil && processor.DeleteCapabilityProcessor(newValue)
+			if toDelete {
+				delete(caps, newKey)
+			} else {
+				if newKey != name {
+					delete(caps, name)
+				}
+				caps[newKey] = newValue
+			}
 		}
 	}
 	return nil
+}
+
+func ParseRequestCapabilities(body io.ReadCloser) (*RequestCaps, *Capabilities, error) {
+	reqCaps := &RequestCaps{}
+	err := json.NewDecoder(body).Decode(reqCaps)
+	if err != nil {
+		return nil, nil, fmt.Errorf("bad json format: %v", err)
+	}
+
+	reqCaps.processAllCapabilititesByFunc(unpackVendorOptions)
+
+	err = reqCaps.processAllCapabilititesByFunc(preConfigurationCapsProcessor.applyProcessors)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	configurationCapabilities, err := reqCaps.GetContainerConfiguration()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	err = reqCaps.processAllCapabilititesByFunc(postConfigurationCapsProcessor.applyProcessors)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return reqCaps, configurationCapabilities, nil
 }
 
 type RequestCaps struct {
@@ -95,20 +296,13 @@ type RequestCaps struct {
 	DesiredCapabilities map[string]interface{} `json:"desiredCapabilities,omitempty"`
 }
 
-func ParseRequestCapabilities(body io.ReadCloser) (*RequestCaps, error) {
-	reqCaps := &RequestCaps{}
-	err := json.NewDecoder(body).Decode(reqCaps)
+func (c *RequestCaps) ToRequestBody() (*bytes.Reader, error) {
+	body, err := json.Marshal(c)
 	if err != nil {
-		return nil, fmt.Errorf("bad json format: %v", err)
+		return nil, err
 	}
 
-	if len(reqCaps.DesiredCapabilities) != 0 {
-		err = reqCaps.processLegacy()
-	} else {
-		err = reqCaps.process()
-	}
-
-	return reqCaps, err
+	return bytes.NewReader(body), nil
 }
 
 func (c *RequestCaps) ToMap() map[string]interface{} {
@@ -121,108 +315,24 @@ func (c *RequestCaps) ToMap() map[string]interface{} {
 	}
 }
 
-func (c *RequestCaps) process() error {
+func (c *RequestCaps) processAllCapabilititesByFunc(fn func(caps map[string]interface{}) error) error {
 	var err error
-	err = processLegacyCaps(c.Capabilities.AlwaysMatch)
-	if err != nil {
-		return err
-	}
-
-	err = processVendorCaps(c.Capabilities.AlwaysMatch)
-	if err != nil {
-		return err
-	}
-
-	err = processCaps(c.Capabilities.AlwaysMatch)
-	if err != nil {
-		return err
-	}
-
-	err = processOptions(c.Capabilities.AlwaysMatch)
-	if err != nil {
-		return err
-	}
-
-	processProxy(c.Capabilities.AlwaysMatch)
-
-	for index := range c.Capabilities.FirstMatch {
-		err = processLegacyCaps(c.Capabilities.FirstMatch[index])
+	if c.DesiredCapabilities != nil {
+		err = fn(c.DesiredCapabilities)
 		if err != nil {
 			return err
 		}
-
-		err = processVendorCaps(c.Capabilities.FirstMatch[index])
-		if err != nil {
-			return err
-		}
-
-		err = processCaps(c.Capabilities.FirstMatch[index])
-		if err != nil {
-			return err
-		}
-
-		err = processOptions(c.Capabilities.FirstMatch[index])
-		if err != nil {
-			return err
-		}
-
-		processProxy(c.Capabilities.FirstMatch[index])
-	}
-
-	return nil
-}
-
-func (c *RequestCaps) processLegacy() error {
-	// Process desired caps
-	err := processLegacyCaps(c.DesiredCapabilities)
-	if err != nil {
-		return err
-	}
-
-	err = processVendorCaps(c.DesiredCapabilities)
-	if err != nil {
-		return err
-	}
-
-	err = processCaps(c.DesiredCapabilities)
-	if err != nil {
-		return err
-	}
-
-	err = processOptions(c.DesiredCapabilities)
-	if err != nil {
-		return err
 	}
 
 	if c.Capabilities.AlwaysMatch != nil {
-		for k := range c.Capabilities.AlwaysMatch {
-			delete(c.DesiredCapabilities, k)
-		}
-
-		err = processCaps(c.Capabilities.AlwaysMatch)
+		err = fn(c.Capabilities.AlwaysMatch)
 		if err != nil {
 			return err
 		}
 	}
 
-	// Add vendor and option caps to all from firstMatch
 	for _, fmCaps := range c.Capabilities.FirstMatch {
-		for name, value := range c.DesiredCapabilities {
-			if strings.Contains(name, ":") {
-				fmCaps[name] = value
-			}
-		}
-
-		processProxy(fmCaps)
-
-		renamedLegacy := []string{"browserName", "platformName", "browserVersion"}
-		for _, name := range renamedLegacy {
-			if fmCaps[name] == nil && c.DesiredCapabilities[name] != nil {
-				fmCaps[name] = c.DesiredCapabilities[name]
-			}
-		}
-
-		err = processCaps(fmCaps)
+		err = fn(fmCaps)
 		if err != nil {
 			return err
 		}
@@ -232,238 +342,47 @@ func (c *RequestCaps) processLegacy() error {
 }
 
 func (c *RequestCaps) GetContainerConfiguration() (*Capabilities, error) {
-	conf := GetDefaultCaps()
+	containerConfiguration := GetDefaultCaps()
 
-	amCaps := RemovePrefix(c.Capabilities.AlwaysMatch, config.VendorPrefix)
-	amCaps = RemovePrefix(amCaps, "appium")
-	err := conf.ParseRequestCaps(amCaps)
-	if err != nil {
-		log.WithError(err).Warn("Failed to map config")
-		return nil, err
-	}
-
-	for _, fmCaps := range c.Capabilities.FirstMatch {
-		caps := RemovePrefix(fmCaps, config.VendorPrefix)
-		caps = RemovePrefix(caps, "appium")
-
-		conf.ParseRequestCaps(caps)
+	if c.DesiredCapabilities != nil {
+		desiredCaps := RemovePrefix(c.DesiredCapabilities, "appium")
+		err := containerConfiguration.ParseRequestCaps(desiredCaps)
 		if err != nil {
 			log.WithError(err).Warn("Failed to map config")
 			return nil, err
 		}
 	}
 
-	return conf, nil
-}
-
-func (c *RequestCaps) ToRequestBody() (*bytes.Reader, error) {
-	body, err := json.Marshal(c)
-	if err != nil {
-		return nil, err
-	}
-	
-	return bytes.NewReader(body), nil
-}
-
-func processLegacyCaps(caps map[string]interface{}) error {
-	allowedPlatforms := []string{"linux", "any"}
-	legacyProcessors := map[string]*CapProcessor{
-		"platform": {
-			KeyProcessor:   replaceName("platformName"),
-			ValueProcessor: func(x interface{}) interface{} { return strings.ToLower(x.(string)) },
-			Validator: func(x interface{}) error {
-				for _, platform := range allowedPlatforms {
-					if platform == x.(string) {
-						return nil
-					}
-				}
-				return fmt.Errorf("platform not allowed")
-			},
-		},
-		"name": {
-			KeyProcessor: replaceName("browserName"),
-		},
-		"version": {
-			KeyProcessor: replaceName("browserVersion"),
-		},
-	}
-
-	err := applyProcessor(caps, legacyProcessors)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func processVendorCaps(caps map[string]interface{}) error {
-	vendorCapNames := []string{
-		"enableVNC",
-		"enableVideo",
-		"enableLog",
-		"enableDebug",
-		"idleTimeout",
-		"maxTimeout",
-		"screenResolution",
-		"videoScreenSize",
-		"videoCodec",
-		"frameRate",
-		"deviceName",
-		"cpu", "Cpu", //to support lower case and camel case
-		"memory", "Memory", //to support lower case and camel case
-		"timeZone",
-		"env",
-		"hostEntries",
-		"dnsServers",
-		"mitm", "Mitm", //to support lower case and camel case
-		"mitmArgs", "MitmArgs", "mitmargs",
-		"mitmCpu", "MitmCpu", "mitmcpu",
-		"mitmMemory", "MitmMemory", "mitmmemory",
-	}
-	processors := map[string]*CapProcessor{}
-	for _, name := range vendorCapNames {
-		processors[name] = &CapProcessor{
-			KeyProcessor: addPrefix(config.VendorPrefix),
+	if c.Capabilities.AlwaysMatch != nil {
+		amCaps := RemovePrefix(c.Capabilities.AlwaysMatch, "appium")
+		err := containerConfiguration.ParseRequestCaps(amCaps)
+		if err != nil {
+			log.WithError(err).Warn("Failed to map config")
+			return nil, err
 		}
 	}
 
-	//overrided vendor caps by existing w3c caps
+	for _, fmCaps := range c.Capabilities.FirstMatch {
+		caps := RemovePrefix(fmCaps, "appium")
+		err := containerConfiguration.ParseRequestCaps(caps)
+		if err != nil {
+			log.WithError(err).Warn("Failed to map config")
+			return nil, err
+		}
+	}
+
+	return containerConfiguration, nil
+}
+
+func unpackVendorOptions(caps map[string]interface{}) error {
 	if zebrunnerOptions, ok := caps["zebrunner:options"].(map[string]interface{}); ok {
-		for k, v := range zebrunnerOptions {
-			caps[k] = v
-			processors[k] = &CapProcessor{
-				KeyProcessor: addPrefix(config.VendorPrefix),
+		for _, name := range vendorCapNames {
+			if value, ok := zebrunnerOptions[name]; ok {
+				caps[config.VendorPrefix+":"+name] = value
 			}
 		}
+		delete(caps, "zebrunner:options")
 	}
-
-	err := applyProcessor(caps, processors)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func processCaps(caps map[string]interface{}) error {
-	processors := map[string]*CapProcessor{
-		"browserVersion": {
-			KeyByValueProcessor: func(value interface{}) string {
-				version, ok := value.(string)
-				if ok {
-					version = strings.ToLower(version)
-					if version == "latest" || version == "null" || version == "" {
-						return ""
-					}
-				}
-				return "browserVersion"
-			},
-		},
-	}
-
-	err := applyProcessor(caps, processors)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func processProxy(caps map[string]interface{}) {
-	for key, value := range caps {
-		if strings.ToLower(key) == "zebrunner:mitm" {
-			if enabled, ok := value.(bool); !ok || !enabled {
-				return
-			}
-
-			log.Debug("Found mitm cap, overriding proxy capabilities object...")
-			// proxy:map[sslProxy:mitm:8080 httpProxy:mitm:8080 proxyType:MANUAL]
-			caps["proxy"] = map[string]interface{}{
-				"httpProxy": "mitm:8080",
-				"sslProxy":  "mitm:8080",
-				"proxyType": "manual",
-			}
-			return
-		}
-	}
-}
-
-func processOptions(caps map[string]interface{}) error {
-	downloadOptionProcessors := map[string]*CapProcessor{
-		"goog:chromeOptions": {
-			ValueProcessor: deletePref("download.default_directory"),
-		},
-		"ms:edgeOptions": {
-			ValueProcessor: deletePref("download.default_directory"),
-		},
-		"prefs": {
-			ValueProcessor: deletePref("download.default_directory"),
-		},
-		"moz:firefoxOptions": {
-			ValueProcessor: func(options interface{}) interface{} {
-				if optionsMap, ok := options.(map[string]interface{}); ok {
-					if profileEncoded, ok := optionsMap["profile"].(string); ok {
-						profileBytes, err := base64.StdEncoding.DecodeString(profileEncoded)
-						if err != nil {
-							return options
-						}
-
-						profilesMap, err := unzipFFProfile(profileBytes)
-						if err != nil {
-							return options
-						}
-
-						for name, prefernces := range profilesMap {
-							for i := 0; i < len(prefernces); i++ {
-								if strings.Contains(prefernces[i], "browser.download.dir") {
-									profilesMap[name] = append(prefernces[:i], prefernces[i+1:]...)
-									break
-								}
-							}
-						}
-
-						zippedBuf, err := zipFFProfile(profilesMap)
-						if err != nil {
-							return options
-						}
-						optionsMap["profile"] = base64.StdEncoding.EncodeToString(zippedBuf.Bytes())
-					}
-				}
-				return options
-			},
-		},
-	}
-
-	err := applyProcessor(caps, downloadOptionProcessors)
-	if err != nil {
-		return err
-	}
-
-	argsProcessors := map[string]*CapProcessor{
-		"goog:chromeOptions": {
-			ValueProcessor: func(options interface{}) interface{} {
-				if optionsMap, ok := options.(map[string]interface{}); ok {
-					if args, ok := optionsMap["args"].([]interface{}); ok {
-						for i, v := range args {
-							argStr := v.(string)
-							if strings.Contains(argStr, "--remote-allow-origins") {
-								args[i] = "--remote-allow-origins=*"
-								return options
-							}
-						}
-						optionsMap["args"] = append(args, "--remote-allow-origins=*")
-					}
-				}
-				return options
-			},
-		},
-	}
-
-	err = applyProcessor(caps, argsProcessors)
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 
