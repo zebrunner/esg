@@ -70,7 +70,7 @@ func Create(c *gin.Context) {
 		return
 	}
 	log.Trace("Request capabilitites: ", reqCaps.ToMap())
-	log.Trace("Container configuration: ", configurationCaps)
+	log.Trace("Container configuration: ", configurationCaps.ToMap())
 
 	env, err := environment.Build(workspace, configurationCaps)
 	if err != nil {

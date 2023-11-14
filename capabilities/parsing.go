@@ -15,6 +15,7 @@ import (
 )
 
 var (
+	vendorCapsProcessor            CapsProcessor
 	preConfigurationCapsProcessor  CapsProcessor
 	postConfigurationCapsProcessor CapsProcessor
 	vendorCapNames                 = []string{
@@ -43,6 +44,13 @@ var (
 )
 
 func init() {
+	vendorCapsProcessor = make(CapsProcessor)
+	for _, name := range vendorCapNames {
+		vendorCapsProcessor[config.VendorPrefix+":"+name] = &Processors{
+			KeyProcessor: replaceName(name),
+		}
+	}
+
 	preConfigurationCapsProcessor = CapsProcessor{
 		"platform": {
 			KeyProcessor:   replaceName("platformName"),
@@ -67,18 +75,6 @@ func init() {
 		"moz:firefoxOptions": {
 			ValueProcessor: deletePrefFromProfile("browser.download.dir"),
 		},
-	}
-
-	for _, name := range vendorCapNames {
-		preConfigurationCapsProcessor[config.VendorPrefix+":"+name] = &Processors{
-			KeyProcessor: replaceName(name),
-		}
-	}
-
-	postConfigurationCapsProcessor = CapsProcessor{
-		"goog:chromeOptions": {
-			ValueProcessor: addArg("remote-allow-origins", "--remote-allow-origins=*"),
-		},
 		"mitm": {
 			NewCapabilitiesGenerator: func(value interface{}) (bool, map[string]interface{}) {
 				if boolValue, ok := value.(bool); ok && boolValue {
@@ -89,11 +85,16 @@ func init() {
 							"proxyType": "manual",
 						},
 					}
-
 					return true, capabilityToAdd
 				}
 				return false, nil
 			},
+		},
+	}
+
+	postConfigurationCapsProcessor = CapsProcessor{
+		"goog:chromeOptions": {
+			ValueProcessor: addArg("remote-allow-origins", "--remote-allow-origins=*"),
 		},
 		"browserVersion": {
 			DeleteCapabilityProcessor: func(value interface{}) bool {
@@ -119,12 +120,17 @@ func init() {
 			},
 		},
 	}
+
+	for _, name := range vendorCapNames {
+		postConfigurationCapsProcessor[name] = &Processors{
+			DeleteCapabilityProcessor: func(i interface{}) bool { return true },
+		}
+	}
 }
 
 type CapsProcessor map[string]*Processors
 
 type Processors struct {
-	// replace capabilites key by passed func
 	KeyProcessor              func(string) string
 	ValueProcessor            func(interface{}) interface{}
 	Validator                 func(interface{}) error
@@ -268,7 +274,10 @@ func ParseRequestCapabilities(body io.ReadCloser) (*RequestCaps, *Capabilities, 
 		return nil, nil, fmt.Errorf("bad json format: %v", err)
 	}
 
-	reqCaps.processAllCapabilititesByFunc(unpackVendorOptions)
+	err = reqCaps.processAllCapabilititesByFunc(unpackVendorOptions)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	err = reqCaps.processAllCapabilititesByFunc(preConfigurationCapsProcessor.applyProcessors)
 	if err != nil {
@@ -378,12 +387,15 @@ func unpackVendorOptions(caps map[string]interface{}) error {
 	if zebrunnerOptions, ok := caps["zebrunner:options"].(map[string]interface{}); ok {
 		for _, name := range vendorCapNames {
 			if value, ok := zebrunnerOptions[name]; ok {
-				caps[config.VendorPrefix+":"+name] = value
+				caps[name] = value
 			}
 		}
 		delete(caps, "zebrunner:options")
 	}
-	return nil
+
+	err := vendorCapsProcessor.applyProcessors(caps)
+
+	return err
 }
 
 func unzipFFProfile(profiles []byte) (map[string][]string, error) {

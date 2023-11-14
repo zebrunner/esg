@@ -1,9 +1,6 @@
 package environment
 
 import (
-	"strconv"
-	"strings"
-
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/zebrunner/esg/capabilities"
@@ -20,39 +17,14 @@ func buildWindowsBrowser(workspace string, routerUUID string, caps *capabilities
 		return nil, err
 	}
 
-	caps.EnableVNC.From(false)
-	caps.EnableVideo.From(false)
 	log.Trace("caps: ", caps)
 
-	tz, err := caps.GetTimeZone()
-	if err != nil {
-		log.WithError(err).Error("failed to parse timezone")
-		return nil, err
-	}
-
-	resolution, err := caps.GetScreenResolution()
-	if err != nil {
-		log.WithError(err).Error("failed to parse screenResolution")
-		return nil, err
-	}
 	browserContainer := Container{
 		Name:      "browser",
 		Image:     browserImage,
 		Essential: true,
 		Ports: map[string]portMapping{
 			"driver": {seleniumPort, 0},
-			// "vnc":            {vncPort, 0},
-			// "devtools":       {devtoolsPort, 0},
-			// "fileserverPort": {fileserverPort, 0},
-			// "clipboardPort":  {clipboardPort, 0},
-		},
-		Env: map[string]string{
-			"ENABLE_VNC":        strconv.FormatBool(caps.EnableVNC.ToPrimitive()),
-			"ENABLE_VIDEO":      strconv.FormatBool(caps.EnableVideo.ToPrimitive()),
-			"DNS_SERVERS":       strings.Join(caps.DNSServers, " "),
-			"HOSTS_ENTRIES":     strings.Join(caps.HostsEntries, " "),
-			"TZ":                tz.String(),
-			"SCREEN_RESOLUTION": resolution,
 		},
 		// Mounts:     []string{shmVolume, logVolume},
 		// Command:    []string{"-c", "/entrypoint.sh" + taskLogRedirect},
@@ -78,10 +50,6 @@ func buildWindowsBrowser(workspace string, routerUUID string, caps *capabilities
 			IP: "",
 			Endpoints: map[string]*Endpoint{
 				"driver": {ContainerPort: seleniumPort, HostPort: 0, Path: "/wd/hub/"},
-				// "vnc":         {ContainerPort: vncPort, HostPort: 0, Path: "/"},
-				// "clipboard":   {ContainerPort: clipboardPort, HostPort: 0, Path: "/"},
-				// "devtools":    {ContainerPort: devtoolsPort, HostPort: 0, Path: "/"},
-				// "fileserver":  {ContainerPort: fileserverPort, HostPort: 0, Path: "/"},
 				"healthcheck": {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
 			},
 		},
@@ -89,11 +57,6 @@ func buildWindowsBrowser(workspace string, routerUUID string, caps *capabilities
 		RouterUUID:       routerUUID,
 		CapacityProvider: config.Conf.AwsWinCapacityProvider,
 	}
-
-	// if caps.BrowserName == "firefox" {
-	// 	environment.Network.Endpoints["driver"].Path = "/wd/hub/"
-	// 	environment.Network.Endpoints["healthcheck"].Path = "/wd/hub/"
-	// }
 
 	return &environment, nil
 }
