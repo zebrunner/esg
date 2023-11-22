@@ -76,6 +76,7 @@ func ListDrivers(c *gin.Context) {
 
 	windowsPlatforms := map[string]string{
 		"windows-chrome": "windows",
+		"windows-edge":   "windows",
 	}
 
 	for _, image := range images {

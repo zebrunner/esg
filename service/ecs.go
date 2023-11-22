@@ -62,6 +62,7 @@ func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (*ecs.T
 		NetworkMode:          &networkMode,
 		ContainerDefinitions: environment.ContainerDefinitions(),
 		Family:               &environment.TaskDefinitionFamily,
+		TaskRoleArn:          &environment.TaskRoleArn,
 	}
 
 	volumes := []*ecs.Volume{}

@@ -76,6 +76,7 @@ type ExecutionEnvironment struct {
 	Network              *NetworkConfiguration
 	Workspace            string
 	CapacityProvider     string
+	TaskRoleArn          string
 }
 
 func (e *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefinition {
@@ -295,6 +296,7 @@ func (e *ExecutionEnvironment) HashRegisterDefinition() string {
 		Containers:           containers,
 		Volumes:              e.Volumes,
 		Network:              e.Network,
+		TaskRoleArn:          e.TaskRoleArn,
 	}
 	registerDefinitionHash := utils.EncodeToHash(registerDefinitionData)
 

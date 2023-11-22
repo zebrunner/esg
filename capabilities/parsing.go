@@ -106,17 +106,15 @@ func init() {
 				return true
 			},
 		},
-		"platformName": {
-			NewCapabilitiesGenerator: func(value interface{}) (bool, map[string]interface{}) {
-				if platform, ok := value.(string); ok {
-					platform = strings.ToLower(platform)
-					if platform == "windows" {
-						return true, map[string]interface{}{
-							"browserVersion": "*",
-						}
+		"browserName": {
+			ValueProcessor: func(value interface{}) interface{} {
+				if name, ok := value.(string); ok {
+					name = strings.ToLower(name)
+					if name == "edge" {
+						return "MicrosoftEdge"
 					}
 				}
-				return false, nil
+				return value
 			},
 		},
 	}

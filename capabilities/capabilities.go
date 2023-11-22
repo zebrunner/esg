@@ -568,6 +568,7 @@ func FromImage(image string) ([]*Capabilities, error) {
 		"edge":    capsForLinux,
 
 		"windows-chrome": capsForWindows,
+		"windows-edge": capsForWindows,
 
 		"cypress-chrome":   capsForCypress,
 		"cypress-chromium": capsForCypress,
