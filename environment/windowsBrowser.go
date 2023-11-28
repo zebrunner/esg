@@ -49,7 +49,7 @@ func buildWindowsBrowser(workspace string, routerUUID string, caps *capabilities
 
 	recorderContainer := Container{
 		Name:       "recorder",
-		Image:      "public.ecr.aws/zebrunner/recorder:windows-1.0-beta1",
+		Image:      winRecorderImage,
 		cpu:        recorderCpu,
 		memory:     recorderMemory,
 		Privileged: false,
@@ -72,7 +72,7 @@ func buildWindowsBrowser(workspace string, routerUUID string, caps *capabilities
 
 	uploaderContainer := Container{
 		Name:       "uploader",
-		Image:      "public.ecr.aws/zebrunner/uploader:windows-1.0-beta1",
+		Image:      winUploaderImage,
 		cpu:        64,  // with 32  uploading is aborted
 		memory:     256, // 64 works for single thread. for backgroud copying it is not enough
 		Privileged: false,

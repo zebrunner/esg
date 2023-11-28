@@ -76,7 +76,7 @@ func init() {
 			ValueProcessor: deletePrefFromProfile("browser.download.dir"),
 		},
 		"mitm": {
-			NewCapabilitiesGenerator: func(value interface{}) (bool, map[string]interface{}) {
+			NewCapabilitiesGenerator: func(value interface{}) map[string]interface{} {
 				if boolValue, ok := value.(bool); ok && boolValue {
 					capabilityToAdd := map[string]interface{}{
 						"proxy": map[string]interface{}{
@@ -85,9 +85,10 @@ func init() {
 							"proxyType": "manual",
 						},
 					}
-					return true, capabilityToAdd
+					return capabilityToAdd
 				}
-				return false, nil
+
+				return nil
 			},
 		},
 	}
@@ -133,7 +134,7 @@ type Processors struct {
 	ValueProcessor            func(interface{}) interface{}
 	Validator                 func(interface{}) error
 	DeleteCapabilityProcessor func(interface{}) bool
-	NewCapabilitiesGenerator  func(value interface{}) (bool, map[string]interface{})
+	NewCapabilitiesGenerator  func(value interface{}) map[string]interface{}
 }
 
 func replaceName(name string) func(string) string {
@@ -225,6 +226,20 @@ func addArg(argToRewrite string, fullArg string) func(interface{}) interface{} {
 	}
 }
 
+func addArgs(args ...string) func(interface{}) interface{} {
+	return func(options interface{}) interface{} {
+		if optionsMap, ok := options.(map[string]interface{}); ok {
+			if argsMap, ok := optionsMap["args"].([]interface{}); ok {
+				for _, v := range args {
+					argsMap = append(argsMap, v)
+				}
+				optionsMap["args"] = argsMap
+			}
+		}
+		return options
+	}
+}
+
 func (capsProcessor CapsProcessor) applyProcessors(caps map[string]interface{}) error {
 	for name, value := range caps {
 		newKey := name
@@ -244,7 +259,7 @@ func (capsProcessor CapsProcessor) applyProcessors(caps map[string]interface{}) 
 				}
 			}
 			if processor.NewCapabilitiesGenerator != nil {
-				if toAdd, capabilities := processor.NewCapabilitiesGenerator(newValue); toAdd {
+				if capabilities := processor.NewCapabilitiesGenerator(newValue); capabilities != nil {
 					for k, v := range capabilities {
 						caps[k] = v
 					}
@@ -290,6 +305,37 @@ func ParseRequestCapabilities(body io.ReadCloser) (*RequestCaps, *Capabilities, 
 	err = reqCaps.processAllCapabilititesByFunc(postConfigurationCapsProcessor.applyProcessors)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	if configurationCapabilities.PlatformName == "windows" {
+		resolutionStr, err := configurationCapabilities.GetScreenResolution()
+		if err != nil {
+			return nil, nil, err
+		}
+
+		var windowsSize string
+		if resolutionArr := strings.Split(resolutionStr, "x"); len(resolutionArr) < 2 {
+			windowsSize = fmt.Sprintf("--window-size=%s,%s", "1920", "1080")
+		} else {
+			windowsSize = fmt.Sprintf("--window-size=%s,%s", resolutionArr[0], resolutionArr[1])
+		}
+
+		windowsCasProcessor := CapsProcessor{
+			"goog:chromeOptions": {
+				ValueProcessor: addArgs("--headless=new", "--disable-gpu", windowsSize),
+			},
+			"ms:edgeOptions": {
+				ValueProcessor: addArgs("--headless=new", "--disable-gpu", windowsSize),
+			},
+			"moz:firefoxOptions": {
+				ValueProcessor: addArgs("--headless=new", "--disable-gpu", windowsSize),
+			},
+		}
+
+		err = reqCaps.processAllCapabilititesByFunc(windowsCasProcessor.applyProcessors)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 
 	return reqCaps, configurationCapabilities, nil

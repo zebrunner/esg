@@ -98,14 +98,15 @@ func Proxy(c *gin.Context) {
 	// c.Request.URL.Path contains router UUID which should be replaced by selenium/selenoid sess.SessionID
 	c.Request.URL.Path = rerouteProxy(c.Request.URL.Path, sess.SessionID)
 
+	url, ok := sess.Network.GetUrl("driver")
+	if !ok {
+		log.Error("failed to get `driver` url from session")
+		c.Error(utils.UnknownErr(fmt.Errorf("failed to get `driver` url from session"))).SetType(gin.ErrorTypePublic)
+		return
+	}
+
 	(&httputil.ReverseProxy{
 		Director: func(r *http.Request) {
-			url, ok := sess.Network.GetUrl("driver")
-			if !ok {
-				log.Error("failed to get `driver` url from session")
-				c.Error(utils.UnknownErr(fmt.Errorf("failed to get `driver` url from session"))).SetType(gin.ErrorTypePublic)
-			}
-
 			// fix for file upload using selenium 4
 			seUploadPath, uploadPath := "/se/file", "/file"
 			if strings.HasSuffix(r.URL.Path, seUploadPath) {
@@ -338,27 +339,35 @@ func TaskDescribe(c *gin.Context) {
 
 func Downloads(c *gin.Context) {
 	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
+	url, ok := sess.Network.GetUrl("fileserver")
+	if !ok {
+		log.Error("failed to get `fileserver` url from session")
+		c.Error(utils.UnknownErr(fmt.Errorf("failed to get `fileserver` url from session"))).SetType(gin.ErrorTypePublic)
+		return
+	}
 
 	director := func(req *http.Request) {
 		req.URL.Scheme = "http"
-		if sess != nil {
-			url, _ := sess.Network.GetUrl("fileserver")
-			req.URL.Host = url.Host
-			req.Host = url.Host
-			req.URL.Path = getRemainingPath(req.URL.Path)
-		}
+		req.URL.Host = url.Host
+		req.Host = url.Host
+		req.URL.Path = getRemainingPath(req.URL.Path)
 	}
 	proxy := &httputil.ReverseProxy{Director: director}
-	fmt.Println(c.Request)
+
 	proxy.ServeHTTP(c.Writer, c.Request)
 }
 
 func Clipboard(c *gin.Context) {
 	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
+	url, ok := sess.Network.GetUrl("clipboard")
+	if !ok {
+		log.Error("failed to get `clipboard` url from session")
+		c.Error(utils.UnknownErr(fmt.Errorf("failed to get `clipboard` url from session"))).SetType(gin.ErrorTypePublic)
+		return
+	}
 
 	director := func(req *http.Request) {
 		req.URL.Scheme = "http"
-		url, _ := sess.Network.GetUrl("clipboard")
 		req.URL.Host = url.Host
 		req.Host = url.Host
 	}
@@ -368,7 +377,13 @@ func Clipboard(c *gin.Context) {
 
 func Devtools(c *gin.Context) {
 	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
-	url, _ := sess.Network.GetUrl("devtools")
+	url, ok := sess.Network.GetUrl("devtools")
+	if !ok {
+		log.Error("failed to get `devtools` url from session")
+		c.Error(utils.UnknownErr(fmt.Errorf("failed to get `devtools` url from session"))).SetType(gin.ErrorTypePublic)
+		return
+	}
+
 	director := func(req *http.Request) {
 		req.URL.Scheme = "http"
 		req.URL.Host = url.Host
