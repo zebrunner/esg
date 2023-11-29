@@ -18,6 +18,7 @@ var (
 		"cypress-edge",
 		"cypress-firefox",
 		"windows-chrome",
+		"windows-edge",
 	}
 	VendorPrefix = "zebrunner"
 	Conf         = Config{}
@@ -35,6 +36,7 @@ type Config struct {
 	AwsWinCapacityProvider   string
 	AwsAccessKeyID           string
 	AwsSecretAccessKey       string
+	AwsTaskRoleArn			 string
 
 	// Session resource limitations
 	MaxMemory int64
@@ -81,6 +83,7 @@ func init() {
 	flag.StringVar(&Conf.AwsWinCapacityProvider, "aws-win-capacity-provider", "esg-win-capacityprovider", "AWS capacity provicer for windows instances")
 	flag.StringVar(&Conf.AwsAccessKeyID, "aws-access-key-id", "", "Access key for AWS services")
 	flag.StringVar(&Conf.AwsSecretAccessKey, "aws-secret-access-key", "", "Secret key for AWS services")
+	flag.StringVar(&Conf.AwsTaskRoleArn, "aws-task-role-arn", "", "Role that would be assigned to all task's definitions")
 
 	flag.Int64Var(&Conf.MaxMemory, "max-memory", 28675, "maximum memory limitation for session") // max memory for c5a.4xlarge
 	flag.Int64Var(&Conf.MaxCpu, "max-cpu", 16384, "maximum CPU limitation for session")          //max cpu for c5a.4xlarge

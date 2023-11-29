@@ -253,6 +253,27 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (essential *utils.Sel
 
 		s.Log = s.Log.WithField(config.SessionIdKey, sessionId)
 
+		if s.Env.Capabilities.PlatformName == "windows" {
+			nonEssential = addCapabilitiesToDriverResponse(s.Reply, map[string]interface{}{
+				"enableVideo": false,
+				"enableVNC":   false,
+			})
+
+			if nonEssential != nil {
+				s.Log.WithError(err).Error("Failed to disabe vnc and video download for windows")
+				return
+			}
+		} else if s.Env.Capabilities.PlatformName == "android" {
+			nonEssential = addCapabilitiesToDriverResponse(s.Reply, map[string]interface{}{
+				"enableVNC": false,
+			})
+
+			if nonEssential != nil {
+				s.Log.WithError(err).Error("Failed to disabe vnc for android")
+				return
+			}
+		}
+
 		var sess *sessionmap.Session
 		for {
 			sess, err = sessionmap.CreateEntity(sessionId, s.Env, s.TaskId)
@@ -510,4 +531,22 @@ func replaceSessionId(driverResponse map[string]interface{}, routerUUID string) 
 	}
 
 	return "", fmt.Errorf("failed to find sessionId field in response")
+}
+
+func addCapabilitiesToDriverResponse(driverResponse map[string]interface{}, capsToAdd map[string]interface{}) error {
+	value, ok := driverResponse["value"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("`value` must be an object")
+	}
+
+	capabilities, ok := value["capabilities"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("`capabilities` must be an object")
+	}
+
+	for k, v := range capsToAdd {
+		capabilities[k] = v
+	}
+
+	return nil
 }

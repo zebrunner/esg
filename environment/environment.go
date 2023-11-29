@@ -36,6 +36,8 @@ const (
 	cloneImage           = imageRepo + "git:2.36.2"
 	entrypointImage      = imageRepo + "entrypoint:2.4"
 	mavenImage           = imageRepo + "m2-repo-carina:1.5"
+	winUploaderImage 	 = imageRepo + "uploader:1.0-win"
+	winRecorderImage 	 = imageRepo + "recorder:1.0-win"
 )
 
 const (
@@ -76,6 +78,7 @@ type ExecutionEnvironment struct {
 	Network              *NetworkConfiguration
 	Workspace            string
 	CapacityProvider     string
+	TaskRoleArn          string
 }
 
 func (e *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefinition {
@@ -295,6 +298,7 @@ func (e *ExecutionEnvironment) HashRegisterDefinition() string {
 		Containers:           containers,
 		Volumes:              e.Volumes,
 		Network:              e.Network,
+		TaskRoleArn:          e.TaskRoleArn,
 	}
 	registerDefinitionHash := utils.EncodeToHash(registerDefinitionData)
 

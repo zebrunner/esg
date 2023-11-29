@@ -107,6 +107,7 @@ func buildAppiumRedroid(workspace string, routerUUID string, caps *capabilities.
 		Workspace:        workspace,
 		RouterUUID:       routerUUID,
 		CapacityProvider: config.Conf.AwsLinuxCapacityProvider,
+		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
 	}
 
 	return &environment, nil

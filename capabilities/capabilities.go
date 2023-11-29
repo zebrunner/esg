@@ -1,6 +1,7 @@
 package capabilities
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -256,6 +257,16 @@ type Capabilities struct {
 	LaunchCommand stringWrapper
 	EnvVariables  mapStrStrWrapper
 	LaunchUUID    stringWrapper
+}
+
+func (c *Capabilities) ToMap() (newMap map[string]interface{}){
+	data, err := json.Marshal(c)
+	if err != nil {
+		return
+	}
+
+	json.Unmarshal(data, &newMap)
+	return
 }
 
 func (c *Capabilities) GetTimeZone() (*time.Location, error) {
@@ -557,6 +568,7 @@ func FromImage(image string) ([]*Capabilities, error) {
 		"edge":    capsForLinux,
 
 		"windows-chrome": capsForWindows,
+		"windows-edge": capsForWindows,
 
 		"cypress-chrome":   capsForCypress,
 		"cypress-chromium": capsForCypress,
