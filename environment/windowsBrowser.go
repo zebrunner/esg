@@ -32,9 +32,10 @@ func buildWindowsBrowser(workspace string, routerUUID string, caps *capabilities
 		},
 		Mounts: []string{logVolume},
 		Env: map[string]string{
-			"LOG_DIR":  logDir,
-			"TASK_LOG": "task.log",
-			"LOG_FILE": "session.log",
+			"LOG_DIR":   logDir,
+			"TASK_LOG":  "task.log",
+			"LOG_FILE":  "session.log",
+			"LOG_LEVEL": "INFO",
 		},
 		HealthCheck: &ecs.HealthCheck{
 			Command:     []*string{aws.String("cmd.exe"), aws.String("curl -f localhost:4444/status || exit 1")},
@@ -50,8 +51,8 @@ func buildWindowsBrowser(workspace string, routerUUID string, caps *capabilities
 	recorderContainer := Container{
 		Name:       "recorder",
 		Image:      winRecorderImage,
-		cpu:        recorderCpu,
-		memory:     recorderMemory,
+		cpu:        8,
+		memory:     8,
 		Privileged: false,
 		Essential:  false,
 		Env: map[string]string{
@@ -73,8 +74,8 @@ func buildWindowsBrowser(workspace string, routerUUID string, caps *capabilities
 	uploaderContainer := Container{
 		Name:       "uploader",
 		Image:      winUploaderImage,
-		cpu:        64,  // with 32  uploading is aborted
-		memory:     256, // 64 works for single thread. for backgroud copying it is not enough
+		cpu:        16,
+		memory:     16,
 		Privileged: false,
 		Essential:  false,
 		Env: map[string]string{
