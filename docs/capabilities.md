@@ -2,7 +2,9 @@
 
 Capabilities could be passed one by one as map{string:any} with prefix `zebrunner:` in key. Example - `"zebrunner:enableDebug":true`.
 
-Or as map{string:map{string:any}}, where the key in the first map sholud be `zebrunner:options`, and simple keys in the second. Example -  `map{"zebrunner:options": map{"enableVNC":true, "enableVideo":false, "mitm":"false"}}`
+Or as map{string:map{string:any}}, where the key in the first map sholud be `zebrunner:options`, and simple keys in the second. Example -  `map{"zebrunner:options": map{"enableVNC":true, "enableVideo":false, "mitm":"false"}}`.
+
+If the same capability but with different values were passed by prefix and map options, value usage priority will be given to the capability with prefix.
 
 ### Supported list
 
@@ -19,7 +21,7 @@ Or as map{string:map{string:any}}, where the key in the first map sholud be `zeb
 * `frameRate` - Default: 12. Value type: integer/string. Determines videor recorder fps. Value could be set between 1 and 30 fps.
 * `hostEntries` - Default: -. Value type: string array. Selenoid's [hostEntries](https://aerokube.com/selenoid/latest/#_hosts_entries_hostsentries) capability.
 * `dnsServers` - Default: -. Value type: string array. Selenoid's [dnsServers](https://aerokube.com/selenoid/latest/#_custom_dns_servers_dnsservers) capability.
-* `timeZone` - Default: utc 0. Value type: string. Specifies particular time zone in operating system for session. Example: Asia/Kolkata
+* `timeZone` - Default: utc 0. Value type: string. Specifies particular time zone in operating system for session. Example: Asia/Kolkata.
 * `mitm` (allias: `Mitm`) - Default: false. Value type: bool/string. Enables mitm proxy. Usage tracker includes allocated resources for mitm container.
 
 #### Selenium windows browser capabilities
