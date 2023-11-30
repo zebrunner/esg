@@ -25,7 +25,7 @@ type RedisWorker[T interface{}] struct {
 }
 
 // Copies error chan, that would recieve a reponse on the next worker iteration.
-// Adds request item to worker and waits for reponse from any channel.
+// Adds request item to worker and waits for reponse from err channel.
 func (w *RedisWorker[T]) AppendToWorker(id string, item T) error {
 	w.mutex.Lock()
 	w.items[id] = item
