@@ -80,8 +80,8 @@ func buildWindowsBrowser(workspace string, routerUUID string, caps *capabilities
 		Essential:  false,
 		Env: map[string]string{
 			"LOG_DIR":               logDir,
-			"AWS_BUCKET":            conf.S3Bucket,
-			"AWS_KEY":               fmt.Sprintf("%s/artifacts/test-sessions", workspace),
+			"S3_BUCKET":             conf.S3Bucket,
+			"S3_KEY":                fmt.Sprintf("%s/artifacts/test-sessions", workspace),
 			"AWS_ACCESS_KEY_ID":     conf.S3AwsAccessKeyID,
 			"AWS_SECRET_ACCESS_KEY": conf.S3AwsSecretAccessKey,
 			"AWS_DEFAULT_REGION":    conf.S3Region,
