@@ -1,18 +1,25 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"net/http"
 	"net/http/httputil"
 	"os"
+	"os/signal"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/net/websocket"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps/definitionmap"
+	"github.com/zebrunner/esg/cachemaps/mapper"
+	"github.com/zebrunner/esg/cachemaps/resourcesToAllocate"
+	"github.com/zebrunner/esg/cachemaps/sessionmap"
+	"github.com/zebrunner/esg/cachemaps/taskmap"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/handlers"
 	"github.com/zebrunner/esg/service"
@@ -44,6 +51,8 @@ func ReverseProxy() gin.HandlerFunc {
 
 func CreateRouter() *gin.Engine {
 	r := gin.New()
+	r.ForwardedByClientIP = true
+
 	r.Use(gin.LoggerWithFormatter(utils.TraceLogFromating), gin.Recovery())
 
 	api := r.Group("/api", handlers.APIError, handlers.LowLvlAuthentication)
@@ -63,16 +72,8 @@ func CreateRouter() *gin.Engine {
 	{
 		hub.GET("/", handlers.Welcome)
 		hub.GET("/ping", handlers.Ping)
-
 		// sessionId passed for linux browsers and redroid session. taskId passed for cypress
-		hub.GET("/ws/vnc/:id", func(c *gin.Context) {
-			handler := websocket.Handler(handlers.Vnc)
-			c.Request.Header.Add("Access-Control-Allow-Origin", "*")
-			c.Request.Header.Add("X-Real-IP", c.Request.RemoteAddr)
-
-			log.WithField("request", c.Request).Debug("Vnc request")
-			handler.ServeHTTP(c.Writer, c.Request)
-		})
+		hub.GET("/ws/vnc/:uuid", handlers.Vnc)
 	}
 
 	seleniumHub := hub.Group("/", handlers.SeleniumError)
@@ -80,7 +81,7 @@ func CreateRouter() *gin.Engine {
 		seleniumHub.POST("/session", handlers.Create) // Auth logic moved to handler
 		seleniumHub.DELETE("/session/:session", handlers.CloseSession)
 		seleniumHub.Any("/session/:session/*action", handlers.Proxy)
-		
+
 		seleniumHub.Any("/download/:session/*action", handlers.Downloads)
 
 		seleniumHub.GET("/clipboard/:session", handlers.Clipboard)
@@ -145,9 +146,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	defer config.RedisSessionsConnection.Close()
-	defer config.RedisTasksConnection.Close()
-	defer config.RedisDefinitionConnection.Close()
+	defer config.RedisSessionsClient.Close()
+	defer config.RedisTasksClient.Close()
+	defer config.RedisDefinitionClient.Close()
+	defer config.RedisCypressSetClient.Close()
+	defer config.RedisIdMapperClient.Close()
+	defer config.RedisResourcesClient.Close()
+	mapper.InitUUIDMapWorkers()
+	taskmap.InitTaskmapWorkers()
+	sessionmap.InitSessionmapWorker()
+	resourcesToAllocate.InitResourceWorker()
 
 	aws, err := service.InitAws()
 	if err != nil {
@@ -172,9 +180,44 @@ func main() {
 	service.InitInstanceWorker()
 	service.InitWaitWorker()
 
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
 	log.Infof("Listening on %s", listen)
-	err = router.Run(listen)
-	if err != nil {
-		log.WithError(err).Fatal("Failed to start server")
+	srv := &http.Server{
+		Addr:    listen,
+		Handler: router,
 	}
+
+	go func() {
+		// service connections
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.WithError(err).Fatal("Failed to start router")
+		}
+	}()
+
+	<-quit
+
+	log.Info("Shutdown router ...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.WithError(err).Error("Failed to shutdown correctly")
+	}
+
+	var wg sync.WaitGroup
+
+	for routerUUID, ctx := range service.GenericCtxWorker.CtxMap {
+		wg.Add(1)
+		go func(routerUUID string, ctx context.Context) {
+			log.WithField(config.RouterUUID, routerUUID).Info("Waiting for task to start")
+			<-ctx.Done()
+			log.WithField(config.RouterUUID, routerUUID).Info("Task started")
+			wg.Done()
+		}(routerUUID, ctx)
+	}
+
+	wg.Wait()
+	log.Info("Router exited")
 }

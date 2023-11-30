@@ -7,6 +7,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/zebrunner/esg/cachemaps"
 	"github.com/zebrunner/esg/cachemaps/mapper"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
@@ -42,38 +43,44 @@ type Task struct {
 	UsageTracked     bool
 	Workspace        string
 	RouterUUID       string
+	HealthAt         *time.Time
 	CurrentSessionID string                           `json:",omitempty"`
 	StopReason       StoppedReason                    `json:",omitempty"`
-	HealthAt         time.Time                        `json:",omitempty"`
 	Network          environment.NetworkConfiguration `json:",omitempty"`
 	AccessedAt       time.Time                        `json:",omitempty"`
 }
 
+// Creates new record in tasks redis db and updates mapper uuid record with new taskId. Resets existing expiration on mapper uuid record
 func CreateEntity(taskId string, env *environment.ExecutionEnvironment) (*Task, error) {
-	err := mapper.UpdateTaskId(env.RouterUUID, taskId)
-	if err != nil {
-		log.WithError(err).Error("Task not cached!")
+	responseCh, errCh := mapper.WriteMapper(mapper.IdMapper{RouterUUID: env.RouterUUID, TaskId: taskId}, 0)
+	select {
+	case err := <-errCh:
 		return nil, err
+	case <-responseCh:
 	}
+
+	creationTime := time.Now()
 	cachedTask := &Task{
 		TaskId:       taskId,
 		Capabilities: env.Capabilities,
 		Status:       TaskQueued,
 		RouterUUID:   env.RouterUUID,
 		Workspace:    env.Workspace,
+		HealthAt:     &creationTime,
 	}
 
-	err = Write(cachedTask.TaskId, cachedTask, 0)
-	if err != nil {
-		log.WithError(err).Error("Task not cached!")
+	responseCh, errCh = WriteTask(*cachedTask, 0)
+	select {
+	case err := <-errCh:
 		return nil, err
+	case <-responseCh:
 	}
 
 	return cachedTask, nil
 }
 
 func Find(taskId string, rewriteAccessTime bool) (*Task, error) {
-	sessionData, err := config.RedisTasksConnection.Get(context.Background(), taskId).Result()
+	sessionData, err := config.RedisTasksClient.Get(context.Background(), taskId).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +119,7 @@ func Write(taskId string, task *Task, expiration time.Duration) error {
 		return err
 	}
 
-	err = config.RedisTasksConnection.Set(context.Background(), taskId, data, expiration).Err()
+	err = config.RedisTasksClient.Set(context.Background(), taskId, data, expiration).Err()
 	if err != nil {
 		return err
 	}
@@ -124,6 +131,36 @@ func Write(taskId string, task *Task, expiration time.Duration) error {
 	return nil
 }
 
+// Writes all passed tasks to redis db by pipeline.
+func WriteAll(tasks []Task, expiration time.Duration) error {
+	rdbPipe := config.RedisTasksClient.Pipeline()
+	tasksMap := make(map[string]Task, len(tasks))
+	if expiration > 0 {
+		uuidList := make([]string, 0, len(tasksMap))
+		for _, task := range tasks {
+			uuidList = append(uuidList, task.RouterUUID)
+			tasksMap[task.TaskId] = task
+		}
+
+		err := cachemaps.WriteAll(rdbPipe, tasksMap, expiration)
+		if err != nil {
+			return err
+		}
+
+		return mapper.SetExpireForSeveralRecords(uuidList, expiration)
+	} else {
+		for _, task := range tasks {
+			tasksMap[task.TaskId] = task
+		}
+		return cachemaps.WriteAll(rdbPipe, tasksMap, expiration)
+	}
+}
+
 func Keys() ([]string, error) {
-	return config.RedisTasksConnection.Keys(context.Background(), "*").Result()
+	return config.RedisTasksClient.Keys(context.Background(), "*").Result()
+}
+
+// Returns cached tasks by passed taskIdArr from tasks redis db
+func Tasks(taskIdArr []string) ([]Task, error) {
+	return cachemaps.FindAll[Task](config.RedisTasksClient.Pipeline(), taskIdArr)
 }

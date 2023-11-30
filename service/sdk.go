@@ -13,7 +13,7 @@ import (
 	"github.com/zebrunner/esg/utils"
 )
 
-func GetClusterTasks(svc *ecs.ECS) ([]*ecs.Task, error) {
+func GetCapacityProviderTasks(svc *ecs.ECS, capacityProviderName string) ([]*ecs.Task, error) {
 	tasks := []*ecs.Task{}
 	listTasksInput := &ecs.ListTasksInput{
 		Cluster: &config.Conf.AwsCluster,
@@ -36,7 +36,12 @@ func GetClusterTasks(svc *ecs.ECS) ([]*ecs.Task, error) {
 			log.WithError(err).Warn("Failed to get all tasks. Only partial results returned")
 			break
 		}
-		tasks = append(tasks, describeTasksResult.Tasks...)
+
+		for _, task := range describeTasksResult.Tasks {
+			if task.CapacityProviderName != nil && *task.CapacityProviderName == capacityProviderName {
+				tasks = append(tasks, task)
+			}
+		}
 
 		if listTasksResult.NextToken == nil {
 			break
@@ -138,19 +143,51 @@ func DescribeContainerInstances(containerInstanceIdPtrs []*string, svc *ecs.ECS)
 			return nil, err
 		}
 
+		if describeResult.Failures != nil && len(describeResult.Failures) != 0 {
+			log.Error("Found failure in DescribeContainerInstances operation")
+			for _, failure := range describeResult.Failures {
+				l := log.NewEntry(log.StandardLogger())
+				if failure.Arn != nil {
+					l = l.WithField("Arn", &failure.Arn)
+				}
+				if failure.Reason != nil {
+					l = l.WithField("Reason", &failure.Reason)
+				}
+				if failure.Detail != nil {
+					l = l.WithField("Detail", &failure.Detail)
+				}
+				l.Error("Failure in DescribeContainerInstances")
+			}
+		}
+
 		containerInstances = append(containerInstances, describeResult.ContainerInstances...)
 	}
 
 	return containerInstances, nil
 }
 
+func DescribeContainerInstancesOfCapacityProvider(containerInstanceIdPtrs []*string, svc *ecs.ECS, capacityProviderName string) ([]*ecs.ContainerInstance, error) {
+	ciArr, err := DescribeContainerInstances(containerInstanceIdPtrs, svc)
+	if err != nil {
+		return nil, err
+	}
+
+	cpCIArr := make([]*ecs.ContainerInstance, 0)
+	for _, containerInstance := range ciArr {
+		if containerInstance.CapacityProviderName != nil && *containerInstance.CapacityProviderName == capacityProviderName {
+			cpCIArr = append(cpCIArr, containerInstance)
+		}
+	}
+
+	return cpCIArr, nil
+}
+
 func DescribeInstances(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) ([]*ec2.Instance, error) {
 	var ec2Instances []*ec2.Instance
+	input := ec2.DescribeInstancesInput{
+		InstanceIds: ec2InstanceIdPtrs,
+	}
 	for {
-		input := ec2.DescribeInstancesInput{
-			InstanceIds: ec2InstanceIdPtrs,
-		}
-
 		ec2Result, err := utils.RetryThrottling(ec2Svc.DescribeInstances)(&input)
 		if err != nil {
 			log.WithField("error", err).Error("Failed to DescribeInstances!")
@@ -191,7 +228,7 @@ func DescribeInstancesStatus(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) ([]*s
 			l := log.WithField("_ec2Id", *is.InstanceId)
 
 			if *is.InstanceStatus.Status == ec2.SummaryStatusImpaired || *is.SystemStatus.Status == ec2.SummaryStatusImpaired {
-				l.Info("Unhealthy instance")
+				l.Error("Unhealthy instance")
 				unhealthyInstanceIdPtrs = append(unhealthyInstanceIdPtrs, is.InstanceId)
 			} else {
 				l.Trace("Healthy instance")
@@ -204,7 +241,6 @@ func DescribeInstancesStatus(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) ([]*s
 		} else {
 			break
 		}
-
 	}
 
 	return healthyInstanceIdPtrs, unhealthyInstanceIdPtrs, nil

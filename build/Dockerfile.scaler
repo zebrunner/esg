@@ -1,7 +1,5 @@
 FROM golang:1.18-alpine
 
-RUN apk add -U ca-certificates tzdata mailcap curl git && rm -Rf /var/cache/apk/*
-
 WORKDIR /esg
 
 # Download dependencies
@@ -12,12 +10,11 @@ RUN go mod download
 # Build esg
 COPY . /esg
 
-RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./cmd/management
+RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./cmd/scaler
 
 
 FROM alpine:latest
 
-ENV AWS_ASG_NAME=
 ENV RESERVE_INSTANCES_PERCENT=
 ENV RESERVE_MAX_CAPACITY=
 ENV INSTANCE_COOLDOWN_TIMEOUT=
@@ -29,6 +26,7 @@ ENV AWS_CLUSTER=
 
 ENV AWS_ACESS_KEY_ID=
 ENV AWS_SECRET_ACCESS_KEY=
+ENV AWS_TASK_ROLE=
 
 ENV AWS_ELASTIC_CACHE=
 ENV LOG_LEVEL=
@@ -52,7 +50,7 @@ ENV ZEBRUNNER_INTEGRATION_PASSWORD=
 
 ENV EXCLUDE_BROWSERS=
 
-COPY --from=0 /esg/management /management
+COPY --from=0 /esg/scaler /scaler
 
 COPY ./build/entrypoint.scaler /entrypoint.sh
 

@@ -1,0 +1,17 @@
+version: "3.8"
+services:
+  router:
+    build:
+      context: ../
+      dockerfile: build/Dockerfile.router
+    image: public.ecr.aws/zebrunner/router:latest
+  scaler:
+    build:
+      context: ../
+      dockerfile: build/Dockerfile.scaler
+    image: public.ecr.aws/zebrunner/scaler:latest
+  migration:
+    build:
+      context: ../
+      dockerfile: build/Dockerfile.migration
+    image: public.ecr.aws/zebrunner/migration:latest

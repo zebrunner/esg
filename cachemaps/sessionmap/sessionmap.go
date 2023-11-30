@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps/mapper"
-	"github.com/zebrunner/esg/cachemaps/taskmap"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
 )
@@ -41,11 +41,14 @@ type Session struct {
 	Workspace   string
 }
 
-func CreateEntity(sessionId string, env *environment.ExecutionEnvironment, task *taskmap.Task) (*Session, error) {
-	err := mapper.UpdateSessionId(env.RouterUUID, sessionId)
-	if err != nil {
+// Creates a new record in sessions redis db. Updates mapper's record with taskId, sessionId and resets expiration
+func CreateEntity(sessionId string, env *environment.ExecutionEnvironment, taskId *string) (*Session, error) {
+	responseCh, errCh := mapper.WriteMapper(mapper.IdMapper{RouterUUID: env.RouterUUID, TaskId: *taskId, SessionID: sessionId}, 0)
+	select {
+	case err := <-errCh:
 		log.WithError(err).Error("Session not cached!")
 		return nil, err
+	case <-responseCh:
 	}
 
 	cachedSession := &Session{
@@ -55,29 +58,22 @@ func CreateEntity(sessionId string, env *environment.ExecutionEnvironment, task 
 		AccessedAt:  time.Now(),
 		IdleTimeout: float64(env.Capabilities.IdleTimeout),
 		Network:     *env.Network,
-		TaskId:      task.TaskId,
+		TaskId:      *taskId,
 		Status:      SessionActive,
-		Workspace:   task.Workspace,
+		Workspace:   env.Workspace,
 	}
 
-	err = Write(cachedSession.SessionID, cachedSession, 0)
-	if err != nil {
-		log.WithError(err).Error("Session not cached!")
+	responseCh, errCh = WriteSession(*cachedSession, 0)
+	select {
+	case err := <-errCh:
 		return nil, err
+	case <-responseCh:
+		return cachedSession, nil
 	}
-
-	task.CurrentSessionID = sessionId
-	err = taskmap.Write(task.TaskId, task, -1)
-	if err != nil {
-		log.WithError(err).Error("Session id not cached for task!")
-		return nil, err
-	}
-
-	return cachedSession, nil
 }
 
 func Find(sessionId string, rewriteAccessTime bool) (*Session, error) {
-	sessionData, err := config.RedisSessionsConnection.Get(context.Background(), sessionId).Result()
+	sessionData, err := config.RedisSessionsClient.Get(context.Background(), sessionId).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -116,18 +112,46 @@ func Write(sessionId string, session *Session, expiration time.Duration) error {
 		return err
 	}
 
-	err = config.RedisSessionsConnection.Set(context.Background(), sessionId, data, expiration).Err()
+	err = config.RedisSessionsClient.Set(context.Background(), sessionId, data, expiration).Err()
 	if err != nil {
 		return err
-	}
-
-	if expiration > 0 {
-		mapper.SetExpire(session.RouterUUID, expiration)
 	}
 
 	return nil
 }
 
-func Keys() ([]string, error) {
-	return config.RedisSessionsConnection.Keys(context.Background(), "*").Result()
+// Returns all sessions from redis
+func Sessions() ([]Session, error) {
+	keys, err := config.RedisSessionsClient.Keys(context.Background(), "*").Result()
+	if err != nil {
+		return nil, err
+	}
+
+	rdbPipe := config.RedisSessionsClient.Pipeline()
+	for _, key := range keys {
+		rdbPipe.Get(context.Background(), key)
+	}
+
+	cmds, err := rdbPipe.Exec(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	sessions := make([]Session, 0)
+	for _, cmd := range cmds {
+		data, err := cmd.(*redis.StringCmd).Result()
+		if err != nil {
+			log.WithError(err).Warn("Failed to get cached session")
+			continue
+		}
+
+		var session Session
+		err = json.Unmarshal([]byte(data), &session)
+		if err != nil {
+			return nil, err
+		}
+		sessions = append(sessions, session)
+	}
+
+	return sessions, nil
 }

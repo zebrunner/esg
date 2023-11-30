@@ -17,22 +17,26 @@ var (
 		"cypress-chromium",
 		"cypress-edge",
 		"cypress-firefox",
+		"windows-chrome",
+		"windows-edge",
 	}
 	VendorPrefix = "zebrunner"
 	Conf         = Config{}
-	RouterUuid   = "_uuid"
+	RouterUUID   = "_uuid"
 	TaskIdKey    = "_taskId"
 	SessionIdKey = "sessionId"
 )
 
 type Config struct {
 	// AWS settings
-	AwsRegion           string
-	AwsRetry            int
-	AwsCluster          string
-	AwsAutoScalingGroup string
-	AwsAccessKeyID      string
-	AwsSecretAccessKey  string
+	AwsRegion                string
+	AwsRetry                 int
+	AwsCluster               string
+	AwsLinuxCapacityProvider string
+	AwsWinCapacityProvider   string
+	AwsAccessKeyID           string
+	AwsSecretAccessKey       string
+	AwsTaskRoleArn			 string
 
 	// Session resource limitations
 	MaxMemory int64
@@ -41,10 +45,10 @@ type Config struct {
 	// Timeouts
 	MaxIdleTimeout          time.Duration
 	IdleTimeout             time.Duration
-	CypressIdleTimeout		time.Duration
+	CypressIdleTimeout      time.Duration
 	SessionDeleteTimeout    time.Duration
 	ServiceStartupTimeout   time.Duration
-	DriverStartupTimeout    time.Duration
+	TaskUncachedTimeout     time.Duration
 	InstanceCooldownTimeout time.Duration
 	MaxTimeout              time.Duration
 
@@ -75,19 +79,21 @@ func init() {
 	flag.StringVar(&Conf.AwsRegion, "aws-region", "us-east-1", "AWS region name")
 	flag.IntVar(&Conf.AwsRetry, "aws-retry", 10, "AWS client retry count")
 	flag.StringVar(&Conf.AwsCluster, "aws-cluster", "esg", "AWS ECS cluster name")
-	flag.StringVar(&Conf.AwsAutoScalingGroup, "aws-auto-scaling-group", "esg-asg", "AWS auto scaling group name")
+	flag.StringVar(&Conf.AwsLinuxCapacityProvider, "aws-linux-capacity-provider", "esg-linux-capacityprovider", "AWS capacity provider for linux instances")
+	flag.StringVar(&Conf.AwsWinCapacityProvider, "aws-win-capacity-provider", "esg-win-capacityprovider", "AWS capacity provicer for windows instances")
 	flag.StringVar(&Conf.AwsAccessKeyID, "aws-access-key-id", "", "Access key for AWS services")
 	flag.StringVar(&Conf.AwsSecretAccessKey, "aws-secret-access-key", "", "Secret key for AWS services")
+	flag.StringVar(&Conf.AwsTaskRoleArn, "aws-task-role-arn", "", "Role that would be assigned to all task's definitions")
 
 	flag.Int64Var(&Conf.MaxMemory, "max-memory", 28675, "maximum memory limitation for session") // max memory for c5a.4xlarge
 	flag.Int64Var(&Conf.MaxCpu, "max-cpu", 16384, "maximum CPU limitation for session")          //max cpu for c5a.4xlarge
 
 	flag.DurationVar(&Conf.MaxIdleTimeout, "max-idle-timeout", 20*time.Minute, "Maximum session idle timeout time that could be set by user's capabilities")
 	flag.DurationVar(&Conf.IdleTimeout, "idle-timeout", 60*time.Second, "Session idle timeout in time.Duration format")
-	flag.DurationVar(&Conf.CypressIdleTimeout, "cypress-idle-timeout", 10*time.Second, "Cypress task idle timeout in time.Duration format") // cyserver get task's status every 5 seconds
+	flag.DurationVar(&Conf.CypressIdleTimeout, "cypress-idle-timeout", 30*time.Second, "Cypress task idle timeout in time.Duration format") // cyserver get task's status every 5 seconds
 	flag.DurationVar(&Conf.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
-	flag.DurationVar(&Conf.ServiceStartupTimeout, "service-startup-timeout", 9*time.Minute, "Service startup timeout in time.Duration format")
-	flag.DurationVar(&Conf.DriverStartupTimeout, "driver-startup-timeout", 1*time.Minute, "Driver startup timeout in time.Duration format")
+	flag.DurationVar(&Conf.ServiceStartupTimeout, "service-startup-timeout", 10*time.Minute, "Service startup timeout in time.Duration format")
+	flag.DurationVar(&Conf.TaskUncachedTimeout, "task-uncached-timeout", 30*time.Second, "Time for task to be cached on start in time.Duration format")
 	flag.DurationVar(&Conf.InstanceCooldownTimeout, "instance-cooldown-timeout", 4*time.Minute, "Time after instance start when shutdown is prohibited on scale down in time.Duration format")
 	flag.DurationVar(&Conf.MaxTimeout, "max-timeout", 24*time.Hour, "Maximum valid task/session timeout in time.Duration format")
 

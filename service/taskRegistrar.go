@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/cachemaps/resourcesToAllocate"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
 )
@@ -25,7 +26,12 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 
 	family, err := env.GetFamilyRevision()
 	if err != nil {
-		waitRequest.EssentialErrCh <- fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily)
+		log.WithError(err).Error("image not found")
+		select {
+		case waitRequest.EssentialErrCh <- fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily):
+		default:
+		}
+
 		return
 	}
 	l := log.WithField("family", env.TaskDefinitionFamily)
@@ -40,6 +46,7 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 				Type:  aws.String("binpack"),
 			},
 		},
+		CapacityProviderStrategy: []*ecs.CapacityProviderStrategyItem{{CapacityProvider: &env.CapacityProvider}},
 	}
 	l.WithField("runTaskInput", runTaskInput).Trace("Res runTaskInput")
 
@@ -47,40 +54,48 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 	// TODO: convert existing hard-coded 25 retries into the queue or provisioning timeout: https://github.com/zebrunner/esg/issues/72
 	// [VD] "i" retry should be ~15 if instances can be started in 1 min and 25 if ~2 min
 	var outputErr error
-	for i := 0; i < 25; i++ {
-
+	markedToAllocate := false
+	for i := 0; true; i++ {
 		l := l.WithField("retry", i)
 
 		select {
 		case <-ctx.Done():
+			if markedToAllocate {
+				resourcesToAllocate.RemoveEntity(env.RouterUUID)
+			}
 			return
 		default:
 		}
-		// Random sleep to fix problems with parallel 100+ threads startup. Not applicable for generic tasks!
-		//TODO: uncomment before release!
-		/*		if env.TaskDefinitionFamily != "generic" {
-					sleep := time.Duration(rand.Intn(30)) * time.Second
-					time.Sleep(sleep)
-				}
-		*/
+
+		// do not pause after ctx deadline check and before ecs call
 
 		var resultRunTask *ecs.RunTaskOutput
 		resultRunTask, err := svc.RunTask(runTaskInput)
 		if err != nil {
-			l.WithError(err).Debug("Task register failed.")
 			// Not good solution but aws doesn't give a choice
 			errStr := err.Error()
 			if errStr == "ClientException: TaskDefinition not found." {
-				waitRequest.EssentialErrCh <- fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily)
+				l.WithError(err).Error("Task register failed.")
+				if markedToAllocate {
+					resourcesToAllocate.RemoveEntity(env.RouterUUID)
+				}
+
+				select {
+				case waitRequest.EssentialErrCh <- fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily):
+				default:
+				}
+
 				return
-			} else if errStr == "ClientException: Tasks provisioning capacity limit exceeded." {
-				// wait for 15 seconds (repeated until new instances will be provided and provisioning tasks will get to the next phase)
-				time.Sleep(time.Duration(15 * time.Second))
-			} else if strings.Contains(errStr, "ThrottlingException: Rate exceeded") {
-				// increase average wait time based on retry count
-				// min -> 1 sec on first retry
-				// max -> 125 sec on last retry
-				time.Sleep(time.Duration((i+1)*(1+rand.Intn(5))) * time.Second)
+			}
+
+			if errStr == "ClientException: Tasks provisioning capacity limit exceeded." || strings.Contains(errStr, "ThrottlingException: Rate exceeded") {
+				l.WithError(err).Trace("Task register failed.")
+				if !markedToAllocate {
+					resourcesToAllocate.AddEntity(env.GetAllocationResources())
+					markedToAllocate = true
+				}
+				sleepRateLimit := time.Duration(20+rand.Intn(10)) * time.Second
+				time.Sleep(sleepRateLimit)
 			}
 
 			outputErr = err
@@ -90,6 +105,8 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 		if len(resultRunTask.Failures) != 0 {
 			outputErr = fmt.Errorf(*resultRunTask.Failures[0].Reason)
 			l.WithError(outputErr).Debug("Task register failed. Response contains failures")
+			sleepRateLimit := time.Duration(5+(rand.Intn(15))) * time.Second
+			time.Sleep(sleepRateLimit)
 			continue
 		}
 
@@ -99,12 +116,22 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 			continue
 		}
 
+		if markedToAllocate {
+			resourcesToAllocate.RemoveEntity(env.RouterUUID)
+		}
+
 		// All is ok. We got task then we can return it.
-		waitRequest.ResponseCh <- *resultRunTask.Tasks[0].TaskArn
+		select {
+		case waitRequest.ResponseCh <- *resultRunTask.Tasks[0].TaskArn:
+		default:
+		}
 		return
 	}
 
-	waitRequest.NonEssentialErrCh <- outputErr
+	select {
+	case waitRequest.NonEssentialErrCh <- outputErr:
+	default:
+	}
 }
 
 func WaitForTaskRegister(ctx context.Context, env environment.ExecutionEnvironment) *registerWaitRequest {

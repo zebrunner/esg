@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/google/uuid"
 	"github.com/zebrunner/esg/cachemaps/definitionmap"
+	"github.com/zebrunner/esg/cachemaps/resourcesToAllocate"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/utils"
 )
@@ -23,17 +24,20 @@ const (
 	anyPlatform     = "any"
 	genericPlatform = "generic"
 	cypressPlatform = "cypress"
+	windowsPlatform = "windows"
 
 	//public zebrunner ECR docker registry
 	imageRepo            = "public.ecr.aws/zebrunner/"
-	uploaderImage        = imageRepo + "uploader:3.3"
+	uploaderImage        = imageRepo + "uploader:3.4"
 	mitmImage            = imageRepo + "mitmproxy:1.2"
-	recorderImage        = imageRepo + "recorder:1.4"
-	cypressRecorderImage = imageRepo + "cypress-recorder:1.1"
+	recorderImage        = imageRepo + "recorder:1.5"
+	cypressRecorderImage = imageRepo + "cypress-recorder:1.3"
 	appiumImage          = imageRepo + "appium:2.0.5"
-	cloneImage           = imageRepo + "git:latest"
+	cloneImage           = imageRepo + "git:2.36.2"
 	entrypointImage      = imageRepo + "entrypoint:2.4"
-	mavenImage           = imageRepo + "m2-repo-carina:1.4"
+	mavenImage           = imageRepo + "m2-repo-carina:1.5"
+	winUploaderImage 	 = imageRepo + "uploader:1.0-win"
+	winRecorderImage 	 = imageRepo + "recorder:1.0-win"
 )
 
 const (
@@ -73,6 +77,8 @@ type ExecutionEnvironment struct {
 	Volumes              map[string]volume
 	Network              *NetworkConfiguration
 	Workspace            string
+	CapacityProvider     string
+	TaskRoleArn          string
 }
 
 func (e *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefinition {
@@ -82,15 +88,18 @@ func (e *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefinition
 		cpu := c.Cpu()
 		memory := c.Memory()
 		definition := ecs.ContainerDefinition{
-			Name:              &c.Name,
-			Image:             &c.Image,
-			Cpu:               &cpu,
-			Memory:            &memory,
-			MemoryReservation: &memory,
-			Essential:         &c.Essential,
-			Privileged:        &c.Privileged,
-			HealthCheck:       c.HealthCheck,
-			DependsOn:         c.DependsOn,
+			Name:        &c.Name,
+			Image:       &c.Image,
+			Cpu:         &cpu,
+			Memory:      &memory,
+			Essential:   &c.Essential,
+			HealthCheck: c.HealthCheck,
+			DependsOn:   c.DependsOn,
+		}
+
+		if strings.ToLower(e.Capabilities.PlatformName.ToPrimitive()) != windowsPlatform {
+			definition.MemoryReservation = &memory
+			definition.Privileged = &c.Privileged
 		}
 
 		if c.WorkingDirectory != "" {
@@ -154,10 +163,13 @@ func (e *ExecutionEnvironment) ContainerOverrides() []*ecs.ContainerOverride {
 		cpu := container.Cpu()
 		memory := container.Memory()
 		override := ecs.ContainerOverride{
-			Name:              &container.Name,
-			Cpu:               &cpu,
-			Memory:            &memory,
-			MemoryReservation: &memory,
+			Name:   &container.Name,
+			Cpu:    &cpu,
+			Memory: &memory,
+		}
+
+		if strings.ToLower(e.Capabilities.PlatformName.ToPrimitive()) != windowsPlatform {
+			override.MemoryReservation = &memory
 		}
 
 		env := []*ecs.KeyValuePair{}
@@ -285,10 +297,31 @@ func (e *ExecutionEnvironment) HashRegisterDefinition() string {
 		TaskDefinitionFamily: e.TaskDefinitionFamily,
 		Containers:           containers,
 		Volumes:              e.Volumes,
+		Network:              e.Network,
+		TaskRoleArn:          e.TaskRoleArn,
 	}
 	registerDefinitionHash := utils.EncodeToHash(registerDefinitionData)
 
 	return registerDefinitionHash
+}
+
+func (env *ExecutionEnvironment) GetAllocationResources() *resourcesToAllocate.ResourcesToAllocate {
+	var cpu int64 = 0
+	var memory int64 = 0
+
+	for _, container := range env.Containers {
+		cpu += container.cpu
+		memory += container.memory
+	}
+
+	resources := resourcesToAllocate.ResourcesToAllocate{
+		RouterUUID:       env.RouterUUID,
+		Cpu:              cpu,
+		Memory:           memory,
+		CapacityProvider: env.CapacityProvider,
+	}
+
+	return &resources
 }
 
 func (env *ExecutionEnvironment) GetFamilyRevision() (string, error) {
@@ -297,9 +330,9 @@ func (env *ExecutionEnvironment) GetFamilyRevision() (string, error) {
 		return env.TaskDefinitionFamily, nil
 	}
 
-	revision, err := definitionmap.FindRevision(env.HashOvverideDefinition())
-	if err != nil {
-		return "", fmt.Errorf("revision not found for '%s'. %v", env.TaskDefinitionFamily, err)
+	revision, found := definitionmap.FindRevision(env.HashOvverideDefinition())
+	if !found {
+		return "", fmt.Errorf("revision not found for '%s'", env.TaskDefinitionFamily)
 	}
 
 	return fmt.Sprint(env.TaskDefinitionFamily, ":", revision), nil
@@ -325,6 +358,8 @@ func build(workspace string, routerUUID string, caps *capabilities.Capabilities)
 		return buildGeneric(workspace, routerUUID, caps)
 	} else if platform == cypressPlatform {
 		return buildCypress(workspace, routerUUID, caps)
+	} else if platform == windowsPlatform {
+		return buildWindowsBrowser(workspace, routerUUID, caps)
 	} else if platform == linuxPlatform || platform == "" || platform == anyPlatform {
 		return buildBrowser(workspace, routerUUID, caps)
 	}
@@ -399,6 +434,12 @@ func buildImage(caps *capabilities.Capabilities) (string, error) {
 		version := strings.ToLower(caps.BrowserVersion.ToPrimitive())
 		version = remapVersion(version)
 		return imageRepo + name + ":" + version, nil
+	} else if platformName == windowsPlatform {
+		name := strings.ToLower(caps.BrowserName.ToPrimitive())
+		name = remapName(name)
+		version := strings.ToLower(caps.BrowserVersion.ToPrimitive())
+		version = remapVersion(version)
+		return imageRepo + windowsPlatform + "-" + name + ":" + version, nil
 	} else {
 		return "", fmt.Errorf("failed to build container image. unsupported platform specified. platformName=%s", caps.PlatformName)
 	}
@@ -406,6 +447,11 @@ func buildImage(caps *capabilities.Capabilities) (string, error) {
 
 func buildTaskDefinitionFamily(caps *capabilities.Capabilities) string {
 	familyParts := []string{}
+
+	if zbrEnv := os.Getenv("ZEBRUNNER_ENV"); zbrEnv != "" {
+		familyParts = append(familyParts, zbrEnv)
+	}
+
 	platformName := strings.ToLower(caps.PlatformName.ToPrimitive())
 
 	if caps.PlatformName == "" || platformName == "any" {
@@ -435,11 +481,6 @@ func buildTaskDefinitionFamily(caps *capabilities.Capabilities) string {
 	}
 
 	taskDefFamily := strings.Join(familyParts, "-")
-
-	zbrEnv := os.Getenv("ZEBRUNNER_ENV")
-	if zbrEnv != "" {
-		taskDefFamily = zbrEnv + "-" + taskDefFamily
-	}
 
 	return taskDefFamily
 }

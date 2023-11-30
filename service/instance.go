@@ -46,6 +46,7 @@ func (w *instanceWatchWorker) start() {
 		for k, v := range w.requests {
 			select {
 			case <-v.ctx.Done():
+				log.WithField("taskArn", k).Trace("instanceWatchWorker: deleting request from map due to the conext deadline")
 				delete(w.requests, k)
 			default:
 				continue
@@ -53,6 +54,7 @@ func (w *instanceWatchWorker) start() {
 		}
 
 		if len(w.requests) == 0 {
+			log.Trace("instanceWatchWorker: no requests found")
 			continue
 		}
 
@@ -80,6 +82,7 @@ func (w *instanceWatchWorker) start() {
 		ec2IdCiArnsMap := make(map[string][]string, 0)
 		for _, ci := range containerInstances {
 			if *ci.Ec2InstanceId == "" {
+				log.WithField("ciArn", *ci.ContainerInstanceArn).Warn("instanceWatchWorker: container instance doesn't contain ec2 instance id")
 				continue
 			}
 
@@ -91,6 +94,7 @@ func (w *instanceWatchWorker) start() {
 		}
 
 		if len(ec2IdPtrs) == 0 {
+			log.Trace("instanceWatchWorker: ec2 instance ids list is empty")
 			continue
 		}
 
@@ -98,6 +102,7 @@ func (w *instanceWatchWorker) start() {
 		if err != nil {
 			log.WithError(err).Error("instanceWatchWorker: failed to describe instances status.")
 			if len(healthyInstanceIdPtrs) == 0 && len(unhealthyInstanceIdPtrs) == 0 {
+				log.Trace("instanceWatchWorker: healthy and unhealthy instances lists are empty")
 				continue
 			}
 		}
@@ -106,7 +111,7 @@ func (w *instanceWatchWorker) start() {
 			// stop unhealthy instances
 			err := TerminateInstancesInASG(unhealthyInstanceIdPtrs, false, autoScalingSvc)
 			if err != nil {
-				log.WithError(err).Error("instanceWatchWorker: failed to terminate instances.")
+				log.WithError(err).Error("instanceWatchWorker: failed to terminate unhealthy instances.")
 				continue
 			}
 
@@ -116,8 +121,14 @@ func (w *instanceWatchWorker) start() {
 				for _, containerInstanceArn := range containerInstanceArns {
 					taskArns := ciArnTaskArnsMap[containerInstanceArn]
 					for _, taskArn := range taskArns {
+						err := fmt.Errorf("instance unhealty, status: impaired")
+						log.WithField("taskArn", taskArn).WithError(err).Trace("instanceWatchWorker: error sent back to request")
+
 						req := w.requests[taskArn]
-						req.NonEssentialErrCh <- fmt.Errorf("instance unhealty, status: impaired")
+						select {
+						case req.NonEssentialErrCh <- err:
+						default:
+						}
 						delete(w.requests, taskArn)
 					}
 				}
@@ -125,6 +136,7 @@ func (w *instanceWatchWorker) start() {
 		}
 
 		if len(healthyInstanceIdPtrs) == 0 {
+			log.Warn("instanceWatchWorker: healthy instances are not found")
 			continue
 		}
 
@@ -140,8 +152,12 @@ func (w *instanceWatchWorker) start() {
 			for _, ciArn := range ciArns {
 				taskArns := ciArnTaskArnsMap[ciArn]
 				for _, taskArn := range taskArns {
+					log.WithField("taskArn", taskArn).WithError(err).Trace("instanceWatchWorker: described instance is sent back to request")
 					req := w.requests[taskArn]
-					req.ResponseCh <- ec2Instance
+					select {
+					case req.ResponseCh <- ec2Instance:
+					default:
+					}
 					delete(w.requests, taskArn)
 				}
 			}

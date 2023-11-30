@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,6 +28,9 @@ import (
 )
 
 func Create(c *gin.Context) {
+	// start context with deadline before any other action
+	startupTime, _ := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout)
+
 	remote := c.ClientIP()
 	l := log.WithField("remote", remote)
 	user, password, ok := c.Request.BasicAuth()
@@ -51,6 +55,7 @@ func Create(c *gin.Context) {
 	if err != nil {
 		l.Warnf("Workspace for user %s not found", user)
 		c.Error(utils.AuthErr(err)).SetType(gin.ErrorTypePublic)
+		return
 	}
 
 	// not adding workspace to logs because as for now user and workspace have the same value
@@ -58,21 +63,14 @@ func Create(c *gin.Context) {
 	// l = l.WithField("workspace", workspace)
 	// }
 
-	reqCaps, err := capabilities.ParseRequestCapabilities(c.Request.Body)
+	reqCaps, configurationCaps, err := capabilities.ParseRequestCapabilities(c.Request.Body)
 	if err != nil {
 		l.WithError(err).Error("Failed to process capabilities")
 		c.Error(utils.InvalidArgErr(fmt.Errorf("failed to process capabilities"), err.Error())).SetType(gin.ErrorTypePublic)
 		return
 	}
 	log.Trace("Request capabilitites: ", reqCaps.ToMap())
-
-	configurationCaps, err := reqCaps.GetContainerConfiguration()
-	if err != nil {
-		l.WithError(err).Error("Failed to process zebrunner container configuration")
-		c.Error(utils.InvalidArgErr(fmt.Errorf("failed to process capabilities"), err.Error())).SetType(gin.ErrorTypePublic)
-		return
-	}
-	log.Trace("Container configuration: ", configurationCaps)
+	log.Trace("Container configuration: ", configurationCaps.ToMap())
 
 	env, err := environment.Build(workspace, configurationCaps)
 	if err != nil {
@@ -81,20 +79,12 @@ func Create(c *gin.Context) {
 		return
 	}
 	env.ReqCapabilities = reqCaps
-	l = l.WithField("family", env.TaskDefinitionFamily).WithField(config.RouterUuid, env.RouterUUID)
+	l = l.WithField("family", env.TaskDefinitionFamily).WithField(config.RouterUUID, env.RouterUUID)
 
 	l.Info("new request")
 	l.WithField("env", env).Debug("Env details")
 
-	if strings.Contains(env.TaskDefinitionFamily, "generic") {
-		_, err = service.CreateTaskDefinition(env)
-		if err != nil {
-			log.WithError(err).Error("Failed to create task definition")
-			return
-		}
-	}
-
-	resp, seErr := service.GetServiceStarter(env, c, l).StartService()
+	resp, seErr := service.GetServiceStarter(env, c, l).StartService(startupTime)
 	if seErr != nil {
 		c.Error(seErr).SetType(gin.ErrorTypePublic)
 	} else {
@@ -108,14 +98,15 @@ func Proxy(c *gin.Context) {
 	// c.Request.URL.Path contains router UUID which should be replaced by selenium/selenoid sess.SessionID
 	c.Request.URL.Path = rerouteProxy(c.Request.URL.Path, sess.SessionID)
 
+	url, ok := sess.Network.GetUrl("driver")
+	if !ok {
+		log.Error("failed to get `driver` url from session")
+		c.Error(utils.UnknownErr(fmt.Errorf("failed to get `driver` url from session"))).SetType(gin.ErrorTypePublic)
+		return
+	}
+
 	(&httputil.ReverseProxy{
 		Director: func(r *http.Request) {
-			url, ok := sess.Network.GetUrl("driver")
-			if !ok {
-				log.Error("failed to get `driver` url from session")
-				c.Error(utils.UnknownErr(fmt.Errorf("failed to get `driver` url from session"))).SetType(gin.ErrorTypePublic)
-			}
-
 			// fix for file upload using selenium 4
 			seUploadPath, uploadPath := "/se/file", "/file"
 			if strings.HasSuffix(r.URL.Path, seUploadPath) {
@@ -152,14 +143,18 @@ func rerouteProxy(path string, sessionId string) string {
 func CloseSession(c *gin.Context) {
 	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
 
-	l := log.WithField(config.TaskIdKey, sess.TaskId)
+	l := log.WithField(config.TaskIdKey, sess.TaskId).WithField(config.SessionIdKey, sess.SessionID)
 
 	selenium.CloseSession(sess, sessionmap.SessionFinished)
-	l = l.WithField(config.SessionIdKey, sess.SessionID)
 
-	err := service.StopTask(sess.TaskId, taskmap.TaskFinished)
+	cachedTask, err := taskmap.Find(sess.TaskId, false)
 	if err != nil {
-		l.WithError(err).Warn("Failed to stop task")
+		l.WithError(err).Warn("Failed to find task")
+	} else {
+		err = service.StopTask(*cachedTask, taskmap.TaskFinished)
+		if err != nil {
+			l.WithError(err).Warn("Failed to stop task")
+		}
 	}
 
 	l.Info("task closed")
@@ -169,13 +164,13 @@ func CloseSession(c *gin.Context) {
 func AbortTask(c *gin.Context) {
 	task := c.MustGet(config.TaskIdKey).(*taskmap.Task)
 
-	l := log.WithField(config.RouterUuid, task.RouterUUID).WithField(config.TaskIdKey, task.TaskId)
+	l := log.WithField(config.RouterUUID, task.RouterUUID).WithField(config.TaskIdKey, task.TaskId)
 
 	if !config.Conf.SingleTenant {
 		l = l.WithField("workspace", task.Workspace)
 	}
 
-	err := service.StopTask(task.TaskId, taskmap.TaskAborted)
+	err := service.StopTask(*task, taskmap.TaskAborted)
 	if err != nil {
 		l.WithError(err).Warn("Failed to stop task")
 	}
@@ -184,57 +179,71 @@ func AbortTask(c *gin.Context) {
 	c.JSON(http.StatusNoContent, gin.H{})
 }
 
-func Vnc(wsconn *websocket.Conn) {
-	defer wsconn.Close()
-	fragments := strings.Split(wsconn.Request().URL.Path, "/")
-	id := fragments[len(fragments)-1]
-	l := log.NewEntry(log.StandardLogger())
+func Vnc(c *gin.Context) {
+	routerUUID := c.Param("uuid")
+	l := log.WithField(config.RouterUUID, routerUUID)
+	l.Debug("Vnc request")
 
 	var network environment.NetworkConfiguration
-
-	sess, seErr := getSession(id)
-	if seErr != nil {
-		task, taskErr := getTask(id)
-		if taskErr != nil {
-			l.WithError(seErr).WithField("id", id).Error("Vnc(): can't access session")
+	if sess, seErr := getSession(routerUUID); seErr == nil {
+		l = l.WithField(config.SessionIdKey, sess.SessionID).WithField(config.TaskIdKey, sess.TaskId)
+		network = sess.Network
+	} else if sess != nil {
+		// session found but stopped
+		l.WithError(seErr).Error("vnc error")
+		c.JSON(seErr.ResponseStatus, gin.H{"error": seErr.Error()})
+		return
+	} else {
+		task, seErr := getTask(routerUUID)
+		if seErr != nil {
+			l.WithError(seErr).Error("vnc error")
+			c.JSON(seErr.ResponseStatus, gin.H{"error": seErr.Error()})
 			return
 		}
-		l = l.WithField(config.RouterUuid, id).WithField(config.TaskIdKey, task.TaskId)
+		l = l.WithField(config.TaskIdKey, task.TaskId)
 		network = task.Network
-	} else {
-		l = l.WithField(config.SessionIdKey, id)
-		network = sess.Network
 	}
-	l.Debug("network: ", network)
 
 	vncUrl, ok := network.GetUrl("vnc")
 	if !ok {
-		l.Warn("Vnc url is not available: ", vncUrl)
+		err := fmt.Errorf("vnc url is not available")
+		l.WithError(err).WithField("url", vncUrl).Warn("vnc error")
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	l.Debug("Vnc enabled")
-	var d net.Dialer
-	conn, err := d.DialContext(wsconn.Request().Context(), "tcp", vncUrl.Host)
-	if err != nil {
-		l.WithError(err).Error("Vnc error")
-		return
-	}
-	defer conn.Close()
-	wsconn.PayloadType = websocket.BinaryFrame
-	go func() {
-		_, e := io.Copy(wsconn, conn)
-		if e != nil {
-			log.WithError(e).Debug("VNC WS Copy error")
-		}
-		wsconn.Close()
-		l.Debug("Vnc session closed")
-	}()
-	_, err = io.Copy(conn, wsconn)
-	if err != nil {
-		log.WithError(err).Debug("VNC WS Copy error")
-	}
-	l.Debug("Vnc client disconected")
+	c.Request.Header.Add("Access-Control-Allow-Origin", "*")
+	c.Request.Header.Add("X-Real-IP", c.Request.RemoteAddr)
+
+	websocket.Handler(
+		func(wsconn *websocket.Conn) {
+			defer wsconn.Close()
+
+			l.Debug("vnc enabled")
+			var d net.Dialer
+			conn, err := d.DialContext(wsconn.Request().Context(), "tcp", vncUrl.Host)
+			if err != nil {
+				l.WithError(err).Error("vnc error")
+				return
+			}
+			defer conn.Close()
+			wsconn.PayloadType = websocket.BinaryFrame
+			go func() {
+				defer wsconn.Close()
+				_, e := io.Copy(wsconn, conn)
+				if e != nil {
+					log.WithError(e).Debug("VNC WS Copy error")
+				}
+				l.Debug("vnc session closed")
+			}()
+			_, err = io.Copy(conn, wsconn)
+			if err != nil {
+				log.WithError(err).Debug("VNC WS Copy error")
+			}
+			l.Debug("vnc client disconected")
+		},
+	).ServeHTTP(c.Writer, c.Request)
 }
 
 func Logs(c *gin.Context) {
@@ -306,7 +315,7 @@ func TaskDescribe(c *gin.Context) {
 		return
 	}
 	routerUUID := c.Param("task")
-	l := log.WithField("user", user).WithField(config.RouterUuid, routerUUID)
+	l := log.WithField("user", user).WithField(config.RouterUUID, routerUUID)
 	l.Debug("Get task status")
 
 	task, seErr := getTask(routerUUID)
@@ -330,27 +339,35 @@ func TaskDescribe(c *gin.Context) {
 
 func Downloads(c *gin.Context) {
 	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
+	url, ok := sess.Network.GetUrl("fileserver")
+	if !ok {
+		log.Error("failed to get `fileserver` url from session")
+		c.Error(utils.UnknownErr(fmt.Errorf("failed to get `fileserver` url from session"))).SetType(gin.ErrorTypePublic)
+		return
+	}
 
 	director := func(req *http.Request) {
 		req.URL.Scheme = "http"
-		if sess != nil {
-			url, _ := sess.Network.GetUrl("fileserver")
-			req.URL.Host = url.Host
-			req.Host = url.Host
-			req.URL.Path = getRemainingPath(req.URL.Path)
-		}
+		req.URL.Host = url.Host
+		req.Host = url.Host
+		req.URL.Path = getRemainingPath(req.URL.Path)
 	}
 	proxy := &httputil.ReverseProxy{Director: director}
-	fmt.Println(c.Request)
+
 	proxy.ServeHTTP(c.Writer, c.Request)
 }
 
 func Clipboard(c *gin.Context) {
 	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
+	url, ok := sess.Network.GetUrl("clipboard")
+	if !ok {
+		log.Error("failed to get `clipboard` url from session")
+		c.Error(utils.UnknownErr(fmt.Errorf("failed to get `clipboard` url from session"))).SetType(gin.ErrorTypePublic)
+		return
+	}
 
 	director := func(req *http.Request) {
 		req.URL.Scheme = "http"
-		url, _ := sess.Network.GetUrl("clipboard")
 		req.URL.Host = url.Host
 		req.Host = url.Host
 	}
@@ -360,7 +377,13 @@ func Clipboard(c *gin.Context) {
 
 func Devtools(c *gin.Context) {
 	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
-	url, _ := sess.Network.GetUrl("devtools")
+	url, ok := sess.Network.GetUrl("devtools")
+	if !ok {
+		log.Error("failed to get `devtools` url from session")
+		c.Error(utils.UnknownErr(fmt.Errorf("failed to get `devtools` url from session"))).SetType(gin.ErrorTypePublic)
+		return
+	}
+
 	director := func(req *http.Request) {
 		req.URL.Scheme = "http"
 		req.URL.Host = url.Host

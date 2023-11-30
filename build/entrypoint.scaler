@@ -1,11 +1,25 @@
 #!/bin/sh
 
-CMD_ARGS=
+finish() {
+  ppid=$1
+  if [ -n "$ppid" ]; then
+    kill -s TERM $ppid
+  fi
 
+  # wait until $ppid finished normally to provide more time for termination process
+  while [ true ]; do
+    ps -ef | grep $ppid | grep -v grep > /dev/null 2>&1
+    if [ $? -eq 1 ]; then
+      echo "process finished"
+      break
+    fi
+    sleep 2
+  done
+  return 0
+}
+
+CMD_ARGS=
 #scaler cli args:
-if [ ! -z ${AWS_ASG_NAME} ]; then
-  CMD_ARGS="${CMD_ARGS} -aws-auto-scaling-group ${AWS_ASG_NAME}"
-fi
 if [ ! -z ${RESERVE_INSTANCES_PERCENT} ]; then
   CMD_ARGS="${CMD_ARGS} -reserve-instances-percent ${RESERVE_INSTANCES_PERCENT}"
 fi
@@ -32,6 +46,9 @@ if [ ! -z ${AWS_ACESS_KEY_ID} ]; then
 fi
 if [ ! -z ${AWS_SECRET_ACCESS_KEY} ]; then
   CMD_ARGS="${CMD_ARGS} -aws-secret-access-key ${AWS_SECRET_ACCESS_KEY}"
+fi
+if [ ! -z ${AWS_TASK_ROLE} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-task-role-arn ${AWS_TASK_ROLE}"
 fi
 if [ ! -z ${AWS_ELASTIC_CACHE} ]; then
   CMD_ARGS="${CMD_ARGS} -aws-elastic-cache ${AWS_ELASTIC_CACHE}"
@@ -78,4 +95,9 @@ fi
 
 echo "CMD_ARGS: $CMD_ARGS"
 
-./management $CMD_ARGS
+./scaler $CMD_ARGS &
+PID=$!
+
+trap 'finish $PID' TERM INT
+
+wait $PID

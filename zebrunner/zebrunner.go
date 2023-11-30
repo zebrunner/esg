@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -30,7 +31,7 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 		return
 	}
 
-	l := log.WithField(config.RouterUuid, cachedTask.RouterUUID).WithField(config.TaskIdKey, cachedTask.TaskId)
+	l := log.WithField(config.RouterUUID, cachedTask.RouterUUID).WithField(config.TaskIdKey, cachedTask.TaskId)
 	if cachedTask.CurrentSessionID != "" {
 		l = l.WithField(config.SessionIdKey, cachedTask.CurrentSessionID)
 	}
@@ -41,7 +42,7 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 		return
 	}
 
-	if task.StartedAt == nil || task.StoppingAt == nil {
+	if task.StartedAt == nil || task.StoppingAt == nil || cachedTask.HealthAt == nil {
 		// don't calculate timing for terminated tasks by AWS due to the missted StartedAt!
 		//      StopCode: \"TerminationNotice\"
 		//      StoppedReason: \"Host EC2 (instance i-03dba81187d65ce7e) terminated.\"
@@ -57,6 +58,12 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 			l = l.WithField("StoppingAt", *task.StoppingAt) //time
 		}
 
+		if cachedTask.HealthAt == nil {
+			l = l.WithField("HealthAt", cachedTask.HealthAt) // nil
+		} else {
+			l = l.WithField("HealthAt", *cachedTask.HealthAt) //time
+		}
+
 		l.Warn("Unable to track resourse usage!")
 		return
 	}
@@ -64,16 +71,17 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 	l.Trace("StartedAt: ", *task.StartedAt)
 	l.Trace("StoppingAt: ", *task.StoppingAt)
 
-	l.Trace("HealthAt: ", cachedTask.HealthAt)
+	l.Trace("HealthAt: ", *cachedTask.HealthAt)
 	startedAt := *task.StartedAt //local var needed to calculate difference via Sub(..)
 	stoppingAt := *task.StoppingAt
 
 	duration := stoppingAt.Sub(startedAt)
-	healthAt := cachedTask.HealthAt
+	healthAt := *cachedTask.HealthAt
 
 	provisioningTime := healthAt.Sub(startedAt) //diff between healthAt and startedAt provide task preparation time
 	l.Trace("provisioningSeconds: ", provisioningTime.Seconds())
-	netTime := duration.Seconds() - provisioningTime.Seconds()
+	l = l.WithField("provisioningSeconds", provisioningTime.Seconds())
+	netTime := int64(math.Ceil(duration.Seconds() - provisioningTime.Seconds()))
 	// if task completed before it was marked as healthy (case for generic tasks)
 	if netTime <= 0 {
 		// generic healthcheck Timeout: 10 second
@@ -155,7 +163,7 @@ func AbortLaunch(routerUUID, workspace, launchUUID, reason string) {
 		return
 	}
 
-	l := log.WithFields(log.Fields{config.RouterUuid: routerUUID, "comment": reason})
+	l := log.WithFields(log.Fields{config.RouterUUID: routerUUID, "comment": reason})
 
 	requestUrl, err := url.ParseRequestURI(
 		fmt.Sprintf("%s%s?ciRunId=%s", conf.ZebrunnerHost, ABORT_API_PATH, launchUUID))

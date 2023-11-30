@@ -1,6 +1,7 @@
 package capabilities
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -258,6 +259,16 @@ type Capabilities struct {
 	LaunchUUID    stringWrapper
 }
 
+func (c *Capabilities) ToMap() (newMap map[string]interface{}){
+	data, err := json.Marshal(c)
+	if err != nil {
+		return
+	}
+
+	json.Unmarshal(data, &newMap)
+	return
+}
+
 func (c *Capabilities) GetTimeZone() (*time.Location, error) {
 	if c.TimeZone == "" {
 		return time.UTC, nil
@@ -485,6 +496,24 @@ func capsForAndroid(executor string, version string) ([]*Capabilities, error) {
 	return append(capsList, caps), nil
 }
 
+func capsForWindows(executor string, version string) ([]*Capabilities, error) {
+	capsList := make([]*Capabilities, 0)
+
+	reqCaps := map[string]interface{}{
+		"platformName":   "windows",
+		"browserName":    strings.TrimPrefix(executor, "windows-"),
+		"browserVersion": version,
+	}
+	capsWithoutMitm := GetDefaultCaps()
+	err := capsWithoutMitm.ParseRequestCaps(reqCaps)
+	if err != nil {
+		return nil, err
+	}
+
+	capsList = append(capsList, capsWithoutMitm)
+	return capsList, nil
+}
+
 func capsForLinux(executor string, version string) ([]*Capabilities, error) {
 	capsList := make([]*Capabilities, 0)
 	reqCaps := map[string]interface{}{
@@ -537,6 +566,9 @@ func FromImage(image string) ([]*Capabilities, error) {
 		"chrome":  capsForLinux,
 		"firefox": capsForLinux,
 		"edge":    capsForLinux,
+
+		"windows-chrome": capsForWindows,
+		"windows-edge": capsForWindows,
 
 		"cypress-chrome":   capsForCypress,
 		"cypress-chromium": capsForCypress,

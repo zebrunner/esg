@@ -1,6 +1,6 @@
 # ESG
 
-ESG is a ideological heir of [Selenoid](https://github.com/aerokube/selenoid) hub using [Docker](https://docker.com/) containers to launch browsers and aws logic for comfortable scaling.
+ESG is a ideological heir of [Selenoid](https://github.com/aerokube/selenoid) hub using [Docker](https://docker.com/) containers to launch browsers using AWS scaling capabilities.
 
 ## Features
 
@@ -22,5 +22,9 @@ Suitable for personal usage and in big clusters:
 * Consumes **10 times** less memory than Java-based Selenium server under the same load
 * **Small 6 Mb binary** with no external dependencies (no need to install Java)
 * **Browser consumption API** working out of the box
-* Ability to send browser logs to **centralized log storage** (e.g. to the [ELK-stack](https://logz.io/learn/complete-guide-elk-stack/))
 * Fully **isolated** and **reproducible** environment
+
+### Documentation 
+
+* [Capabilities](docs/capabilities.md)
+* [Errors](docs/errors.md)

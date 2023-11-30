@@ -33,7 +33,10 @@ func startSession(ctx context.Context, req *http.Request, sessReq startSessReque
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		sessReq.EssentialErrCh <- err
+		select {
+		case sessReq.EssentialErrCh <- err:
+		default:
+		}
 		return
 	}
 
@@ -42,20 +45,32 @@ func startSession(ctx context.Context, req *http.Request, sessReq startSessReque
 
 	err = json.NewDecoder(resp.Body).Decode(&reply)
 	if err != nil {
-		sessReq.EssentialErrCh <- err
+		select {
+		case sessReq.EssentialErrCh <- err:
+		default:
+		}
 		return
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusBadRequest {
-			sessReq.EssentialErrCh <- fmt.Errorf("%v", reply)
+			select {
+			case sessReq.EssentialErrCh <- fmt.Errorf("%v", reply):
+			default:
+			}
 		} else {
-			sessReq.NonEssentialErrCh <- fmt.Errorf("%v", reply)
+			select {
+			case sessReq.NonEssentialErrCh <- fmt.Errorf("%v", reply):
+			default:
+			}
 		}
 		return
 	}
 
-	sessReq.ResponseCh <- reply
+	select {
+	case sessReq.ResponseCh <- reply:
+	default:
+	}
 }
 
 func WaitForSessionStart(ctx context.Context, request *http.Request) *startSessRequest {
@@ -74,12 +89,14 @@ func CloseSession(session *sessionmap.Session, stopReason sessionmap.StoppedReas
 	// Set SessionStopped status and expiration time 10 minutes to be able to return sessionID and stop reason for session
 	session.Status = sessionmap.SessionStopped
 	session.StopReason = stopReason
-	err := sessionmap.Write(session.SessionID, session, 10*time.Minute)
-	if err != nil {
+	responseCh, errCh := sessionmap.WriteSession(*session, 10*time.Minute)
+	select {
+	case err := <-errCh:
 		log.WithError(err).Error("Driver session not marked as stopped!")
+	case <-responseCh:		
 	}
 
-	l := log.WithFields(log.Fields{config.TaskIdKey: session.TaskId, config.SessionIdKey: session.SessionID, config.RouterUuid: session.RouterUUID})
+	l := log.WithFields(log.Fields{config.TaskIdKey: session.TaskId, config.SessionIdKey: session.SessionID, config.RouterUUID: session.RouterUUID})
 	if !config.Conf.SingleTenant {
 		l = l.WithField("workspace", session.Workspace)
 	}

@@ -18,7 +18,7 @@ var mutex = &sync.RWMutex{}
 
 func InitWaitWorker() {
 	taskWaiter = &waitWorker{
-		requests: make(map[string]*waitRequest, 1000),
+		requests: make(map[string]*waitRequest, 2500),
 	}
 	go taskWaiter.start()
 }
@@ -92,23 +92,29 @@ func (w *waitWorker) start() {
 		// Send responses for running tasks
 		for _, task := range tasks {
 			taskId := strings.Split(*task.TaskArn, "/")[2]
+			l := log.WithField(config.TaskIdKey, taskId)
 			req, ok := w.requests[taskId]
 			if !ok {
+				l.Error("RunningTaskWaiter: described task was not found in requests map")
 				continue
 			}
-			l := log.WithField(config.TaskIdKey, taskId)
 
 			if *task.LastStatus == "STOPPED" {
 				// #860: Api tests are reexecuted several times
 				if strings.Contains(*task.TaskDefinitionArn, "generic") && isTaskFinishedSuccessfully(task) {
 					l.Info("task already finished")
-					req.ResponseCh <- task
-					delete(w.requests, taskId)
-					continue
-				}
+					select {
+					case req.ResponseCh <- task:
+					default:
+					}
 
-				l.Error("Task stopped: ", *task)
-				req.NonEssentialErrCh <- fmt.Errorf("task stopped with reason: %s", *task.StoppedReason)
+				} else {
+					l.Error("Task stopped: ", *task)
+					select {
+					case req.NonEssentialErrCh <- fmt.Errorf("task stopped with reason: %s", *task.StoppedReason):
+					default:
+					}
+				}
 				delete(w.requests, taskId)
 				continue
 			}
@@ -134,14 +140,24 @@ func (w *waitWorker) start() {
 				}
 
 				if essential != nil {
-					req.EssentialErrCh <- essential
+					select {
+					case req.EssentialErrCh <- essential:
+					default:
+					}
 				} else {
-					req.NonEssentialErrCh <- fmt.Errorf("task unhealthy")
+					select {
+					case req.NonEssentialErrCh <- fmt.Errorf("task unhealthy"):
+					default:
+					}
 				}
 
 				delete(w.requests, taskId)
 			case "HEALTHY":
-				req.ResponseCh <- task
+				select {
+				case req.ResponseCh <- task:
+				default:
+				}
+
 				delete(w.requests, taskId)
 			}
 		}
@@ -151,7 +167,7 @@ func (w *waitWorker) start() {
 func isTaskFinishedSuccessfully(task *ecs.Task) bool {
 	for _, container := range task.Containers {
 		// if container's exit code is nil it means that container doesn't even started
-		if container.ExitCode == nil || *container.ExitCode != 0{
+		if container.ExitCode == nil || *container.ExitCode != 0 {
 			return false
 		}
 	}

@@ -4,10 +4,23 @@ export REVISION=$(git rev-parse HEAD)
 export BUILD_TIME=$(date -Iseconds)
 export VERSION=$(git describe --tags $(git rev-list --tags --max-count=1))
 
-# Apply all up migrations
-#DATABASE="postgres://postgres:postgres@db/postgres?sslmode=disable"
-migrate -path migrations -database $DATABASE up
+finish() {
+  ppid=$1
+  if [ -n "$ppid" ]; then
+    kill -s TERM $ppid
+  fi
 
+  # wait until $ppid finished normally to provide more time for termination process
+  while [ true ]; do
+    ps -ef | grep $ppid | grep -v grep > /dev/null 2>&1
+    if [ $? -eq 1 ]; then
+      echo "process finished"
+      break
+    fi
+    sleep 2
+  done
+  return 0
+}
 
 CMD_ARGS=
 if [ ! -z ${AWS_REGION} ]; then
@@ -18,6 +31,12 @@ if [ ! -z ${AWS_RETRY} ]; then
 fi
 if [ ! -z ${AWS_CLUSTER} ]; then
   CMD_ARGS="${CMD_ARGS} -aws-cluster ${AWS_CLUSTER}"
+fi
+if [ ! -z ${AWS_LINUX_CAPACITY_PROVIDER} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-linux-capacity-provider ${AWS_LINUX_CAPACITY_PROVIDER}"
+fi
+if [ ! -z ${AWS_WIN_CAPACITY_PROVIDER} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-win-capacity-provider ${AWS_WIN_CAPACITY_PROVIDER}"
 fi
 if [ ! -z ${USE_PUBLIC_IP} ]; then
   CMD_ARGS="${CMD_ARGS} -use-public-ip=${USE_PUBLIC_IP}"
@@ -91,4 +110,9 @@ fi
 
 echo "CMD_ARGS: $CMD_ARGS"
 
-./server -listen :$LISTEN_PORT $CMD_ARGS
+./router -listen :$LISTEN_PORT $CMD_ARGS &
+PID=$!
+
+trap 'finish $PID' TERM INT
+
+wait $PID
