@@ -449,11 +449,10 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l 
 			basis: basis,
 			finalizeFunc: func(s *startBasis) {
 				s.CachedTask.Status = taskmap.TaskGeneric
-				responseCh, errCh := taskmap.UpdateTask(*s.CachedTask, 0)
-				select {
-				case err := <-errCh:
+
+				err := taskmap.UpdateTask(*s.CachedTask, 0)
+				if err != nil {
 					basis.Log.WithError(err).Error("Failed to recache task on finalize!")
-				case <-responseCh:
 				}
 			},
 		}
@@ -465,11 +464,9 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l 
 			finalizeFunc: func(s *startBasis) {
 				s.CachedTask.Status = taskmap.TaskGeneric
 				s.CachedTask.AccessedAt = time.Now()
-				responseCh, errCh := taskmap.UpdateTask(*s.CachedTask, 0)
-				select {
-				case err := <-errCh:
+				err := taskmap.UpdateTask(*s.CachedTask, 0)
+				if err != nil {
 					basis.Log.WithError(err).Error("Failed to recache task on finalize!")
-				case <-responseCh:
 				}
 				taskmap.AddToCypressSet(s.CachedTask.TaskId)
 			},
@@ -480,11 +477,9 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l 
 			basis: basis,
 			finalizeFunc: func(s *startBasis) {
 				//cache all collected data during startup
-				responseCh, errCh := taskmap.UpdateTask(*s.CachedTask, 0)
-				select {
-				case err := <-errCh:
+				err := taskmap.UpdateTask(*s.CachedTask, 0)
+				if err != nil {
 					basis.Log.WithError(err).Error("Failed to recache task on finalize!")
-				case <-responseCh:
 				}
 			},
 		}

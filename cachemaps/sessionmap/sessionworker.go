@@ -44,14 +44,6 @@ func writeRecords(rdsConn *redis.Conn, items map[string]SessionItem) error {
 	return err
 }
 
-/*
-To wait for response implement select switch construction
-	select {
-	case err := <-errCh:
-		...
-	case <-responseCh:
-	}
-*/
-func WriteSession(session Session, expiration time.Duration) (<-chan interface{}, <-chan error) {
+func WriteSession(session Session, expiration time.Duration) error {
 	return writeWorker.AppendToWorker(session.SessionID, SessionItem{CachedSession: session, Expiration: expiration})
 }

@@ -86,19 +86,18 @@ func WaitForSessionStart(ctx context.Context, request *http.Request) *startSessR
 }
 
 func CloseSession(session *sessionmap.Session, stopReason sessionmap.StoppedReason) {
-	// Set SessionStopped status and expiration time 10 minutes to be able to return sessionID and stop reason for session
-	session.Status = sessionmap.SessionStopped
-	session.StopReason = stopReason
-	responseCh, errCh := sessionmap.WriteSession(*session, 10*time.Minute)
-	select {
-	case err := <-errCh:
-		log.WithError(err).Error("Driver session not marked as stopped!")
-	case <-responseCh:		
-	}
-
 	l := log.WithFields(log.Fields{config.TaskIdKey: session.TaskId, config.SessionIdKey: session.SessionID, config.RouterUUID: session.RouterUUID})
 	if !config.Conf.SingleTenant {
 		l = l.WithField("workspace", session.Workspace)
+	}
+
+	// Set SessionStopped status and expiration time 10 minutes to be able to return sessionID and stop reason for session
+	session.Status = sessionmap.SessionStopped
+	session.StopReason = stopReason
+
+	err := sessionmap.WriteSession(*session, 10*time.Minute)
+	if err != nil {
+		l.WithError(err).Error("Driver session not marked as stopped!")
 	}
 
 	conf := &config.Conf
