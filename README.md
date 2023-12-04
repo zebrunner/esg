@@ -24,20 +24,7 @@ Suitable for personal usage and in big clusters:
 * **Browser consumption API** working out of the box
 * Fully **isolated** and **reproducible** environment
 
+### Documentation 
 
-## Capabilities
-- `zebrunner:enableVnc` - Enable VNC for session. Type: Boolean
-- `zebrunner:enableVideo` - Enable video recording for session. Type: Boolean
-- `zebrunner:enableLog` - Saving session log for session. Type: Boolean
-- `zebrunner:deviceName` - Specify "redroid" for mobile and mobile web testing. Type: String
-
-- `zebrunner:idleTimeout` - Session idle timeout in seconds. Type: String (Default: "60")
-- `zebrunner:maxTimeout` - Maximum valid session timeout in seconds. Type: String (Default: "86400")
-
-- `zebrunner:cpu` - CPU limit for session. STRING (Default: "1024")
-- `zebrunner:memory` - Memory limit for session. STRING (Default: "2048")
-
-- `zebrunner:timeZone` -
-- `zebrunner:env` -
-- `zebrunner:hostEntries` -
-- `zebrunner:dnsServers` -
+* [Capabilities](docs/capabilities.md)
+* [Errors](docs/errors.md)
