@@ -22,6 +22,8 @@ func buildAppiumRedroid(workspace string, routerUUID string, caps *capabilities.
 	logDir := "/tmp/log"
 	logVolume := "log"
 
+	caps.EnableVNC = false
+
 	conf := &config.Conf
 
 	deviceImage, err := buildImage(caps)

@@ -14,6 +14,9 @@ import (
 func buildWindowsBrowser(workspace string, routerUUID string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
 	conf := &config.Conf
 
+	caps.EnableVNC = false
+	caps.EnableVideo = false
+
 	browserImage, err := buildImage(caps)
 	if err != nil {
 		return nil, err
