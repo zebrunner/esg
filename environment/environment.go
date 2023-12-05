@@ -29,7 +29,7 @@ const (
 	//public zebrunner ECR docker registry
 	imageRepo            = "public.ecr.aws/zebrunner/"
 	uploaderImage        = imageRepo + "uploader:3.4"
-	mitmImage            = imageRepo + "mitmproxy:1.2"
+	mitmImage            = imageRepo + "mitmproxy:1.3-beta1"
 	recorderImage        = imageRepo + "recorder:1.5"
 	cypressRecorderImage = imageRepo + "cypress-recorder:1.3"
 	appiumImage          = imageRepo + "appium:2.0.5"
@@ -46,6 +46,7 @@ const (
 	devtoolsPort   int64 = 7070
 	fileserverPort int64 = 8080
 	clipboardPort  int64 = 9090
+	mitmHarPort	   int64 = 8060
 
 	recorderCpu    int64 = 320
 	recorderMemory int64 = 1024

@@ -80,6 +80,7 @@ func CreateRouter() *gin.Engine {
 	{
 		seleniumHub.POST("/session", handlers.Create) // Auth logic moved to handler
 		seleniumHub.DELETE("/session/:session", handlers.CloseSession)
+		seleniumHub.GET("/mitm/:session", handlers.GenerateHar)
 		seleniumHub.Any("/session/:session/*action", handlers.Proxy)
 
 		seleniumHub.Any("/download/:session/*action", handlers.Downloads)

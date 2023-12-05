@@ -337,6 +337,26 @@ func TaskDescribe(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": result.Tasks[0].LastStatus})
 }
 
+func GenerateHar(c *gin.Context) {
+	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
+	url, ok := sess.Network.GetUrl("mitmHarPort")
+	if !ok {
+		log.Error("failed to get `mitmHarPort` url from session")
+		c.Error(utils.UnknownErr(fmt.Errorf("failed to get `mitmHarPort` url from session"))).SetType(gin.ErrorTypePublic)
+		return
+	}
+
+	director := func(req *http.Request) {
+		req.URL.Scheme = "http"
+		req.URL.Host = url.Host
+		req.Host = url.Host
+		req.URL.Path = getRemainingPath(req.URL.Path)
+	}
+	proxy := &httputil.ReverseProxy{Director: director}
+
+	proxy.ServeHTTP(c.Writer, c.Request)
+}
+
 func Downloads(c *gin.Context) {
 	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
 	url, ok := sess.Network.GetUrl("fileserver")

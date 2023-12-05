@@ -154,7 +154,7 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 	if caps.Mitm {
 		//TODO: handle resolution and video screen size
 		// to generate har we have to enable regular dump.mitm output by -w option and place it before har_dump.py!
-		mitmCommand := "mitmdump -w " + logDir + "/dump.mitm"
+		mitmCommand := "mitmproxy -w " + logDir + "/dump.mitm"
 		if caps.MitmArgs != "" {
 			//append args only if mitm=true
 			mitmCommand = mitmCommand + " " + caps.MitmArgs.ToPrimitive()
@@ -173,9 +173,10 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 			},
 			Ports: map[string]portMapping{
 				"fileserverPort": {fileserverPort, 0},
+				"mitmHarPort":    {mitmHarPort, 0},
 			},
 			Mounts:     []string{logVolume},
-			Command:    []string{"-c", "/entrypoint.sh"},
+			Command:    []string{"-c", "/screenEntrypoint.sh"},
 			EntryPoint: []string{"/bin/sh"},
 		}
 		mitmContainer.SetCpu(&caps.MitmCpu, 512, conf.MaxCpu)
@@ -214,6 +215,10 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 	if caps.BrowserName == "firefox" {
 		environment.Network.Endpoints["driver"].Path = "/wd/hub/"
 		environment.Network.Endpoints["healthcheck"].Path = "/wd/hub/"
+	}
+
+	if caps.Mitm {
+		environment.Network.Endpoints["mitmHarPort"] = &Endpoint{ContainerPort: mitmHarPort, HostPort: 0, Path: "/"}
 	}
 
 	return &environment, nil
