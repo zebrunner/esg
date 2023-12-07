@@ -176,7 +176,7 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 				"mitmHarPort":    {mitmHarPort, 0},
 			},
 			Mounts:     []string{logVolume},
-			Command:    []string{"-c", "/screenEntrypoint.sh"},
+			Command:    []string{"-c", "/entrypoint.sh"},
 			EntryPoint: []string{"/bin/sh"},
 		}
 		mitmContainer.SetCpu(&caps.MitmCpu, 512, conf.MaxCpu)

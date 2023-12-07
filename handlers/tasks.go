@@ -350,7 +350,7 @@ func GenerateHar(c *gin.Context) {
 		req.URL.Scheme = "http"
 		req.URL.Host = url.Host
 		req.Host = url.Host
-		req.URL.Path = getRemainingPath(req.URL.Path)
+		req.URL.Path = trimSession(req.URL.Path)
 	}
 	proxy := &httputil.ReverseProxy{Director: director}
 
@@ -422,6 +422,15 @@ func getRemainingPath(path string) string {
 	}
 
 	return "/" + strings.Join(pathFragments[3:], "/")
+}
+
+func trimSession(path string) string {
+	pathFragments := strings.Split(path, "/")
+	if len(pathFragments) < 2 {
+		return "/"
+	}
+
+	return strings.Join(pathFragments[:len(pathFragments)-1], "/")
 }
 
 func defaultErrorHandler(c *gin.Context) func(http.ResponseWriter, *http.Request, error) {
