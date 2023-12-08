@@ -386,12 +386,17 @@ func Clipboard(c *gin.Context) {
 		return
 	}
 
-	director := func(req *http.Request) {
-		req.URL.Scheme = "http"
-		req.URL.Host = url.Host
-		req.Host = url.Host
+	proxy := &httputil.ReverseProxy{
+		Director: func(req *http.Request) {
+			req.URL.Scheme = "http" 
+			req.URL.Host = url.Host
+			req.Host = url.Host
+		},
+		ModifyResponse: func(r *http.Response) error {
+			// update session last access time
+			return nil
+		},
 	}
-	proxy := &httputil.ReverseProxy{Director: director}
 	proxy.ServeHTTP(c.Writer, c.Request)
 }
 

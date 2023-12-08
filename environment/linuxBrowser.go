@@ -154,13 +154,14 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 	if caps.Mitm {
 		//TODO: handle resolution and video screen size
 		// to generate har we have to enable regular dump.mitm output by -w option and place it before har_dump.py!
-		mitmCommand := "mitmproxy -w " + logDir + "/dump.mitm"
+		mitmCommand := "mitmproxy"
 		if caps.MitmArgs != "" {
 			//append args only if mitm=true
 			mitmCommand = mitmCommand + " " + caps.MitmArgs.ToPrimitive()
 		}
 		// --quiet is a must to run without interactive console
-		mitmCommand = mitmCommand + " --quiet"
+		// applicable for mitmdump
+		// mitmCommand = mitmCommand + " --quiet"
 
 		mitmContainer := Container{
 			Name:       "mitm",
