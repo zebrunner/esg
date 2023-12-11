@@ -517,7 +517,7 @@ func (s *scaler) StopEc2ZombieInstances() {
 		instance := instances[i]
 		found := false
 		for j := 0; j < len(containerInstances); j++ {
-			if containerInstances[j].Ec2InstanceId == instance.InstanceId {
+			if *containerInstances[j].Ec2InstanceId == *instance.InstanceId {
 				containerInstances = deleteElement(containerInstances, j)
 				found = true
 				break
