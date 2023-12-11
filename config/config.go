@@ -36,21 +36,22 @@ type Config struct {
 	AwsWinCapacityProvider   string
 	AwsAccessKeyID           string
 	AwsSecretAccessKey       string
-	AwsTaskRoleArn			 string
+	AwsTaskRoleArn           string
 
 	// Session resource limitations
 	MaxMemory int64
 	MaxCpu    int64
 
 	// Timeouts
-	MaxIdleTimeout          time.Duration
-	IdleTimeout             time.Duration
-	CypressIdleTimeout      time.Duration
-	SessionDeleteTimeout    time.Duration
-	ServiceStartupTimeout   time.Duration
-	TaskUncachedTimeout     time.Duration
-	InstanceCooldownTimeout time.Duration
-	MaxTimeout              time.Duration
+	MaxIdleTimeout               time.Duration
+	IdleTimeout                  time.Duration
+	CypressIdleTimeout           time.Duration
+	SessionDeleteTimeout         time.Duration
+	ServiceStartupTimeout        time.Duration
+	TaskUncachedTimeout          time.Duration
+	InstanceCooldownTimeout      time.Duration
+	ContainerInstanceInitTimeout time.Duration
+	MaxTimeout                   time.Duration
 
 	// External connections
 	DbConnectionString           string
@@ -95,6 +96,7 @@ func init() {
 	flag.DurationVar(&Conf.ServiceStartupTimeout, "service-startup-timeout", 10*time.Minute, "Service startup timeout in time.Duration format")
 	flag.DurationVar(&Conf.TaskUncachedTimeout, "task-uncached-timeout", 30*time.Second, "Time for task to be cached on start in time.Duration format")
 	flag.DurationVar(&Conf.InstanceCooldownTimeout, "instance-cooldown-timeout", 4*time.Minute, "Time after instance start when shutdown is prohibited on scale down in time.Duration format")
+	flag.DurationVar(&Conf.ContainerInstanceInitTimeout, "container-instance-init-timeout", 10*time.Minute, "Time for ec2 instance after launch to initialize container-instance for asg in time.Duration format")
 	flag.DurationVar(&Conf.MaxTimeout, "max-timeout", 24*time.Hour, "Maximum valid task/session timeout in time.Duration format")
 
 	flag.StringVar(&Conf.DbConnectionString, "db-connection", "", "Connection string for database")

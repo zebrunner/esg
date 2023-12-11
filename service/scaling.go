@@ -84,6 +84,13 @@ func StartScalers() {
 			}
 		}(s)
 
+		go func(s scaler) {
+			for {
+				time.Sleep(10 * time.Minute)
+				s.StopEc2ZombieInstances()
+			}
+		}(s)
+
 		log.WithField("instanceResources", s.instanceTypeResources).WithField("capacityProvider", s.capacityProviderName).WithField("asg", s.autoscalingGroupName).Info("Started scaler")
 	}
 }
@@ -475,4 +482,71 @@ func (s *scaler) ScaleDown() {
 			"newCapacity": newCapacity,
 		}).Info("Capacity updated")
 	}
+}
+
+func (s *scaler) StopEc2ZombieInstances() {
+	l := log.WithField("asg", s.autoscalingGroupName)
+	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
+	if err != nil {
+		l.WithError(err).Error("Failed to create AWS session")
+		return
+	}
+
+	svc := ecs.New(session)
+	ciArns, err := ListContainerInstances(svc)
+	if err != nil {
+		l.WithError(err).Debug("Failed to list container instances")
+		return
+	}
+
+	containerInstances, err := DescribeContainerInstancesOfCapacityProvider(ciArns, svc, s.capacityProviderName)
+	if err != nil {
+		l.WithError(err).Error("Failed to describe container instances")
+		return
+	}
+
+	ec2Svc := ec2.New(session)
+	instances, err := DescribeInstancesByAsgName(&s.autoscalingGroupName, ec2Svc)
+	if err != nil {
+		l.WithError(err).Error("Failed to describe ec2 instances")
+		return
+	}
+
+	instancesToStop := []*ec2.Instance{}
+	for i := 0; i < len(instances); i++ {
+		instance := instances[i]
+		found := false
+		for j := 0; j < len(containerInstances); j++ {
+			if containerInstances[j].Ec2InstanceId == instance.InstanceId {
+				containerInstances = deleteElement(containerInstances, j)
+				found = true
+				break
+			}
+		}
+
+		if !found &&
+			instance.State != nil && *instance.State.Code == 16 &&
+			instance.LaunchTime != nil && time.Since(*instance.LaunchTime) > config.Conf.ContainerInstanceInitTimeout {
+			instancesToStop = append(instancesToStop, instances[i])
+		}
+	}
+
+	autoscalingSvc := autoscaling.New(session)
+	for _, instance := range instancesToStop {
+		l.WithField("instance-id", *instance.InstanceId).Error("Stopping instance as it failed to init container-instance in ", config.Conf.ContainerInstanceInitTimeout.Minutes())
+		stopInstanceInput := autoscaling.TerminateInstanceInAutoScalingGroupInput{
+			InstanceId:                     instance.InstanceId,
+			ShouldDecrementDesiredCapacity: aws.Bool(false),
+		}
+		_, err := utils.RetryThrottling(autoscalingSvc.TerminateInstanceInAutoScalingGroup)(&stopInstanceInput)
+		if err != nil {
+			l.WithError(err).Error("Failed to stop instance")
+		}
+
+		time.Sleep(250 * time.Millisecond)
+	}
+}
+
+func deleteElement(slice []*ecs.ContainerInstance, index int) []*ecs.ContainerInstance {
+	return append(slice[:index], slice[index+1:]...)
 }
