@@ -208,6 +208,37 @@ func DescribeInstances(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) ([]*ec2.Ins
 	return ec2Instances, nil
 }
 
+func DescribeInstancesByAsgName(asg *string, ec2Svc *ec2.EC2) ([]*ec2.Instance, error) {
+	var ec2Instances []*ec2.Instance
+	//search instances by aws:autoscaling:groupName tag
+	input := ec2.DescribeInstancesInput{
+		Filters: []*ec2.Filter{{
+			Name:   aws.String("tag:aws:autoscaling:groupName"),
+			Values: []*string{asg},
+		}},
+	}
+
+	for {
+		ec2Result, err := utils.RetryThrottling(ec2Svc.DescribeInstances)(&input)
+		if err != nil {
+			log.WithField("error", err).Error("Failed to DescribeInstances!")
+			return nil, err
+		}
+
+		for _, reservation := range ec2Result.Reservations {
+			ec2Instances = append(ec2Instances, reservation.Instances...)
+		}
+
+		if ec2Result.NextToken != nil {
+			input.NextToken = ec2Result.NextToken
+		} else {
+			break
+		}
+	}
+
+	return ec2Instances, nil
+}
+
 func DescribeInstancesStatus(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) ([]*string, []*string, error) {
 	input := &ec2.DescribeInstanceStatusInput{
 		InstanceIds: ec2InstanceIdPtrs,
