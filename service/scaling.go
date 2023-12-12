@@ -533,7 +533,7 @@ func (s *scaler) StopEc2ZombieInstances() {
 
 	autoscalingSvc := autoscaling.New(session)
 	for _, instance := range instancesToStop {
-		l.WithField("instance-id", *instance.InstanceId).Error("Stopping instance as it failed to init container-instance in ", config.Conf.ContainerInstanceInitTimeout.Minutes())
+		l.WithField("instance-id", *instance.InstanceId).WithField("initTimeout", config.Conf.ContainerInstanceInitTimeout.Minutes()).Error("Stopping instance as it failed to init container-instance")
 		stopInstanceInput := autoscaling.TerminateInstanceInAutoScalingGroupInput{
 			InstanceId:                     instance.InstanceId,
 			ShouldDecrementDesiredCapacity: aws.Bool(false),
