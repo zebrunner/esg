@@ -137,17 +137,18 @@ func initScalers() (map[string]scaler, error) {
 			return nil, err
 		}
 
-		launchConfiguration := describeGroupOutput.AutoScalingGroups[0].LaunchConfigurationName
-		describeLaunchConfigInput := autoscaling.DescribeLaunchConfigurationsInput{
-			LaunchConfigurationNames: []*string{launchConfiguration},
+		launchTemplate := describeGroupOutput.AutoScalingGroups[0].LaunchTemplate
+		describeLaunchTemplateInput := ec2.DescribeLaunchTemplateVersionsInput{
+			LaunchTemplateId: launchTemplate.LaunchTemplateId,
+			Versions:         []*string{launchTemplate.Version},
 		}
-		result, err := utils.RetryThrottling(autoscalingSvc.DescribeLaunchConfigurations)(&describeLaunchConfigInput)
+		ec2Svc := ec2.New(session)
+		result, err := utils.RetryThrottling(ec2Svc.DescribeLaunchTemplateVersions)(&describeLaunchTemplateInput)
 		if err != nil {
 			return nil, err
 		}
 
-		instanceType := result.LaunchConfigurations[0].InstanceType
-		ec2Svc := ec2.New(session)
+		instanceType := result.LaunchTemplateVersions[0].LaunchTemplateData.InstanceType
 		describeInstanceTypeInput := ec2.DescribeInstanceTypesInput{
 			InstanceTypes: []*string{instanceType},
 		}
