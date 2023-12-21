@@ -137,20 +137,31 @@ func initScalers() (map[string]scaler, error) {
 			return nil, err
 		}
 
-		launchTemplate := describeGroupOutput.AutoScalingGroups[0].LaunchTemplate
-		describeLaunchTemplateInput := ec2.DescribeLaunchTemplateVersionsInput{
-			LaunchTemplateId: launchTemplate.LaunchTemplateId,
-			Versions:         []*string{launchTemplate.Version},
-		}
-		ec2Svc := ec2.New(session)
-		result, err := utils.RetryThrottling(ec2Svc.DescribeLaunchTemplateVersions)(&describeLaunchTemplateInput)
-		if err != nil {
-			return nil, err
+		instanceOverrides := describeGroupOutput.AutoScalingGroups[0].MixedInstancesPolicy.LaunchTemplate.Overrides
+		if len(instanceOverrides) <= 0 {
+			return nil, fmt.Errorf("no instances were provided in MixedInstancesPolicy")
 		}
 
-		instanceType := result.LaunchTemplateVersions[0].LaunchTemplateData.InstanceType
+		// From doc: Value must be in the range of 1 to 999.
+		instanceWithMinWeight := &autoscaling.LaunchTemplateOverrides{
+			WeightedCapacity: aws.String("1000"),
+		}
+		minWeight := 1000
+		for i := 0; i < len(instanceOverrides); i++ {
+			if instanceOverrides[i].WeightedCapacity == nil {
+				return nil, fmt.Errorf("every instance in MixedInstancesPolicy should have its own weight")
+			}
+
+			weight, _ := strconv.Atoi(*instanceOverrides[i].WeightedCapacity)
+			if weight < minWeight {
+				minWeight = weight
+				instanceWithMinWeight = instanceOverrides[i]
+			}
+		}
+
+		ec2Svc := ec2.New(session)
 		describeInstanceTypeInput := ec2.DescribeInstanceTypesInput{
-			InstanceTypes: []*string{instanceType},
+			InstanceTypes: []*string{instanceWithMinWeight.InstanceType},
 		}
 		instanceTypesResult, err := utils.RetryThrottling(ec2Svc.DescribeInstanceTypes)(&describeInstanceTypeInput)
 		if err != nil {
@@ -162,7 +173,7 @@ func initScalers() (map[string]scaler, error) {
 		s := scaler{
 			capacityProviderName:  *capacityProvider.Name,
 			autoscalingGroupName:  asgName,
-			instanceTypeResources: Resources{CPU: *instanceInfo.VCpuInfo.DefaultVCpus * 1024, Memory: *instanceInfo.MemoryInfo.SizeInMiB},
+			instanceTypeResources: Resources{CPU: *instanceInfo.VCpuInfo.DefaultVCpus * 1024 / int64(minWeight), Memory: *instanceInfo.MemoryInfo.SizeInMiB / int64(minWeight)},
 		}
 
 		scalers[s.capacityProviderName] = s
