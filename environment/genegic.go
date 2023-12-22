@@ -53,39 +53,42 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 	taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
 
 	cloneContainer := Container{
-		Name:       "clone",
-		Image:      cloneImage,
-		cpu:        minCpu,
-		memory:     512, //increased memory to fix OOM for huge repositories (3K+ branches)
-		Privileged: false,
-		Essential:  false,
-		Mounts:     []string{taskVolume, logVolume},
-		Command:    []string{"-c", cloneCommand + taskLogRedirect},
-		EntryPoint: []string{"/bin/sh"},
+		Name:         "clone",
+		Image:        cloneImage,
+		cpu:          minCpu,
+		memory:       512, //increased memory to fix OOM for huge repositories (3K+ branches)
+		Privileged:   false,
+		Essential:    false,
+		ReadonlyRoot: true,
+		Mounts:       []string{taskVolume, logVolume},
+		Command:      []string{"-c", cloneCommand + taskLogRedirect},
+		EntryPoint:   []string{"/bin/sh"},
 	}
 
 	entrypointContainer := Container{
-		Name:       "entrypoint",
-		Image:      entrypointImage,
-		cpu:        16,
-		memory:     16,
-		Privileged: false,
-		Essential:  false,
-		Mounts:     []string{entrypointVolume, logVolume},
-		EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
+		Name:         "entrypoint",
+		Image:        entrypointImage,
+		cpu:          16,
+		memory:       16,
+		Privileged:   false,
+		Essential:    false,
+		ReadonlyRoot: true,
+		Mounts:       []string{entrypointVolume, logVolume},
+		EntryPoint:   []string{entrypointDir + "/entrypoint.sh"},
 	}
 
 	includeMaven := strings.Contains(caps.Image.ToPrimitive(), "maven")
 	var mavenContainer *Container = nil
 	if includeMaven {
 		mavenContainer = &Container{
-			Name:       "maven",
-			Image:      mavenImage,
-			cpu:        16,
-			memory:     16,
-			Privileged: false,
-			Essential:  false,
-			Mounts:     []string{mavenVolume},
+			Name:         "maven",
+			Image:        mavenImage,
+			cpu:          16,
+			memory:       16,
+			Privileged:   false,
+			Essential:    false,
+			ReadonlyRoot: true,
+			Mounts:       []string{mavenVolume},
 		}
 	}
 
@@ -118,10 +121,11 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 		Condition:     aws.String("COMPLETE"),
 	})
 	executorContainer := Container{
-		Name:       "executor",
-		Image:      executorImage.ToPrimitive(),
-		Privileged: false,
-		Essential:  true,
+		Name:         "executor",
+		Image:        executorImage.ToPrimitive(),
+		Privileged:   false,
+		Essential:    true,
+		ReadonlyRoot: false,
 		Env: map[string]string{
 			"COMMAND": launchCommand.ToPrimitive(),
 		},
@@ -151,12 +155,13 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 	executorContainer.SetMemory(&caps.Memory, 1024, conf.MaxMemory)
 
 	recorderContainer := Container{
-		Name:       "recorder",
-		Image:      recorderImage,
-		cpu:        32,
-		memory:     256, // with 128 failed for cyserver "OutOfMemoryError: Container killed due to memory usage"
-		Privileged: false,
-		Essential:  false,
+		Name:         "recorder",
+		Image:        recorderImage,
+		cpu:          32,
+		memory:       256, // with 128 failed for cyserver "OutOfMemoryError: Container killed due to memory usage"
+		Privileged:   false,
+		Essential:    false,
+		ReadonlyRoot: true,
 		Env: map[string]string{
 			"ROUTER_UUID":          routerUUID,
 			"ENABLE_VIDEO":         "false",
@@ -177,12 +182,13 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 	}
 
 	uploaderContainer := Container{
-		Name:       "uploader",
-		Image:      uploaderImage,
-		cpu:        64,
-		memory:     64,
-		Privileged: false,
-		Essential:  false,
+		Name:         "uploader",
+		Image:        uploaderImage,
+		cpu:          64,
+		memory:       64,
+		Privileged:   false,
+		Essential:    false,
+		ReadonlyRoot: true,
 		Env: map[string]string{
 			"S3_KEY_PATTERN":        fmt.Sprintf("s3://%s/%s/artifacts/launches", conf.S3Bucket, workspace),
 			"AWS_ACCESS_KEY_ID":     conf.S3AwsAccessKeyID,

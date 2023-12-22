@@ -54,15 +54,16 @@ func buildCypress(workspace string, routerUUID string, caps *capabilities.Capabi
 	}
 
 	cloneContainer := Container{
-		Name:       "clone",
-		Image:      cloneImage,
-		cpu:        minCpu,
-		memory:     512, //increased memory to fix OOM for huge repositories (3K+ branches)
-		Privileged: false,
-		Essential:  false,
-		Mounts:     []string{taskVolume, logVolume},
-		Command:    []string{"-c", cloneCommand + taskLogRedirect},
-		EntryPoint: []string{"/bin/sh"},
+		Name:         "clone",
+		Image:        cloneImage,
+		cpu:          minCpu,
+		memory:       512, //increased memory to fix OOM for huge repositories (3K+ branches)
+		Privileged:   false,
+		Essential:    false,
+		ReadonlyRoot: true,
+		Mounts:       []string{taskVolume, logVolume},
+		Command:      []string{"-c", cloneCommand + taskLogRedirect},
+		EntryPoint:   []string{"/bin/sh"},
 	}
 
 	launchCommand := "CHANGE_ME"
@@ -71,12 +72,13 @@ func buildCypress(workspace string, routerUUID string, caps *capabilities.Capabi
 	}
 
 	entrypointContainer := Container{
-		Name:       "entrypoint",
-		Image:      entrypointImage,
-		cpu:        16,
-		memory:     16,
-		Privileged: false,
-		Essential:  false,
+		Name:         "entrypoint",
+		Image:        entrypointImage,
+		cpu:          16,
+		memory:       16,
+		Privileged:   false,
+		Essential:    false,
+		ReadonlyRoot: true,
 		Env: map[string]string{
 			"LOG_DIR":     logDir,
 			"WORK_DIR":    workDir,
@@ -100,10 +102,11 @@ func buildCypress(workspace string, routerUUID string, caps *capabilities.Capabi
 	}
 
 	cypressContainer := Container{
-		Name:       "browser",
-		Image:      browserImage,
-		Privileged: false,
-		Essential:  true,
+		Name:         "browser",
+		Image:        browserImage,
+		Privileged:   false,
+		Essential:    true,
+		ReadonlyRoot: false,
 		Ports: map[string]portMapping{
 			"vnc": {vncPort, 0},
 		},
@@ -152,12 +155,13 @@ func buildCypress(workspace string, routerUUID string, caps *capabilities.Capabi
 	cypressContainer.SetMemory(&caps.Memory, 2048, conf.MaxMemory) // 2Gb RAM is minimal for cypress due to the potential memory leaks
 
 	recorderContainer := Container{
-		Name:       "recorder",
-		Image:      cypressRecorderImage,
-		cpu:        recorderCpu,
-		memory:     2048,
-		Privileged: false,
-		Essential:  false,
+		Name:         "recorder",
+		Image:        cypressRecorderImage,
+		cpu:          recorderCpu,
+		memory:       2048,
+		Privileged:   false,
+		Essential:    false,
+		ReadonlyRoot: true,
 		Env: map[string]string{
 			"ENABLE_VIDEO":         "true",
 			"ENABLE_REALTIME_LOGS": "true",
@@ -194,12 +198,13 @@ func buildCypress(workspace string, routerUUID string, caps *capabilities.Capabi
 	}
 
 	uploaderContainer := Container{
-		Name:       "uploader",
-		Image:      uploaderImage,
-		cpu:        64,  // with 32  uploading is aborted
-		memory:     256, // 64 works for single thread. for backgroud copying it is not enough
-		Privileged: false,
-		Essential:  false,
+		Name:         "uploader",
+		Image:        uploaderImage,
+		cpu:          64,  // with 32  uploading is aborted
+		memory:       256, // 64 works for single thread. for backgroud copying it is not enough
+		Privileged:   false,
+		Essential:    false,
+		ReadonlyRoot: true,
 		Env: map[string]string{
 			"S3_KEY_PATTERN":        fmt.Sprintf("s3://%s/%s/artifacts/test-sessions", conf.S3Bucket, workspace),
 			"AWS_ACCESS_KEY_ID":     conf.S3AwsAccessKeyID,

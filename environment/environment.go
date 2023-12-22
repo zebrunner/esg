@@ -36,8 +36,8 @@ const (
 	cloneImage           = imageRepo + "git:2.36.2"
 	entrypointImage      = imageRepo + "entrypoint:2.4"
 	mavenImage           = imageRepo + "m2-repo-carina:1.5"
-	winUploaderImage 	 = imageRepo + "uploader:1.0-win"
-	winRecorderImage 	 = imageRepo + "recorder:1.0-win"
+	winUploaderImage     = imageRepo + "uploader:1.0-win"
+	winRecorderImage     = imageRepo + "recorder:1.0-win"
 )
 
 const (
@@ -88,13 +88,14 @@ func (e *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefinition
 		cpu := c.Cpu()
 		memory := c.Memory()
 		definition := ecs.ContainerDefinition{
-			Name:        &c.Name,
-			Image:       &c.Image,
-			Cpu:         &cpu,
-			Memory:      &memory,
-			Essential:   &c.Essential,
-			HealthCheck: c.HealthCheck,
-			DependsOn:   c.DependsOn,
+			Name:                   &c.Name,
+			Image:                  &c.Image,
+			Cpu:                    &cpu,
+			Memory:                 &memory,
+			Essential:              &c.Essential,
+			HealthCheck:            c.HealthCheck,
+			DependsOn:              c.DependsOn,
+			ReadonlyRootFilesystem: &c.ReadonlyRoot,
 		}
 
 		if strings.ToLower(e.Capabilities.PlatformName.ToPrimitive()) != windowsPlatform {
@@ -226,6 +227,7 @@ func (e *ExecutionEnvironment) HashOvverideDefinition() string {
 			Name:             container.Name,
 			Image:            container.Image,
 			Essential:        container.Essential,
+			ReadonlyRoot:     container.ReadonlyRoot,
 			Privileged:       container.Privileged,
 			Ports:            container.Ports,
 			Mounts:           container.Mounts,
@@ -280,6 +282,7 @@ func (e *ExecutionEnvironment) HashRegisterDefinition() string {
 			cpu:              container.cpu,
 			memory:           container.memory,
 			Essential:        container.Essential,
+			ReadonlyRoot:     container.ReadonlyRoot,
 			Privileged:       container.Privileged,
 			Ports:            container.Ports,
 			Mounts:           container.Mounts,

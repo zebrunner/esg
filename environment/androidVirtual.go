@@ -32,10 +32,11 @@ func buildAppiumRedroid(workspace string, routerUUID string, caps *capabilities.
 	}
 
 	deviceContainer := Container{
-		Name:       "device",
-		Image:      deviceImage,
-		Privileged: true,
-		Essential:  true,
+		Name:         "device",
+		Image:        deviceImage,
+		Privileged:   true,
+		Essential:    true,
+		ReadonlyRoot: false,
 		Env: map[string]string{
 			"VERBOSE": "1",
 		},
@@ -44,12 +45,13 @@ func buildAppiumRedroid(workspace string, routerUUID string, caps *capabilities.
 	deviceContainer.SetMemory(&caps.Memory, 2048, conf.MaxMemory)
 
 	appiumContainer := Container{
-		Name:       "appium",
-		Image:      appiumImage,
-		cpu:        appiumCpu,
-		memory:     appiumMemory,
-		Privileged: false,
-		Essential:  true,
+		Name:         "appium",
+		Image:        appiumImage,
+		cpu:          appiumCpu,
+		memory:       appiumMemory,
+		Privileged:   false,
+		Essential:    true,
+		ReadonlyRoot: false,
 		Ports: map[string]portMapping{
 			"driver": {appiumPort, 0},
 		},
@@ -72,12 +74,13 @@ func buildAppiumRedroid(workspace string, routerUUID string, caps *capabilities.
 	}
 
 	uploaderContainer := Container{
-		Name:       "uploader",
-		Image:      uploaderImage,
-		cpu:        64,  // with 32  uploading is aborted
-		memory:     256, // 64 works for single thread. for background copying it is not enough
-		Privileged: false,
-		Essential:  false,
+		Name:         "uploader",
+		Image:        uploaderImage,
+		cpu:          64,  // with 32  uploading is aborted
+		memory:       256, // 64 works for single thread. for background copying it is not enough
+		Privileged:   false,
+		Essential:    false,
+		ReadonlyRoot: true,
 		Env: map[string]string{
 			"LOG_DIR":               logDir,
 			"S3_KEY_PATTERN":        fmt.Sprintf("s3://%s/%s/artifacts/test-sessions", conf.S3Bucket, workspace),

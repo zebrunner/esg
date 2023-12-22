@@ -26,8 +26,9 @@ type Container struct {
 	cpu    int64
 	memory int64
 
-	Essential  bool
-	Privileged bool
+	Essential    bool
+	Privileged   bool
+	ReadonlyRoot bool
 
 	Ports            map[string]portMapping
 	Mounts           []string // List of volume names

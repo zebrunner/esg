@@ -53,9 +53,10 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 		driverArgs = ", \"--log=info\""
 	}
 	browserContainer := Container{
-		Name:      "browser",
-		Image:     browserImage,
-		Essential: true,
+		Name:         "browser",
+		Image:        browserImage,
+		Essential:    true,
+		ReadonlyRoot: false,
 		Ports: map[string]portMapping{
 			"driver":         {seleniumPort, 0},
 			"vnc":            {vncPort, 0},
@@ -86,12 +87,13 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 	browserContainer.SetMemory(&caps.Memory, 1024, conf.MaxMemory)
 
 	recorderContainer := Container{
-		Name:       "recorder",
-		Image:      recorderImage,
-		cpu:        recorderCpu,
-		memory:     recorderMemory,
-		Privileged: false,
-		Essential:  false,
+		Name:         "recorder",
+		Image:        recorderImage,
+		cpu:          recorderCpu,
+		memory:       recorderMemory,
+		Privileged:   false,
+		Essential:    false,
+		ReadonlyRoot: true,
 		Env: map[string]string{
 			"ROUTER_UUID":          routerUUID,
 			"LOG_DIR":              logDir,
@@ -133,12 +135,13 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 	}
 
 	uploaderContainer := Container{
-		Name:       "uploader",
-		Image:      uploaderImage,
-		cpu:        64,  // with 32  uploading is aborted
-		memory:     256, // 64 works for single thread. for backgroud copying it is not enough
-		Privileged: false,
-		Essential:  false,
+		Name:         "uploader",
+		Image:        uploaderImage,
+		cpu:          64,  // with 32  uploading is aborted
+		memory:       256, // 64 works for single thread. for backgroud copying it is not enough
+		Privileged:   false,
+		Essential:    false,
+		ReadonlyRoot: true,
 		Env: map[string]string{
 			"LOG_DIR":               logDir,
 			"S3_KEY_PATTERN":        fmt.Sprintf("s3://%s/%s/artifacts/test-sessions", conf.S3Bucket, workspace),
@@ -163,10 +166,11 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 		mitmCommand = mitmCommand + " --quiet"
 
 		mitmContainer := Container{
-			Name:       "mitm",
-			Image:      mitmImage,
-			Privileged: false,
-			Essential:  false,
+			Name:         "mitm",
+			Image:        mitmImage,
+			Privileged:   false,
+			Essential:    false,
+			ReadonlyRoot: false,
 			Env: map[string]string{
 				"LOG_DIR": logDir,
 				"COMMAND": mitmCommand,
