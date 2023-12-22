@@ -205,8 +205,10 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 				"healthcheck": {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
 			},
 		},
-		Workspace:  workspace,
-		RouterUUID: routerUUID,
+		Workspace:        workspace,
+		RouterUUID:       routerUUID,
+		CapacityProvider: config.Conf.AwsLinuxCapacityProvider,
+		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
 	}
 
 	if caps.BrowserName == "firefox" {

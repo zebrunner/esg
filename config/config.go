@@ -17,6 +17,8 @@ var (
 		"cypress-chromium",
 		"cypress-edge",
 		"cypress-firefox",
+		"windows-chrome",
+		"windows-edge",
 	}
 	VendorPrefix = "zebrunner"
 	Conf         = Config{}
@@ -27,26 +29,29 @@ var (
 
 type Config struct {
 	// AWS settings
-	AwsRegion           string
-	AwsRetry            int
-	AwsCluster          string
-	AwsAutoScalingGroup string
-	AwsAccessKeyID      string
-	AwsSecretAccessKey  string
+	AwsRegion                string
+	AwsRetry                 int
+	AwsCluster               string
+	AwsLinuxCapacityProvider string
+	AwsWinCapacityProvider   string
+	AwsAccessKeyID           string
+	AwsSecretAccessKey       string
+	AwsTaskRoleArn           string
 
 	// Session resource limitations
 	MaxMemory int64
 	MaxCpu    int64
 
 	// Timeouts
-	MaxIdleTimeout          time.Duration
-	IdleTimeout             time.Duration
-	CypressIdleTimeout      time.Duration
-	SessionDeleteTimeout    time.Duration
-	ServiceStartupTimeout   time.Duration
-	TaskUncachedTimeout     time.Duration
-	InstanceCooldownTimeout time.Duration
-	MaxTimeout              time.Duration
+	MaxIdleTimeout               time.Duration
+	IdleTimeout                  time.Duration
+	CypressIdleTimeout           time.Duration
+	SessionDeleteTimeout         time.Duration
+	ServiceStartupTimeout        time.Duration
+	TaskUncachedTimeout          time.Duration
+	InstanceCooldownTimeout      time.Duration
+	ContainerInstanceInitTimeout time.Duration
+	MaxTimeout                   time.Duration
 
 	// External connections
 	DbConnectionString           string
@@ -75,9 +80,11 @@ func init() {
 	flag.StringVar(&Conf.AwsRegion, "aws-region", "us-east-1", "AWS region name")
 	flag.IntVar(&Conf.AwsRetry, "aws-retry", 10, "AWS client retry count")
 	flag.StringVar(&Conf.AwsCluster, "aws-cluster", "esg", "AWS ECS cluster name")
-	flag.StringVar(&Conf.AwsAutoScalingGroup, "aws-auto-scaling-group", "esg-asg", "AWS auto scaling group name")
+	flag.StringVar(&Conf.AwsLinuxCapacityProvider, "aws-linux-capacity-provider", "esg-linux-capacityprovider", "AWS capacity provider for linux instances")
+	flag.StringVar(&Conf.AwsWinCapacityProvider, "aws-win-capacity-provider", "esg-win-capacityprovider", "AWS capacity provicer for windows instances")
 	flag.StringVar(&Conf.AwsAccessKeyID, "aws-access-key-id", "", "Access key for AWS services")
 	flag.StringVar(&Conf.AwsSecretAccessKey, "aws-secret-access-key", "", "Secret key for AWS services")
+	flag.StringVar(&Conf.AwsTaskRoleArn, "aws-task-role-arn", "", "Role that would be assigned to all task's definitions")
 
 	flag.Int64Var(&Conf.MaxMemory, "max-memory", 28675, "maximum memory limitation for session") // max memory for c5a.4xlarge
 	flag.Int64Var(&Conf.MaxCpu, "max-cpu", 16384, "maximum CPU limitation for session")          //max cpu for c5a.4xlarge
@@ -89,6 +96,7 @@ func init() {
 	flag.DurationVar(&Conf.ServiceStartupTimeout, "service-startup-timeout", 10*time.Minute, "Service startup timeout in time.Duration format")
 	flag.DurationVar(&Conf.TaskUncachedTimeout, "task-uncached-timeout", 30*time.Second, "Time for task to be cached on start in time.Duration format")
 	flag.DurationVar(&Conf.InstanceCooldownTimeout, "instance-cooldown-timeout", 4*time.Minute, "Time after instance start when shutdown is prohibited on scale down in time.Duration format")
+	flag.DurationVar(&Conf.ContainerInstanceInitTimeout, "container-instance-init-timeout", 10*time.Minute, "Time for ec2 instance after launch to initialize container-instance for asg in time.Duration format")
 	flag.DurationVar(&Conf.MaxTimeout, "max-timeout", 24*time.Hour, "Maximum valid task/session timeout in time.Duration format")
 
 	flag.StringVar(&Conf.DbConnectionString, "db-connection", "", "Connection string for database")

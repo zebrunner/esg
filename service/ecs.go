@@ -62,6 +62,7 @@ func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (*ecs.T
 		NetworkMode:          &networkMode,
 		ContainerDefinitions: environment.ContainerDefinitions(),
 		Family:               &environment.TaskDefinitionFamily,
+		TaskRoleArn:          &environment.TaskRoleArn,
 	}
 
 	volumes := []*ecs.Volume{}
@@ -149,11 +150,10 @@ func StopTask(cachedTask taskmap.Task, stopReason taskmap.StoppedReason) error {
 
 	cachedTask.Status = taskmap.TaskStopped
 	cachedTask.StopReason = stopReason
-	responseCh, errCh := taskmap.UpdateTask(cachedTask, 10*time.Minute)
-	select {
-	case err := <-errCh:
+	err = taskmap.UpdateTask(cachedTask, 10*time.Minute)
+	if err != nil {
+		log.WithError(err).WithField(config.TaskIdKey, cachedTask.TaskId).Error("Failed to update task's cache!")
 		return err
-	case <-responseCh:
 	}
 
 	return nil

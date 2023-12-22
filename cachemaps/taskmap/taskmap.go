@@ -52,11 +52,10 @@ type Task struct {
 
 // Creates new record in tasks redis db and updates mapper uuid record with new taskId. Resets existing expiration on mapper uuid record
 func CreateEntity(taskId string, env *environment.ExecutionEnvironment) (*Task, error) {
-	responseCh, errCh := mapper.WriteMapper(mapper.IdMapper{RouterUUID: env.RouterUUID, TaskId: taskId}, 0)
-	select {
-	case err := <-errCh:
+	err := mapper.WriteMapperRecord(mapper.IdMapper{RouterUUID: env.RouterUUID, TaskId: taskId}, 0)
+	if err != nil {
+		log.WithField(config.TaskIdKey, taskId).WithError(err).Error("Task not cached!")
 		return nil, err
-	case <-responseCh:
 	}
 
 	creationTime := time.Now()
@@ -69,11 +68,10 @@ func CreateEntity(taskId string, env *environment.ExecutionEnvironment) (*Task, 
 		HealthAt:     &creationTime,
 	}
 
-	responseCh, errCh = WriteTask(*cachedTask, 0)
-	select {
-	case err := <-errCh:
+	err = WriteTask(*cachedTask, 0)
+	if err != nil {
+		log.WithField(config.TaskIdKey, taskId).WithError(err).Error("Task not cached!")
 		return nil, err
-	case <-responseCh:
 	}
 
 	return cachedTask, nil

@@ -22,6 +22,8 @@ func buildAppiumRedroid(workspace string, routerUUID string, caps *capabilities.
 	logDir := "/tmp/log"
 	logVolume := "log"
 
+	caps.EnableVNC = false
+
 	conf := &config.Conf
 
 	deviceImage, err := buildImage(caps)
@@ -104,8 +106,10 @@ func buildAppiumRedroid(workspace string, routerUUID string, caps *capabilities.
 				"healthcheck": {ContainerPort: appiumPort, HostPort: 0, Path: "/wd/hub/status-adb"},
 			},
 		},
-		Workspace:  workspace,
-		RouterUUID: routerUUID,
+		Workspace:        workspace,
+		RouterUUID:       routerUUID,
+		CapacityProvider: config.Conf.AwsLinuxCapacityProvider,
+		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
 	}
 
 	return &environment, nil

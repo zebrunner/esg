@@ -207,7 +207,7 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (essential *utils.Sel
 
 	requestBody, err := s.Env.ReqCapabilities.ToRequestBody()
 	if err != nil {
-		essential = utils.CreationErr(fmt.Errorf("failed to start driver"), err.Error())
+		essential = utils.CreationErr(fmt.Errorf("failed to get request body for driver start"), err.Error())
 		s.Log.WithError(essential).Warn("Failed to start driver, stopping service...")
 		return
 	}
@@ -219,7 +219,7 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (essential *utils.Sel
 
 	startSessionRequest, err := http.NewRequest(http.MethodPost, reqUrl.String(), requestBody)
 	if err != nil {
-		essential = utils.CreationErr(fmt.Errorf("failed to start driver"), err.Error())
+		essential = utils.CreationErr(fmt.Errorf("failed to create start driver request"), err.Error())
 		s.Log.WithError(essential).Warn("Failed to start driver, stopping service...")
 		return
 	}
@@ -252,6 +252,12 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (essential *utils.Sel
 		}
 
 		s.Log = s.Log.WithField(config.SessionIdKey, sessionId)
+
+		nonEssential = modifyDriverReply(s.Reply, s.Env)
+		if nonEssential != nil {
+			s.Log.WithError(nonEssential).Error("Failed to modify driver reply")
+			return
+		}
 
 		var sess *sessionmap.Session
 		for {
@@ -428,11 +434,10 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l 
 			basis: basis,
 			finalizeFunc: func(s *startBasis) {
 				s.CachedTask.Status = taskmap.TaskGeneric
-				responseCh, errCh := taskmap.UpdateTask(*s.CachedTask, 0)
-				select {
-				case err := <-errCh:
+
+				err := taskmap.UpdateTask(*s.CachedTask, 0)
+				if err != nil {
 					basis.Log.WithError(err).Error("Failed to recache task on finalize!")
-				case <-responseCh:
 				}
 			},
 		}
@@ -444,11 +449,9 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l 
 			finalizeFunc: func(s *startBasis) {
 				s.CachedTask.Status = taskmap.TaskGeneric
 				s.CachedTask.AccessedAt = time.Now()
-				responseCh, errCh := taskmap.UpdateTask(*s.CachedTask, 0)
-				select {
-				case err := <-errCh:
+				err := taskmap.UpdateTask(*s.CachedTask, 0)
+				if err != nil {
 					basis.Log.WithError(err).Error("Failed to recache task on finalize!")
-				case <-responseCh:
 				}
 				taskmap.AddToCypressSet(s.CachedTask.TaskId)
 			},
@@ -459,11 +462,9 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l 
 			basis: basis,
 			finalizeFunc: func(s *startBasis) {
 				//cache all collected data during startup
-				responseCh, errCh := taskmap.UpdateTask(*s.CachedTask, 0)
-				select {
-				case err := <-errCh:
+				err := taskmap.UpdateTask(*s.CachedTask, 0)
+				if err != nil {
 					basis.Log.WithError(err).Error("Failed to recache task on finalize!")
-				case <-responseCh:
 				}
 			},
 		}
@@ -510,4 +511,27 @@ func replaceSessionId(driverResponse map[string]interface{}, routerUUID string) 
 	}
 
 	return "", fmt.Errorf("failed to find sessionId field in response")
+}
+
+func modifyDriverReply(driverReply map[string]interface{}, env *environment.ExecutionEnvironment) error {
+	capsToAdd := map[string]interface{}{
+		"enableVideo": env.Capabilities.EnableVideo,
+		"enableVNC":   env.Capabilities.EnableVNC,
+	}
+
+	value, ok := driverReply["value"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("`value` must be an object")
+	}
+
+	capabilities, ok := value["capabilities"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("`capabilities` must be an object")
+	}
+
+	for k, v := range capsToAdd {
+		capabilities[k] = v
+	}
+
+	return nil
 }

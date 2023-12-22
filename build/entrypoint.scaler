@@ -20,9 +20,6 @@ finish() {
 
 CMD_ARGS=
 #scaler cli args:
-if [ ! -z ${AWS_ASG_NAME} ]; then
-  CMD_ARGS="${CMD_ARGS} -aws-auto-scaling-group ${AWS_ASG_NAME}"
-fi
 if [ ! -z ${RESERVE_INSTANCES_PERCENT} ]; then
   CMD_ARGS="${CMD_ARGS} -reserve-instances-percent ${RESERVE_INSTANCES_PERCENT}"
 fi
@@ -49,6 +46,9 @@ if [ ! -z ${AWS_ACESS_KEY_ID} ]; then
 fi
 if [ ! -z ${AWS_SECRET_ACCESS_KEY} ]; then
   CMD_ARGS="${CMD_ARGS} -aws-secret-access-key ${AWS_SECRET_ACCESS_KEY}"
+fi
+if [ ! -z ${AWS_TASK_ROLE} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-task-role-arn ${AWS_TASK_ROLE}"
 fi
 if [ ! -z ${AWS_ELASTIC_CACHE} ]; then
   CMD_ARGS="${CMD_ARGS} -aws-elastic-cache ${AWS_ELASTIC_CACHE}"

@@ -16,6 +16,9 @@ import (
 func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
 	conf := &config.Conf
 
+	caps.EnableVNC = false
+	caps.EnableVideo = false
+
 	workDir := "/tmp/zebrunner"
 	taskVolume := "work"
 
@@ -213,8 +216,10 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 				"driver": {ContainerPort: genericPort, HostPort: 0, Path: "/"},
 			},
 		},
-		Workspace:  workspace,
-		RouterUUID: routerUUID,
+		Workspace:        workspace,
+		RouterUUID:       routerUUID,
+		CapacityProvider: config.Conf.AwsLinuxCapacityProvider,
+		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
 	}
 
 	return &environment, nil
