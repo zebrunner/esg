@@ -414,14 +414,14 @@ func (s *scaler) ScaleDown() {
 		}
 	}
 
-	removeCount := 0
+	allowedCapacityForDeleting := 0
 	for _, instance := range freeResources {
 		if instance.CPU >= s.instanceTypeResources.CPU && instance.Memory >= s.instanceTypeResources.Memory {
-			removeCount++
+			allowedCapacityForDeleting++
 		}
 	}
 
-	if removeCount == 0 {
+	if allowedCapacityForDeleting == 0 {
 		l.Trace("All instances are busy, scale down not allowed")
 		return
 	}
@@ -438,36 +438,40 @@ func (s *scaler) ScaleDown() {
 		return
 	}
 
-	instancesToDelete := make([]*ecs.ContainerInstance, 0)
+	// [instance]weight map
+	instancesToDelete := make(map[*ecs.ContainerInstance]int64)
+	capacityToDelete := 0
 	for _, instance := range containerInstances {
-		if removeCount == 0 {
+		if allowedCapacityForDeleting <= 0 {
 			break
 		}
 
 		if *instance.PendingTasksCount == 0 && *instance.RunningTasksCount == 0 {
 			instanceUptime := time.Since(*instance.RegisteredAt)
 			if instanceUptime > config.Conf.InstanceCooldownTimeout {
-				instancesToDelete = append(instancesToDelete, instance)
-				removeCount--
+				weight := s.GetInstanceWeight(instance)
+				capacityToDelete += int(weight)
+				instancesToDelete[instance] = weight
+				allowedCapacityForDeleting -= int(weight)
 			}
 		}
 	}
 
-	instanceToDeleteReserved := float64(len(instancesToDelete)) * (1 - config.Conf.ReserveInstancesPercent)
-	if float64(len(instancesToDelete))-instanceToDeleteReserved > float64(config.Conf.ReserveMaxCapacity) {
+	capacityToDeleteReserved := float64(capacityToDelete) * (1 - config.Conf.ReserveInstancesPercent)
+	if float64(capacityToDelete)-capacityToDeleteReserved > float64(config.Conf.ReserveMaxCapacity) {
 		l.WithFields(log.Fields{
-			"instances to delete":                 len(instancesToDelete),
-			"instances to delete except reserved": math.Ceil(instanceToDeleteReserved),
-			"max reservation capacity":            config.Conf.ReserveMaxCapacity,
+			"capacity to delete":                 capacityToDelete,
+			"capacity to delete except reserved": math.Ceil(capacityToDeleteReserved),
+			"max reservation capacity":           config.Conf.ReserveMaxCapacity,
 		}).Warn("Triggered max reservation capacity limit")
-		instanceToDeleteReserved = float64(int64(len(instancesToDelete)) - config.Conf.ReserveMaxCapacity)
+		capacityToDeleteReserved = float64(int64(capacityToDelete) - config.Conf.ReserveMaxCapacity)
 	}
 
-	maxInstancesToDelete := int(math.Ceil(instanceToDeleteReserved))
+	maxCapacityToDelete := int64(math.Ceil(capacityToDeleteReserved))
 
-	terminatedCount := 0
-	for _, instance := range instancesToDelete {
-		if newCapacity <= minSize || maxInstancesToDelete <= 0 {
+	var terminatedCount int64 = 0
+	for instance, weight := range instancesToDelete {
+		if newCapacity <= minSize || maxCapacityToDelete <= 0 {
 			break
 		}
 
@@ -483,9 +487,9 @@ func (s *scaler) ScaleDown() {
 			l.WithError(err).Error("Failed to stop instance")
 		}
 
-		newCapacity -= 1
-		maxInstancesToDelete -= 1
-		terminatedCount++
+		newCapacity -= weight
+		maxCapacityToDelete -= weight
+		terminatedCount += weight
 		time.Sleep(250 * time.Millisecond)
 	}
 	if terminatedCount != 0 {
@@ -561,4 +565,18 @@ func (s *scaler) StopEc2ZombieInstances() {
 
 func deleteElement(slice []*ecs.ContainerInstance, index int) []*ecs.ContainerInstance {
 	return append(slice[:index], slice[index+1:]...)
+}
+
+func (s *scaler) GetInstanceWeight(ci *ecs.ContainerInstance) int64 {
+	for _, resource := range ci.RegisteredResources {
+		if resource.Name != nil && *resource.Name == "CPU" {
+			if resource.IntegerValue != nil {
+				return *resource.IntegerValue / s.instanceTypeResources.CPU
+			} else {
+				break
+			}
+		}
+	}
+
+	return 1
 }
