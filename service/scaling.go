@@ -25,9 +25,11 @@ var (
 )
 
 type scaler struct {
-	capacityProviderName  string
-	autoscalingGroupName  string
-	instanceTypeResources Resources
+	capacityProviderName string
+	autoscalingGroupName string
+	resourcesPerWeight   Resources
+	instanceResources    Resources
+	instanceMinWeight    int64
 }
 
 type Resources struct {
@@ -91,7 +93,7 @@ func StartScalers() {
 			}
 		}(s)
 
-		log.WithField("instanceResources", s.instanceTypeResources).WithField("capacityProvider", s.capacityProviderName).WithField("asg", s.autoscalingGroupName).Info("Started scaler")
+		log.WithFields(log.Fields{"instanceResources": s.instanceResources, "minInstanceWeight": s.instanceMinWeight, "capacityProvider": s.capacityProviderName, "asg": s.autoscalingGroupName}).Info("Started scaler")
 	}
 }
 
@@ -146,13 +148,13 @@ func initScalers() (map[string]scaler, error) {
 		instanceWithMinWeight := &autoscaling.LaunchTemplateOverrides{
 			WeightedCapacity: aws.String("1000"),
 		}
-		minWeight := 1000
+		var minWeight int64 = 1000
 		for i := 0; i < len(instanceOverrides); i++ {
 			if instanceOverrides[i].WeightedCapacity == nil {
 				return nil, fmt.Errorf("every instance in MixedInstancesPolicy should have its own weight")
 			}
 
-			weight, _ := strconv.Atoi(*instanceOverrides[i].WeightedCapacity)
+			weight, _ := strconv.ParseInt(*instanceOverrides[i].WeightedCapacity, 10, 64)
 			if weight < minWeight {
 				minWeight = weight
 				instanceWithMinWeight = instanceOverrides[i]
@@ -171,9 +173,11 @@ func initScalers() (map[string]scaler, error) {
 		instanceInfo := instanceTypesResult.InstanceTypes[0]
 
 		s := scaler{
-			capacityProviderName:  *capacityProvider.Name,
-			autoscalingGroupName:  asgName,
-			instanceTypeResources: Resources{CPU: *instanceInfo.VCpuInfo.DefaultVCpus * 1024 / int64(minWeight), Memory: *instanceInfo.MemoryInfo.SizeInMiB / int64(minWeight)},
+			capacityProviderName: *capacityProvider.Name,
+			autoscalingGroupName: asgName,
+			resourcesPerWeight:   Resources{CPU: (*instanceInfo.VCpuInfo.DefaultVCpus * 1024) / minWeight, Memory: (*instanceInfo.MemoryInfo.SizeInMiB) / minWeight},
+			instanceResources:    Resources{CPU: *instanceInfo.VCpuInfo.DefaultVCpus * 1024, Memory: *instanceInfo.MemoryInfo.SizeInMiB},
+			instanceMinWeight:    minWeight,
 		}
 
 		scalers[s.capacityProviderName] = s
@@ -200,11 +204,19 @@ func getTasksResources(tasks []*ecs.Task, status string) []*Resources {
 
 func (s *scaler) getFreeResources(tasks []*ecs.Task, currentCapacity int, statuses ...string) []*Resources {
 	// Generate list of resources for each instance
-	instanceResources := make([]*Resources, 0, currentCapacity)
-	for i := 0; i < int(currentCapacity); i++ {
+	instanceResources := make([]*Resources, 0)
+	var i int64 = int64(currentCapacity)
+	for ; i >= s.instanceMinWeight; i -= s.instanceMinWeight {
 		instanceResources = append(instanceResources, &Resources{
-			CPU:    s.instanceTypeResources.CPU,
-			Memory: s.instanceTypeResources.Memory,
+			CPU:    s.instanceResources.CPU,
+			Memory: s.instanceResources.Memory,
+		})
+	}
+
+	if i > 0 {
+		instanceResources = append(instanceResources, &Resources{
+			CPU:    s.resourcesPerWeight.CPU * i,
+			Memory: s.resourcesPerWeight.Memory * i,
 		})
 	}
 
@@ -251,7 +263,6 @@ func (s *scaler) ScaleUp() {
 		return
 	}
 	svc := ecs.New(session)
-	autoscalingSvc := autoscaling.New(session)
 	tasks, err := GetCapacityProviderTasks(svc, s.capacityProviderName)
 	if err != nil {
 		l.WithError(err).Error("Failed to get list of running task")
@@ -264,6 +275,7 @@ func (s *scaler) ScaleUp() {
 		return
 	}
 
+	autoscalingSvc := autoscaling.New(session)
 	asg, err := s.getAutoscalingGroup(autoscalingSvc)
 	if err != nil {
 		l.WithError(err).Error("Failed to get autoscaling group")
@@ -327,8 +339,8 @@ func (s *scaler) ScaleUp() {
 		"Memory": totalRequiredResources.Memory,
 	}).Debug("Total required resources")
 
-	requiredCpu := float64(totalRequiredResources.CPU) / float64(s.instanceTypeResources.CPU)
-	requiredMemory := float64(totalRequiredResources.Memory) / float64(s.instanceTypeResources.Memory)
+	requiredCpu := float64(totalRequiredResources.CPU) / float64(s.resourcesPerWeight.CPU)
+	requiredMemory := float64(totalRequiredResources.Memory) / float64(s.resourcesPerWeight.Memory)
 
 	desiredCapacity := float64(currentCapacity) + math.Max(requiredCpu, requiredMemory)
 	desiredReservationCapacity := desiredCapacity * (1 + config.Conf.ReserveInstancesPercent)
@@ -397,8 +409,7 @@ func (s *scaler) ScaleDown() {
 		l.WithError(err).Error("Failed to get autoscaling group")
 		return
 	}
-	minSize := *asg.MinSize
-	newCapacity, currentCapacity := *asg.DesiredCapacity, *asg.DesiredCapacity
+	minSize, newCapacity, currentCapacity := *asg.MinSize, *asg.DesiredCapacity, *asg.DesiredCapacity
 
 	freeResources := s.getFreeResources(tasks, int(currentCapacity), "RUNNING", "PROVISIONING")
 
@@ -416,7 +427,7 @@ func (s *scaler) ScaleDown() {
 
 	allowedCapacityForDeleting := 0
 	for _, instance := range freeResources {
-		if instance.CPU >= s.instanceTypeResources.CPU && instance.Memory >= s.instanceTypeResources.Memory {
+		if instance.CPU >= s.resourcesPerWeight.CPU && instance.Memory >= s.resourcesPerWeight.Memory {
 			allowedCapacityForDeleting++
 		}
 	}
@@ -473,6 +484,13 @@ func (s *scaler) ScaleDown() {
 	for instance, weight := range instancesToDelete {
 		if newCapacity <= minSize || maxCapacityToDelete <= 0 {
 			break
+		}
+
+		if newCapacity-weight < minSize {
+			if minSize != 0 {
+				continue
+			}
+			weight = newCapacity
 		}
 
 		l := l.WithField("instance", *instance.Ec2InstanceId)
@@ -571,7 +589,7 @@ func (s *scaler) GetInstanceWeight(ci *ecs.ContainerInstance) int64 {
 	for _, resource := range ci.RegisteredResources {
 		if resource.Name != nil && *resource.Name == "CPU" {
 			if resource.IntegerValue != nil {
-				return *resource.IntegerValue / s.instanceTypeResources.CPU
+				return *resource.IntegerValue / s.resourcesPerWeight.CPU
 			} else {
 				break
 			}
