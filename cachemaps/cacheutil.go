@@ -14,36 +14,34 @@ type workerExecutFunc[T interface{}] func(*redis.Conn, map[string]T) error
 type RedisWorker[T interface{}] struct {
 	// used only one connection per worker
 	// this connection should not be used simultaneously for different redis operations
-	rdsConn    *redis.Conn
-	mutex      sync.Mutex
+	rdsConn *redis.Conn
+	mutex   sync.Mutex
 	// function, that will be executed every iteration if requests are present
 	executFunc workerExecutFunc[T]
 	// request items. key -> id of a record in redis, value -> new record by specified key
 	items map[string]T
-	// signals that work is done. Recieved item should not be used
-	responseCh chan interface{}
-	errCh      chan error
+	// signals that work is done. If nil -> successfully executed, else -> something went wrong.
+	errCh chan error
 }
 
-// Copies error and response chan, that would recieve a reponse on the next worker iteration. Adds request item to worker
-func (w *RedisWorker[T]) AppendToWorker(id string, item T) (<-chan interface{}, <-chan error) {
+// Copies error chan, that would recieve a reponse on the next worker iteration.
+// Adds request item to worker and waits for reponse from err channel.
+func (w *RedisWorker[T]) AppendToWorker(id string, item T) error {
 	w.mutex.Lock()
 	w.items[id] = item
-	responseCh := w.responseCh
 	errCh := w.errCh
 	w.mutex.Unlock()
-	return responseCh, errCh
+	return <-errCh
 }
 
 // Worker begins to execute w.executFunc() every iterationPause time. Start() should be called in a new thread
 func (w *RedisWorker[T]) Start(iterationPause time.Duration) {
 	for {
 		// get current state of a worker to new vars and flush all fields,
-		// so new requests would wait for a new iteration of a worker and have a new err/response channels
+		// so new requests would wait for a new iteration of a worker and have a new err channels
 		time.Sleep(iterationPause)
 		w.mutex.Lock()
 		items := w.items
-		responseCh := w.responseCh
 		errCh := w.errCh
 		w.flush()
 		w.mutex.Unlock()
@@ -53,18 +51,14 @@ func (w *RedisWorker[T]) Start(iterationPause time.Duration) {
 		}
 
 		err := w.executFunc(w.rdsConn, items)
-		if err != nil {
-			SendMessageToAllChannels(errCh, err)
-		} else {
-			SendMessageToAllChannels(responseCh, 0)
-		}
+
+		SendMessageToAllChannels(errCh, err)
 	}
 }
 
 // Create new objects and assign them to the worker fields. Old objects are no longer accessible from worker instance
 func (w *RedisWorker[T]) flush() {
 	w.items = make(map[string]T, 0)
-	w.responseCh = make(chan interface{})
 	w.errCh = make(chan error)
 }
 
@@ -74,8 +68,7 @@ func CreateRedisWorker[T interface{}](redisClient *redis.Client, executeFunc wor
 		rdsConn:    redisClient.Conn(),
 		mutex:      sync.Mutex{},
 		executFunc: executeFunc,
-		items:      make(map[string]T, 0),
-		responseCh: make(chan interface{}),
+		items:      make(map[string]T),
 		errCh:      make(chan error),
 	}
 }

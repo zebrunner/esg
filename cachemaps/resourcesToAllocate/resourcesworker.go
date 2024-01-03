@@ -47,26 +47,10 @@ func writeRecords(rdsConn *redis.Conn, items map[string]ResourceItem) error {
 	return err
 }
 
-/*
-To wait for response implement select switch construction
-	select {
-	case err := <-errCh:
-		...
-	case <-responseCh:
-	}
-*/
-func AddEntity(resources *ResourcesToAllocate) (<-chan interface{}, <-chan error) {
+func AddEntity(resources *ResourcesToAllocate) error {
 	return resourceWorker.AppendToWorker(resources.RouterUUID, ResourceItem{resourceToAdd: resources})
 }
 
-/*
-To wait for response implement select switch construction
-	select {
-	case err := <-errCh:
-		...
-	case <-responseCh:
-	}
-*/
-func RemoveEntity(routerUUID string) (<-chan interface{}, <-chan error) {
+func RemoveEntity(routerUUID string) error {
 	return resourceWorker.AppendToWorker(routerUUID, ResourceItem{resourceToDelete: &routerUUID})
 }

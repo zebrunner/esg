@@ -54,7 +54,7 @@ func updateRecords(rdsConn *redis.Conn, items map[string]TaskItem) error {
 		data, _ := json.Marshal(&item.CachedTask)
 		rdbWritePipeline.Set(context.Background(), task.TaskId, data, item.Expiration)
 		if item.Expiration > 0 {
-			mapper.ExpireMapper(task.RouterUUID, item.Expiration)
+			go mapper.ExpireMapperRecord(task.RouterUUID, item.Expiration)
 		}
 	}
 
@@ -73,7 +73,7 @@ func writeRecords(rdsConn *redis.Conn, items map[string]TaskItem) error {
 
 		rdbWritePipeline.Set(context.Background(), item.CachedTask.TaskId, data, item.Expiration)
 		if item.Expiration > 0 {
-			mapper.ExpireMapper(item.CachedTask.RouterUUID, item.Expiration)
+			go mapper.ExpireMapperRecord(item.CachedTask.RouterUUID, item.Expiration)
 		}
 	}
 
@@ -81,26 +81,10 @@ func writeRecords(rdsConn *redis.Conn, items map[string]TaskItem) error {
 	return err
 }
 
-/*
-To wait for response implement select switch construction
-	select {
-	case err := <-errCh:
-		...
-	case <-responseCh:
-	}
-*/
-func UpdateTask(cachedTask Task, expiration time.Duration) (<-chan interface{}, <-chan error) {
+func UpdateTask(cachedTask Task, expiration time.Duration) error {
 	return updateWorker.AppendToWorker(cachedTask.TaskId, TaskItem{CachedTask: cachedTask, Expiration: expiration})
 }
 
-/*
-To wait for response implement select switch construction
-	select {
-	case err := <-errCh:
-		...
-	case <-responseCh:
-	}
-*/
-func WriteTask(cachedTask Task, expiration time.Duration) (<-chan interface{}, <-chan error) {
+func WriteTask(cachedTask Task, expiration time.Duration) error {
 	return writeWorker.AppendToWorker(cachedTask.TaskId, TaskItem{CachedTask: cachedTask, Expiration: expiration})
 }

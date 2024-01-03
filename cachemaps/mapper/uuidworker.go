@@ -58,26 +58,10 @@ func expireRecords(rdsConn *redis.Conn, items map[string]MapperItem) error {
 	return err
 }
 
-/*
-To wait for response implement select switch construction
-	select {
-	case err := <-errCh:
-		...
-	case <-responseCh:
-	}
-*/
-func WriteMapper(mapper IdMapper, expiration time.Duration) (<-chan interface{}, <-chan error) {
+func WriteMapperRecord(mapper IdMapper, expiration time.Duration) error {
 	return writeWorker.AppendToWorker(mapper.RouterUUID, MapperItem{Mapper: mapper, Expiration: expiration})
 }
 
-/*
-To wait for response implement select switch construction
-	select {
-	case err := <-errCh:
-		...
-	case <-responseCh:
-	}
-*/
-func ExpireMapper(routerUUID string, expiration time.Duration) (<-chan interface{}, <-chan error) {
+func ExpireMapperRecord(routerUUID string, expiration time.Duration) error {
 	return expireWorker.AppendToWorker(routerUUID, MapperItem{Expiration: expiration})
 }

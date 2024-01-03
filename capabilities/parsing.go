@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -142,6 +143,26 @@ func appendProxy(value interface{}) map[string]interface{} {
 			},
 		}
 		return capabilityToAdd
+	}
+
+	return nil
+}
+
+func appendProxy(value interface{}) map[string]interface{} {
+	capabilityToAdd := map[string]interface{}{
+		"proxy": map[string]interface{}{
+			"httpProxy": "mitm:8080",
+			"sslProxy":  "mitm:8080",
+			"proxyType": "manual",
+		},
+	}
+
+	if boolValue, ok := value.(bool); ok && boolValue {
+		return capabilityToAdd
+	} else if stringValue, ok := value.(string); ok {
+		if boolValue, err := strconv.ParseBool(stringValue); err == nil && boolValue {
+			return capabilityToAdd
+		}
 	}
 
 	return nil

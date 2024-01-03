@@ -16,13 +16,7 @@ type IdMapper struct {
 
 // Create new record with ServiceStartupTimeout timeout, that contains only router uuid.
 func InitEntity(routerUUID string) error {
-	responseCh, errCh := WriteMapper(IdMapper{RouterUUID: routerUUID}, config.Conf.ServiceStartupTimeout)
-	select {
-	case err := <-errCh:
-		return err
-	case <-responseCh:
-		return nil
-	}
+	return WriteMapperRecord(IdMapper{RouterUUID: routerUUID}, config.Conf.ServiceStartupTimeout)
 }
 
 // Only internal usage (use methods from sessionmap/taskmap)

@@ -91,7 +91,8 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 			if errStr == "ClientException: Tasks provisioning capacity limit exceeded." || strings.Contains(errStr, "ThrottlingException: Rate exceeded") {
 				l.WithError(err).Trace("Task register failed.")
 				if !markedToAllocate {
-					resourcesToAllocate.AddEntity(env.GetAllocationResources())
+					// start in another thead to not wait for response and continue execution
+					go resourcesToAllocate.AddEntity(env.GetAllocationResources())
 					markedToAllocate = true
 				}
 				sleepRateLimit := time.Duration(20+rand.Intn(10)) * time.Second
