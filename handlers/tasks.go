@@ -140,6 +140,26 @@ func rerouteProxy(path string, sessionId string) string {
 	return strings.Join(splittedPath, "/")
 }
 
+func ProxyMitm(c *gin.Context) {
+	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
+	url, ok := sess.Network.GetUrl("proxyHandlerPort")
+	if !ok {
+		log.Error("failed to get `proxyHandlerPort` url from session")
+		c.Error(utils.UnknownErr(fmt.Errorf("failed to get `proxyHandlerPort` url from session"))).SetType(gin.ErrorTypePublic)
+		return
+	}
+
+	(&httputil.ReverseProxy{
+		Director: func(r *http.Request) {
+			// fix for file upload using selenium 4
+			r.URL.Scheme = "http"
+			r.URL.Host = url.Host
+			r.Host = url.Host
+			r.URL.Path = getRemainingPath(r.URL.Path)
+		},
+	}).ServeHTTP(c.Writer, c.Request)
+}
+
 func CloseSession(c *gin.Context) {
 	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
 
@@ -337,26 +357,6 @@ func TaskDescribe(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": result.Tasks[0].LastStatus})
 }
 
-func GenerateHar(c *gin.Context) {
-	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
-	url, ok := sess.Network.GetUrl("mitmHarPort")
-	if !ok {
-		log.Error("failed to get `mitmHarPort` url from session")
-		c.Error(utils.UnknownErr(fmt.Errorf("failed to get `mitmHarPort` url from session"))).SetType(gin.ErrorTypePublic)
-		return
-	}
-
-	director := func(req *http.Request) {
-		req.URL.Scheme = "http"
-		req.URL.Host = url.Host
-		req.Host = url.Host
-		req.URL.Path = trimSession(req.URL.Path)
-	}
-	proxy := &httputil.ReverseProxy{Director: director}
-
-	proxy.ServeHTTP(c.Writer, c.Request)
-}
-
 func Downloads(c *gin.Context) {
 	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
 	url, ok := sess.Network.GetUrl("fileserver")
@@ -388,7 +388,7 @@ func Clipboard(c *gin.Context) {
 
 	proxy := &httputil.ReverseProxy{
 		Director: func(req *http.Request) {
-			req.URL.Scheme = "http" 
+			req.URL.Scheme = "http"
 			req.URL.Host = url.Host
 			req.Host = url.Host
 		},
@@ -427,15 +427,6 @@ func getRemainingPath(path string) string {
 	}
 
 	return "/" + strings.Join(pathFragments[3:], "/")
-}
-
-func trimSession(path string) string {
-	pathFragments := strings.Split(path, "/")
-	if len(pathFragments) < 2 {
-		return "/"
-	}
-
-	return strings.Join(pathFragments[:len(pathFragments)-1], "/")
 }
 
 func defaultErrorHandler(c *gin.Context) func(http.ResponseWriter, *http.Request, error) {

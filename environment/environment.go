@@ -29,24 +29,24 @@ const (
 	//public zebrunner ECR docker registry
 	imageRepo            = "public.ecr.aws/zebrunner/"
 	uploaderImage        = imageRepo + "uploader:3.4"
-	mitmImage            = imageRepo + "mitmproxy:1.3-beta1"
+	mitmImage            = imageRepo + "mitmproxy:1.3-beta2"
 	recorderImage        = imageRepo + "recorder:1.5"
 	cypressRecorderImage = imageRepo + "cypress-recorder:1.3"
-	appiumImage          = imageRepo + "appium:2.0.9"
+	appiumImage          = imageRepo + "appium:2.0.10-beta10"
 	cloneImage           = imageRepo + "git:2.36.2"
 	entrypointImage      = imageRepo + "entrypoint:2.4"
 	mavenImage           = imageRepo + "m2-repo-carina:1.5"
-	winUploaderImage 	 = imageRepo + "uploader:1.0-win"
-	winRecorderImage 	 = imageRepo + "recorder:1.0-win"
+	winUploaderImage     = imageRepo + "uploader:1.0-win"
+	winRecorderImage     = imageRepo + "recorder:1.0-win"
 )
 
 const (
-	seleniumPort   int64 = 4444
-	vncPort        int64 = 5900
-	devtoolsPort   int64 = 7070
-	fileserverPort int64 = 8080
-	clipboardPort  int64 = 9090
-	mitmHarPort	   int64 = 8060
+	seleniumPort     int64 = 4444
+	vncPort          int64 = 5900
+	devtoolsPort     int64 = 7070
+	fileserverPort   int64 = 8080
+	clipboardPort    int64 = 9090
+	proxyHandlerPort int64 = 8060
 
 	recorderCpu    int64 = 320
 	recorderMemory int64 = 1024

@@ -173,8 +173,8 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 				"COMMAND": mitmCommand,
 			},
 			Ports: map[string]portMapping{
-				"fileserverPort": {fileserverPort, 0},
-				"mitmHarPort":    {mitmHarPort, 0},
+				"fileserverPort":   {fileserverPort, 0},
+				"proxyHandlerPort": {proxyHandlerPort, 0},
 			},
 			Mounts:     []string{logVolume},
 			Command:    []string{"-c", "/entrypoint.sh"},
@@ -219,7 +219,7 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 	}
 
 	if caps.Mitm {
-		environment.Network.Endpoints["mitmHarPort"] = &Endpoint{ContainerPort: mitmHarPort, HostPort: 0, Path: "/"}
+		environment.Network.Endpoints["proxyHandlerPort"] = &Endpoint{ContainerPort: proxyHandlerPort, HostPort: 0, Path: "/"}
 	}
 
 	return &environment, nil

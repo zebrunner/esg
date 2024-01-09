@@ -83,10 +83,17 @@ func CreateRouter() *gin.Engine {
 		seleniumHub.Any("/session/:session/*action", handlers.Proxy)
 
 		seleniumHub.Any("/download/:session/*action", handlers.Downloads)
-		seleniumHub.GET("/download/har/:session", handlers.GenerateHar)
 
 		seleniumHub.GET("/clipboard/:session", handlers.Clipboard)
 		seleniumHub.POST("/clipboard/:session", handlers.Clipboard)
+
+		proxyHandlerHub := seleniumHub.Group("/proxy/:session", handlers.ProxyMitm)
+		{
+			proxyHandlerHub.GET("/download/har/:flow")
+			proxyHandlerHub.GET("/download/flows/:flow")
+			proxyHandlerHub.POST("/restart")
+			proxyHandlerHub.DELETE("/clear")
+		}
 
 		devtoolsHub := seleniumHub.Group("/devtools/:session", handlers.Devtools)
 		{

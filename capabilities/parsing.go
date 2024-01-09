@@ -133,20 +133,6 @@ func replaceName(name string) func(string) string {
 		return name
 	}
 }
-func appendProxy(value interface{}) map[string]interface{} {
-	if boolValue, ok := value.(bool); ok && boolValue {
-		capabilityToAdd := map[string]interface{}{
-			"proxy": map[string]interface{}{
-				"httpProxy": "mitm:8080",
-				"sslProxy":  "mitm:8080",
-				"proxyType": "manual",
-			},
-		}
-		return capabilityToAdd
-	}
-
-	return nil
-}
 
 func appendProxy(value interface{}) map[string]interface{} {
 	capabilityToAdd := map[string]interface{}{
