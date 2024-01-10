@@ -151,11 +151,20 @@ func ProxyMitm(c *gin.Context) {
 
 	(&httputil.ReverseProxy{
 		Director: func(r *http.Request) {
-			// fix for file upload using selenium 4
 			r.URL.Scheme = "http"
 			r.URL.Host = url.Host
 			r.Host = url.Host
 			r.URL.Path = getRemainingPath(r.URL.Path)
+		},
+		ModifyResponse: func(r *http.Response) error {
+			sess.AccessedAt = time.Now()
+			err := sessionmap.Write(sess.SessionID, sess, -1)
+
+			if err != nil {
+				log.WithField(config.SessionIdKey, sess.SessionID).WithField(config.RouterUUID, sess.RouterUUID).WithError(err).Error("Failed to update last access time")
+			}
+
+			return nil
 		},
 	}).ServeHTTP(c.Writer, c.Request)
 }
@@ -391,10 +400,6 @@ func Clipboard(c *gin.Context) {
 			req.URL.Scheme = "http"
 			req.URL.Host = url.Host
 			req.Host = url.Host
-		},
-		ModifyResponse: func(r *http.Response) error {
-			// update session last access time
-			return nil
 		},
 	}
 	proxy.ServeHTTP(c.Writer, c.Request)
