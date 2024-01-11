@@ -29,7 +29,7 @@ const (
 	//public zebrunner ECR docker registry
 	imageRepo            = "public.ecr.aws/zebrunner/"
 	uploaderImage        = imageRepo + "uploader:3.4"
-	mitmImage            = imageRepo + "mitmproxy:1.2"
+	mitmImage            = imageRepo + "mitmproxy:2.0"
 	recorderImage        = imageRepo + "recorder:1.5"
 	cypressRecorderImage = imageRepo + "cypress-recorder:1.3"
 	appiumImage          = imageRepo + "appium:2.0.9"

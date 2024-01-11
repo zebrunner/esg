@@ -158,8 +158,9 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 			Privileged: false,
 			Essential:  false,
 			Env: map[string]string{
-				"LOG_DIR": logDir,
-				"COMMAND": caps.MitmArgs.ToPrimitive(),
+				"LOG_DIR":    logDir,
+				"PROXY_TYPE": caps.MitmArgs.ToPrimitive(),
+				"PROXY_ARGS": caps.MitmArgs.ToPrimitive(),
 			},
 			Ports: map[string]portMapping{
 				"fileserverPort":   {fileserverPort, 0},
