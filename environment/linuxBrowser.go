@@ -159,7 +159,6 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 			Essential:  false,
 			Env: map[string]string{
 				"LOG_DIR":    logDir,
-				"PROXY_TYPE": caps.MitmArgs.ToPrimitive(),
 				"PROXY_ARGS": caps.MitmArgs.ToPrimitive(),
 			},
 			Ports: map[string]portMapping{
@@ -170,6 +169,11 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 			Command:    []string{"-c", "/entrypoint.sh"},
 			EntryPoint: []string{"/bin/sh"},
 		}
+
+		if caps.MitmType.ToPrimitive() != "" {
+			mitmContainer.Env["PROXY_TYPE"] = caps.MitmType.ToPrimitive()
+		}
+
 		mitmContainer.SetCpu(&caps.MitmCpu, 512, conf.MaxCpu)
 		mitmContainer.SetMemory(&caps.MitmMemory, 512, conf.MaxMemory)
 
