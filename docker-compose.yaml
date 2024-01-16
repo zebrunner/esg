@@ -4,6 +4,8 @@ services:
   router_1:
     container_name: router_1
     image: public.ecr.aws/zebrunner/router:latest
+    environment:
+      - EXPOSED_PORT=4444
     env_file:
       - router.env
     ports:
@@ -19,6 +21,8 @@ services:
   router_2:
     container_name: router_2
     image: public.ecr.aws/zebrunner/router:latest
+    environment:
+      - EXPOSED_PORT=4445
     env_file:
       - router.env
     ports:

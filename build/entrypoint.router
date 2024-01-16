@@ -110,6 +110,12 @@ fi
 if [ ! -z ${IMDSV2_ENABLED} ]; then
   CMD_ARGS="${CMD_ARGS} -imdsv2-enabled=${IMDSV2_ENABLED}"
 fi
+if [ ! -z ${EXPOSED_PORT} ]; then
+  CMD_ARGS="${CMD_ARGS} -exposed-port ${EXPOSED_PORT}"
+fi
+if [ ! -z ${AWS_ALB_NAME} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-alb-name ${AWS_ALB_NAME}"
+fi
 
 echo "CMD_ARGS: $CMD_ARGS"
 

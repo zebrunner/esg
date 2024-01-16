@@ -123,6 +123,34 @@ func refreshIMDSV2Token() {
 	}
 }
 
+func registerInLoadBalancer() error {
+	lb, err := service.DescribeLoadBalancer(config.Conf.AwsAlbName)
+	if err != nil {
+		return err
+	}
+
+	tg, err := service.DescribeTargetGroup(*lb.LoadBalancerArn)
+	if err != nil {
+		return err
+	}
+
+	return service.RegisterTarget(*tg.TargetGroupArn, config.Conf.ExposedPort)
+}
+
+func deregisterFromLoadBalancer() error {
+	lb, err := service.DescribeLoadBalancer(config.Conf.AwsAlbName)
+	if err != nil {
+		return err
+	}
+
+	tg, err := service.DescribeTargetGroup(*lb.LoadBalancerArn)
+	if err != nil {
+		return err
+	}
+
+	return service.DeregisterTarget(*tg.TargetGroupArn, config.Conf.ExposedPort)
+}
+
 func main() {
 	flag.Parse()
 
@@ -168,8 +196,6 @@ func main() {
 		go refreshIMDSV2Token()
 	}
 
-	router := CreateRouter()
-
 	for {
 		if definitionmap.IsRefreshDone() {
 			break
@@ -183,18 +209,26 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
-	log.Infof("Listening on %s", listen)
 	srv := &http.Server{
 		Addr:    listen,
-		Handler: router,
+		Handler: CreateRouter(),
 	}
 
 	go func() {
 		// service connections
+		log.Infof("Listening on %s", listen)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.WithError(err).Fatal("Failed to start router")
 		}
 	}()
+
+	err = registerInLoadBalancer()
+	if err != nil {
+		log.WithError(err).Fatal("Failed to append target to the elb target group! Stopping router...")
+		os.Exit(1)
+	} else {
+		log.Info("registered target in alb")
+	}
 
 	<-quit
 
@@ -202,6 +236,14 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout)
 	defer cancel()
+
+	deregisterFromLoadBalancer()
+	if err != nil {
+		log.WithError(err).Fatal("Failed to detach target from the elb target group!")
+	} else {
+		log.Info("detached target from alb")
+	}
+
 	if err := srv.Shutdown(ctx); err != nil {
 		log.WithError(err).Error("Failed to shutdown correctly")
 	}

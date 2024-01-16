@@ -37,6 +37,7 @@ type Config struct {
 	AwsAccessKeyID           string
 	AwsSecretAccessKey       string
 	AwsTaskRoleArn           string
+	AwsAlbName				 string
 
 	// Session resource limitations
 	MaxMemory int64
@@ -74,6 +75,7 @@ type Config struct {
 
 	SingleTenant  bool
 	Imdsv2Enabled bool
+	ExposedPort   int64
 }
 
 func init() {
@@ -85,6 +87,7 @@ func init() {
 	flag.StringVar(&Conf.AwsAccessKeyID, "aws-access-key-id", "", "Access key for AWS services")
 	flag.StringVar(&Conf.AwsSecretAccessKey, "aws-secret-access-key", "", "Secret key for AWS services")
 	flag.StringVar(&Conf.AwsTaskRoleArn, "aws-task-role-arn", "", "Role that would be assigned to all task's definitions")
+	flag.StringVar(&Conf.AwsTaskRoleArn, "aws-alb-name", "", "Application load balancer name")	
 
 	flag.Int64Var(&Conf.MaxMemory, "max-memory", 28675, "maximum memory limitation for session") // max memory for c5a.4xlarge
 	flag.Int64Var(&Conf.MaxCpu, "max-cpu", 16384, "maximum CPU limitation for session")          //max cpu for c5a.4xlarge
@@ -119,6 +122,7 @@ func init() {
 
 	flag.BoolVar(&Conf.SingleTenant, "single-tenant", false, "Single tenant mode")
 	flag.BoolVar(&Conf.Imdsv2Enabled, "imdsv2-enabled", false, "Session-oriented method")
+	flag.Int64Var(&Conf.ExposedPort, "exposed-port", 0, "Router's external listening port")
 }
 
 func (c *Config) ParseLogLevel() logrus.Level {
