@@ -8,6 +8,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/cachemaps"
 	"github.com/zebrunner/esg/config"
 )
 
@@ -35,24 +36,15 @@ func FindRevision(hash string) (int64, bool) {
 	return revision, ok
 }
 
-// Add revision to redis
-func AddRevision(overrideDefenititonHash string, revision int64) error {
-	hr := hashRevision{
-		Hash:     overrideDefenititonHash,
-		Revision: revision,
+// Add's new revisions to redis/update's ttl for existing ones
+func WriteAll(definitionsMap map[string]int64, expiration time.Duration) error {
+	rdbPipe := config.RedisDefinitionClient.Pipeline()
+	hashRevisionMap := make(map[string]hashRevision, len(definitionsMap))
+	for k, v := range definitionsMap {
+		hashRevisionMap[k] = hashRevision{Hash: k, Revision: v}
 	}
 
-	data, err := json.Marshal(&hr)
-	if err != nil {
-		return err
-	}
-
-	err = config.RedisDefinitionClient.Set(context.Background(), overrideDefenititonHash, data, 0).Err()
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return cachemaps.WriteAll(rdbPipe, hashRevisionMap, expiration)
 }
 
 // Returns all definitions from redis as map[hash]revision

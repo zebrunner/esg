@@ -56,7 +56,7 @@ func (er excludeRules) isAcceptableImage(image string) bool {
 	return true
 }
 
-func ListBrowsers() ([]string, error) {
+func ListImages() ([]string, error) {
 	imgRequestUrl := "https://api.us-east-1.gallery.ecr.aws/describeImageTags"
 	images := make([]string, 0)
 	var excludeRules = getRules()
@@ -132,4 +132,3 @@ func ListBrowsers() ([]string, error) {
 
 	return images, nil
 }
-
