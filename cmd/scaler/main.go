@@ -412,6 +412,9 @@ func RefreshTaskDefinition(env *environment.ExecutionEnvironment) (*db.TaskDefin
 		if err != nil {
 			return nil, err
 		}
+	} else {
+		l.Trace("Definition record is up-to-date")
+		newDbDefinititon.RevisionTag = savedDbDefinition.RevisionTag
 	}
 
 	return newDbDefinititon, nil
@@ -451,6 +454,7 @@ func RefreshTaskDefinitions() {
 
 		log.Info("Task definitions update finished")
 		definitionmap.SetRefreshDone()
+		time.Sleep(refreshInterval)
 	}
 }
 
