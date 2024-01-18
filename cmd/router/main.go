@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"net/http"
 	"net/http/httputil"
 	"os"
@@ -137,7 +138,7 @@ func registerInLoadBalancer() error {
 	return service.RegisterTarget(*tg.TargetGroupArn, config.Conf.ExposedPort)
 }
 
-func deregisterFromLoadBalancer() error {
+func deregisterFromLoadBalancer(ctx context.Context) error {
 	lb, err := service.DescribeLoadBalancer(config.Conf.AwsAlbName)
 	if err != nil {
 		return err
@@ -148,7 +149,40 @@ func deregisterFromLoadBalancer() error {
 		return err
 	}
 
-	return service.DeregisterTarget(*tg.TargetGroupArn, config.Conf.ExposedPort)
+	err = service.DeregisterTarget(*tg.TargetGroupArn, config.Conf.ExposedPort)
+	if err != nil {
+		return err
+	}
+
+	// wait for target deregister
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("timed out on target deregistering")
+		default:
+		}
+
+		targetDescriptions, err := service.DescribeTargets(*tg.TargetGroupArn)
+		if err != nil {
+			return err
+		}
+
+		present := false
+		for _, target := range targetDescriptions {
+			if *target.Target.Port == config.Conf.ExposedPort {
+				present = true
+				break
+			}
+		}
+
+		if !present {
+			break
+		}
+
+		time.Sleep(time.Second * 5)
+	}
+
+	return nil
 }
 
 func main() {
@@ -237,7 +271,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout)
 	defer cancel()
 
-	deregisterFromLoadBalancer()
+	err = deregisterFromLoadBalancer(ctx)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to detach target from the elb target group!")
 	} else {
