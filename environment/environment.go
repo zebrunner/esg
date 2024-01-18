@@ -36,8 +36,8 @@ const (
 	cloneImage           = imageRepo + "git:2.36.2"
 	entrypointImage      = imageRepo + "entrypoint:2.4"
 	mavenImage           = imageRepo + "m2-repo-carina:1.5"
-	winUploaderImage 	 = imageRepo + "uploader:1.0-win"
-	winRecorderImage 	 = imageRepo + "recorder:1.0-win"
+	winUploaderImage     = imageRepo + "uploader:1.0-win"
+	winRecorderImage     = imageRepo + "recorder:1.0-win"
 )
 
 const (

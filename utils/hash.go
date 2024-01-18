@@ -1,8 +1,8 @@
 package utils
 
 import (
-	"github.com/davegardnerisme/deephash"
 	"fmt"
+	"github.com/davegardnerisme/deephash"
 )
 
 func EncodeToHash(any interface{}) string {
