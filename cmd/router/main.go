@@ -268,7 +268,7 @@ func main() {
 
 	log.Info("Shutdown router ...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout-5*time.Second)
 	defer cancel()
 
 	err = deregisterFromLoadBalancer(ctx)
