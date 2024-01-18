@@ -107,7 +107,7 @@ networkName="e3s-network"
     case "$1" in
       "")
         # down services
-        docker compose -f "$BASEDIR/docker-compose.yaml" down -t $graceful_timeout
+        docker compose -f "$BASEDIR/docker-compose.yaml" down
         # down postgres and redis
         docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" down
         ;;
