@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"net/http"
 	"net/http/httputil"
 	"os"
@@ -149,40 +148,7 @@ func deregisterFromLoadBalancer(ctx context.Context) error {
 		return err
 	}
 
-	err = service.DeregisterTarget(*tg.TargetGroupArn, config.Conf.ExposedPort)
-	if err != nil {
-		return err
-	}
-
-	// wait for target deregister
-	for {
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("timed out on target deregistering")
-		default:
-		}
-
-		targetDescriptions, err := service.DescribeTargets(*tg.TargetGroupArn)
-		if err != nil {
-			return err
-		}
-
-		present := false
-		for _, target := range targetDescriptions {
-			if *target.Target.Port == config.Conf.ExposedPort {
-				present = true
-				break
-			}
-		}
-
-		if !present {
-			break
-		}
-
-		time.Sleep(time.Second * 5)
-	}
-
-	return nil
+	return service.DeregisterTarget(*tg.TargetGroupArn, config.Conf.ExposedPort)
 }
 
 func main() {
@@ -267,17 +233,20 @@ func main() {
 	<-quit
 
 	log.Info("Shutdown router ...")
-
-	ctx, cancel := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout-5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout+5*time.Second)
 	defer cancel()
 
 	err = deregisterFromLoadBalancer(ctx)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to detach target from the elb target group!")
 	} else {
+		// wait until alb actually stops distributing requests to that specific target
+		// average time is between 5 to 15 seconds
+		time.Sleep(25 * time.Second)
 		log.Info("detached target from alb")
 	}
 
+	log.Info("finalizing connections...")
 	if err := srv.Shutdown(ctx); err != nil {
 		log.WithError(err).Error("Failed to shutdown correctly")
 	}
