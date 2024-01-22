@@ -30,7 +30,7 @@ import (
 	"github.com/zebrunner/esg/zebrunner"
 )
 
-func ClearTasks() {
+func ClearTasks(shapingCh chan<- interface{}) {
 	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
 	if err != nil {
 		log.WithError(err).Error("Failed to create AWS session! Stopping scaler...")
@@ -75,7 +75,7 @@ func ClearTasks() {
 			go StopUnhealthyTasks(tasks, cachedTasksMap, &wg)
 
 			wg.Add(1)
-			go TrackResourceUsage(tasks, cachedTasksMap, &wg)
+			go TrackResourceUsage(tasks, cachedTasksMap, &wg, shapingCh)
 		}
 
 		wg.Wait()
@@ -185,7 +185,7 @@ func StopLostTasks(keys []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 	wg.Done()
 }
 
-func TrackResourceUsage(tasks []*ecs.Task, cachedTasksMap map[string]taskmap.Task, wg *sync.WaitGroup) {
+func TrackResourceUsage(tasks []*ecs.Task, cachedTasksMap map[string]taskmap.Task, wg *sync.WaitGroup, shapingCh chan<- interface{}) {
 	// analyze tasks response
 	tasksCacheToUpdate := make([]taskmap.Task, 0)
 	tasksToTrack := make(map[*taskmap.Task]*ecs.Task)
@@ -247,6 +247,11 @@ func TrackResourceUsage(tasks []*ecs.Task, cachedTasksMap map[string]taskmap.Tas
 		for cachedTask, task := range tasksToTrack {
 			zebrunner.TrackResourcesUsage(cachedTask, task)
 		}
+	}
+
+	select {
+	case shapingCh <- "done":
+	default:
 	}
 
 	wg.Done()
@@ -538,7 +543,8 @@ func main() {
 
 	go RefreshTaskDefinitions()
 
-	go ClearTasks()
+	shapingCh := make(chan interface{})
+	go ClearTasks(shapingCh)
 
 	go StopIdleTasks()
 
@@ -558,4 +564,9 @@ func main() {
 	if err != nil {
 		log.WithError(err).Error("Failed to unmark task definition refresh")
 	}
+
+	// wait for the end of a resources shaping
+	log.Info("Waiting for shaping...")
+	<-shapingCh
+	log.Info("Shaping performed")
 }
