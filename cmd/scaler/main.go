@@ -30,7 +30,7 @@ import (
 	"github.com/zebrunner/esg/zebrunner"
 )
 
-func ClearTasks() {
+func ClearTasks(shapingCh chan<- interface{}) {
 	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
 	if err != nil {
 		log.WithError(err).Error("Failed to create AWS session! Stopping scaler...")
@@ -75,7 +75,7 @@ func ClearTasks() {
 			go StopUnhealthyTasks(tasks, cachedTasksMap, &wg)
 
 			wg.Add(1)
-			go TrackResourceUsage(tasks, cachedTasksMap, &wg)
+			go TrackResourceUsage(tasks, cachedTasksMap, &wg, shapingCh)
 		}
 
 		wg.Wait()
@@ -185,7 +185,7 @@ func StopLostTasks(keys []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 	wg.Done()
 }
 
-func TrackResourceUsage(tasks []*ecs.Task, cachedTasksMap map[string]taskmap.Task, wg *sync.WaitGroup) {
+func TrackResourceUsage(tasks []*ecs.Task, cachedTasksMap map[string]taskmap.Task, wg *sync.WaitGroup, shapingCh chan<- interface{}) {
 	// analyze tasks response
 	tasksCacheToUpdate := make([]taskmap.Task, 0)
 	tasksToTrack := make(map[*taskmap.Task]*ecs.Task)
@@ -247,6 +247,11 @@ func TrackResourceUsage(tasks []*ecs.Task, cachedTasksMap map[string]taskmap.Tas
 		for cachedTask, task := range tasksToTrack {
 			zebrunner.TrackResourcesUsage(cachedTask, task)
 		}
+	}
+
+	select {
+	case shapingCh <- "done":
+	default:
 	}
 
 	wg.Done()
@@ -375,157 +380,112 @@ func StopCypressIdleTasks() {
 	}
 }
 
-func RefreshTaskDefinition(image string) error {
-	capsList, err := capabilities.FromImage(image)
-	l := log.WithField("image", image)
+func RefreshTaskDefinition(env *environment.ExecutionEnvironment) (*db.TaskDefinition, error) {
+	l := log.WithField("schema", env.Schema).WithField("family", env.TaskDefinitionFamily)
+
+	newDbDefinititon := db.CreateTaskDefinitionEntity(env)
+	savedDbDefinition, err := db.GetDefinition(env.TaskDefinitionFamily, env.Schema)
 	if err != nil {
-		l.WithError(err).Error("Failed to build capabilities for image!")
-		return err
-	}
+		if err != sql.ErrNoRows {
+			return nil, err
+		}
 
-	for _, caps := range capsList {
-		env, err := environment.BuildFromCaps(caps)
+		l.Info("Creating new record")
+		taskDef, err := service.CreateTaskDefinition(env)
 		if err != nil {
-			l.WithError(err).Error("Failed to build execution environment!")
-			return err
+			return nil, err
 		}
+		// pause after aws call
+		time.Sleep(1 * time.Second)
+		newDbDefinititon.RevisionTag = *taskDef.Revision
 
-		l = l.WithField("schema", env.Schema).WithField("family", env.TaskDefinitionFamily)
-
-		registerDefinitionHash := env.HashRegisterDefinition()
-		dbDefinition, err := db.GetDefinition(env.TaskDefinitionFamily, env.Schema)
+		err = db.InsertDefinition(newDbDefinititon)
 		if err != nil {
-			if err == sql.ErrNoRows {
-				l.Info("Creating new record")
-				taskDef, err := service.CreateTaskDefinition(env)
-				if err != nil {
-					return err
-				}
-				// pause after aws call
-				time.Sleep(1 * time.Second)
-
-				newDefinition := &db.TaskDefinition{
-					RevisionTag:            *taskDef.Revision,
-					Family:                 env.TaskDefinitionFamily,
-					Schema:                 env.Schema,
-					RegisterDefinitionHash: registerDefinitionHash,
-					OverrideDefinitionHash: env.HashOvverideDefinition(),
-				}
-
-				err = db.CreateDefinition(newDefinition)
-				if err != nil {
-					return err
-				}
-
-				err = definitionmap.AddRevision(newDefinition.OverrideDefinitionHash, newDefinition.RevisionTag)
-				if err != nil {
-					return err
-				}
-
-				continue
-			} else {
-				return err
-			}
+			return nil, err
 		}
-
-		if dbDefinition.RegisterDefinitionHash != registerDefinitionHash {
-			l.WithFields(log.Fields{"stored hash": dbDefinition.RegisterDefinitionHash, "new hash": registerDefinitionHash}).Info("Updating definition record")
-			taskDef, err := service.CreateTaskDefinition(env)
-			if err != nil {
-				return err
-			}
-			// pause after aws call
-			time.Sleep(1 * time.Second)
-
-			updatedDefinition := &db.TaskDefinition{
-				RevisionTag:            *taskDef.Revision,
-				Family:                 env.TaskDefinitionFamily,
-				Schema:                 env.Schema,
-				RegisterDefinitionHash: registerDefinitionHash,
-				OverrideDefinitionHash: env.HashOvverideDefinition(),
-			}
-
-			err = db.RefreshTag(dbDefinition.RegisterDefinitionHash, updatedDefinition)
-			if err != nil {
-				return err
-			}
-
-			err = definitionmap.AddRevision(updatedDefinition.OverrideDefinitionHash, updatedDefinition.RevisionTag)
-			if err != nil {
-				return err
-			}
-
-			continue
+	} else if newDbDefinititon.RegisterDefinitionHash != savedDbDefinition.RegisterDefinitionHash {
+		l.Info("Updating definition record")
+		taskDef, err := service.CreateTaskDefinition(env)
+		if err != nil {
+			return nil, err
 		}
+		// pause after aws call
+		time.Sleep(1 * time.Second)
+		newDbDefinititon.RevisionTag = *taskDef.Revision
 
+		err = db.RefreshTag(savedDbDefinition.RegisterDefinitionHash, newDbDefinititon)
+		if err != nil {
+			return nil, err
+		}
+	} else {
 		l.Trace("Definition record is up-to-date")
-		err = definitionmap.AddRevision(dbDefinition.OverrideDefinitionHash, dbDefinition.RevisionTag)
-		if err != nil {
-			return err
-		}
+		newDbDefinititon.RevisionTag = savedDbDefinition.RevisionTag
 	}
 
-	return nil
+	return newDbDefinititon, nil
 }
 
 func RefreshTaskDefinitions() {
-	images := getImageList()
-
-	for _, image := range images {
-		l := log.WithField("image", image)
-		err := RefreshTaskDefinition(image)
+	refreshInterval := time.Hour * 12
+	for {
+		images, err := utils.ListImages()
 		if err != nil {
-			l.WithError(err).Error("Couldn't create task defenition. Stopping scaler...")
+			log.WithError(err).Error("Failed to get images list!")
 			os.Exit(1)
 		}
-	}
 
-	log.Info("Task definitions updates finished")
-	definitionmap.SetRefreshDone()
-}
-
-func getImageList() []string {
-	images, err := utils.ListBrowsers()
-	if err != nil {
-		log.WithError(err).Error("Failed to get image list!")
-		os.Exit(1)
-	}
-
-	return images
-}
-
-func getImageSet() map[string]bool {
-	images := getImageList()
-
-	imagesSet := make(map[string]bool, cap(images))
-	for _, image := range images {
-		imagesSet[image] = true
-	}
-
-	return imagesSet
-}
-
-func AddTaskDefinitions() {
-	imagesSet := getImageSet()
-
-	for {
-		time.Sleep(12 * time.Hour)
-
-		updatedImages := getImageList()
-		for _, image := range updatedImages {
-			if present := imagesSet[image]; !present {
-				log.Info("Adding task definition for new image: ", image)
-				err := RefreshTaskDefinition(image)
-				if err == nil {
-					imagesSet[image] = true
-				} else {
-					log.WithField("image", image).WithError(err).Error("Couldn't create task defenition. Stopping scaler...")
-					os.Exit(1)
-				}
-			}
+		envsList, err := BuildEnvsFromImages(images)
+		if err != nil {
+			log.WithError(err).Error("Failed to build execution environments from images list!")
+			os.Exit(1)
 		}
 
+		hashRevisionMap := make(map[string]int64)
+		for _, env := range envsList {
+			dbTaskDefinition, err := RefreshTaskDefinition(env)
+			if err != nil {
+				log.WithField("family", env.TaskDefinitionFamily).WithError(err).Error("Couldn't create task defenition. Stopping scaler...")
+				os.Exit(1)
+			}
+
+			hashRevisionMap[dbTaskDefinition.OverrideDefinitionHash] = dbTaskDefinition.RevisionTag
+		}
+
+		err = definitionmap.WriteAll(hashRevisionMap, refreshInterval+time.Hour)
+		if err != nil {
+			log.WithError(err).Error("Failed to add hashRevision map to redis. Stopping scaler...")
+			os.Exit(1)
+		}
+
+		log.Info("Task definitions update finished")
+		definitionmap.SetRefreshDone()
+		time.Sleep(refreshInterval)
 	}
+}
+
+func BuildEnvsFromImages(images []string) ([]*environment.ExecutionEnvironment, error) {
+	envsList := make([]*environment.ExecutionEnvironment, 0)
+	for _, image := range images {
+		l := log.WithField("image", image)
+
+		capsList, err := capabilities.FromImage(image)
+		if err != nil {
+			l.WithError(err).Error("Failed to build capabilitites from image!")
+			return nil, err
+		}
+
+		for _, caps := range capsList {
+			env, err := environment.BuildFromCaps(caps)
+			if err != nil {
+				l.WithError(err).Error("Failed to build execution environment from capabilities!")
+				return nil, err
+			}
+
+			envsList = append(envsList, env)
+		}
+	}
+
+	return envsList, nil
 }
 
 func refreshIMDSV2Token() {
@@ -583,13 +543,12 @@ func main() {
 
 	go RefreshTaskDefinitions()
 
-	go ClearTasks()
+	shapingCh := make(chan interface{})
+	go ClearTasks(shapingCh)
 
 	go StopIdleTasks()
 
 	go StopCypressIdleTasks()
-
-	go AddTaskDefinitions()
 
 	if config.Conf.Imdsv2Enabled {
 		go refreshIMDSV2Token()
@@ -605,4 +564,9 @@ func main() {
 	if err != nil {
 		log.WithError(err).Error("Failed to unmark task definition refresh")
 	}
+
+	// wait for the end of a resources shaping
+	log.Info("Waiting for shaping...")
+	<-shapingCh
+	log.Info("Shaping performed")
 }

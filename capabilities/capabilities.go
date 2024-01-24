@@ -259,7 +259,7 @@ type Capabilities struct {
 	LaunchUUID    stringWrapper
 }
 
-func (c *Capabilities) ToMap() (newMap map[string]interface{}){
+func (c *Capabilities) ToMap() (newMap map[string]interface{}) {
 	data, err := json.Marshal(c)
 	if err != nil {
 		return
@@ -568,7 +568,7 @@ func FromImage(image string) ([]*Capabilities, error) {
 		"edge":    capsForLinux,
 
 		"windows-chrome": capsForWindows,
-		"windows-edge": capsForWindows,
+		"windows-edge":   capsForWindows,
 
 		"cypress-chrome":   capsForCypress,
 		"cypress-chromium": capsForCypress,

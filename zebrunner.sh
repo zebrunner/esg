@@ -3,7 +3,7 @@
 BASEDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${BASEDIR}" || exit
 
-graceful_timeout=600
+graceful_timeout=610
 networkName="e3s-network"
 
 
@@ -63,7 +63,7 @@ networkName="e3s-network"
     case "$1" in
       "")
         # stop services
-        docker compose -f "$BASEDIR/docker-compose.yaml" stop -t $graceful_timeout
+        docker compose -f "$BASEDIR/docker-compose.yaml" stop
         # stop postgres and redis
         docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" stop
         ;;
@@ -107,7 +107,7 @@ networkName="e3s-network"
     case "$1" in
       "")
         # down services
-        docker compose -f "$BASEDIR/docker-compose.yaml" down -t $graceful_timeout
+        docker compose -f "$BASEDIR/docker-compose.yaml" down
         # down postgres and redis
         docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" down
         ;;
