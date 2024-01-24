@@ -75,7 +75,7 @@ type Config struct {
 
 	SingleTenant  bool
 	Imdsv2Enabled bool
-	ExposedPort   int64
+	ExternalPort  int64
 }
 
 func init() {
@@ -122,7 +122,7 @@ func init() {
 
 	flag.BoolVar(&Conf.SingleTenant, "single-tenant", false, "Single tenant mode")
 	flag.BoolVar(&Conf.Imdsv2Enabled, "imdsv2-enabled", false, "Session-oriented method")
-	flag.Int64Var(&Conf.ExposedPort, "exposed-port", 0, "Router's external listening port")
+	flag.Int64Var(&Conf.ExternalPort, "external-port", 0, "Router's external listening port")
 }
 
 func (c *Config) ParseLogLevel() logrus.Level {

@@ -134,7 +134,7 @@ func registerInLoadBalancer() error {
 		return err
 	}
 
-	return service.RegisterTarget(*tg.TargetGroupArn, config.Conf.ExposedPort)
+	return service.RegisterTarget(*tg.TargetGroupArn, config.Conf.ExternalPort)
 }
 
 func deregisterFromLoadBalancer(ctx context.Context) error {
@@ -148,7 +148,7 @@ func deregisterFromLoadBalancer(ctx context.Context) error {
 		return err
 	}
 
-	return service.DeregisterTarget(*tg.TargetGroupArn, config.Conf.ExposedPort)
+	return service.DeregisterTarget(*tg.TargetGroupArn, config.Conf.ExternalPort)
 }
 
 func main() {
