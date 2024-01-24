@@ -107,9 +107,6 @@ fi
 if [ ! -z ${SINGLE_TENANT} ]; then
   CMD_ARGS="${CMD_ARGS} -single-tenant=${SINGLE_TENANT}"
 fi
-if [ ! -z ${IMDSV2_ENABLED} ]; then
-  CMD_ARGS="${CMD_ARGS} -imdsv2-enabled=${IMDSV2_ENABLED}"
-fi
 if [ ! -z ${EXTERNAL_PORT} ]; then
   CMD_ARGS="${CMD_ARGS} -external-port ${EXTERNAL_PORT}"
 fi

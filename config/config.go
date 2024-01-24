@@ -74,7 +74,6 @@ type Config struct {
 	ExcludeBrowsers string
 
 	SingleTenant  bool
-	Imdsv2Enabled bool
 	ExternalPort  int64
 }
 
@@ -121,7 +120,6 @@ func init() {
 	flag.StringVar(&Conf.ExcludeBrowsers, "exclude-browsers", "", "Pattern for excluding browsers from available images")
 
 	flag.BoolVar(&Conf.SingleTenant, "single-tenant", false, "Single tenant mode")
-	flag.BoolVar(&Conf.Imdsv2Enabled, "imdsv2-enabled", false, "Session-oriented method")
 	flag.Int64Var(&Conf.ExternalPort, "external-port", 0, "Router's external listening port")
 }
 

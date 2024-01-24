@@ -492,10 +492,11 @@ func refreshIMDSV2Token() {
 	for {
 		err := utils.RefreshIMDSV2Token()
 		if err != nil {
-			log.WithError(err).Error("Failed to generate IMDSV2 token")
-		} else {
-			log.Debug("Successfully generated IMDSV2 token")
+			log.WithError(err).Error("Failed to generate IMDSV2 token. Stopping scaler...")
+			os.Exit(1)
 		}
+
+		log.Debug("Successfully generated IMDSV2 token")
 		time.Sleep(2*time.Hour + 30*time.Minute)
 	}
 }
@@ -550,9 +551,7 @@ func main() {
 
 	go StopCypressIdleTasks()
 
-	if config.Conf.Imdsv2Enabled {
-		go refreshIMDSV2Token()
-	}
+	go refreshIMDSV2Token()
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
