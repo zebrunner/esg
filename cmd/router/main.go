@@ -115,10 +115,11 @@ func refreshIMDSV2Token() {
 	for {
 		err := utils.RefreshIMDSV2Token()
 		if err != nil {
-			log.WithError(err).Error("Failed to generate IMDSV2 token")
-		} else {
-			log.Debug("Successfully generated IMDSV2 token")
+			log.WithError(err).Error("Failed to generate IMDSV2 token. Stopping router...")
+			os.Exit(1)
 		}
+
+		log.Debug("Successfully generated IMDSV2 token")
 		time.Sleep(2*time.Hour + 30*time.Minute)
 	}
 }
@@ -192,9 +193,7 @@ func main() {
 	}
 	service.AwsSess = aws
 
-	if config.Conf.Imdsv2Enabled {
-		go refreshIMDSV2Token()
-	}
+	go refreshIMDSV2Token()
 
 	for {
 		if definitionmap.IsRefreshDone() {
