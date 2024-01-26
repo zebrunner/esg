@@ -46,20 +46,6 @@ func DescribeTargetGroup(elbArn string) (*elbv2.TargetGroup, error) {
 	return describeTGOutput.TargetGroups[0], nil
 }
 
-func DescribeTargets(tagetGroupArn string) ([]*elbv2.TargetHealthDescription, error) {
-	svc := elbv2.New(AwsSess)
-	describeTargetHealthInput := elbv2.DescribeTargetHealthInput{
-		TargetGroupArn: &tagetGroupArn,
-	}
-
-	describeTargetHealthOutput, err := utils.RetryThrottling(svc.DescribeTargetHealth)(&describeTargetHealthInput)
-	if err != nil {
-		return nil, err
-	}
-
-	return describeTargetHealthOutput.TargetHealthDescriptions, nil
-}
-
 func RegisterTarget(tagetGroupArn string, port int64) error {
 	instanceId, err := utils.GetMetadata(utils.InstanceIdItem)
 	if err != nil {
