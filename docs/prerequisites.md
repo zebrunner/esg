@@ -46,11 +46,11 @@
           "ecs:DescribeCapacityProviders"
       ],
       "Resource": [
-          "arn:aws:ecs:us-east-1:659932254483:container-instance/esg-${env}/*",
-          "arn:aws:ecs:us-east-1:659932254483:task/esg-${env}/*",
-          "arn:aws:ecs:us-east-1:659932254483:cluster/esg-${env}",
-          "arn:aws:ecs:us-east-1:659932254483:task-definition/${env}-*",
-          "arn:aws:ecs:us-east-1:659932254483:capacity-provider/esg-${env}-*"
+          "arn:aws:ecs:${Region}:${Account}:container-instance/esg-${env}/*",
+          "arn:aws:ecs:${Region}:${Account}:task/esg-${env}/*",
+          "arn:aws:ecs:${Region}:${Account}:cluster/esg-${env}",
+          "arn:aws:ecs:${Region}:${Account}:task-definition/${env}-*",
+          "arn:aws:ecs:${Region}:${Account}:capacity-provider/esg-${env}-*"
       ]
   },
   {
@@ -60,7 +60,7 @@
           "autoscaling:UpdateAutoScalingGroup",
           "autoscaling:TerminateInstanceInAutoScalingGroup"
       ],
-      "Resource": "arn:aws:autoscaling:us-east-1:659932254483:autoScalingGroup:*:autoScalingGroupName/esg-${env}-*"
+      "Resource": "arn:aws:autoscaling:${Region}:${Account}:autoScalingGroup:*:autoScalingGroupName/esg-${env}-*"
   },
   {
       "Sid": "ELB",
@@ -69,7 +69,7 @@
           "elasticloadbalancing:RegisterTargets",
           "elasticloadbalancing:DeregisterTargets"
       ],
-      "Resource": "arn:aws:elasticloadbalancing:us-east-1:659932254483:targetgroup/esg-${env}-*"
+      "Resource": "arn:aws:elasticloadbalancing:${Region}:${Account}:targetgroup/esg-${env}-*"
   },
   {
       "Sid": "S3",
