@@ -297,25 +297,6 @@ func TerminateInstancesInASG(ec2InstanceIdPtrs []*string, decrementDesiredCapaci
 	return nil
 }
 
-// TerminateInstances need's permissons for performing ec2Svc.TerminateInstances call
-func TerminateInstances(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) error {
-	// ec2 constraints: Up to 1000 instance IDs. We recommend breaking up this request into smaller batches
-	// paginating only up to 100 instance IDs
-	pages := paginate(ec2InstanceIdPtrs, 100)
-	for _, page := range pages {
-		input := &ec2.TerminateInstancesInput{
-			InstanceIds: page,
-		}
-
-		_, err := utils.RetryThrottling(ec2Svc.TerminateInstances)(input)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 func paginate[T interface{}](l []T, size int) [][]T {
 	numPages := int(math.Ceil(float64(len(l)) / float64(size)))
 	pages := make([][]T, numPages)
