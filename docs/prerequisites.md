@@ -11,10 +11,9 @@
 
 * Installed Docker v19+
 * Installed Docker compose plugin v2+
-* [Optional] Installed jq for ./scripts support
-* [Optional] Installed aws cli for ./scripts support
+* [Optional] Installed jq and aws cli for ./scripts support
 
-### Role's policy document:
+### Attached IAM Role/Policies:
 
 ```json
 "Document": {
@@ -101,6 +100,6 @@
 * Instance type c5a.2xlarge +
 * Configured IMDSv2 (HttpPutResponseHopLimit=1)
 
-### Role's policy
+### Attached IAM Role/Policies:
 
 * AmazonEC2ContainerServiceforEC2Role
