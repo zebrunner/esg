@@ -11,39 +11,88 @@
 
 * Installed Docker v19+
 * Installed Docker compose plugin v2+
-* (Optinal) Installed jq for ./scripts support
-* (Optinal) Installed aws cli for ./scripts support
+* [Optional] Installed jq for ./scripts support
+* [Optional] Installed aws cli for ./scripts support
 
-### Role's actions
+### Role's policy document:
 
-* S3 actions
-  * ListBucket
-  * GetObject
-* ECS actions
-  * RunTask
-  * ListTasks
-  * ListContainerInstances
-  * RegisterTaskDefinition
-  * StopTask
-  * DescribeContainerInstances
-  * DescribeTasks
-  * DescribeClusters
-  * DescribeCapacityProviders
-* EC2 actions 
-  * DescribeInstances
-  * DescribeInstanceTypes
-  * DescribeInstanceStatus
-* ELB actions
-  * DescribeLoadBalancer
-  * DescribeTargetGroups
-  * DeregisterTargets
-  * RegisterTargets
-* Autoscaling actions
-  * DescribeAutoScalingGroups
-  * UpdateAutoScalingGroup
-  * TerminateInstanceInAutoScalingGroup
-* IAM actions
-  * passRole
+```json
+"Document": {
+  {
+      "Sid": "WithoutConstraints",
+      "Effect": "Allow",
+      "Action": [
+          "ecs:RegisterTaskDefinition",
+          "ecs:ListTasks",
+          "ec2:DescribeInstances",
+          "ec2:DescribeInstanceStatus",
+          "ec2:DescribeInstanceTypes",
+          "elasticloadbalancing:DescribeLoadBalancers",
+          "elasticloadbalancing:DescribeTargetGroups",
+          "autoscaling:DescribeAutoScalingGroups"
+      ],
+      "Resource": "*"
+  },
+  {
+      "Sid": "ECS",
+      "Effect": "Allow",
+      "Action": [
+          "ecs:DescribeContainerInstances",
+          "ecs:DescribeTasks",
+          "ecs:StopTask",
+          "ecs:DescribeClusters",
+          "ecs:ListContainerInstances",
+          "ecs:RunTask",
+          "ecs:DescribeCapacityProviders"
+      ],
+      "Resource": [
+          "arn:aws:ecs:us-east-1:659932254483:container-instance/esg-${env}/*",
+          "arn:aws:ecs:us-east-1:659932254483:task/esg-${env}/*",
+          "arn:aws:ecs:us-east-1:659932254483:cluster/esg-${env}",
+          "arn:aws:ecs:us-east-1:659932254483:task-definition/${env}-*",
+          "arn:aws:ecs:us-east-1:659932254483:capacity-provider/esg-${env}-*"
+      ]
+  },
+  {
+      "Sid": "Autoscaling",
+      "Effect": "Allow",
+      "Action": [
+          "autoscaling:UpdateAutoScalingGroup",
+          "autoscaling:TerminateInstanceInAutoScalingGroup"
+      ],
+      "Resource": "arn:aws:autoscaling:us-east-1:659932254483:autoScalingGroup:*:autoScalingGroupName/esg-${env}-*"
+  },
+  {
+      "Sid": "ELB",
+      "Effect": "Allow",
+      "Action": [
+          "elasticloadbalancing:RegisterTargets",
+          "elasticloadbalancing:DeregisterTargets"
+      ],
+      "Resource": "arn:aws:elasticloadbalancing:us-east-1:659932254483:targetgroup/esg-${env}-*"
+  },
+  {
+      "Sid": "S3",
+      "Effect": "Allow",
+      "Action": [
+          "s3:ListBucket",
+          "s3:GetObject"
+      ],
+      "Resource": [
+          "arn:aws:s3:::zebrunner.${env}-engine",
+          "arn:aws:s3:::zebrunner.${env}-engine/*"
+      ]
+  },
+  {
+      "Sid": "IAM",
+      "Effect": "Allow",
+      "Action": [
+          "iam:passRole"
+      ],
+      "Resource": "arn:aws:iam::659932254483:role/esg-${env}-task-role"
+  }
+}
+```
 
 ## Agent instance
 
@@ -52,6 +101,6 @@
 * Instance type c5a.2xlarge +
 * Configured IMDSv2 (HttpPutResponseHopLimit=1)
 
-### Role's policies
+### Role's policy
 
 * AmazonEC2ContainerServiceforEC2Role
