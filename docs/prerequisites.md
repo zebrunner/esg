@@ -88,7 +88,7 @@
       "Action": [
           "iam:passRole"
       ],
-      "Resource": "arn:aws:iam::659932254483:role/esg-${env}-task-role"
+      "Resource": "arn:aws:iam::${Account}:role/esg-${env}-task-role"
   }
 }
 ```
@@ -102,4 +102,55 @@
 
 ### Attached IAM Role/Policies:
 
-* AmazonEC2ContainerServiceforEC2Role
+#### Agent role
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "WithoutConstraints",
+            "Effect": "Allow",
+            "Action": [
+                "ecs:DiscoverPollEndpoint",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "ECS",
+            "Effect": "Allow",
+            "Action": [
+                "ecs:DeregisterContainerInstance",
+                "ecs:RegisterContainerInstance",
+                "ecs:Submit*",
+                "ecs:StartTelemetrySession",
+                "ecs:UpdateContainerInstancesState",
+                "ecs:Poll"
+            ],
+            "Resource": [
+                "arn:aws:ecs:${Region}:${Account}:cluster/esg-${env}",
+                "arn:aws:ecs:${Region}:${Account}:container-instance/esg-${env}/*"
+            ]
+        }
+    ]
+}
+```
+
+#### Task role
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "s3:PutObject"
+            ],
+            "Resource": [
+                "arn:aws:s3:::zebrunner.${env}-engine/*"
+            ]
+        }
+    ]
+}
+```
