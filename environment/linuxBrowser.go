@@ -93,7 +93,7 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 		memory:       recorderMemory,
 		Privileged:   false,
 		Essential:    false,
-		ReadonlyRoot: true,
+		ReadonlyRoot: false,
 		Env: map[string]string{
 			"ROUTER_UUID":          routerUUID,
 			"LOG_DIR":              logDir,

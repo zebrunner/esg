@@ -161,7 +161,7 @@ func buildCypress(workspace string, routerUUID string, caps *capabilities.Capabi
 		memory:       2048,
 		Privileged:   false,
 		Essential:    false,
-		ReadonlyRoot: true,
+		ReadonlyRoot: false,
 		Env: map[string]string{
 			"ENABLE_VIDEO":         "true",
 			"ENABLE_REALTIME_LOGS": "true",
