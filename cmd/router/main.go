@@ -115,12 +115,41 @@ func refreshIMDSV2Token() {
 	for {
 		err := utils.RefreshIMDSV2Token()
 		if err != nil {
-			log.WithError(err).Error("Failed to generate IMDSV2 token")
-		} else {
-			log.Debug("Successfully generated IMDSV2 token")
+			log.WithError(err).Error("Failed to generate IMDSV2 token. Stopping router...")
+			os.Exit(1)
 		}
+
+		log.Debug("Successfully generated IMDSV2 token")
 		time.Sleep(2*time.Hour + 30*time.Minute)
 	}
+}
+
+func registerInLoadBalancer() error {
+	lb, err := service.DescribeLoadBalancer(config.Conf.AwsAlbName)
+	if err != nil {
+		return err
+	}
+
+	tg, err := service.DescribeTargetGroup(*lb.LoadBalancerArn)
+	if err != nil {
+		return err
+	}
+
+	return service.RegisterTarget(*tg.TargetGroupArn, config.Conf.ExternalPort)
+}
+
+func deregisterFromLoadBalancer(ctx context.Context) error {
+	lb, err := service.DescribeLoadBalancer(config.Conf.AwsAlbName)
+	if err != nil {
+		return err
+	}
+
+	tg, err := service.DescribeTargetGroup(*lb.LoadBalancerArn)
+	if err != nil {
+		return err
+	}
+
+	return service.DeregisterTarget(*tg.TargetGroupArn, config.Conf.ExternalPort)
 }
 
 func main() {
@@ -164,11 +193,7 @@ func main() {
 	}
 	service.AwsSess = aws
 
-	if config.Conf.Imdsv2Enabled {
-		go refreshIMDSV2Token()
-	}
-
-	router := CreateRouter()
+	go refreshIMDSV2Token()
 
 	for {
 		if definitionmap.IsRefreshDone() {
@@ -183,25 +208,44 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
-	log.Infof("Listening on %s", listen)
 	srv := &http.Server{
 		Addr:    listen,
-		Handler: router,
+		Handler: CreateRouter(),
 	}
 
 	go func() {
 		// service connections
+		log.Infof("Listening on %s", listen)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.WithError(err).Fatal("Failed to start router")
 		}
 	}()
 
+	err = registerInLoadBalancer()
+	if err != nil {
+		log.WithError(err).Fatal("Failed to append target to the elb target group! Stopping router...")
+		os.Exit(1)
+	} else {
+		log.Info("registered target in alb")
+	}
+
 	<-quit
 
 	log.Info("Shutdown router ...")
-
-	ctx, cancel := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout+5*time.Second)
 	defer cancel()
+
+	err = deregisterFromLoadBalancer(ctx)
+	if err != nil {
+		log.WithError(err).Fatal("Failed to detach target from the elb target group!")
+	} else {
+		// wait until alb actually stops distributing requests to that specific target
+		// average time is between 5 to 15 seconds
+		time.Sleep(25 * time.Second)
+		log.Info("detached target from alb")
+	}
+
+	log.Info("finalizing connections...")
 	if err := srv.Shutdown(ctx); err != nil {
 		log.WithError(err).Error("Failed to shutdown correctly")
 	}

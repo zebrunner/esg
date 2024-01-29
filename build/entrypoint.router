@@ -47,6 +47,9 @@ fi
 if [ ! -z ${AWS_SECRET_ACCESS_KEY} ]; then
   CMD_ARGS="${CMD_ARGS} -aws-secret-access-key ${AWS_SECRET_ACCESS_KEY}"
 fi
+if [ ! -z ${AWS_TASK_ROLE} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-task-role-arn ${AWS_TASK_ROLE}"
+fi
 if [ ! -z ${AWS_ELASTIC_CACHE} ]; then
   CMD_ARGS="${CMD_ARGS} -aws-elastic-cache ${AWS_ELASTIC_CACHE}"
 fi
@@ -104,8 +107,11 @@ fi
 if [ ! -z ${SINGLE_TENANT} ]; then
   CMD_ARGS="${CMD_ARGS} -single-tenant=${SINGLE_TENANT}"
 fi
-if [ ! -z ${IMDSV2_ENABLED} ]; then
-  CMD_ARGS="${CMD_ARGS} -imdsv2-enabled=${IMDSV2_ENABLED}"
+if [ ! -z ${EXTERNAL_PORT} ]; then
+  CMD_ARGS="${CMD_ARGS} -external-port ${EXTERNAL_PORT}"
+fi
+if [ ! -z ${AWS_ALB_NAME} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-alb-name ${AWS_ALB_NAME}"
 fi
 
 echo "CMD_ARGS: $CMD_ARGS"
