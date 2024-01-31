@@ -21,7 +21,7 @@ func buildWindowsBrowser(workspace string, routerUUID string, caps *capabilities
 	if err != nil {
 		return nil, err
 	}
-	logDir := "C:\\selenium"
+	logDir := "C:\\Users\\ContainerAdministrator\\Downloads"
 	logVolume := "log"
 
 	log.Trace("caps: ", caps)

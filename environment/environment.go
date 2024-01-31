@@ -37,7 +37,7 @@ const (
 	entrypointImage      = imageRepo + "entrypoint:2.4"
 	mavenImage           = imageRepo + "m2-repo-carina:1.5"
 	winUploaderImage     = imageRepo + "uploader:1.0-win"
-	winRecorderImage     = imageRepo + "recorder:1.0-win"
+	winRecorderImage     = imageRepo + "recorder:1.1-win"
 )
 
 const (
