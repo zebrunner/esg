@@ -55,7 +55,7 @@ func ClusterStatus(c *gin.Context) {
 
 func ListDrivers(c *gin.Context) {
 	// TODO: Refactor code: code must be split in few different functions
-	images, err := utils.ListBrowsers()
+	images, err := utils.ListImages()
 	if err != nil {
 		log.WithError(err).Warn("Failed to get browser list")
 		c.Error(utils.NotFoundApiErr("failed to get browser list")).SetType(gin.ErrorTypePublic)

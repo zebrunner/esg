@@ -26,5 +26,6 @@ Suitable for personal usage and in big clusters:
 
 ### Documentation 
 
+* [Prerequisites](docs/prerequisites.md)
 * [Capabilities](docs/capabilities.md)
 * [Errors](docs/errors.md)
