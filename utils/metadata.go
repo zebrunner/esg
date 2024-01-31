@@ -9,7 +9,9 @@ import (
 type metadataItem string
 
 var (
-	InstanceIdItem metadataItem = "instance-id"
+	InstanceIdItem  metadataItem = "instance-id"
+	PrivateIpv4Item metadataItem = "local-ipv4"
+	Ipv6Item        metadataItem = "ipv6"
 )
 
 const (
@@ -18,7 +20,7 @@ const (
 )
 
 func GetMetadata(item metadataItem) (string, error) {
-	tokenBytes, err := getToken("10")
+	tokenBytes, err := getToken("15")
 	if err != nil {
 		return "", err
 	}
