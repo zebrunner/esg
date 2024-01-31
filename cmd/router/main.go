@@ -124,32 +124,40 @@ func refreshIMDSV2Token() {
 	}
 }
 
-func registerInLoadBalancer() error {
-	lb, err := service.DescribeLoadBalancer(config.Conf.AwsAlbName)
+func registerTargetInTargetGroup(targetGroup string, port int64) error {
+	tg, err := service.DescribeTargetGroup(targetGroup)
 	if err != nil {
 		return err
 	}
 
-	tg, err := service.DescribeTargetGroup(*lb.LoadBalancerArn)
+	err = service.RegisterTarget(tg, port)
 	if err != nil {
 		return err
 	}
 
-	return service.RegisterTarget(*tg.TargetGroupArn, config.Conf.ExternalPort)
+	// wait until alb actually starts distributing requests to that specific target
+	// average time is between 5 to 15 seconds
+	time.Sleep(25 * time.Second)
+
+	return nil
 }
 
-func deregisterFromLoadBalancer(ctx context.Context) error {
-	lb, err := service.DescribeLoadBalancer(config.Conf.AwsAlbName)
+func deregisterTargetFromTargetGroup(targetGroup string, port int64) error {
+	tg, err := service.DescribeTargetGroup(targetGroup)
 	if err != nil {
 		return err
 	}
 
-	tg, err := service.DescribeTargetGroup(*lb.LoadBalancerArn)
+	err = service.DeregisterTarget(tg, port)
 	if err != nil {
 		return err
 	}
 
-	return service.DeregisterTarget(*tg.TargetGroupArn, config.Conf.ExternalPort)
+	// wait until alb actually stops distributing requests to that specific target
+	// average time is between 5 to 15 seconds
+	time.Sleep(25 * time.Second)
+
+	return nil
 }
 
 func main() {
@@ -221,13 +229,12 @@ func main() {
 		}
 	}()
 
-	err = registerInLoadBalancer()
+	err = registerTargetInTargetGroup(config.Conf.AwsTargetGroup, config.Conf.ExternalPort)
 	if err != nil {
-		log.WithError(err).Fatal("Failed to append target to the elb target group! Stopping router...")
+		log.WithFields(log.Fields{"port": config.Conf.ExternalPort, "targetGroup": config.Conf.AwsTargetGroup}).WithError(err).Fatal("Failed to append target to the elb target group! Stopping router...")
 		os.Exit(1)
-	} else {
-		log.Info("registered target in alb")
 	}
+	log.WithFields(log.Fields{"port": config.Conf.ExternalPort, "targetGroup": config.Conf.AwsTargetGroup}).Info("Registered target in target group")
 
 	<-quit
 
@@ -235,15 +242,12 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout+5*time.Second)
 	defer cancel()
 
-	err = deregisterFromLoadBalancer(ctx)
+	err = deregisterTargetFromTargetGroup(config.Conf.AwsTargetGroup, config.Conf.ExternalPort)
 	if err != nil {
-		log.WithError(err).Fatal("Failed to detach target from the elb target group!")
-	} else {
-		// wait until alb actually stops distributing requests to that specific target
-		// average time is between 5 to 15 seconds
-		time.Sleep(25 * time.Second)
-		log.Info("detached target from alb")
+		log.WithFields(log.Fields{"port": config.Conf.ExternalPort, "targetGroup": config.Conf.AwsTargetGroup}).WithError(err).Fatal("Failed to detach target from the elb target group! Stopping router...")
+		os.Exit(1)
 	}
+	log.WithFields(log.Fields{"port": config.Conf.ExternalPort, "targetGroup": config.Conf.AwsTargetGroup}).Info("Deregistered target from target group")
 
 	log.Info("finalizing connections...")
 	if err := srv.Shutdown(ctx); err != nil {

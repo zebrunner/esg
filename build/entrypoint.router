@@ -110,8 +110,8 @@ fi
 if [ ! -z ${EXTERNAL_PORT} ]; then
   CMD_ARGS="${CMD_ARGS} -external-port ${EXTERNAL_PORT}"
 fi
-if [ ! -z ${AWS_ALB_NAME} ]; then
-  CMD_ARGS="${CMD_ARGS} -aws-alb-name ${AWS_ALB_NAME}"
+if [ ! -z ${AWS_TARGET_GROUP} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-target-group ${AWS_TARGET_GROUP}"
 fi
 
 echo "CMD_ARGS: $CMD_ARGS"
