@@ -152,32 +152,28 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 
 	containers := []*Container{&browserContainer, &recorderContainer, &uploaderContainer}
 	if caps.Mitm {
-		//TODO: handle resolution and video screen size
-		// to generate har we have to enable regular dump.mitm output by -w option and place it before har_dump.py!
-		mitmCommand := "mitmdump -w " + logDir + "/dump.mitm"
-		if caps.MitmArgs != "" {
-			//append args only if mitm=true
-			mitmCommand = mitmCommand + " " + caps.MitmArgs.ToPrimitive()
-		}
-		// --quiet is a must to run without interactive console
-		mitmCommand = mitmCommand + " --quiet"
-
 		mitmContainer := Container{
 			Name:       "mitm",
 			Image:      mitmImage,
 			Privileged: false,
 			Essential:  false,
 			Env: map[string]string{
-				"LOG_DIR": logDir,
-				"COMMAND": mitmCommand,
+				"LOG_DIR":    logDir,
+				"PROXY_ARGS": caps.MitmArgs.ToPrimitive(),
 			},
 			Ports: map[string]portMapping{
-				"fileserverPort": {fileserverPort, 0},
+				"fileserverPort":   {fileserverPort, 0},
+				"proxyHandlerPort": {proxyHandlerPort, 0},
 			},
 			Mounts:     []string{logVolume},
 			Command:    []string{"-c", "/entrypoint.sh"},
 			EntryPoint: []string{"/bin/sh"},
 		}
+
+		if caps.MitmType.ToPrimitive() != "" {
+			mitmContainer.Env["PROXY_TYPE"] = caps.MitmType.ToPrimitive()
+		}
+
 		mitmContainer.SetCpu(&caps.MitmCpu, 512, conf.MaxCpu)
 		mitmContainer.SetMemory(&caps.MitmMemory, 512, conf.MaxMemory)
 
@@ -214,6 +210,10 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 	if caps.BrowserName == "firefox" {
 		environment.Network.Endpoints["driver"].Path = "/wd/hub/"
 		environment.Network.Endpoints["healthcheck"].Path = "/wd/hub/"
+	}
+
+	if caps.Mitm {
+		environment.Network.Endpoints["proxyHandlerPort"] = &Endpoint{ContainerPort: proxyHandlerPort, HostPort: 0, Path: "/"}
 	}
 
 	return &environment, nil

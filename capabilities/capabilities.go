@@ -71,6 +71,31 @@ func (s *stringWrapper) From(value string) {
 	*s = stringWrapper(value)
 }
 
+type mitmTypeWrapper string
+
+func (s *mitmTypeWrapper) Validate(key string, value interface{}) string {
+	errStr := ""
+	if valueStr, ok := value.(string); ok {
+		if valueStr == "full" || valueStr == "simple" {
+			s.From(valueStr)
+		} else {
+			errStr = malformedError(valueStr, "mitmType", "Bad type specified. Availiable values: full, simple").Error()
+		}
+	} else {
+		errStr = typeError(value, key, "string")
+	}
+
+	return errStr
+}
+
+func (s *mitmTypeWrapper) ToPrimitive() string {
+	return string(*s)
+}
+
+func (s *mitmTypeWrapper) From(value string) {
+	*s = mitmTypeWrapper(value)
+}
+
 type boolWrapper bool
 
 func (b *boolWrapper) Validate(key string, value interface{}) string {
@@ -245,8 +270,9 @@ type Capabilities struct {
 	Cpu    int64Wrapper
 	Memory int64Wrapper
 	//Mitm proxy caps
-	Mitm       boolWrapper   //enabl mitm with har dump and output generation for mitmweb
-	MitmArgs   stringWrapper // list of arguments for mitmdump command. Important: --verbose and --quiet will be appended forcibly
+	Mitm       boolWrapper // enable mitm with har dump and output generation for mitmweb
+	MitmType   mitmTypeWrapper
+	MitmArgs   stringWrapper
 	MitmCpu    int64Wrapper
 	MitmMemory int64Wrapper
 
@@ -441,6 +467,7 @@ func (c *Capabilities) ParseRequestCaps(reqCaps map[string]interface{}) error {
 		"memory": &c.Memory,
 
 		"mitm":       &c.Mitm,
+		"mitmtype":   &c.MitmType,
 		"mitmargs":   &c.MitmArgs,
 		"mitmcpu":    &c.MitmCpu,
 		"mitmmemory": &c.MitmMemory,
