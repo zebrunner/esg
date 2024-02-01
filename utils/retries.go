@@ -27,7 +27,7 @@ func RetryThrottling[T, R interface{}](executeFunc func(T) (R, error)) func(T) (
 					// starting from 1 sec to 10 secs
 					time.Sleep(time.Duration(i+1) * time.Second)
 				} else if strings.Contains(err.Error(), "ClusterNotFoundException") || strings.Contains(err.Error(), "NoCredentialProviders") {
-					l.WithError(err).Error("Stopping container because of exception")
+					l.WithError(err).Error("Received fatal error. Stopping container...")
 					os.Exit(1)
 				} else {
 					break

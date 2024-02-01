@@ -30,11 +30,15 @@ import (
 	"github.com/zebrunner/esg/zebrunner"
 )
 
+func exitWithError(err error, message string, l *log.Entry) {
+	l.WithField("message", message).WithError(err).Fatal("Stopping scaler...")
+	os.Exit(1)
+}
+
 func ClearTasks(shapingCh chan<- interface{}) {
 	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
 	if err != nil {
-		log.WithError(err).Error("Failed to create AWS session! Stopping scaler...")
-		os.Exit(1)
+		exitWithError(err, "Failed to create AWS session", &log.Entry{})
 	}
 
 	svc := ecs.New(session)
@@ -319,8 +323,7 @@ func StopIdleTasks() {
 func StopCypressIdleTasks() {
 	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
 	if err != nil {
-		log.WithError(err).Error("Failed to create AWS session! Stopping scaler...")
-		os.Exit(1)
+		exitWithError(err, "Failed to create AWS session", &log.Entry{})
 	}
 
 	svc := ecs.New(session)
@@ -430,22 +433,19 @@ func RefreshTaskDefinitions() {
 	for {
 		images, err := utils.ListImages()
 		if err != nil {
-			log.WithError(err).Error("Failed to get images list!")
-			os.Exit(1)
+			exitWithError(err, "Failed to get images list", &log.Entry{})
 		}
 
 		envsList, err := BuildEnvsFromImages(images)
 		if err != nil {
-			log.WithError(err).Error("Failed to build execution environments from images list!")
-			os.Exit(1)
+			exitWithError(err, "Failed to build execution environments from images list", &log.Entry{})
 		}
 
 		hashRevisionMap := make(map[string]int64)
 		for _, env := range envsList {
 			dbTaskDefinition, err := RefreshTaskDefinition(env)
 			if err != nil {
-				log.WithField("family", env.TaskDefinitionFamily).WithError(err).Error("Couldn't create task defenition. Stopping scaler...")
-				os.Exit(1)
+				exitWithError(err, "Couldn't create task defenition", log.WithField("family", env.TaskDefinitionFamily))
 			}
 
 			hashRevisionMap[dbTaskDefinition.OverrideDefinitionHash] = dbTaskDefinition.RevisionTag
@@ -453,8 +453,7 @@ func RefreshTaskDefinitions() {
 
 		err = definitionmap.WriteAll(hashRevisionMap, refreshInterval+time.Hour)
 		if err != nil {
-			log.WithError(err).Error("Failed to add hashRevision map to redis. Stopping scaler...")
-			os.Exit(1)
+			exitWithError(err, "Failed to add hashRevision map to redis", &log.Entry{})
 		}
 
 		log.Info("Task definitions update finished")
@@ -492,8 +491,7 @@ func refreshIMDSV2Token() {
 	for {
 		err := utils.RefreshIMDSV2Token()
 		if err != nil {
-			log.WithError(err).Error("Failed to generate IMDSV2 token. Stopping scaler...")
-			os.Exit(1)
+			exitWithError(err, "Failed to generate IMDSV2 token", &log.Entry{})
 		}
 
 		log.Debug("Successfully generated IMDSV2 token")
@@ -508,23 +506,20 @@ func main() {
 
 	awsSess, err := service.InitAws()
 	if err != nil {
-		log.WithError(err).Fatal("Failed to init aws session! Stopping scaler...")
-		os.Exit(1)
+		exitWithError(err, "Failed to init aws session", &log.Entry{})
 	}
 	service.AwsSess = awsSess
 
 	err = config.InitDBConnection(config.Conf.DbConnectionString)
 	if err != nil {
-		log.WithError(err).Fatal("Failed to init DB client! Stopping router...")
-		os.Exit(1)
+		exitWithError(err, "Failed to init DB client", &log.Entry{})
 	}
 
 	defer config.DbConnection.Close()
 
 	err = config.InitCache()
 	if err != nil {
-		log.WithError(err).Fatal("Failed to init redis connection! Stopping scaler...")
-		os.Exit(1)
+		exitWithError(err, "Failed to init redis connection", &log.Entry{})
 	}
 
 	defer config.RedisSessionsClient.Close()
@@ -539,7 +534,10 @@ func main() {
 	// scaler don't need ResourceWorker
 	// resourcesToAllocate.InitResourceWorker()
 
-	service.InitScalingData()
+	err = service.InitScalingData()
+	if err != nil {
+		exitWithError(err, "Failed to init scaling data", &log.Entry{})
+	}
 	service.StartScalers()
 
 	go RefreshTaskDefinitions()
