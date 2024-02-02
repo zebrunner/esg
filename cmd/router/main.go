@@ -30,11 +30,6 @@ var (
 	listen string
 )
 
-func exitWithError(err error, message string, l *log.Entry) {
-	l.WithField("message", message).WithError(err).Fatal("Stopping router...")
-	os.Exit(1)
-}
-
 func init() {
 	flag.StringVar(&listen, "listen", ":4444", "Network address to accept connections")
 }
@@ -128,7 +123,7 @@ func refreshIMDSV2Token() {
 	for {
 		err := utils.RefreshIMDSV2Token()
 		if err != nil {
-			exitWithError(err, "Failed to generate IMDSV2 token", &log.Entry{})
+			utils.ExitWithError(err, "Failed to generate IMDSV2 token", log.NewEntry(log.StandardLogger()))
 		}
 
 		log.Debug("Successfully generated IMDSV2 token")
@@ -183,14 +178,14 @@ func main() {
 
 	err := config.InitDBConnection(config.Conf.DbConnectionString)
 	if err != nil {
-		exitWithError(err, "Failed to init DB client", &log.Entry{})
+		utils.ExitWithError(err, "Failed to init DB client", log.NewEntry(log.StandardLogger()))
 	}
 
 	defer config.DbConnection.Close()
 
 	err = config.InitCache()
 	if err != nil {
-		exitWithError(err, "Failed to init Redis client", &log.Entry{})
+		utils.ExitWithError(err, "Failed to init Redis client", log.NewEntry(log.StandardLogger()))
 	}
 
 	defer config.RedisSessionsClient.Close()
@@ -206,7 +201,7 @@ func main() {
 
 	aws, err := service.InitAws()
 	if err != nil {
-		exitWithError(err, "Failed to start aws session", &log.Entry{})
+		utils.ExitWithError(err, "Failed to start aws session", log.NewEntry(log.StandardLogger()))
 	}
 	service.AwsSess = aws
 
@@ -241,10 +236,11 @@ func main() {
 	targetGrouLog := log.WithFields(log.Fields{"port": config.Conf.ExternalPort, "targetGroup": config.Conf.AwsTargetGroup})
 	err = registerTargetInTargetGroup(config.Conf.AwsTargetGroup, config.Conf.ExternalPort)
 	if err != nil {
-		exitWithError(err, "Failed to append target to the elb target group", targetGrouLog)
+		utils.ExitWithError(err, "Failed to append target to the elb target group", targetGrouLog)
 	}
 	targetGrouLog.Info("Registered target in target group")
 
+	log.Info("Service started")
 	<-quit
 
 	log.Info("Shutdown router ...")

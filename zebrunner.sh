@@ -3,7 +3,7 @@
 BASEDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${BASEDIR}" || exit
 
-graceful_timeout=610
+graceful_timeout="-t 610"
 networkName="e3s-network"
 
 
@@ -60,10 +60,11 @@ networkName="e3s-network"
   }
 
   stop() {
+    docker_flags=$3
     case "$1" in
       "")
         # stop services
-        docker compose -f "$BASEDIR/docker-compose.yaml" stop
+        docker compose -f "$BASEDIR/docker-compose.yaml" stop $docker_flags
         # stop postgres and redis
         docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" stop
         ;;
@@ -85,9 +86,9 @@ networkName="e3s-network"
       service)
         service_name=$2
         if [ -z "$service_name" ]; then
-            docker compose -f "$BASEDIR/docker-compose.yaml" stop -t $graceful_timeout
+            docker compose -f "$BASEDIR/docker-compose.yaml" stop -t $docker_flags
         else
-          docker compose -f "$BASEDIR/docker-compose.yaml" stop -t $graceful_timeout "$service_name"
+          docker compose -f "$BASEDIR/docker-compose.yaml" stop -t $docker_flags "$service_name"
           ret=$?
           if [ $ret -ne 0 ]; then
             echo_warning "Failed to stop service $service_name"
@@ -104,10 +105,11 @@ networkName="e3s-network"
   }
 
   down() {
+    docker_flags=$3
     case "$1" in
       "")
         # down services
-        docker compose -f "$BASEDIR/docker-compose.yaml" down
+        docker compose -f "$BASEDIR/docker-compose.yaml" down $docker_flags
         # down postgres and redis
         docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" down
         ;;
@@ -129,9 +131,9 @@ networkName="e3s-network"
       service)
         service_name=$2
         if [ -z "$service_name" ]; then
-            docker compose -f "$BASEDIR/docker-compose.yaml" down -t $graceful_timeout
+            docker compose -f "$BASEDIR/docker-compose.yaml" down $docker_flags
         else
-          docker compose -f "$BASEDIR/docker-compose.yaml" down -t $graceful_timeout "$service_name"
+          docker compose -f "$BASEDIR/docker-compose.yaml" down $docker_flags "$service_name"
           ret=$?
           if [ $ret -ne 0 ]; then
             echo_warning "Failed to down service $service_name"
@@ -193,12 +195,12 @@ networkName="e3s-network"
         if [ -z "$service_name" ]; then
             read -r -p "The entire service layer and its volumes will be deleted. Do you want to continue? (y/n) [y]: "
             if [[ $REPLY =~ ^[Yy]*$ ]]; then
-              docker compose -f "$BASEDIR/docker-compose.yaml" down -v -t $graceful_timeout
+              docker compose -f "$BASEDIR/docker-compose.yaml" down -v
             fi
         else
           read -r -p "$2 and its volumes will be deleted. Do you want to continue? (y/n) [y]: "
             if [[ $REPLY =~ ^[Yy]*$ ]]; then
-              docker compose -f "$BASEDIR/docker-compose.yaml" down -v -t $graceful_timeout "$service_name"
+              docker compose -f "$BASEDIR/docker-compose.yaml" down -v "$service_name"
               ret=$?
               if [ $ret -ne 0 ]; then
                 echo_warning "Failed to shutdown data $data_name"
@@ -212,6 +214,40 @@ networkName="e3s-network"
         exit 1
         ;;
     esac
+  }
+
+  graceful_restart() {
+    # get all service names and put them into array
+    serviceNames=`cat $BASEDIR/docker-compose.yaml | grep -m 3 "container_name" | sed 's/^[   ]*//;s/[    ]*$//' |cut -d " " -f 2`
+    readarray -t namesArray <<< "$serviceNames"
+    for serviceName in "${namesArray[@]}"
+    do
+      down "service" "$serviceName" "$graceful_timeout"
+      start "service" "$serviceName"
+      wait_for_service_to_start "$serviceName"
+    done
+  }
+
+  wait_for_service_to_start(){
+    service_name=$1
+    log_to_wait="Service started"
+    while true; do
+      logs=$( { docker logs $service_name; } 2>&1 )
+
+      logField=`echo "$logs" | grep -m 1 "$log_to_wait"`
+      if [ ! -z "$logField" ]; then
+        break
+      fi
+
+
+      logField=`echo "$logs" | grep -m 1 "Stopping container..."`
+      if [ ! -z "$logField" ]; then
+        echo_warning "Failed to start $service_name"
+        exit 1
+      fi
+
+      sleep 1
+    done
   }
 
   build() {
@@ -305,17 +341,32 @@ case "$1" in
       start "$2" "$3"
       ;;
     stop)
-      stop "$2" "$3"
+      read -r -p "Do you want to stop services forcibly? y/n [n]: "
+      if [[ $REPLY =~ ^[Nn]*$ ]]; then
+        timeout="$graceful_timeout"
+      fi
+
+      stop "$2" "$3" "$timeout"
       ;;
     down)
-      down "$2" "$3"
+      read -r -p "Do you want to down services forcibly? y/n [n]: "
+      if [[ $REPLY =~ ^[Nn]*$ ]]; then
+        timeout="$graceful_timeout"
+      fi
+
+      down "$2" "$3" "$timeout"
       ;;
     shutdown)
       shutdown "$2" "$3"
       ;;
     restart)
-      down "$2" "$3"
-      start "$2" "$3"
+      read -r -p "Do you want to restart services forcibly? y/n [n]: "
+      if [[ $REPLY =~ ^[Yy]$ ]]; then
+        down "$2" "$3" ""
+        start "$2" "$3"
+      else
+        graceful_restart
+      fi
       ;;
     build)
       build
