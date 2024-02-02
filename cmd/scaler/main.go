@@ -575,7 +575,9 @@ func main() {
 	}
 
 	// wait for the end of a resources shaping
-	log.Info("Waiting for shaping...")
+	log.Info("Waiting for sessions and tasks processors iteration to finish...")
 	<-iterationDoneCh
-	log.Info("Shaping performed")
+	log.Info("Sessions and tasks processors iteration finished")
+
+	log.Info("Scaler exited")
 }
