@@ -123,8 +123,7 @@ func refreshIMDSV2Token() {
 	for {
 		err := utils.RefreshIMDSV2Token()
 		if err != nil {
-			log.WithError(err).Error("Failed to generate IMDSV2 token. Stopping router...")
-			os.Exit(1)
+			utils.ExitWithError(err, "Failed to generate IMDSV2 token", log.NewEntry(log.StandardLogger()))
 		}
 
 		log.Debug("Successfully generated IMDSV2 token")
@@ -179,16 +178,14 @@ func main() {
 
 	err := config.InitDBConnection(config.Conf.DbConnectionString)
 	if err != nil {
-		log.WithError(err).Fatal("Failed to init DB client! Stopping router...")
-		os.Exit(1)
+		utils.ExitWithError(err, "Failed to init DB client", log.NewEntry(log.StandardLogger()))
 	}
 
 	defer config.DbConnection.Close()
 
 	err = config.InitCache()
 	if err != nil {
-		log.WithError(err).Fatal("Failed to init Redis client! Stopping router...")
-		os.Exit(1)
+		utils.ExitWithError(err, "Failed to init Redis client", log.NewEntry(log.StandardLogger()))
 	}
 
 	defer config.RedisSessionsClient.Close()
@@ -204,8 +201,7 @@ func main() {
 
 	aws, err := service.InitAws()
 	if err != nil {
-		log.WithError(err).Fatal("Failed to start aws session! Stopping router...")
-		os.Exit(1)
+		utils.ExitWithError(err, "Failed to start aws session", log.NewEntry(log.StandardLogger()))
 	}
 	service.AwsSess = aws
 
@@ -237,13 +233,14 @@ func main() {
 		}
 	}()
 
+	targetGrouLog := log.WithFields(log.Fields{"port": config.Conf.ExternalPort, "targetGroup": config.Conf.AwsTargetGroup})
 	err = registerTargetInTargetGroup(config.Conf.AwsTargetGroup, config.Conf.ExternalPort)
 	if err != nil {
-		log.WithFields(log.Fields{"port": config.Conf.ExternalPort, "targetGroup": config.Conf.AwsTargetGroup}).WithError(err).Fatal("Failed to append target to the elb target group! Stopping router...")
-		os.Exit(1)
+		utils.ExitWithError(err, "Failed to append target to the elb target group", targetGrouLog)
 	}
-	log.WithFields(log.Fields{"port": config.Conf.ExternalPort, "targetGroup": config.Conf.AwsTargetGroup}).Info("Registered target in target group")
+	targetGrouLog.Info("Registered target in target group")
 
+	log.Info("Service started")
 	<-quit
 
 	log.Info("Shutdown router ...")
@@ -252,10 +249,10 @@ func main() {
 
 	err = deregisterTargetFromTargetGroup(config.Conf.AwsTargetGroup, config.Conf.ExternalPort)
 	if err != nil {
-		log.WithFields(log.Fields{"port": config.Conf.ExternalPort, "targetGroup": config.Conf.AwsTargetGroup}).WithError(err).Fatal("Failed to detach target from the elb target group! Stopping router...")
-		os.Exit(1)
+		targetGrouLog.WithError(err).Fatal("Failed to detach target from the elb target group")
+	} else {
+		targetGrouLog.Info("Deregistered target from target group")
 	}
-	log.WithFields(log.Fields{"port": config.Conf.ExternalPort, "targetGroup": config.Conf.AwsTargetGroup}).Info("Deregistered target from target group")
 
 	log.Info("finalizing connections...")
 	if err := srv.Shutdown(ctx); err != nil {

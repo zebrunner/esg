@@ -3,7 +3,6 @@ package service
 import (
 	"fmt"
 	"math"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -37,12 +36,12 @@ type Resources struct {
 	Memory int64
 }
 
-func InitScalingData() {
+func InitScalingData() error {
 	var err error
 	scalersMap, err = initScalers()
 	if err != nil {
-		log.WithError(err).Error("Failed to create scaler instances. Stopping scaler")
-		os.Exit(1)
+		log.WithError(err).Error("Failed to create scaler instances")
+		return err
 	}
 
 	allocationResMap = make(map[string][]resourcesToAllocate.ResourcesToAllocate)
@@ -68,6 +67,8 @@ func InitScalingData() {
 			allocationResMap = tmpResourcesMap
 		}
 	}()
+
+	return nil
 }
 
 func StartScalers() {

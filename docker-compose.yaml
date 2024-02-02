@@ -1,6 +1,16 @@
 version: "3.8"
 name: backend
 services:
+  scaler:
+    container_name: scaler
+    image: public.ecr.aws/zebrunner/scaler:latest
+    env_file:
+      - scaler.env
+    networks:
+      - service-network
+    restart: always
+#    volumes:
+#      - "${HOME}/.aws:/root/.aws"
   router_1:
     container_name: router_1
     image: public.ecr.aws/zebrunner/router:latest
@@ -35,16 +45,6 @@ services:
     restart: always
     #    volumes:
     #      - "${HOME}/.aws:/root/.aws"
-  scaler:
-    container_name: scaler
-    image: public.ecr.aws/zebrunner/scaler:latest
-    env_file:
-      - scaler.env
-    networks:
-      - service-network
-    restart: always
-#    volumes:
-#      - "${HOME}/.aws:/root/.aws"
 networks:
   service-network:
     external: true

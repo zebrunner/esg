@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"os"
 	"reflect"
 	"runtime"
 	"strings"
@@ -27,8 +26,7 @@ func RetryThrottling[T, R interface{}](executeFunc func(T) (R, error)) func(T) (
 					// starting from 1 sec to 10 secs
 					time.Sleep(time.Duration(i+1) * time.Second)
 				} else if strings.Contains(err.Error(), "ClusterNotFoundException") || strings.Contains(err.Error(), "NoCredentialProviders") {
-					l.WithError(err).Error("Stopping container because of exception")
-					os.Exit(1)
+					ExitWithError(err, "AWS returned fatal error on api call", l)
 				} else {
 					break
 				}
