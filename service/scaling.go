@@ -370,11 +370,7 @@ func (s *scaler) ScaleUp() {
 		return
 	}
 
-	updateGroupInput := &autoscaling.UpdateAutoScalingGroupInput{
-		AutoScalingGroupName: asg.AutoScalingGroupName,
-		DesiredCapacity:      &newCapacity,
-	}
-	_, err = utils.RetryThrottling(autoscalingSvc.UpdateAutoScalingGroup)(updateGroupInput)
+	err = s.SetDesiredCapacity(*autoscalingSvc, newCapacity)
 	if err != nil {
 		l.WithError(err).Error("Failed to update auto scaling group")
 		return
@@ -451,7 +447,7 @@ func (s *scaler) ScaleDown() {
 	}
 
 	// [instance]weight map
-	instancesToDelete := make(map[*ecs.ContainerInstance]int64)
+	allowedInstancesToDelete := make(map[*ecs.ContainerInstance]int64)
 	capacityToDelete := 0
 	for _, instance := range containerInstances {
 		if allowedCapacityForDeleting <= 0 {
@@ -463,7 +459,7 @@ func (s *scaler) ScaleDown() {
 			if instanceUptime > config.Conf.InstanceCooldownTimeout {
 				weight := s.GetInstanceWeight(instance)
 				capacityToDelete += int(weight)
-				instancesToDelete[instance] = weight
+				allowedInstancesToDelete[instance] = weight
 				allowedCapacityForDeleting -= int(weight)
 			}
 		}
@@ -481,8 +477,9 @@ func (s *scaler) ScaleDown() {
 
 	maxCapacityToDelete := int64(math.Ceil(capacityToDeleteReserved))
 
+	instancesToDelete := make([]*string, 0)
 	var terminatedCount int64 = 0
-	for instance, weight := range instancesToDelete {
+	for instance, weight := range allowedInstancesToDelete {
 		if newCapacity <= minSize || maxCapacityToDelete <= 0 {
 			break
 		}
@@ -494,23 +491,36 @@ func (s *scaler) ScaleDown() {
 			weight = newCapacity
 		}
 
-		l := l.WithField("instance", *instance.Ec2InstanceId)
-
-		l.Trace("Stopping instance")
-		stopInstanceInput := autoscaling.TerminateInstanceInAutoScalingGroupInput{
-			InstanceId:                     instance.Ec2InstanceId,
-			ShouldDecrementDesiredCapacity: aws.Bool(true),
-		}
-		_, err := utils.RetryThrottling(autoscalingSvc.TerminateInstanceInAutoScalingGroup)(&stopInstanceInput)
-		if err != nil {
-			l.WithError(err).Error("Failed to stop instance")
-		}
+		l.WithField("instance", *instance.Ec2InstanceId).Trace("Stopping instance")
+		instancesToDelete = append(instancesToDelete, instance.Ec2InstanceId)
 
 		newCapacity -= weight
 		maxCapacityToDelete -= weight
 		terminatedCount += weight
-		time.Sleep(250 * time.Millisecond)
 	}
+
+	if len(instancesToDelete) == 0 {
+		return
+	}
+
+	scaleInDisableInput := autoscaling.SetInstanceProtectionInput{
+		AutoScalingGroupName: &s.autoscalingGroupName,
+		InstanceIds:          instancesToDelete,
+		ProtectedFromScaleIn: aws.Bool(false),
+	}
+
+	_, err = utils.RetryThrottling(autoscalingSvc.SetInstanceProtection)(&scaleInDisableInput)
+	if err != nil {
+		l.WithError(err).Info("Failed to diable scale-in protection")
+		return
+	}
+
+	err = s.SetDesiredCapacity(*autoscalingSvc, newCapacity)
+	if err != nil {
+		l.WithError(err).Error("Failed to update auto scaling group")
+		return
+	}
+
 	if terminatedCount != 0 {
 		l.WithFields(log.Fields{
 			"oldCapacity": currentCapacity,
@@ -580,6 +590,16 @@ func (s *scaler) StopEc2ZombieInstances() {
 
 		time.Sleep(250 * time.Millisecond)
 	}
+}
+
+func (s *scaler) SetDesiredCapacity(autoscalingSvc autoscaling.AutoScaling, newCapacity int64) error {
+	setDesiredCapacityInput := autoscaling.SetDesiredCapacityInput{
+		AutoScalingGroupName: &s.autoscalingGroupName,
+		DesiredCapacity:      &newCapacity,
+	}
+	_, err := utils.RetryThrottling(autoscalingSvc.SetDesiredCapacity)(&setDesiredCapacityInput)
+
+	return err
 }
 
 func deleteElement(slice []*ecs.ContainerInstance, index int) []*ecs.ContainerInstance {

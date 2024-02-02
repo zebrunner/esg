@@ -55,8 +55,9 @@
       "Sid": "Autoscaling",
       "Effect": "Allow",
       "Action": [
-          "autoscaling:UpdateAutoScalingGroup",
-          "autoscaling:TerminateInstanceInAutoScalingGroup"
+          "autoscaling:TerminateInstanceInAutoScalingGroup",
+          "autoscaling:SetInstanceProtection",
+          "autoscaling:SetDesiredCapacity"
       ],
       "Resource": "arn:aws:autoscaling:${Region}:${Account}:autoScalingGroup:*:autoScalingGroupName/esg-${env}-*"
   },
