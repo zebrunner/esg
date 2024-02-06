@@ -520,6 +520,10 @@ func (s *scaler) ScaleDown(session *awsSession.Session, asg *autoscaling.Group, 
 		return
 	}
 
+	if currentCapacity >= desiredCapacity{
+		return
+	}
+
 	err = s.SetDesiredCapacity(*autoscalingSvc, currentCapacity)
 	if err != nil {
 		s.log.WithError(err).Error("Failed to update auto scaling group")
