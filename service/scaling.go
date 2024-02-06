@@ -502,22 +502,23 @@ func (s *scaler) ScaleDown(session *awsSession.Session, asg *autoscaling.Group, 
 	maxCapacityToDelete := int64(math.Ceil(capacityToDeleteReserved))
 
 	instancesToDelete := make([]*string, 0)
+	newCapacity := currentCapacity
 	for instance, weight := range allowedInstancesToDelete {
-		if currentCapacity <= minSize || maxCapacityToDelete <= 0 {
+		if newCapacity <= minSize || maxCapacityToDelete <= 0 {
 			break
 		}
 
-		if currentCapacity-weight < minSize {
+		if newCapacity-weight < minSize {
 			if minSize != 0 {
 				continue
 			}
-			weight = currentCapacity
+			weight = newCapacity
 		}
 
 		s.log.WithField("instance", *instance.Ec2InstanceId).Trace("Stopping instance")
 		instancesToDelete = append(instancesToDelete, instance.Ec2InstanceId)
 
-		currentCapacity -= weight
+		newCapacity -= weight
 		maxCapacityToDelete -= weight
 	}
 
@@ -537,11 +538,12 @@ func (s *scaler) ScaleDown(session *awsSession.Session, asg *autoscaling.Group, 
 		return
 	}
 
-	if currentCapacity >= desiredCapacity{
+	if newCapacity >= desiredCapacity {
+		s.log.WithFields(log.Fields{"desiredCapacity": desiredCapacity, "terminatedCapacity": currentCapacity - newCapacity}).Info("Instance rebalance were performed without desired capacity change")
 		return
 	}
 
-	err = s.SetDesiredCapacity(*autoscalingSvc, currentCapacity)
+	err = s.SetDesiredCapacity(*autoscalingSvc, newCapacity)
 	if err != nil {
 		s.log.WithError(err).Error("Failed to update auto scaling group")
 		return
@@ -549,7 +551,7 @@ func (s *scaler) ScaleDown(session *awsSession.Session, asg *autoscaling.Group, 
 
 	s.log.WithFields(log.Fields{
 		"oldCapacity": desiredCapacity,
-		"newCapacity": currentCapacity,
+		"newCapacity": newCapacity,
 	}).Info("Capacity updated")
 }
 
