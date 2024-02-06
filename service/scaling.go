@@ -173,7 +173,7 @@ func initScalers() (map[string]scaler, error) {
 			resourcesPerWeight:   Resources{CPU: (*instanceInfo.VCpuInfo.DefaultVCpus * 1024) / minWeight, Memory: (*instanceInfo.MemoryInfo.SizeInMiB) / minWeight},
 			instanceResources:    Resources{CPU: *instanceInfo.VCpuInfo.DefaultVCpus * 1024, Memory: *instanceInfo.MemoryInfo.SizeInMiB},
 			instanceMinWeight:    minWeight,
-			log:                  log.WithFields(log.Fields{"asg": asgName, "minWeight": minWeight}),
+			log:                  log.WithFields(log.Fields{"asg": asgName, "capacityProvider": *capacityProvider.Name}),
 		}
 
 		scalers[s.capacityProviderName] = s
