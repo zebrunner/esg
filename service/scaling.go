@@ -502,6 +502,7 @@ func (s *scaler) ScaleDown(session *awsSession.Session, asg *autoscaling.Group, 
 	maxCapacityToDelete := int64(math.Ceil(capacityToDeleteReserved))
 
 	instancesToDelete := make([]*string, 0)
+	containerInstanceToDelete := make([]*string, 0)
 	newCapacity := currentCapacity
 	for instance, weight := range allowedInstancesToDelete {
 		if newCapacity <= minSize || maxCapacityToDelete <= 0 {
@@ -517,12 +518,25 @@ func (s *scaler) ScaleDown(session *awsSession.Session, asg *autoscaling.Group, 
 
 		s.log.WithField("instance", *instance.Ec2InstanceId).Trace("Stopping instance")
 		instancesToDelete = append(instancesToDelete, instance.Ec2InstanceId)
+		containerInstanceToDelete = append(containerInstanceToDelete, instance.ContainerInstanceArn)
 
 		newCapacity -= weight
 		maxCapacityToDelete -= weight
 	}
 
 	if len(instancesToDelete) == 0 {
+		return
+	}
+
+	stateUpdateInput := ecs.UpdateContainerInstancesStateInput{
+		Cluster:            &config.Conf.AwsCluster,
+		Status:             aws.String("DRAINING"),
+		ContainerInstances: containerInstanceToDelete,
+	}
+	ecsSvc := ecs.New(session)
+	_, err = utils.RetryThrottling(ecsSvc.UpdateContainerInstancesState)(&stateUpdateInput)
+	if err != nil {
+		s.log.WithError(err).Info("Failed to change status of stopping contaienr-instances to draining")
 		return
 	}
 

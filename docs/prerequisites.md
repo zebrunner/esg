@@ -44,7 +44,8 @@
                 "ecs:DescribeClusters",
                 "ecs:ListContainerInstances",
                 "ecs:RunTask",
-                "ecs:DescribeCapacityProviders"
+                "ecs:DescribeCapacityProviders",
+                "ecs:UpdateContainerInstancesState"
             ],
             "Resource": [
                 "arn:aws:ecs:${Region}:${Account}:container-instance/esg-${env}/*",
