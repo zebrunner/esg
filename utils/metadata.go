@@ -15,12 +15,17 @@ var (
 )
 
 const (
+	longTermToken  = "21600"
+	shortTermToken = "15"
+)
+
+const (
 	tokenURL    = "http://169.254.169.254/latest/api/token"
 	metadataURL = "http://169.254.169.254/latest/meta-data"
 )
 
 func GetMetadata(item metadataItem) (string, error) {
-	tokenBytes, err := getToken("15")
+	tokenBytes, err := getToken(shortTermToken)
 	if err != nil {
 		return "", err
 	}
@@ -42,7 +47,7 @@ func GetMetadata(item metadataItem) (string, error) {
 }
 
 func RefreshIMDSV2Token() error {
-	tokenBytes, err := getToken("21600")
+	tokenBytes, err := getToken(longTermToken)
 	if err != nil {
 		return err
 	}
