@@ -360,12 +360,21 @@ case "$1" in
       shutdown "$2" "$3"
       ;;
     restart)
-      read -r -p "Do you want to restart services forcibly? y/n [n]: "
-      if [[ $REPLY =~ ^[Yy]$ ]]; then
-        down "$2" "$3" ""
-        start "$2" "$3"
+      if [ -z "$3" ] && [[ "$2" == "service" || -z "$2" ]]; then
+        read -r -p "Do you want to restart services forcibly? y/n [n]: "
+        if [[ $REPLY =~ ^[Nn]*$ ]]; then
+          graceful_restart
+        else
+          down "$2" "$3" ""
+          start "$2" "$3"
+        fi
       else
-        graceful_restart
+        read -r -p "Do you want to down services forcibly? y/n [n]: "
+        if [[ $REPLY =~ ^[Nn]*$ ]]; then
+          timeout="$graceful_timeout"
+        fi
+        down "$2" "$3" "$timeout"
+        start "$2" "$3"
       fi
       ;;
     build)
