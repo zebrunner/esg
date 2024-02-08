@@ -86,9 +86,9 @@ networkName="e3s-network"
       service)
         service_name=$2
         if [ -z "$service_name" ]; then
-            docker compose -f "$BASEDIR/docker-compose.yaml" stop -t $docker_flags
+            docker compose -f "$BASEDIR/docker-compose.yaml" stop $docker_flags
         else
-          docker compose -f "$BASEDIR/docker-compose.yaml" stop -t $docker_flags "$service_name"
+          docker compose -f "$BASEDIR/docker-compose.yaml" stop $docker_flags "$service_name"
           ret=$?
           if [ $ret -ne 0 ]; then
             echo_warning "Failed to stop service $service_name"
@@ -360,7 +360,7 @@ case "$1" in
       shutdown "$2" "$3"
       ;;
     restart)
-      if [ -z "$3" ] && [[ "$2" == "service" || -z "$2" ]]; then
+      if [ -z "$3" ] && [[ "$2" == "service" ]]; then
         read -r -p "Do you want to restart services forcibly? y/n [n]: "
         if [[ $REPLY =~ ^[Nn]*$ ]]; then
           graceful_restart
