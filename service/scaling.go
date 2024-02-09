@@ -284,11 +284,34 @@ func (s *scaler) getInstancesInAutoscalingGroup(autoscalingSvc *autoscaling.Auto
 		return nil, err
 	}
 
+	// filter by ec2 instance state and scale-in protection
 	for _, ec2Instance := range ec2Instances {
-		// 0 - pending, 16 - running
-		if ec2Instance.State.Code == nil || (*ec2Instance.State.Code != 0 && *ec2Instance.State.Code != 16) {
+		if ec2Instance.State.Code == nil {
 			delete(instancesMap, *ec2Instance.InstanceId)
+			continue
 		}
+
+		// 0 - pending
+		if *ec2Instance.State.Code == 0 {
+			continue
+		}
+
+		// 16 - running
+		if *ec2Instance.State.Code == 16 {
+			isProtected := false
+			var details *autoscaling.InstanceDetails
+			if details, isProtected = instancesMap[*ec2Instance.InstanceId]; isProtected {
+				isProtected = *details.ProtectedFromScaleIn
+			}
+
+			if !isProtected {
+				delete(instancesMap, *ec2Instance.InstanceId)
+			}
+
+			continue
+		}
+
+		delete(instancesMap, *ec2Instance.InstanceId)
 	}
 
 	return instancesMap, nil
@@ -464,7 +487,7 @@ func (s *scaler) ScaleDown(session *awsSession.Session, asg *autoscaling.Group, 
 		return
 	}
 
-	containerInstances, err := DescribeContainerInstancesOfCapacityProvider(ciArns, svc, s.capacityProviderName)
+	containerInstances, err := DescribeActiveContainerInstancesOfCapacityProvider(ciArns, svc, s.capacityProviderName)
 	if err != nil {
 		s.log.WithError(err).Error("Failed to describe container instances")
 		return
@@ -489,14 +512,17 @@ func (s *scaler) ScaleDown(session *awsSession.Session, asg *autoscaling.Group, 
 		}
 	}
 
+	// ReserveInstancesPercent on scalde down makes less instance termination that it could be done (scales down slower)
 	capacityToDeleteReserved := float64(capacityToDelete) * (1 - config.Conf.ReserveInstancesPercent)
 	if float64(capacityToDelete)-capacityToDeleteReserved > float64(config.Conf.ReserveMaxCapacity) {
+		maxCapacityToDelete := float64(int64(capacityToDelete) - config.Conf.ReserveMaxCapacity)
 		s.log.WithFields(log.Fields{
-			"capacity to delete":                 capacityToDelete,
-			"capacity to delete except reserved": math.Ceil(capacityToDeleteReserved),
-			"max reservation capacity":           config.Conf.ReserveMaxCapacity,
+			"wantedCapacityToDelete":   capacityToDelete,
+			"capacityToDeleteReserved": math.Ceil(capacityToDeleteReserved),
+			"maxReservationCapacity":   config.Conf.ReserveMaxCapacity,
+			"maxCapacityToDelete":      maxCapacityToDelete,
 		}).Warn("Triggered max reservation capacity limit")
-		capacityToDeleteReserved = float64(int64(capacityToDelete) - config.Conf.ReserveMaxCapacity)
+		capacityToDeleteReserved = maxCapacityToDelete
 	}
 
 	maxCapacityToDelete := int64(math.Ceil(capacityToDeleteReserved))
@@ -528,28 +554,35 @@ func (s *scaler) ScaleDown(session *awsSession.Session, asg *autoscaling.Group, 
 		return
 	}
 
-	stateUpdateInput := ecs.UpdateContainerInstancesStateInput{
-		Cluster:            &config.Conf.AwsCluster,
-		Status:             aws.String("DRAINING"),
-		ContainerInstances: containerInstanceToDelete,
-	}
-	ecsSvc := ecs.New(session)
-	_, err = utils.RetryThrottling(ecsSvc.UpdateContainerInstancesState)(&stateUpdateInput)
-	if err != nil {
-		s.log.WithError(err).Info("Failed to change status of stopping contaienr-instances to draining")
-		return
+	ciPages := paginate(containerInstanceToDelete, 10)
+	for _, ciArr := range ciPages {
+		stateUpdateInput := ecs.UpdateContainerInstancesStateInput{
+			Cluster:            &config.Conf.AwsCluster,
+			Status:             aws.String("DRAINING"),
+			ContainerInstances: ciArr,
+		}
+
+		ecsSvc := ecs.New(session)
+		_, err = utils.RetryThrottling(ecsSvc.UpdateContainerInstancesState)(&stateUpdateInput)
+		if err != nil {
+			s.log.WithError(err).Info("Failed to change status of stopping contaienr-instances to draining")
+			return
+		}
 	}
 
-	scaleInDisableInput := autoscaling.SetInstanceProtectionInput{
-		AutoScalingGroupName: &s.autoscalingGroupName,
-		InstanceIds:          instancesToDelete,
-		ProtectedFromScaleIn: aws.Bool(false),
-	}
+	instancesPages := paginate(instancesToDelete, 50)
+	for _, instances := range instancesPages {
+		scaleInDisableInput := autoscaling.SetInstanceProtectionInput{
+			AutoScalingGroupName: &s.autoscalingGroupName,
+			InstanceIds:          instances,
+			ProtectedFromScaleIn: aws.Bool(false),
+		}
 
-	_, err = utils.RetryThrottling(autoscalingSvc.SetInstanceProtection)(&scaleInDisableInput)
-	if err != nil {
-		s.log.WithError(err).Info("Failed to diable scale-in protection")
-		return
+		_, err = utils.RetryThrottling(autoscalingSvc.SetInstanceProtection)(&scaleInDisableInput)
+		if err != nil {
+			s.log.WithError(err).Info("Failed to diable scale-in protection")
+			return
+		}
 	}
 
 	if newCapacity >= desiredCapacity {
@@ -584,7 +617,7 @@ func (s *scaler) StopEc2ZombieInstances() {
 		return
 	}
 
-	containerInstances, err := DescribeContainerInstancesOfCapacityProvider(ciArns, svc, s.capacityProviderName)
+	containerInstances, err := DescribeActiveContainerInstancesOfCapacityProvider(ciArns, svc, s.capacityProviderName)
 	if err != nil {
 		l.WithError(err).Error("Failed to describe container instances")
 		return

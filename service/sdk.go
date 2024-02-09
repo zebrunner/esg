@@ -166,7 +166,7 @@ func DescribeContainerInstances(containerInstanceIdPtrs []*string, svc *ecs.ECS)
 	return containerInstances, nil
 }
 
-func DescribeContainerInstancesOfCapacityProvider(containerInstanceIdPtrs []*string, svc *ecs.ECS, capacityProviderName string) ([]*ecs.ContainerInstance, error) {
+func DescribeActiveContainerInstancesOfCapacityProvider(containerInstanceIdPtrs []*string, svc *ecs.ECS, capacityProviderName string) ([]*ecs.ContainerInstance, error) {
 	ciArr, err := DescribeContainerInstances(containerInstanceIdPtrs, svc)
 	if err != nil {
 		return nil, err
@@ -174,9 +174,15 @@ func DescribeContainerInstancesOfCapacityProvider(containerInstanceIdPtrs []*str
 
 	cpCIArr := make([]*ecs.ContainerInstance, 0)
 	for _, containerInstance := range ciArr {
-		if containerInstance.CapacityProviderName != nil && *containerInstance.CapacityProviderName == capacityProviderName {
-			cpCIArr = append(cpCIArr, containerInstance)
+		if containerInstance.Status == nil || *containerInstance.Status != "ACTIVE" {
+			continue
 		}
+
+		if containerInstance.CapacityProviderName == nil || *containerInstance.CapacityProviderName != capacityProviderName {
+			continue
+		}
+
+		cpCIArr = append(cpCIArr, containerInstance)
 	}
 
 	return cpCIArr, nil
