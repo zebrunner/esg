@@ -302,9 +302,9 @@ func StopIdleTasks(wg *sync.WaitGroup) {
 		}
 
 		wg.Add(1)
-		go func(session *sessionmap.Session, wg *sync.WaitGroup) {
-			selenium.CloseSession(session, sessionmap.SessionIdleTimeout)
-			cachedTask, err := taskmap.Find(session.TaskId, false)
+		go func(s *sessionmap.Session, l *log.Entry, wg *sync.WaitGroup) {
+			selenium.CloseSession(s, sessionmap.SessionIdleTimeout)
+			cachedTask, err := taskmap.Find(s.TaskId, false)
 			if err != nil {
 				l.WithError(err).Error("Failed to find cached task with idle session!")
 				wg.Done()
@@ -319,7 +319,7 @@ func StopIdleTasks(wg *sync.WaitGroup) {
 			}
 
 			wg.Done()
-		}(&session, wg)
+		}(sess, l, wg)
 	}
 
 	wg.Done()
