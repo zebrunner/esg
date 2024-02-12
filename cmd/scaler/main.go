@@ -301,19 +301,25 @@ func StopIdleTasks(wg *sync.WaitGroup) {
 			continue
 		}
 
-		selenium.CloseSession(&session, sessionmap.SessionIdleTimeout)
-		cachedTask, err := taskmap.Find(session.TaskId, false)
-		if err != nil {
-			l.WithError(err).Error("Failed to find cached task with idle session!")
-			continue
-		}
+		wg.Add(1)
+		go func(session *sessionmap.Session, wg *sync.WaitGroup) {
+			selenium.CloseSession(session, sessionmap.SessionIdleTimeout)
+			cachedTask, err := taskmap.Find(session.TaskId, false)
+			if err != nil {
+				l.WithError(err).Error("Failed to find cached task with idle session!")
+				wg.Done()
+				return
+			}
 
-		err = service.StopTask(*cachedTask, taskmap.TaskAborted)
-		if err != nil {
-			l.WithError(err).Error("Failed to stop idle driver task!")
-		} else {
-			l.Warn("task aborted due to the session idle timeout")
-		}
+			err = service.StopTask(*cachedTask, taskmap.TaskAborted)
+			if err != nil {
+				l.WithError(err).Error("Failed to stop idle driver task!")
+			} else {
+				l.Warn("task aborted due to the session idle timeout")
+			}
+
+			wg.Done()
+		}(&session, wg)
 	}
 
 	wg.Done()
