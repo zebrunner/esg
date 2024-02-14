@@ -10,7 +10,7 @@
 ### Software
 
 * Installed Docker v19+
-* Installed Docker compose plugin v2+
+* Installed Docker compose plugin v2.20+
 * [Optional] Installed jq and aws cli for ./scripts support
 
 ### Attached IAM Role/Policies:
@@ -104,6 +104,10 @@
 
 * Instance type c5a.2xlarge +
 * Configured IMDSv2 (HttpPutResponseHopLimit=1)
+
+### Software
+
+* Installed Docker v20.10+
 
 ### Attached IAM Role/Policies:
 
