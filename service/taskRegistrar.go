@@ -53,85 +53,88 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 	// TODO: explicitly minimize errors range to wait only by well-known reasons aka RESOURCE:CPU etc
 	// TODO: convert existing hard-coded 25 retries into the queue or provisioning timeout: https://github.com/zebrunner/esg/issues/72
 	// [VD] "i" retry should be ~15 if instances can be started in 1 min and 25 if ~2 min
-	var outputErr error
-	markedToAllocate := false
+	var essentialError error
+	var resourceAllocationEntity *resourcesToAllocate.ResourcesToAllocate
+out:
 	for i := 0; true; i++ {
 		l := l.WithField("retry", i)
+		var outputErr error = nil
+		var sleepRateLimit time.Duration = 0
 
 		select {
 		case <-ctx.Done():
-			if markedToAllocate {
-				resourcesToAllocate.RemoveEntity(env.RouterUUID)
-			}
-			return
+			essentialError = fmt.Errorf("timed out waiting for task register")
+			break out
 		default:
 		}
-
 		// do not pause after ctx deadline check and before ecs call
-
-		var resultRunTask *ecs.RunTaskOutput
 		resultRunTask, err := svc.RunTask(runTaskInput)
 		if err != nil {
+			l.WithError(err).Error("Task register failed.")
+			outputErr = err
+			sleepRateLimit = time.Duration(5+rand.Intn(10)) * time.Second
+
 			// Not good solution but aws doesn't give a choice
 			errStr := err.Error()
 			if errStr == "ClientException: TaskDefinition not found." {
-				l.WithError(err).Error("Task register failed.")
-				if markedToAllocate {
-					resourcesToAllocate.RemoveEntity(env.RouterUUID)
-				}
-
-				select {
-				case waitRequest.EssentialErrCh <- fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily):
-				default:
-				}
-
-				return
+				essentialError = fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily)
+				break out
+			} else if errStr == "ClientException: Tasks provisioning capacity limit exceeded." || strings.Contains(errStr, "ThrottlingException: Rate exceeded") {
+				sleepRateLimit = time.Duration(15+rand.Intn(15)) * time.Second
 			}
-
-			if errStr == "ClientException: Tasks provisioning capacity limit exceeded." || strings.Contains(errStr, "ThrottlingException: Rate exceeded") {
-				l.WithError(err).Trace("Task register failed.")
-				if !markedToAllocate {
-					// start in another thead to not wait for response and continue execution
-					go resourcesToAllocate.AddEntity(env.GetAllocationResources())
-					markedToAllocate = true
-				}
-				sleepRateLimit := time.Duration(20+rand.Intn(10)) * time.Second
-				time.Sleep(sleepRateLimit)
-			}
-
-			outputErr = err
-			continue
-		}
-
-		if len(resultRunTask.Failures) != 0 {
+		} else if len(resultRunTask.Failures) != 0 {
 			outputErr = fmt.Errorf(*resultRunTask.Failures[0].Reason)
 			l.WithError(outputErr).Debug("Task register failed. Response contains failures")
-			sleepRateLimit := time.Duration(5+(rand.Intn(15))) * time.Second
-			time.Sleep(sleepRateLimit)
-			continue
-		}
-
-		if len(resultRunTask.Tasks) == 0 {
+			sleepRateLimit = time.Duration(5+(rand.Intn(15))) * time.Second
+		} else if len(resultRunTask.Tasks) == 0 {
 			outputErr = fmt.Errorf("response doesn't contain tasks")
 			l.WithError(outputErr).Debug("Task register failed")
-			continue
+			sleepRateLimit = time.Duration(5+(rand.Intn(5))) * time.Second
 		}
 
-		if markedToAllocate {
-			resourcesToAllocate.RemoveEntity(env.RouterUUID)
+		if outputErr == nil {
+			// All is ok. We got task then we can return it.
+			select {
+			case waitRequest.ResponseCh <- *resultRunTask.Tasks[0].TaskArn:
+			default:
+			}
+
+			if resourceAllocationEntity != nil {
+				go func(rta *resourcesToAllocate.ResourcesToAllocate) {
+					err := resourcesToAllocate.RemoveEntity(rta)
+					if err != nil {
+						log.WithError(err).Error("Failed to remove allocation resource from cache")
+					}
+				}(resourceAllocationEntity)
+			}
+			return
 		}
 
-		// All is ok. We got task then we can return it.
-		select {
-		case waitRequest.ResponseCh <- *resultRunTask.Tasks[0].TaskArn:
-		default:
+		if resourceAllocationEntity == nil {
+			go func() {
+				resourceAllocationEntity = env.GetAllocationResources()
+				err := resourcesToAllocate.AddEntity(resourceAllocationEntity)
+				if err != nil {
+					log.WithError(err).Error("Failed to add allocation resource to cache")
+				}
+			}()
 		}
-		return
+
+		time.Sleep(sleepRateLimit)
 	}
 
 	select {
-	case waitRequest.NonEssentialErrCh <- outputErr:
+	case waitRequest.EssentialErrCh <- essentialError:
 	default:
+	}
+
+	if resourceAllocationEntity != nil {
+		go func(rta *resourcesToAllocate.ResourcesToAllocate) {
+			err := resourcesToAllocate.RemoveEntity(rta)
+			if err != nil {
+				log.WithError(err).Error("Failed to remove allocation resource from cache")
+			}
+		}(resourceAllocationEntity)
 	}
 }
 

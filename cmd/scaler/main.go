@@ -64,13 +64,14 @@ func LaunchTasksProcessors(svc *ecs.ECS, wg *sync.WaitGroup) {
 		log.WithError(err).Warn("Failed to get list of taskmap keys!")
 		return
 	}
+
+	wg.Add(1)
+	go StopLostTasks(taskIds, svc, wg)
+
 	if len(taskIds) <= 0 {
 		return
 	}
 	log.WithField("keys:", taskIds).Trace("cached task keys")
-
-	wg.Add(1)
-	go StopLostTasks(taskIds, svc, wg)
 
 	tasks := service.GetTasksByTaskIds(taskIds, svc)
 	if len(tasks) <= 0 {
@@ -79,7 +80,7 @@ func LaunchTasksProcessors(svc *ecs.ECS, wg *sync.WaitGroup) {
 
 	cachedTasks, err := taskmap.Tasks(taskIds)
 	if err != nil {
-		log.Warn("Failed to get cached tasks")
+		log.WithError(err).Warn("Failed to get cached tasks")
 		return
 	}
 

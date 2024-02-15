@@ -19,8 +19,7 @@ import (
 )
 
 var (
-	scalersMap       map[string]scaler
-	allocationResMap map[string][]resourcesToAllocate.ResourcesToAllocate
+	scalersMap map[string]scaler
 )
 
 type scaler struct {
@@ -44,30 +43,6 @@ func InitScalingData() error {
 		log.WithError(err).Error("Failed to create scaler instances")
 		return err
 	}
-
-	allocationResMap = make(map[string][]resourcesToAllocate.ResourcesToAllocate)
-	go func() {
-		for {
-			time.Sleep(10 * time.Second)
-			resources, err := resourcesToAllocate.GetAllEntities()
-			if err != nil {
-				log.WithError(err).Error("Failed to get resources for allocation")
-				continue
-			}
-			tmpResourcesMap := make(map[string][]resourcesToAllocate.ResourcesToAllocate)
-			for _, resToAllocate := range resources {
-				if resourcesArr, ok := tmpResourcesMap[resToAllocate.CapacityProvider]; ok {
-					resourcesArr = append(resourcesArr, *resToAllocate)
-					tmpResourcesMap[resToAllocate.CapacityProvider] = resourcesArr
-				} else {
-					resourcesArr = []resourcesToAllocate.ResourcesToAllocate{*resToAllocate}
-					tmpResourcesMap[resToAllocate.CapacityProvider] = resourcesArr
-				}
-			}
-
-			allocationResMap = tmpResourcesMap
-		}
-	}()
 
 	return nil
 }
@@ -248,6 +223,16 @@ func (s *scaler) calculateResources(tasks []*ecs.Task, currentCapacity int, stat
 	return freeResources, requiredResources
 }
 
+func (s *scaler) getResourcesForAllocation() []*resourcesToAllocate.ResourcesToAllocate {
+	resources, err := resourcesToAllocate.GetEntitiesOfCapacityProvider(s.capacityProviderName)
+	if err != nil {
+		log.WithError(err).Error("Failed to get resources for allocation")
+		return nil
+	}
+
+	return resources
+}
+
 func (s *scaler) getInstancesInAutoscalingGroup(autoscalingSvc *autoscaling.AutoScaling) (map[string]*autoscaling.InstanceDetails, error) {
 	instancesMap := make(map[string]*autoscaling.InstanceDetails)
 	instanceIdsArr := make([]*string, 0)
@@ -359,7 +344,7 @@ func (s *scaler) AdjustCapacity() {
 	currentDesiredCapacity := *asg.DesiredCapacity
 	freeResources, requiredResources := s.calculateResources(tasks, int(currentDesiredCapacity), "RUNNING", "PROVISIONING")
 
-	if resourcesToAllocate, ok := allocationResMap[s.capacityProviderName]; ok && resourcesToAllocate != nil {
+	if resourcesToAllocate := s.getResourcesForAllocation(); resourcesToAllocate != nil {
 		for _, resources := range resourcesToAllocate {
 			enough := false
 			for _, i := range freeResources {

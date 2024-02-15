@@ -3,6 +3,7 @@ package resourcesToAllocate
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/zebrunner/esg/config"
@@ -15,8 +16,12 @@ type ResourcesToAllocate struct {
 	CapacityProvider string
 }
 
-func GetAllEntities() ([]*ResourcesToAllocate, error) {
-	keys, err := config.RedisResourcesClient.Keys(context.Background(), "*").Result()
+func (rsa *ResourcesToAllocate) generateRedisId() string {
+	return fmt.Sprintf("%s_%s", rsa.CapacityProvider, rsa.RouterUUID)
+}
+
+func GetEntitiesOfCapacityProvider(capacityProvider string) ([]*ResourcesToAllocate, error) {
+	keys, err := config.RedisResourcesClient.Keys(context.Background(), fmt.Sprintf("%s*", capacityProvider)).Result()
 	if err != nil {
 		return nil, err
 	}
