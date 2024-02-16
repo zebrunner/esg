@@ -17,9 +17,11 @@ services:
       start_period: 5s  
     networks:
       - data-network
-  migration:
-    image: public.ecr.aws/zebrunner/migration:latest
-    container_name: migration
+  e3s-migration:
+    image: public.ecr.aws/zebrunner/e3s-migration:latest
+    container_name: e3s-migration
+    environment:
+      DATABASE: postgres://postgres:postgres@db/postgres?sslmode=disable
     depends_on:
       db:
         condition: service_healthy

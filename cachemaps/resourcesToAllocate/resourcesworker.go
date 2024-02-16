@@ -24,22 +24,21 @@ type ResourceItem struct {
 // Resource Worker -> Reserves new instances if aws provisioning task pool is exceeded. RemoveEntity should be always performed after AddEntity.
 func InitResourceWorker() {
 	resourceWorker = cachemaps.CreateRedisWorker[ResourceItem](config.RedisResourcesClient, writeRecords)
-	// iteration pause is equal to scale up pause
-	go resourceWorker.Start(10 * time.Second)
+	go resourceWorker.Start(4 * time.Second)
 }
 
 func writeRecords(rdsConn *redis.Conn, items map[string]ResourceItem) error {
 	rdbPipe := rdsConn.Pipeline()
-	for _, item := range items {
+	for key, item := range items {
 		if item.resourceToAdd != nil {
 			data, err := json.Marshal(item.resourceToAdd)
 			if err != nil {
 				log.WithError(err).WithField(config.RouterUUID, item.resourceToAdd.RouterUUID).Warn("Failed to marshal resource")
 				continue
 			}
-			rdbPipe.Set(context.Background(), item.resourceToAdd.RouterUUID, data, 10*time.Minute)
+			rdbPipe.Set(context.Background(), key, data, 10*time.Minute)
 		} else if item.resourceToDelete != nil {
-			rdbPipe.Del(context.Background(), *item.resourceToDelete)
+			rdbPipe.Expire(context.Background(), key, 10*time.Second)
 		}
 	}
 
@@ -48,9 +47,10 @@ func writeRecords(rdsConn *redis.Conn, items map[string]ResourceItem) error {
 }
 
 func AddEntity(resources *ResourcesToAllocate) error {
-	return resourceWorker.AppendToWorker(resources.RouterUUID, ResourceItem{resourceToAdd: resources})
+	return resourceWorker.AppendToWorker(resources.generateRedisId(), ResourceItem{resourceToAdd: resources})
 }
 
-func RemoveEntity(routerUUID string) error {
-	return resourceWorker.AppendToWorker(routerUUID, ResourceItem{resourceToDelete: &routerUUID})
+func RemoveEntity(resources *ResourcesToAllocate) error {
+	redisId := resources.generateRedisId()
+	return resourceWorker.AppendToWorker(redisId, ResourceItem{resourceToDelete: &redisId})
 }

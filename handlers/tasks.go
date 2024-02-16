@@ -140,6 +140,35 @@ func rerouteProxy(path string, sessionId string) string {
 	return strings.Join(splittedPath, "/")
 }
 
+func ProxyMitm(c *gin.Context) {
+	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
+	url, ok := sess.Network.GetUrl("proxyHandlerPort")
+	if !ok {
+		log.Error("failed to get `proxyHandlerPort` url from session")
+		c.Error(utils.UnknownErr(fmt.Errorf("failed to get `proxyHandlerPort` url from session"))).SetType(gin.ErrorTypePublic)
+		return
+	}
+
+	(&httputil.ReverseProxy{
+		Director: func(r *http.Request) {
+			r.URL.Scheme = "http"
+			r.URL.Host = url.Host
+			r.Host = url.Host
+			r.URL.Path = getRemainingPath(r.URL.Path)
+		},
+		ModifyResponse: func(r *http.Response) error {
+			sess.AccessedAt = time.Now()
+			err := sessionmap.Write(sess.SessionID, sess, -1)
+
+			if err != nil {
+				log.WithField(config.SessionIdKey, sess.SessionID).WithField(config.RouterUUID, sess.RouterUUID).WithError(err).Error("Failed to update last access time")
+			}
+
+			return nil
+		},
+	}).ServeHTTP(c.Writer, c.Request)
+}
+
 func CloseSession(c *gin.Context) {
 	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
 
@@ -366,12 +395,13 @@ func Clipboard(c *gin.Context) {
 		return
 	}
 
-	director := func(req *http.Request) {
-		req.URL.Scheme = "http"
-		req.URL.Host = url.Host
-		req.Host = url.Host
+	proxy := &httputil.ReverseProxy{
+		Director: func(req *http.Request) {
+			req.URL.Scheme = "http"
+			req.URL.Host = url.Host
+			req.Host = url.Host
+		},
 	}
-	proxy := &httputil.ReverseProxy{Director: director}
 	proxy.ServeHTTP(c.Writer, c.Request)
 }
 

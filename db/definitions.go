@@ -6,6 +6,7 @@ import (
 
 	_ "github.com/jackc/pgx/v4/stdlib"
 	"github.com/zebrunner/esg/config"
+	"github.com/zebrunner/esg/environment"
 )
 
 type TaskDefinition struct {
@@ -17,7 +18,16 @@ type TaskDefinition struct {
 	OverrideDefinitionHash string    `db:"override_definition_hash"`
 }
 
-func CreateDefinition(td *TaskDefinition) error {
+func CreateTaskDefinitionEntity(env *environment.ExecutionEnvironment) *TaskDefinition {
+	return &TaskDefinition{
+		Family:                 env.TaskDefinitionFamily,
+		Schema:                 env.Schema,
+		RegisterDefinitionHash: env.HashRegisterDefinition(),
+		OverrideDefinitionHash: env.HashOvverideDefinition(),
+	}
+}
+
+func InsertDefinition(td *TaskDefinition) error {
 	tx, err := config.DbConnection.Beginx()
 	if err != nil {
 		return err

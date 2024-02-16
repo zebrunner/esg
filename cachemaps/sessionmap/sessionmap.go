@@ -118,6 +118,15 @@ func Write(sessionId string, session *Session, expiration time.Duration) error {
 	return nil
 }
 
+func (sess Session) IsIdle() bool {
+	if sess.Status != SessionActive {
+		return false
+	}
+
+	idleTime := time.Since(sess.AccessedAt).Seconds()
+	return idleTime > sess.IdleTimeout
+}
+
 // Returns all sessions from redis
 func Sessions() ([]Session, error) {
 	keys, err := config.RedisSessionsClient.Keys(context.Background(), "*").Result()

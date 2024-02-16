@@ -166,7 +166,7 @@ func DescribeContainerInstances(containerInstanceIdPtrs []*string, svc *ecs.ECS)
 	return containerInstances, nil
 }
 
-func DescribeContainerInstancesOfCapacityProvider(containerInstanceIdPtrs []*string, svc *ecs.ECS, capacityProviderName string) ([]*ecs.ContainerInstance, error) {
+func DescribeActiveContainerInstancesOfCapacityProvider(containerInstanceIdPtrs []*string, svc *ecs.ECS, capacityProviderName string) ([]*ecs.ContainerInstance, error) {
 	ciArr, err := DescribeContainerInstances(containerInstanceIdPtrs, svc)
 	if err != nil {
 		return nil, err
@@ -174,9 +174,15 @@ func DescribeContainerInstancesOfCapacityProvider(containerInstanceIdPtrs []*str
 
 	cpCIArr := make([]*ecs.ContainerInstance, 0)
 	for _, containerInstance := range ciArr {
-		if containerInstance.CapacityProviderName != nil && *containerInstance.CapacityProviderName == capacityProviderName {
-			cpCIArr = append(cpCIArr, containerInstance)
+		if containerInstance.Status == nil || *containerInstance.Status != "ACTIVE" {
+			continue
 		}
+
+		if containerInstance.CapacityProviderName == nil || *containerInstance.CapacityProviderName != capacityProviderName {
+			continue
+		}
+
+		cpCIArr = append(cpCIArr, containerInstance)
 	}
 
 	return cpCIArr, nil
@@ -292,25 +298,6 @@ func TerminateInstancesInASG(ec2InstanceIdPtrs []*string, decrementDesiredCapaci
 
 		// as we terminating one by one
 		time.Sleep(250 * time.Millisecond)
-	}
-
-	return nil
-}
-
-// TerminateInstances need's permissons for performing ec2Svc.TerminateInstances call
-func TerminateInstances(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) error {
-	// ec2 constraints: Up to 1000 instance IDs. We recommend breaking up this request into smaller batches
-	// paginating only up to 100 instance IDs
-	pages := paginate(ec2InstanceIdPtrs, 100)
-	for _, page := range pages {
-		input := &ec2.TerminateInstancesInput{
-			InstanceIds: page,
-		}
-
-		_, err := utils.RetryThrottling(ec2Svc.TerminateInstances)(input)
-		if err != nil {
-			return err
-		}
 	}
 
 	return nil

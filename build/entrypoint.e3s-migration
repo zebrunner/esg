@@ -1,0 +1,4 @@
+#!/bin/sh
+
+migrate -path migrations -database $DATABASE up
+# CMD migrate -path migrations -database $DATABASE down -all

@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/db"
 	"github.com/zebrunner/esg/utils"
 )
@@ -35,6 +36,7 @@ func CreateUser(c *gin.Context) {
 		return
 	}
 
+	log.WithField("username", body.Username).Info("successfully created new user")
 	c.JSON(http.StatusOK, gin.H{
 		"accessToken": password,
 	})
@@ -48,6 +50,7 @@ func DeleteUser(c *gin.Context) {
 		return
 	}
 
+	log.WithField("username", username).Info("successfully deleted user")
 	c.Status(http.StatusOK)
 }
 
@@ -66,6 +69,7 @@ func RefreshToken(c *gin.Context) {
 		return
 	}
 
+	log.WithField("username", user).Info("successfully refreshed token")
 	c.JSON(http.StatusOK, gin.H{
 		"accessToken": password,
 	})
@@ -87,5 +91,6 @@ func UserActivation(c *gin.Context) {
 		return
 	}
 
+	log.WithField("username", user).WithField("active", body.IsActive).Info("successfully changed user's activation")
 	c.Status(http.StatusOK)
 }

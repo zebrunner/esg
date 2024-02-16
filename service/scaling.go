@@ -3,7 +3,6 @@ package service
 import (
 	"fmt"
 	"math"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -20,14 +19,16 @@ import (
 )
 
 var (
-	scalersMap       map[string]scaler
-	allocationResMap map[string][]resourcesToAllocate.ResourcesToAllocate
+	scalersMap map[string]scaler
 )
 
 type scaler struct {
-	capacityProviderName  string
-	autoscalingGroupName  string
-	instanceTypeResources Resources
+	capacityProviderName string
+	autoscalingGroupName string
+	resourcesPerWeight   Resources
+	instanceResources    Resources
+	instanceMinWeight    int64
+	log                  *log.Entry
 }
 
 type Resources struct {
@@ -35,52 +36,23 @@ type Resources struct {
 	Memory int64
 }
 
-func InitScalingData() {
+func InitScalingData() error {
 	var err error
 	scalersMap, err = initScalers()
 	if err != nil {
-		log.WithError(err).Error("Failed to create scaler instances. Stopping scaler")
-		os.Exit(1)
+		log.WithError(err).Error("Failed to create scaler instances")
+		return err
 	}
 
-	allocationResMap = make(map[string][]resourcesToAllocate.ResourcesToAllocate)
-	go func() {
-		for {
-			time.Sleep(10 * time.Second)
-			resources, err := resourcesToAllocate.GetAllEntities()
-			if err != nil {
-				log.WithError(err).Error("Failed to get resources for allocation")
-				continue
-			}
-			tmpResourcesMap := make(map[string][]resourcesToAllocate.ResourcesToAllocate)
-			for _, resToAllocate := range resources {
-				if resourcesArr, ok := tmpResourcesMap[resToAllocate.CapacityProvider]; ok {
-					resourcesArr = append(resourcesArr, *resToAllocate)
-					tmpResourcesMap[resToAllocate.CapacityProvider] = resourcesArr
-				} else {
-					resourcesArr = []resourcesToAllocate.ResourcesToAllocate{*resToAllocate}
-					tmpResourcesMap[resToAllocate.CapacityProvider] = resourcesArr
-				}
-			}
-
-			allocationResMap = tmpResourcesMap
-		}
-	}()
+	return nil
 }
 
 func StartScalers() {
 	for _, s := range scalersMap {
 		go func(s scaler) {
 			for {
-				time.Sleep(10 * time.Second)
-				s.ScaleUp()
-			}
-		}(s)
-
-		go func(s scaler) {
-			for {
-				time.Sleep(30 * time.Second)
-				s.ScaleDown()
+				time.Sleep(15 * time.Second)
+				s.AdjustCapacity()
 			}
 		}(s)
 
@@ -91,7 +63,7 @@ func StartScalers() {
 			}
 		}(s)
 
-		log.WithField("instanceResources", s.instanceTypeResources).WithField("capacityProvider", s.capacityProviderName).WithField("asg", s.autoscalingGroupName).Info("Started scaler")
+		log.WithFields(log.Fields{"instanceResources": s.instanceResources, "minInstanceWeight": s.instanceMinWeight, "capacityProvider": s.capacityProviderName, "asg": s.autoscalingGroupName}).Info("Started scaler")
 	}
 }
 
@@ -137,19 +109,31 @@ func initScalers() (map[string]scaler, error) {
 			return nil, err
 		}
 
-		launchConfiguration := describeGroupOutput.AutoScalingGroups[0].LaunchConfigurationName
-		describeLaunchConfigInput := autoscaling.DescribeLaunchConfigurationsInput{
-			LaunchConfigurationNames: []*string{launchConfiguration},
-		}
-		result, err := utils.RetryThrottling(autoscalingSvc.DescribeLaunchConfigurations)(&describeLaunchConfigInput)
-		if err != nil {
-			return nil, err
+		instanceOverrides := describeGroupOutput.AutoScalingGroups[0].MixedInstancesPolicy.LaunchTemplate.Overrides
+		if len(instanceOverrides) <= 0 {
+			return nil, fmt.Errorf("no instances were provided in MixedInstancesPolicy")
 		}
 
-		instanceType := result.LaunchConfigurations[0].InstanceType
+		// From doc: Value must be in the range of 1 to 999.
+		instanceWithMinWeight := &autoscaling.LaunchTemplateOverrides{
+			WeightedCapacity: aws.String("1000"),
+		}
+		var minWeight int64 = 1000
+		for i := 0; i < len(instanceOverrides); i++ {
+			if instanceOverrides[i].WeightedCapacity == nil {
+				return nil, fmt.Errorf("every instance in MixedInstancesPolicy should have its own weight")
+			}
+
+			weight, _ := strconv.ParseInt(*instanceOverrides[i].WeightedCapacity, 10, 64)
+			if weight < minWeight {
+				minWeight = weight
+				instanceWithMinWeight = instanceOverrides[i]
+			}
+		}
+
 		ec2Svc := ec2.New(session)
 		describeInstanceTypeInput := ec2.DescribeInstanceTypesInput{
-			InstanceTypes: []*string{instanceType},
+			InstanceTypes: []*string{instanceWithMinWeight.InstanceType},
 		}
 		instanceTypesResult, err := utils.RetryThrottling(ec2Svc.DescribeInstanceTypes)(&describeInstanceTypeInput)
 		if err != nil {
@@ -159,9 +143,12 @@ func initScalers() (map[string]scaler, error) {
 		instanceInfo := instanceTypesResult.InstanceTypes[0]
 
 		s := scaler{
-			capacityProviderName:  *capacityProvider.Name,
-			autoscalingGroupName:  asgName,
-			instanceTypeResources: Resources{CPU: *instanceInfo.VCpuInfo.DefaultVCpus * 1024, Memory: *instanceInfo.MemoryInfo.SizeInMiB},
+			capacityProviderName: *capacityProvider.Name,
+			autoscalingGroupName: asgName,
+			resourcesPerWeight:   Resources{CPU: (*instanceInfo.VCpuInfo.DefaultVCpus * 1024) / minWeight, Memory: (*instanceInfo.MemoryInfo.SizeInMiB) / minWeight},
+			instanceResources:    Resources{CPU: *instanceInfo.VCpuInfo.DefaultVCpus * 1024, Memory: *instanceInfo.MemoryInfo.SizeInMiB},
+			instanceMinWeight:    minWeight,
+			log:                  log.WithFields(log.Fields{"asg": asgName, "capacityProvider": *capacityProvider.Name}),
 		}
 
 		scalers[s.capacityProviderName] = s
@@ -186,31 +173,133 @@ func getTasksResources(tasks []*ecs.Task, status string) []*Resources {
 	return resources
 }
 
-func (s *scaler) getFreeResources(tasks []*ecs.Task, currentCapacity int, statuses ...string) []*Resources {
-	// Generate list of resources for each instance
-	instanceResources := make([]*Resources, 0, currentCapacity)
-	for i := 0; i < int(currentCapacity); i++ {
-		instanceResources = append(instanceResources, &Resources{
-			CPU:    s.instanceTypeResources.CPU,
-			Memory: s.instanceTypeResources.Memory,
+func (s *scaler) generateEmptyResources(capacity int) []*Resources {
+	resources := make([]*Resources, 0)
+	var i int64 = int64(capacity)
+	for ; i >= s.instanceMinWeight; i -= s.instanceMinWeight {
+		resources = append(resources, &Resources{
+			CPU:    s.instanceResources.CPU,
+			Memory: s.instanceResources.Memory,
 		})
 	}
 
+	if i > 0 {
+		k := float64(i) / float64(s.instanceMinWeight)
+		resources = append(resources, &Resources{
+			CPU:    int64(float64(s.resourcesPerWeight.CPU) * k),
+			Memory: int64(float64(s.resourcesPerWeight.Memory) * k),
+		})
+	}
+
+	return resources
+}
+
+func (s *scaler) calculateResources(tasks []*ecs.Task, currentCapacity int, statuses ...string) (freeResources []*Resources, requiredResources []*Resources) {
+	// Generate list of resources for each instance
+	freeResources = s.generateEmptyResources(currentCapacity)
+
+	requiredResources = make([]*Resources, 0)
 	for _, status := range statuses {
 		tasksResourcesInUse := getTasksResources(tasks, status)
 		// Remove resources that already are using by tasks with passed status
 		for _, t := range tasksResourcesInUse {
-			for _, i := range instanceResources {
+			enough := false
+			for _, i := range freeResources {
 				if i.CPU >= t.CPU && i.Memory >= t.Memory {
 					i.CPU -= t.CPU
 					i.Memory -= t.Memory
+					enough = true
 					break
 				}
+			}
+
+			if !enough {
+				// Add resources that cannot be placed on any instance
+				requiredResources = append(requiredResources, t)
 			}
 		}
 	}
 
-	return instanceResources
+	return freeResources, requiredResources
+}
+
+func (s *scaler) getResourcesForAllocation() []*resourcesToAllocate.ResourcesToAllocate {
+	resources, err := resourcesToAllocate.GetEntitiesOfCapacityProvider(s.capacityProviderName)
+	if err != nil {
+		log.WithError(err).Error("Failed to get resources for allocation")
+		return nil
+	}
+
+	return resources
+}
+
+func (s *scaler) getInstancesInAutoscalingGroup(autoscalingSvc *autoscaling.AutoScaling) (map[string]*autoscaling.InstanceDetails, error) {
+	instancesMap := make(map[string]*autoscaling.InstanceDetails)
+	instanceIdsArr := make([]*string, 0)
+	describeInstancesInput := autoscaling.DescribeAutoScalingInstancesInput{}
+	for {
+		describeInstancesOutput, err := utils.RetryThrottling(autoscalingSvc.DescribeAutoScalingInstances)(&describeInstancesInput)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, instance := range describeInstancesOutput.AutoScalingInstances {
+			if instance.AutoScalingGroupName == nil || *instance.AutoScalingGroupName != s.autoscalingGroupName {
+				continue
+			}
+
+			instancesMap[*instance.InstanceId] = instance
+			instanceIdsArr = append(instanceIdsArr, instance.InstanceId)
+		}
+
+		if describeInstancesOutput.NextToken == nil {
+			break
+		}
+
+		describeInstancesInput.NextToken = describeInstancesOutput.NextToken
+	}
+
+	if len(instanceIdsArr) == 0 {
+		return instancesMap, nil
+	}
+
+	ec2Svc := ec2.New(AwsSess)
+	ec2Instances, err := DescribeInstances(instanceIdsArr, ec2Svc)
+	if err != nil {
+		return nil, err
+	}
+
+	// filter by ec2 instance state and scale-in protection
+	for _, ec2Instance := range ec2Instances {
+		if ec2Instance.State.Code == nil {
+			delete(instancesMap, *ec2Instance.InstanceId)
+			continue
+		}
+
+		// 0 - pending
+		if *ec2Instance.State.Code == 0 {
+			continue
+		}
+
+		// 16 - running
+		if *ec2Instance.State.Code == 16 {
+			isProtected := false
+			var details *autoscaling.InstanceDetails
+			if details, isProtected = instancesMap[*ec2Instance.InstanceId]; isProtected {
+				isProtected = *details.ProtectedFromScaleIn
+			}
+
+			if !isProtected {
+				delete(instancesMap, *ec2Instance.InstanceId)
+			}
+
+			continue
+		}
+
+		delete(instancesMap, *ec2Instance.InstanceId)
+	}
+
+	return instancesMap, nil
 }
 
 func (s *scaler) getAutoscalingGroup(autoscalingSvc *autoscaling.AutoScaling) (*autoscaling.Group, error) {
@@ -231,54 +320,31 @@ func (s *scaler) getAutoscalingGroup(autoscalingSvc *autoscaling.AutoScaling) (*
 	return autoScalingGroup, nil
 }
 
-func (s *scaler) ScaleUp() {
-	l := log.WithField("asg", s.autoscalingGroupName)
+func (s *scaler) AdjustCapacity() {
 	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
 	if err != nil {
-		l.WithError(err).Error("Failed to create AWS session")
+		s.log.WithError(err).Error("Failed to create AWS session")
 		return
 	}
+
 	svc := ecs.New(session)
-	autoscalingSvc := autoscaling.New(session)
 	tasks, err := GetCapacityProviderTasks(svc, s.capacityProviderName)
 	if err != nil {
-		l.WithError(err).Error("Failed to get list of running task")
+		s.log.WithError(err).Error("Failed to get list of running task")
 		return
 	}
 
-	provisioningTasksResources := getTasksResources(tasks, "PROVISIONING")
-	// There is no task in provisioning state, no need to scale up
-	if len(provisioningTasksResources) == 0 {
-		return
-	}
-
+	autoscalingSvc := autoscaling.New(session)
 	asg, err := s.getAutoscalingGroup(autoscalingSvc)
 	if err != nil {
-		l.WithError(err).Error("Failed to get autoscaling group")
+		s.log.WithError(err).Error("Failed to get autoscaling group")
 		return
 	}
-	currentCapacity := *asg.DesiredCapacity
 
-	freeResources := s.getFreeResources(tasks, int(currentCapacity), "RUNNING")
-	// Remove resources that might be used for PROVISSIONING tasks
-	requiredTaskResources := []*Resources{}
-	for _, t := range provisioningTasksResources {
-		enough := false
-		for _, i := range freeResources {
-			if i.CPU >= t.CPU && i.Memory >= t.Memory {
-				i.CPU -= t.CPU
-				i.Memory -= t.Memory
-				enough = true
-				break
-			}
-		}
+	currentDesiredCapacity := *asg.DesiredCapacity
+	freeResources, requiredResources := s.calculateResources(tasks, int(currentDesiredCapacity), "RUNNING", "PROVISIONING")
 
-		if !enough {
-			requiredTaskResources = append(requiredTaskResources, t)
-		}
-	}
-
-	if resourcesToAllocate, ok := allocationResMap[s.capacityProviderName]; ok && resourcesToAllocate != nil {
+	if resourcesToAllocate := s.getResourcesForAllocation(); resourcesToAllocate != nil {
 		for _, resources := range resourcesToAllocate {
 			enough := false
 			for _, i := range freeResources {
@@ -291,14 +357,22 @@ func (s *scaler) ScaleUp() {
 			}
 
 			if !enough {
-				requiredTaskResources = append(requiredTaskResources, &Resources{CPU: resources.Cpu, Memory: resources.Memory})
+				requiredResources = append(requiredResources, &Resources{CPU: resources.Cpu, Memory: resources.Memory})
 			}
 		}
 	}
 
+	if len(requiredResources) == 0 {
+		s.ScaleDown(session, asg, freeResources)
+	} else {
+		s.ScaleUp(session, asg, requiredResources)
+	}
+}
+
+func (s *scaler) ScaleUp(session *awsSession.Session, asg *autoscaling.Group, requiredResources []*Resources) {
 	// No new resources required right now
-	if len(requiredTaskResources) == 0 {
-		l.Trace("No new resources required")
+	if len(requiredResources) == 0 {
+		s.log.Trace("No new resources required")
 		return
 	}
 
@@ -306,23 +380,24 @@ func (s *scaler) ScaleUp() {
 		CPU:    0,
 		Memory: 0,
 	}
-	for _, t := range requiredTaskResources {
+	for _, t := range requiredResources {
 		totalRequiredResources.CPU += t.CPU
 		totalRequiredResources.Memory += t.Memory
 	}
-	l.WithFields(log.Fields{
+	s.log.WithFields(log.Fields{
 		"CPU":    totalRequiredResources.CPU,
 		"Memory": totalRequiredResources.Memory,
 	}).Debug("Total required resources")
 
-	requiredCpu := float64(totalRequiredResources.CPU) / float64(s.instanceTypeResources.CPU)
-	requiredMemory := float64(totalRequiredResources.Memory) / float64(s.instanceTypeResources.Memory)
+	requiredCpu := float64(totalRequiredResources.CPU) / float64(s.resourcesPerWeight.CPU)
+	requiredMemory := float64(totalRequiredResources.Memory) / float64(s.resourcesPerWeight.Memory)
 
+	currentCapacity := *asg.DesiredCapacity
 	desiredCapacity := float64(currentCapacity) + math.Max(requiredCpu, requiredMemory)
 	desiredReservationCapacity := desiredCapacity * (1 + config.Conf.ReserveInstancesPercent)
 
 	if desiredReservationCapacity-desiredCapacity > float64(config.Conf.ReserveMaxCapacity) {
-		l.WithFields(log.Fields{
+		s.log.WithFields(log.Fields{
 			"desired reservation capacity": math.Ceil(desiredReservationCapacity),
 			"desired capacity":             math.Ceil(desiredCapacity),
 			"max reservation capacity":     config.Conf.ReserveMaxCapacity,
@@ -333,7 +408,7 @@ func (s *scaler) ScaleUp() {
 	newCapacity := int64(math.Ceil(desiredReservationCapacity))
 
 	if newCapacity > *asg.MaxSize {
-		l.WithFields(log.Fields{
+		s.log.WithFields(log.Fields{
 			"maxCapacity":     *asg.MaxSize,
 			"desiredCapacity": newCapacity,
 		}).Warn("ASG desired size reached limit!")
@@ -345,143 +420,171 @@ func (s *scaler) ScaleUp() {
 		return
 	}
 
-	updateGroupInput := &autoscaling.UpdateAutoScalingGroupInput{
-		AutoScalingGroupName: asg.AutoScalingGroupName,
-		DesiredCapacity:      &newCapacity,
-	}
-	_, err = utils.RetryThrottling(autoscalingSvc.UpdateAutoScalingGroup)(updateGroupInput)
+	autoscalingSvc := autoscaling.New(session)
+	err := s.SetDesiredCapacity(*autoscalingSvc, newCapacity)
 	if err != nil {
-		l.WithError(err).Error("Failed to update auto scaling group")
+		s.log.WithError(err).Error("Failed to update auto scaling group")
 		return
 	}
-	l.WithFields(log.Fields{
+	s.log.WithFields(log.Fields{
 		"oldCapacity": currentCapacity,
 		"newCapacity": newCapacity,
 	}).Info("Capacity updated")
 }
 
-func (s *scaler) ScaleDown() {
-	l := log.WithField("asg", s.autoscalingGroupName)
-	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
-	if err != nil {
-		l.WithError(err).Error("Failed to create AWS session")
-		return
-	}
-	svc := ecs.New(session)
-	tasks, err := GetCapacityProviderTasks(svc, s.capacityProviderName)
-	if err != nil {
-		l.WithError(err).Error("Failed to get list of running task")
-		return
-	}
-
+func (s *scaler) ScaleDown(session *awsSession.Session, asg *autoscaling.Group, freeResources []*Resources) {
 	autoscalingSvc := autoscaling.New(session)
+	instancesDetailsMap, err := s.getInstancesInAutoscalingGroup(autoscalingSvc)
 	if err != nil {
-		l.WithError(err).Error("Failed to get list of running task")
+		s.log.WithError(err).Info("Failed to get instances in autoscaling group")
 		return
 	}
 
-	asg, err := s.getAutoscalingGroup(autoscalingSvc)
-	if err != nil {
-		l.WithError(err).Error("Failed to get autoscaling group")
-		return
-	}
-	minSize := *asg.MinSize
-	newCapacity, currentCapacity := *asg.DesiredCapacity, *asg.DesiredCapacity
+	minSize, desiredCapacity := *asg.MinSize, *asg.DesiredCapacity
 
-	freeResources := s.getFreeResources(tasks, int(currentCapacity), "RUNNING", "PROVISIONING")
-
-	if resourcesToAllocate, ok := allocationResMap[s.capacityProviderName]; ok && resourcesToAllocate != nil {
-		for _, desiredProvisioning := range resourcesToAllocate {
-			for _, instance := range freeResources {
-				if instance.CPU >= desiredProvisioning.Cpu && instance.Memory >= desiredProvisioning.Memory {
-					instance.CPU -= desiredProvisioning.Cpu
-					instance.Memory -= desiredProvisioning.Memory
-					break
-				}
-			}
-		}
+	var currentCapacity int64 = 0
+	for _, instance := range instancesDetailsMap {
+		weight, _ := strconv.ParseInt(*instance.WeightedCapacity, 10, 64)
+		currentCapacity += weight
 	}
 
-	removeCount := 0
+	overLimitCapacity := currentCapacity - desiredCapacity
+	if overLimitCapacity > 0 {
+		freeResources = append(freeResources, s.generateEmptyResources(int(overLimitCapacity))...)
+	}
+
+	allowedCapacityForDeleting := 0
 	for _, instance := range freeResources {
-		if instance.CPU >= s.instanceTypeResources.CPU && instance.Memory >= s.instanceTypeResources.Memory {
-			removeCount++
+		if instance.CPU >= s.resourcesPerWeight.CPU && instance.Memory >= s.resourcesPerWeight.Memory {
+			allowedCapacityForDeleting++
 		}
 	}
 
-	if removeCount == 0 {
-		l.Trace("All instances are busy, scale down not allowed")
+	if allowedCapacityForDeleting == 0 {
+		s.log.Trace("All instances are busy, scale down not allowed")
 		return
 	}
 
+	svc := ecs.New(session)
 	ciArns, err := ListContainerInstances(svc)
 	if err != nil {
-		l.WithError(err).Debug("Failed to list container instances")
+		s.log.WithError(err).Debug("Failed to list container instances")
 		return
 	}
 
-	containerInstances, err := DescribeContainerInstancesOfCapacityProvider(ciArns, svc, s.capacityProviderName)
+	containerInstances, err := DescribeActiveContainerInstancesOfCapacityProvider(ciArns, svc, s.capacityProviderName)
 	if err != nil {
-		l.WithError(err).Error("Failed to describe container instances")
+		s.log.WithError(err).Error("Failed to describe container instances")
 		return
 	}
 
-	instancesToDelete := make([]*ecs.ContainerInstance, 0)
+	// [instance]weight map
+	allowedInstancesToDelete := make(map[*ecs.ContainerInstance]int64)
+	capacityToDelete := 0
 	for _, instance := range containerInstances {
-		if removeCount == 0 {
+		if allowedCapacityForDeleting <= 0 {
 			break
 		}
 
 		if *instance.PendingTasksCount == 0 && *instance.RunningTasksCount == 0 {
 			instanceUptime := time.Since(*instance.RegisteredAt)
 			if instanceUptime > config.Conf.InstanceCooldownTimeout {
-				instancesToDelete = append(instancesToDelete, instance)
-				removeCount--
+				weight, _ := strconv.ParseInt(*instancesDetailsMap[*instance.Ec2InstanceId].WeightedCapacity, 10, 64)
+				capacityToDelete += int(weight)
+				allowedInstancesToDelete[instance] = weight
+				allowedCapacityForDeleting -= int(weight)
 			}
 		}
 	}
 
-	instanceToDeleteReserved := float64(len(instancesToDelete)) * (1 - config.Conf.ReserveInstancesPercent)
-	if float64(len(instancesToDelete))-instanceToDeleteReserved > float64(config.Conf.ReserveMaxCapacity) {
-		l.WithFields(log.Fields{
-			"instances to delete":                 len(instancesToDelete),
-			"instances to delete except reserved": math.Ceil(instanceToDeleteReserved),
-			"max reservation capacity":            config.Conf.ReserveMaxCapacity,
+	// ReserveInstancesPercent on scalde down makes less instance termination that it could be done (scales down slower)
+	capacityToDeleteReserved := float64(capacityToDelete) * (1 - config.Conf.ReserveInstancesPercent)
+	if float64(capacityToDelete)-capacityToDeleteReserved > float64(config.Conf.ReserveMaxCapacity) {
+		maxCapacityToDelete := float64(int64(capacityToDelete) - config.Conf.ReserveMaxCapacity)
+		s.log.WithFields(log.Fields{
+			"wantedCapacityToDelete":   capacityToDelete,
+			"capacityToDeleteReserved": math.Ceil(capacityToDeleteReserved),
+			"maxReservationCapacity":   config.Conf.ReserveMaxCapacity,
+			"maxCapacityToDelete":      maxCapacityToDelete,
 		}).Warn("Triggered max reservation capacity limit")
-		instanceToDeleteReserved = float64(int64(len(instancesToDelete)) - config.Conf.ReserveMaxCapacity)
+		capacityToDeleteReserved = maxCapacityToDelete
 	}
 
-	maxInstancesToDelete := int(math.Ceil(instanceToDeleteReserved))
+	maxCapacityToDelete := int64(math.Ceil(capacityToDeleteReserved))
 
-	terminatedCount := 0
-	for _, instance := range instancesToDelete {
-		if newCapacity <= minSize || maxInstancesToDelete <= 0 {
+	instancesToDelete := make([]*string, 0)
+	containerInstanceToDelete := make([]*string, 0)
+	newCapacity := currentCapacity
+	for instance, weight := range allowedInstancesToDelete {
+		if newCapacity <= minSize || maxCapacityToDelete <= 0 {
 			break
 		}
 
-		l := l.WithField("instance", *instance.Ec2InstanceId)
-
-		l.Trace("Stopping instance")
-		stopInstanceInput := autoscaling.TerminateInstanceInAutoScalingGroupInput{
-			InstanceId:                     instance.Ec2InstanceId,
-			ShouldDecrementDesiredCapacity: aws.Bool(true),
+		if newCapacity-weight < minSize {
+			if minSize != 0 {
+				continue
+			}
+			weight = newCapacity
 		}
-		_, err := utils.RetryThrottling(autoscalingSvc.TerminateInstanceInAutoScalingGroup)(&stopInstanceInput)
+
+		s.log.WithField("instance", *instance.Ec2InstanceId).Trace("Stopping instance")
+		instancesToDelete = append(instancesToDelete, instance.Ec2InstanceId)
+		containerInstanceToDelete = append(containerInstanceToDelete, instance.ContainerInstanceArn)
+
+		newCapacity -= weight
+		maxCapacityToDelete -= weight
+	}
+
+	if len(instancesToDelete) == 0 {
+		return
+	}
+
+	ciPages := paginate(containerInstanceToDelete, 10)
+	for _, ciArr := range ciPages {
+		stateUpdateInput := ecs.UpdateContainerInstancesStateInput{
+			Cluster:            &config.Conf.AwsCluster,
+			Status:             aws.String("DRAINING"),
+			ContainerInstances: ciArr,
+		}
+
+		ecsSvc := ecs.New(session)
+		_, err = utils.RetryThrottling(ecsSvc.UpdateContainerInstancesState)(&stateUpdateInput)
 		if err != nil {
-			l.WithError(err).Error("Failed to stop instance")
+			s.log.WithError(err).Info("Failed to change status of stopping contaienr-instances to draining")
+			return
+		}
+	}
+
+	instancesPages := paginate(instancesToDelete, 50)
+	for _, instances := range instancesPages {
+		scaleInDisableInput := autoscaling.SetInstanceProtectionInput{
+			AutoScalingGroupName: &s.autoscalingGroupName,
+			InstanceIds:          instances,
+			ProtectedFromScaleIn: aws.Bool(false),
 		}
 
-		newCapacity -= 1
-		maxInstancesToDelete -= 1
-		terminatedCount++
-		time.Sleep(250 * time.Millisecond)
+		_, err = utils.RetryThrottling(autoscalingSvc.SetInstanceProtection)(&scaleInDisableInput)
+		if err != nil {
+			s.log.WithError(err).Info("Failed to diable scale-in protection")
+			return
+		}
 	}
-	if terminatedCount != 0 {
-		l.WithFields(log.Fields{
-			"oldCapacity": currentCapacity,
-			"newCapacity": newCapacity,
-		}).Info("Capacity updated")
+
+	if newCapacity >= desiredCapacity {
+		s.log.WithFields(log.Fields{"desiredCapacity": desiredCapacity, "terminatedCapacity": currentCapacity - newCapacity}).Info("Instance rebalance were performed without desired capacity change")
+		return
 	}
+
+	err = s.SetDesiredCapacity(*autoscalingSvc, newCapacity)
+	if err != nil {
+		s.log.WithError(err).Error("Failed to update auto scaling group")
+		return
+	}
+
+	s.log.WithFields(log.Fields{
+		"oldCapacity": desiredCapacity,
+		"newCapacity": newCapacity,
+	}).Info("Capacity updated")
 }
 
 func (s *scaler) StopEc2ZombieInstances() {
@@ -499,7 +602,7 @@ func (s *scaler) StopEc2ZombieInstances() {
 		return
 	}
 
-	containerInstances, err := DescribeContainerInstancesOfCapacityProvider(ciArns, svc, s.capacityProviderName)
+	containerInstances, err := DescribeActiveContainerInstancesOfCapacityProvider(ciArns, svc, s.capacityProviderName)
 	if err != nil {
 		l.WithError(err).Error("Failed to describe container instances")
 		return
@@ -545,6 +648,16 @@ func (s *scaler) StopEc2ZombieInstances() {
 
 		time.Sleep(250 * time.Millisecond)
 	}
+}
+
+func (s *scaler) SetDesiredCapacity(autoscalingSvc autoscaling.AutoScaling, newCapacity int64) error {
+	setDesiredCapacityInput := autoscaling.SetDesiredCapacityInput{
+		AutoScalingGroupName: &s.autoscalingGroupName,
+		DesiredCapacity:      &newCapacity,
+	}
+	_, err := utils.RetryThrottling(autoscalingSvc.SetDesiredCapacity)(&setDesiredCapacityInput)
+
+	return err
 }
 
 func deleteElement(slice []*ecs.ContainerInstance, index int) []*ecs.ContainerInstance {
