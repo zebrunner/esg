@@ -1,0 +1,13 @@
+FROM alpine:latest
+
+RUN apk add -U ca-certificates tzdata curl && rm -Rf /var/cache/apk/* \
+    && curl -L https://github.com/golang-migrate/migrate/releases/download/v4.14.1/migrate.linux-amd64.tar.gz | tar -xvz \
+    && cp migrate.linux-amd64 /usr/bin/migrate \
+    && rm -Rf migrate.linux-amd64
+
+ENV DATABASE=postgres://postgres:postgres@db/postgres?sslmode=disable
+
+COPY ./migrations/ /migrations/
+COPY ./build/entrypoint.e3s-migration /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
