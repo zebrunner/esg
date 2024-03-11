@@ -122,7 +122,11 @@
             "Action": [
                 "ecs:DiscoverPollEndpoint",
                 "logs:CreateLogStream",
-                "logs:PutLogEvents"
+                "logs:PutLogEvents",
+                "ecr:GetAuthorizationToken",
+                "ecr:BatchCheckLayerAvailability",
+                "ecr:GetDownloadUrlForLayer",
+                "ecr:BatchGetImage"
             ],
             "Resource": "*"
         },
