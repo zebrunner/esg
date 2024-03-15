@@ -26,6 +26,6 @@ Suitable for personal usage and in big clusters:
 
 ### Documentation 
 
-* [Prerequisites](docs/prerequisites.md)
-* [Capabilities](docs/capabilities.md)
-* [Errors](docs/errors.md)
+* [Installation](https://github.com/zebrunner/e3s/blob/main/docs/installation.md)
+* [Capabilities](https://github.com/zebrunner/e3s/blob/main/docs/capabilities.md)
+* [Errors](https://github.com/zebrunner/e3s/blob/main/docs/errors.md)
