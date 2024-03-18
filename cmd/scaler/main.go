@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"flag"
+	"fmt"
 	"os"
 	"os/signal"
 	"strings"
@@ -228,7 +229,20 @@ func TrackResourceUsage(tasks []*ecs.Task, cachedTasksMap map[string]taskmap.Tas
 			// generic and cypress on success finish are not marked as stopped in cache after finish
 			if cachedTask.Status == taskmap.TaskGeneric {
 				cachedTask.Status = taskmap.TaskStopped
-				cachedTask.StopReason = taskmap.TaskFinished
+
+				if ok, container := utils.IsTaskFinishedSuccessfully(task); ok {
+					cachedTask.StopReason = taskmap.TaskFinished
+				} else {
+					errStr := fmt.Sprintf("Launcher's container '%s' stopped with reason: %s", *container.Name, *task.StoppedReason)
+					if container.ExitCode != nil {
+						errStr = fmt.Sprintf("%s, with %v exit code", errStr, *container.ExitCode)
+					}
+
+					zebrunner.AbortLaunch(cachedTask.RouterUUID, cachedTask.Workspace,
+						cachedTask.Capabilities.LaunchUUID.ToPrimitive(), errStr)
+
+					cachedTask.StopReason = taskmap.TaskUnhealthy
+				}
 			} else {
 				continue
 			}
