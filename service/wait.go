@@ -101,13 +101,32 @@ func (w *waitWorker) start() {
 
 			if *task.LastStatus == "STOPPED" {
 				// #860: Api tests are reexecuted several times
-				if strings.Contains(*task.TaskDefinitionArn, "generic") && isTaskFinishedSuccessfully(task) {
-					l.Info("task already finished")
-					select {
-					case req.ResponseCh <- task:
-					default:
-					}
+				if strings.Contains(*task.TaskDefinitionArn, "generic") {
+					if ok, container := utils.IsTaskFinishedSuccessfully(task); ok {
+						l.Info("task already finished")
+						select {
+						case req.ResponseCh <- task:
+						default:
+						}
+					} else {
+						l.Error("Generic task stopped: ", *task)
 
+						taskStopReason := *task.StoppedReason
+						if strings.Contains(taskStopReason, "Essential container in task exited") ||
+							strings.Contains(taskStopReason, "CannotPullContainerError") ||
+							(container.Reason != nil && strings.Contains(*container.Reason, "CannotPullContainerError")) {
+
+							select {
+							case req.EssentialErrCh <- fmt.Errorf(utils.GetContainerExitReason(container)):
+							default:
+							}
+						} else {
+							select {
+							case req.NonEssentialErrCh <- fmt.Errorf(utils.GetContainerExitReason(container)):
+							default:
+							}
+						}
+					}
 				} else {
 					l.Error("Task stopped: ", *task)
 					select {
@@ -115,6 +134,7 @@ func (w *waitWorker) start() {
 					default:
 					}
 				}
+
 				delete(w.requests, taskId)
 				continue
 			}
@@ -162,17 +182,6 @@ func (w *waitWorker) start() {
 			}
 		}
 	}
-}
-
-func isTaskFinishedSuccessfully(task *ecs.Task) bool {
-	for _, container := range task.Containers {
-		// if container's exit code is nil it means that container doesn't even started
-		if container.ExitCode == nil || *container.ExitCode != 0 {
-			return false
-		}
-	}
-
-	return true
 }
 
 func (w *waitWorker) waitFor(ctx context.Context, taskId string) *waitRequest {
