@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"flag"
-	"fmt"
 	"os"
 	"os/signal"
 	"strings"
@@ -233,15 +232,18 @@ func TrackResourceUsage(tasks []*ecs.Task, cachedTasksMap map[string]taskmap.Tas
 				if ok, container := utils.IsTaskFinishedSuccessfully(task); ok {
 					cachedTask.StopReason = taskmap.TaskFinished
 				} else {
-					errStr := fmt.Sprintf("Launcher's container '%s' stopped with reason: %s", *container.Name, *task.StoppedReason)
-					if container.ExitCode != nil {
-						errStr = fmt.Sprintf("%s, with %v exit code", errStr, *container.ExitCode)
+					cachedTask.StopReason = taskmap.TaskUnhealthy
+
+					exitReason := utils.GetContainerExitReason(container)
+
+					l := l.WithField("exitReason", exitReason)
+					if task.StoppedReason != nil {
+						l = l.WithField("taskReason", *task.StoppedReason)
 					}
+					l.Warn("Aborting launch due to exit error")
 
 					zebrunner.AbortLaunch(cachedTask.RouterUUID, cachedTask.Workspace,
-						cachedTask.Capabilities.LaunchUUID.ToPrimitive(), errStr)
-
-					cachedTask.StopReason = taskmap.TaskUnhealthy
+						cachedTask.Capabilities.LaunchUUID.ToPrimitive(), exitReason)
 				}
 			} else {
 				continue

@@ -109,15 +109,22 @@ func (w *waitWorker) start() {
 						default:
 						}
 					} else {
-						l.WithField("containerName", *container.Name).Error("Generic task stopped: ", *task)
-						err := fmt.Errorf("Launcher's container '%s' stopped with reason: %s", *container.Name, *task.StoppedReason)
-						if container.ExitCode != nil {
-							err = fmt.Errorf("%v, with %v exit code", err, *container.ExitCode)
-						}
+						l.Error("Generic task stopped: ", *task)
 
-						select {
-						case req.EssentialErrCh <- err:
-						default:
+						taskStopReason := *task.StoppedReason
+						if strings.Contains(taskStopReason, "Essential container in task exited") ||
+							strings.Contains(taskStopReason, "CannotPullContainerError") ||
+							(container.Reason != nil && strings.Contains(*container.Reason, "CannotPullContainerError")) {
+
+							select {
+							case req.EssentialErrCh <- fmt.Errorf(utils.GetContainerExitReason(container)):
+							default:
+							}
+						} else {
+							select {
+							case req.NonEssentialErrCh <- fmt.Errorf(utils.GetContainerExitReason(container)):
+							default:
+							}
 						}
 					}
 				} else {
@@ -127,6 +134,7 @@ func (w *waitWorker) start() {
 					default:
 					}
 				}
+
 				delete(w.requests, taskId)
 				continue
 			}

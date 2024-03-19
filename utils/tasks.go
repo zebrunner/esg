@@ -1,6 +1,10 @@
 package utils
 
-import "github.com/aws/aws-sdk-go/service/ecs"
+import (
+	"fmt"
+
+	"github.com/aws/aws-sdk-go/service/ecs"
+)
 
 func IsTaskFinishedSuccessfully(task *ecs.Task) (bool, *ecs.Container) {
 	for _, container := range task.Containers {
@@ -11,4 +15,21 @@ func IsTaskFinishedSuccessfully(task *ecs.Task) (bool, *ecs.Container) {
 	}
 
 	return true, nil
+}
+
+func GetContainerExitReason(container *ecs.Container) string {
+	reason := ""
+	if container.Name == nil {
+		return reason
+	}
+
+	reason = fmt.Sprintf("Container '%s' stopped.", *container.Name)
+	if container.ExitCode != nil {
+		reason = fmt.Sprintf("%s Exit code: %v.", reason, *container.ExitCode)
+	}
+	if container.Reason != nil {
+		reason = fmt.Sprintf("%s Reason: %v.", reason, *container.Reason)
+	}
+
+	return reason
 }
