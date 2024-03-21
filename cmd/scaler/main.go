@@ -228,23 +228,7 @@ func TrackResourceUsage(tasks []*ecs.Task, cachedTasksMap map[string]taskmap.Tas
 			// generic and cypress on success finish are not marked as stopped in cache after finish
 			if cachedTask.Status == taskmap.TaskGeneric {
 				cachedTask.Status = taskmap.TaskStopped
-
-				if ok, container := utils.IsTaskFinishedSuccessfully(task); ok {
-					cachedTask.StopReason = taskmap.TaskFinished
-				} else {
-					cachedTask.StopReason = taskmap.TaskUnhealthy
-
-					exitReason := utils.GetContainerExitReason(container)
-
-					l := l.WithField("exitReason", exitReason)
-					if task.StoppedReason != nil {
-						l = l.WithField("taskReason", *task.StoppedReason)
-					}
-					l.Warn("Aborting launch due to exit error")
-
-					zebrunner.AbortLaunch(cachedTask.RouterUUID, cachedTask.Workspace,
-						cachedTask.Capabilities.LaunchUUID.ToPrimitive(), exitReason)
-				}
+				cachedTask.StopReason = taskmap.TaskFinished
 			} else {
 				continue
 			}

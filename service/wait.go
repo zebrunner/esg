@@ -111,11 +111,7 @@ func (w *waitWorker) start() {
 					} else {
 						l.Error("Generic task stopped: ", *task)
 
-						taskStopReason := *task.StoppedReason
-						if strings.Contains(taskStopReason, "Essential container in task exited") ||
-							strings.Contains(taskStopReason, "CannotPullContainerError") ||
-							(container.Reason != nil && strings.Contains(*container.Reason, "CannotPullContainerError")) {
-
+						if container.Reason != nil && strings.Contains(*container.Reason, "CannotPullContainerError") {
 							select {
 							case req.EssentialErrCh <- fmt.Errorf(utils.GetContainerExitReason(container)):
 							default:

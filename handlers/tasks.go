@@ -24,6 +24,7 @@ import (
 	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
+	"github.com/zebrunner/esg/zebrunner"
 	"golang.org/x/net/websocket"
 )
 
@@ -205,6 +206,22 @@ func AbortTask(c *gin.Context) {
 	}
 
 	l.Info("task aborted")
+	c.JSON(http.StatusNoContent, gin.H{})
+}
+
+func MarkAsFinished(c *gin.Context) {
+	task := c.MustGet(config.TaskIdKey).(*taskmap.Task)
+
+	l := log.WithField(config.RouterUUID, task.RouterUUID).WithField(config.TaskIdKey, task.TaskId)
+	if !config.Conf.SingleTenant {
+		l = l.WithField("workspace", task.Workspace)
+	}
+
+	go func() {
+		zebrunner.AbortLaunch(task.RouterUUID, task.Workspace, task.Capabilities.LaunchUUID.ToPrimitive(), "Executor finished")
+		l.Info("Generic task finished")
+	}()
+
 	c.JSON(http.StatusNoContent, gin.H{})
 }
 
