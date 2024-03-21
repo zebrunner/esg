@@ -155,7 +155,26 @@ func WriteAll(tasks []Task, expiration time.Duration) error {
 }
 
 func Keys() ([]string, error) {
-	return config.RedisTasksClient.Keys(context.Background(), "*").Result()
+	keysSet := make(map[string]string)
+	iter := config.RedisTasksClient.Scan(context.Background(), 0, "*", 50).Iterator()
+	for iter.Next(context.Background()) {
+		key := iter.Val()
+		keysSet[key] = key
+	}
+
+	if err := iter.Err(); err != nil {
+		log.WithError(err).Error("Failed to get all keys")
+		return nil, err
+	}
+
+	i := 0
+	keys := make([]string, len(keysSet))
+	for key := range keysSet {
+		keys[i] = key
+		i++
+	}
+
+	return keys, nil
 }
 
 // Returns cached tasks by passed taskIdArr from tasks redis db

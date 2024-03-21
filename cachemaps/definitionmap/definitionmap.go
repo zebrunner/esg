@@ -49,14 +49,20 @@ func WriteAll(definitionsMap map[string]int64, expiration time.Duration) error {
 
 // Returns all definitions from redis as map[hash]revision
 func getDefinitions() (map[string]int64, error) {
-	keys, err := config.RedisDefinitionClient.Keys(context.Background(), "*").Result()
-	if err != nil {
+	keysSet := make(map[string]string)
+	iter := config.RedisDefinitionClient.Scan(context.Background(), 0, "*", 50).Iterator()
+	for iter.Next(context.Background()) {
+		key := iter.Val()
+		keysSet[key] = key
+	}
+
+	if err := iter.Err(); err != nil {
 		log.WithError(err).Error("Failed to get all keys")
 		return nil, err
 	}
 
 	rdbPipe := config.RedisDefinitionClient.Pipeline()
-	for _, hash := range keys {
+	for hash := range keysSet {
 		rdbPipe.Get(context.Background(), hash)
 	}
 

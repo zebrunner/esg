@@ -129,13 +129,20 @@ func (sess Session) IsIdle() bool {
 
 // Returns all sessions from redis
 func Sessions() ([]Session, error) {
-	keys, err := config.RedisSessionsClient.Keys(context.Background(), "*").Result()
-	if err != nil {
+	keysSet := make(map[string]string)
+	iter := config.RedisSessionsClient.Scan(context.Background(), 0, "*", 50).Iterator()
+	for iter.Next(context.Background()) {
+		key := iter.Val()
+		keysSet[key] = key
+	}
+
+	if err := iter.Err(); err != nil {
+		log.WithError(err).Error("Failed to get all keys")
 		return nil, err
 	}
 
 	rdbPipe := config.RedisSessionsClient.Pipeline()
-	for _, key := range keys {
+	for key := range keysSet {
 		rdbPipe.Get(context.Background(), key)
 	}
 
