@@ -16,6 +16,7 @@ var (
 	RedisIdMapperClient   *redis.Client
 	RedisDefinitionClient *redis.Client
 	RedisResourcesClient  *redis.Client
+	RedisUtilityClient    *redis.Client
 	DbConnection          *sqlx.DB
 )
 
@@ -64,7 +65,7 @@ func InitCache() error {
 		return err
 	}
 
-	// DB 3 - for task's mapper
+	// DB 3 - for uuid mapper
 	RedisIdMapperClient = redis.NewClient(&redis.Options{
 		Addr:        Conf.RedisConnectionString,
 		Password:    "",
@@ -106,6 +107,13 @@ func InitCache() error {
 		log.WithError(err).Error("Failed to ping redis resources connection")
 		return err
 	}
+
+	RedisUtilityClient = redis.NewClient(&redis.Options{
+		Addr:        Conf.RedisConnectionString,
+		Password:    "",
+		DB:          6,
+		PoolTimeout: 10 * time.Second,
+	})
 
 	return nil
 }

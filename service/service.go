@@ -16,6 +16,7 @@ import (
 	"github.com/zebrunner/esg/cachemaps/mapper"
 	"github.com/zebrunner/esg/cachemaps/sessionmap"
 	"github.com/zebrunner/esg/cachemaps/taskmap"
+	"github.com/zebrunner/esg/cachemaps/utilsmap"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
 	"github.com/zebrunner/esg/selenium"
@@ -386,10 +387,9 @@ func (starter basicStarter) StartService(startupTime context.Context) (map[strin
 				if starter.basis.CachedTask != nil {
 					// check abort status in case of non esential error
 					task, err := taskmap.Find(starter.basis.CachedTask.TaskId, false)
-					if err == nil && task.StopReason == taskmap.TaskAborted {
+					if err == nil && (task.StopReason == taskmap.TaskAborted || task.StopReason == taskmap.TaskFinished) {
 						// stop service starter, return error
-						seErr := utils.CreationErr(fmt.Errorf("service start has been aborted"))
-						return nil, seErr
+						return nil, utils.CreationErr(fmt.Errorf(string(task.StopReason)))
 					}
 					StopTask(*starter.basis.CachedTask, taskmap.TaskStartupFailure)
 				}
@@ -433,11 +433,28 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l 
 		starter = genericStarter{
 			basis: basis,
 			finalizeFunc: func(s *startBasis) {
-				s.CachedTask.Status = taskmap.TaskGeneric
+				// #1056: Small chance of double shaping on generic task abort
+				for {
+					if ok := utilsmap.AcquireLock(s.CachedTask.TaskId, 0); !ok {
+						time.Sleep(10 * time.Second)
+						continue
+					}
 
-				err := taskmap.UpdateTask(*s.CachedTask, 0)
+					cachedTask, err := taskmap.Find(s.CachedTask.TaskId, false)
+					if err == nil && cachedTask.Status != taskmap.TaskStopped {
+						s.CachedTask.Status = taskmap.TaskActive
+						err = taskmap.UpdateTask(*s.CachedTask, 0)
+						if err != nil {
+							s.Log.WithError(err).Error("Failed to recache task on finalize!")
+						}
+					}
+
+					break
+				}
+
+				err := utilsmap.ReleaseLock(s.CachedTask.TaskId)
 				if err != nil {
-					basis.Log.WithError(err).Error("Failed to recache task on finalize!")
+					s.Log.WithError(err).Error("Failed to release lock on finalize!")
 				}
 			},
 		}
@@ -447,7 +464,7 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l 
 		starter = basicStarter{
 			basis: basis,
 			finalizeFunc: func(s *startBasis) {
-				s.CachedTask.Status = taskmap.TaskGeneric
+				s.CachedTask.Status = taskmap.TaskCypress
 				s.CachedTask.AccessedAt = time.Now()
 				err := taskmap.UpdateTask(*s.CachedTask, 0)
 				if err != nil {
