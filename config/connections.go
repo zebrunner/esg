@@ -115,6 +115,12 @@ func InitCache() error {
 		PoolTimeout: 10 * time.Second,
 	})
 
+	_, err = RedisUtilityClient.Ping(context.Background()).Result()
+	if err != nil {
+		log.WithError(err).Error("Failed to ping redis utility connection")
+		return err
+	}
+
 	return nil
 }
 
