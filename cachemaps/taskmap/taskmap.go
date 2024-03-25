@@ -19,7 +19,7 @@ type TaskStatus int
 const (
 	TaskQueued TaskStatus = iota
 	TaskActive
-	TaskGeneric // TODO: delete TaskGeneric status when CloseGenericTask() for generic tasks will be called
+	TaskCypress
 	TaskPendingToStop
 	TaskStopped // Ready for resource usage tracking
 )
@@ -28,7 +28,6 @@ type StoppedReason string
 
 const (
 	TaskStartupFailure     StoppedReason = "task startup failure"
-	SessiongStartupFailure StoppedReason = "healthy task failed to start session"
 	TaskUnhealthy          StoppedReason = "task aborted due to unhealthy status"
 	TaskMaxTimeout         StoppedReason = "task aborted due to the max timeout"
 	TaskAborted            StoppedReason = "task aborted"

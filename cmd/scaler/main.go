@@ -109,16 +109,15 @@ func StopUnhealthyTasks(tasks []*ecs.Task, cachedTasksMap map[string]taskmap.Tas
 				continue
 			}
 
+			if cachedTask.Status == taskmap.TaskQueued {
+				continue
+			}
+
 			if *task.HealthStatus == "UNHEALTHY" {
 				l.Warn("Aborting task due to UNHEALTHY HealthStatus")
 				err := service.StopTask(cachedTask, taskmap.TaskUnhealthy)
 				if err != nil {
 					l.WithError(err).Error("Failed to stop the task")
-				}
-
-				if cachedTask.Status == taskmap.TaskGeneric {
-					zebrunner.AbortLaunch(cachedTask.RouterUUID, cachedTask.Workspace,
-						cachedTask.Capabilities.LaunchUUID.ToPrimitive(), "Task aborted due to UNHEALTHY HealthStatus")
 				}
 			} else {
 				maxTimeout := time.Duration(cachedTask.Capabilities.MaxTimeout) * time.Second
@@ -131,11 +130,6 @@ func StopUnhealthyTasks(tasks []*ecs.Task, cachedTasksMap map[string]taskmap.Tas
 						if err != nil {
 							l.WithError(err).Error("Failed to stop task forcibly")
 						}
-					}
-
-					if cachedTask.Status == taskmap.TaskGeneric {
-						zebrunner.AbortLaunch(cachedTask.RouterUUID, cachedTask.Workspace,
-							cachedTask.Capabilities.LaunchUUID.ToPrimitive(), "Task aborted due to the max timeout limit")
 					}
 				}
 			}
@@ -225,26 +219,10 @@ func TrackResourceUsage(tasks []*ecs.Task, cachedTasksMap map[string]taskmap.Tas
 		}
 
 		if cachedTask.Status != taskmap.TaskStopped {
-			// generic and cypress on success finish are not marked as stopped in cache after finish
-			if cachedTask.Status == taskmap.TaskGeneric {
+			// cypress is not marked as stopped in cache after finish
+			if cachedTask.Status == taskmap.TaskCypress {
 				cachedTask.Status = taskmap.TaskStopped
-
-				if ok, container := utils.IsTaskFinishedSuccessfully(task); ok {
-					cachedTask.StopReason = taskmap.TaskFinished
-				} else {
-					cachedTask.StopReason = taskmap.TaskUnhealthy
-
-					exitReason := utils.GetContainerExitReason(container)
-
-					l := l.WithField("exitReason", exitReason)
-					if task.StoppedReason != nil {
-						l = l.WithField("taskReason", *task.StoppedReason)
-					}
-					l.Warn("Aborting launch due to exit error")
-
-					zebrunner.AbortLaunch(cachedTask.RouterUUID, cachedTask.Workspace,
-						cachedTask.Capabilities.LaunchUUID.ToPrimitive(), exitReason)
-				}
+				cachedTask.StopReason = taskmap.TaskFinished
 			} else {
 				continue
 			}

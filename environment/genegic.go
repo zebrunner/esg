@@ -124,6 +124,7 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 		Essential:  true,
 		Env: map[string]string{
 			"COMMAND": launchCommand.ToPrimitive(),
+			"UUID":    routerUUID,
 		},
 		Mounts:           mounts,
 		WorkingDirectory: workDir,
