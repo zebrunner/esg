@@ -124,8 +124,6 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 		Essential:  true,
 		Env: map[string]string{
 			"COMMAND": launchCommand.ToPrimitive(),
-			"UUID":    routerUUID,
-			"E3S_DNS": config.Conf.AwsEsgDns,
 		},
 		Mounts:           mounts,
 		WorkingDirectory: workDir,
@@ -149,6 +147,8 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 		}
 	}
 
+	executorContainer.Env["UUID"] = routerUUID
+	executorContainer.Env["E3S_DNS"] = config.Conf.AwsEsgDns
 	executorContainer.SetCpu(&caps.Cpu, 1024, conf.MaxCpu)
 	executorContainer.SetMemory(&caps.Memory, 1024, conf.MaxMemory)
 
