@@ -38,6 +38,7 @@ type Config struct {
 	AwsSecretAccessKey       string
 	AwsTaskRoleArn           string
 	AwsTargetGroup           string
+	AwsEsgDns                string
 
 	// Session resource limitations
 	MaxMemory int64

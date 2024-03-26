@@ -7,6 +7,25 @@ import (
 	"github.com/zebrunner/esg/utils"
 )
 
+func DescribeLoadBalancer(lbArn string) (*elbv2.LoadBalancer, error) {
+	svc := elbv2.New(AwsSess)
+
+	describeLBInput := elbv2.DescribeLoadBalancersInput{
+		LoadBalancerArns: []*string{&lbArn},
+	}
+
+	describeLBOutput, err := utils.RetryThrottling(svc.DescribeLoadBalancers)(&describeLBInput)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(describeLBOutput.LoadBalancers) < 1 || describeLBOutput.LoadBalancers[0] == nil {
+		return nil, fmt.Errorf("load balancer %s was not found", lbArn)
+	}
+
+	return describeLBOutput.LoadBalancers[0], nil
+}
+
 func DescribeTargetGroup(tgName string) (*elbv2.TargetGroup, error) {
 	svc := elbv2.New(AwsSess)
 
