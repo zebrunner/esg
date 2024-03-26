@@ -130,6 +130,7 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 		Env: map[string]string{
 			"COMMAND": launchCommand.ToPrimitive(),
 			"UUID":    routerUUID,
+			"E3S_DNS": config.Conf.AwsEsgDns,
 		},
 		Mounts:           mounts,
 		WorkingDirectory: workDir,
