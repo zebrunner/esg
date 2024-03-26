@@ -10,6 +10,7 @@ import (
 )
 
 var (
+	RedisMapperClient     *redis.Client
 	RedisSessionsClient   *redis.Client
 	RedisTasksClient      *redis.Client
 	RedisCypressSetClient *redis.Client
@@ -22,6 +23,18 @@ var (
 
 func InitCache() error {
 	//default PoolTimeout - 4 seconds
+	RedisMapperClient = redis.NewClient(&redis.Options{
+		Addr:        Conf.RedisConnectionString,
+		Password:    "",
+		DB:          -1,
+		PoolTimeout: 10 * time.Second,
+	})
+
+	_, err := RedisMapperClient.Ping(context.Background()).Result()
+	if err != nil {
+		log.WithError(err).Error("Failed to ping redis RedisMapperClient connection")
+		return err
+	}
 
 	// DB 0 - for sessions
 	RedisSessionsClient = redis.NewClient(&redis.Options{
@@ -31,7 +44,7 @@ func InitCache() error {
 		PoolTimeout: 10 * time.Second,
 	})
 
-	_, err := RedisSessionsClient.Ping(context.Background()).Result()
+	_, err = RedisSessionsClient.Ping(context.Background()).Result()
 	if err != nil {
 		log.WithError(err).Error("Failed to ping redis sessions connection")
 		return err
