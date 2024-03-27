@@ -11,10 +11,6 @@ import (
 
 var (
 	RedisMapperClient     *redis.Client
-	RedisSessionsClient   *redis.Client
-	RedisTasksClient      *redis.Client
-	RedisCypressSetClient *redis.Client
-	RedisIdMapperClient   *redis.Client
 	RedisDefinitionClient *redis.Client
 	RedisResourcesClient  *redis.Client
 	RedisUtilityClient    *redis.Client
@@ -23,10 +19,12 @@ var (
 
 func InitCache() error {
 	//default PoolTimeout - 4 seconds
+
+	// DB 2 - for mapper
 	RedisMapperClient = redis.NewClient(&redis.Options{
 		Addr:        Conf.RedisConnectionString,
 		Password:    "",
-		DB:          -1,
+		DB:          0,
 		PoolTimeout: 10 * time.Second,
 	})
 
@@ -36,39 +34,11 @@ func InitCache() error {
 		return err
 	}
 
-	// DB 0 - for sessions
-	RedisSessionsClient = redis.NewClient(&redis.Options{
-		Addr:        Conf.RedisConnectionString,
-		Password:    "",
-		DB:          0,
-		PoolTimeout: 10 * time.Second,
-	})
-
-	_, err = RedisSessionsClient.Ping(context.Background()).Result()
-	if err != nil {
-		log.WithError(err).Error("Failed to ping redis sessions connection")
-		return err
-	}
-
-	// DB 1 - for tasks
-	RedisTasksClient = redis.NewClient(&redis.Options{
-		Addr:        Conf.RedisConnectionString,
-		Password:    "",
-		DB:          1,
-		PoolTimeout: 10 * time.Second,
-	})
-
-	_, err = RedisTasksClient.Ping(context.Background()).Result()
-	if err != nil {
-		log.WithError(err).Error("Failed to ping redis tasks connection")
-		return err
-	}
-
-	// DB 2 - for definitions
+	// DB 1 - for definitions
 	RedisDefinitionClient = redis.NewClient(&redis.Options{
 		Addr:        Conf.RedisConnectionString,
 		Password:    "",
-		DB:          2,
+		DB:          1,
 		PoolTimeout: 10 * time.Second,
 	})
 
@@ -78,40 +48,12 @@ func InitCache() error {
 		return err
 	}
 
-	// DB 3 - for uuid mapper
-	RedisIdMapperClient = redis.NewClient(&redis.Options{
-		Addr:        Conf.RedisConnectionString,
-		Password:    "",
-		DB:          3,
-		PoolTimeout: 10 * time.Second,
-	})
-
-	_, err = RedisIdMapperClient.Ping(context.Background()).Result()
-	if err != nil {
-		log.WithError(err).Error("Failed to ping redis tasksmapper connection")
-		return err
-	}
-
-	// DB 4 - for cypress set
-	RedisCypressSetClient = redis.NewClient(&redis.Options{
-		Addr:        Conf.RedisConnectionString,
-		Password:    "",
-		DB:          4,
-		PoolTimeout: 10 * time.Second,
-	})
-
-	_, err = RedisCypressSetClient.Ping(context.Background()).Result()
-	if err != nil {
-		log.WithError(err).Error("Failed to ping redis cypressSet connection")
-		return err
-	}
-
-	// DB 5 - for tasks that are in register queue
+	// DB 2 - for tasks that are in register queue
 	// Such tasks cannot get into the provisioning pool, but still need to be calculated by scaler
 	RedisResourcesClient = redis.NewClient(&redis.Options{
 		Addr:        Conf.RedisConnectionString,
 		Password:    "",
-		DB:          5,
+		DB:          2,
 		PoolTimeout: 10 * time.Second,
 	})
 
@@ -124,7 +66,7 @@ func InitCache() error {
 	RedisUtilityClient = redis.NewClient(&redis.Options{
 		Addr:        Conf.RedisConnectionString,
 		Password:    "",
-		DB:          6,
+		DB:          3,
 		PoolTimeout: 10 * time.Second,
 	})
 

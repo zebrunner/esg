@@ -15,8 +15,7 @@ import (
 	"github.com/aerokube/util"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
-	"github.com/zebrunner/esg/cachemaps/sessionmap"
-	"github.com/zebrunner/esg/cachemaps/taskmap"
+	"github.com/zebrunner/esg/cachemaps/mapper"
 	"github.com/zebrunner/esg/cachemaps/utilsmap"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
@@ -96,11 +95,11 @@ func Create(c *gin.Context) {
 }
 
 func Proxy(c *gin.Context) {
-	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
+	mapperEntity := c.MustGet(config.RouterUUID).(*mapper.Mapper)
 	// c.Request.URL.Path contains router UUID which should be replaced by selenium/selenoid sess.SessionID
-	c.Request.URL.Path = rerouteProxy(c.Request.URL.Path, sess.SessionID)
+	c.Request.URL.Path = rerouteProxy(c.Request.URL.Path, mapperEntity.SessionID)
 
-	url, ok := sess.Network.GetUrl("driver")
+	url, ok := mapperEntity.Network.GetUrl("driver")
 	if !ok {
 		log.Error("failed to get `driver` url from session")
 		c.Error(utils.UnknownErr(fmt.Errorf("failed to get `driver` url from session"))).SetType(gin.ErrorTypePublic)
@@ -143,8 +142,8 @@ func rerouteProxy(path string, sessionId string) string {
 }
 
 func ProxyMitm(c *gin.Context) {
-	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
-	url, ok := sess.Network.GetUrl("proxyHandlerPort")
+	mapperEntity := c.MustGet(config.RouterUUID).(*mapper.Mapper)
+	url, ok := mapperEntity.Network.GetUrl("proxyHandlerPort")
 	if !ok {
 		log.Error("failed to get `proxyHandlerPort` url from session")
 		c.Error(utils.UnknownErr(fmt.Errorf("failed to get `proxyHandlerPort` url from session"))).SetType(gin.ErrorTypePublic)
@@ -159,11 +158,13 @@ func ProxyMitm(c *gin.Context) {
 			r.URL.Path = getRemainingPath(r.URL.Path)
 		},
 		ModifyResponse: func(r *http.Response) error {
-			sess.AccessedAt = time.Now()
-			err := sessionmap.Write(sess.SessionID, sess, -1)
+			// Delete it when accessed at will be updated in middleware ???
+			accessedAt := time.Now()
+			mapperEntity.AccessedAt = &accessedAt
 
+			err := mapper.Write(mapperEntity, -1)
 			if err != nil {
-				log.WithField(config.SessionIdKey, sess.SessionID).WithField(config.RouterUUID, sess.RouterUUID).WithError(err).Error("Failed to update last access time")
+				log.WithField(config.SessionIdKey, mapperEntity.SessionID).WithField(config.RouterUUID, mapperEntity.RouterUUID).WithError(err).Error("Failed to update last access time")
 			}
 
 			return nil
@@ -172,20 +173,15 @@ func ProxyMitm(c *gin.Context) {
 }
 
 func CloseSession(c *gin.Context) {
-	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
+	mapperEntity := c.MustGet(config.RouterUUID).(*mapper.Mapper)
 
-	l := log.WithField(config.TaskIdKey, sess.TaskId).WithField(config.SessionIdKey, sess.SessionID)
+	l := log.WithFields(log.Fields{config.RouterUUID: mapperEntity.RouterUUID, config.TaskIdKey: mapperEntity.TaskId, config.SessionIdKey: mapperEntity.SessionID})
 
-	selenium.CloseSession(sess, sessionmap.SessionFinished)
+	selenium.CloseSession(mapperEntity)
 
-	cachedTask, err := taskmap.Find(sess.TaskId, false)
+	err := service.StopTask(*mapperEntity, mapper.TaskFinished)
 	if err != nil {
-		l.WithError(err).Warn("Failed to find task")
-	} else {
-		err = service.StopTask(*cachedTask, taskmap.TaskFinished)
-		if err != nil {
-			l.WithError(err).Warn("Failed to stop task")
-		}
+		l.WithError(err).Warn("Failed to stop task")
 	}
 
 	l.Info("task closed")
@@ -194,34 +190,32 @@ func CloseSession(c *gin.Context) {
 
 // #1056: Small chance of double shaping on generic task abort
 func LockGenericTaskCache(c *gin.Context) {
-	task := c.MustGet(config.TaskIdKey).(*taskmap.Task)
+	mapperEntity := c.MustGet(config.RouterUUID).(*mapper.Mapper)
 
 	for {
-		if ok := utilsmap.AcquireLock(task.TaskId, 0); ok {
+		if ok := utilsmap.AcquireLock(mapperEntity.RouterUUID, 0); ok {
 			break
 		}
-
 		time.Sleep(10 * time.Second)
 	}
 
 	c.Next()
 
-	err := utilsmap.ReleaseLock(task.TaskId)
+	err := utilsmap.ReleaseLock(mapperEntity.RouterUUID)
 	if err != nil {
-		log.WithField(config.TaskIdKey, task.TaskId).WithError(err).Error("Failed to release lock for task cache!")
+		log.WithField(config.RouterUUID, mapperEntity.RouterUUID).WithError(err).Error("Failed to release lock for mapper cache!")
 	}
 }
 
 func AbortTask(c *gin.Context) {
-	task := c.MustGet(config.TaskIdKey).(*taskmap.Task)
+	mapperEntity := c.MustGet(config.RouterUUID).(*mapper.Mapper)
 
-	l := log.WithField(config.RouterUUID, task.RouterUUID).WithField(config.TaskIdKey, task.TaskId)
-
+	l := log.WithField(config.RouterUUID, mapperEntity.RouterUUID).WithField(config.TaskIdKey, mapperEntity.TaskId)
 	if !config.Conf.SingleTenant {
-		l = l.WithField("workspace", task.Workspace)
+		l = l.WithField("workspace", mapperEntity.Workspace)
 	}
 
-	err := service.StopTask(*task, taskmap.TaskAborted)
+	err := service.StopTask(*mapperEntity, mapper.TaskAborted)
 	if err != nil {
 		l.WithError(err).Warn("Failed to stop task")
 	}
@@ -231,25 +225,25 @@ func AbortTask(c *gin.Context) {
 }
 
 func MarkAsFinished(c *gin.Context) {
-	task := c.MustGet(config.TaskIdKey).(*taskmap.Task)
+	mapperEntity := c.MustGet(config.RouterUUID).(*mapper.Mapper)
 
-	l := log.WithField(config.RouterUUID, task.RouterUUID).WithField(config.TaskIdKey, task.TaskId)
+	l := log.WithField(config.RouterUUID, mapperEntity.RouterUUID).WithField(config.TaskIdKey, mapperEntity.TaskId)
 	if !config.Conf.SingleTenant {
-		l = l.WithField("workspace", task.Workspace)
+		l = l.WithField("workspace", mapperEntity.Workspace)
 	}
 
-	cachedTask, err := taskmap.Find(task.TaskId, false)
-	if err == nil && cachedTask.Status != taskmap.TaskStopped {
-		task.Status = taskmap.TaskStopped
-		task.StopReason = taskmap.TaskFinished
-		err = taskmap.Write(task.TaskId, task, -1)
+	m, err := mapper.Find(mapperEntity.RouterUUID, false)
+	if err == nil && m.Status != mapper.Stopped {
+		mapperEntity.Status = mapper.Stopped
+		mapperEntity.StopReason = mapper.TaskFinished
+		err = mapper.Write(mapperEntity, -1)
 		if err != nil {
 			log.WithError(err).Error("Failed to mark generec task as stopped in cache")
 		}
 	}
 
 	go func() {
-		zebrunner.AbortLaunch(task.RouterUUID, task.Workspace, task.Capabilities.LaunchUUID.ToPrimitive(), "Executor finished")
+		zebrunner.AbortLaunch(mapperEntity.RouterUUID, mapperEntity.Workspace, mapperEntity.Capabilities.LaunchUUID.ToPrimitive(), "Executor finished")
 		l.Info("Generic task finished")
 	}()
 
@@ -257,31 +251,11 @@ func MarkAsFinished(c *gin.Context) {
 }
 
 func Vnc(c *gin.Context) {
-	routerUUID := c.Param("uuid")
-	l := log.WithField(config.RouterUUID, routerUUID)
+	mapperEntity := c.MustGet(config.TaskIdKey).(*mapper.Mapper)
+	l := log.WithField(config.RouterUUID, mapperEntity.RouterUUID)
 	l.Debug("Vnc request")
 
-	var network environment.NetworkConfiguration
-	if sess, seErr := getSession(routerUUID); seErr == nil {
-		l = l.WithField(config.SessionIdKey, sess.SessionID).WithField(config.TaskIdKey, sess.TaskId)
-		network = sess.Network
-	} else if sess != nil {
-		// session found but stopped
-		l.WithError(seErr).Error("vnc error")
-		c.JSON(seErr.ResponseStatus, gin.H{"error": seErr.Error()})
-		return
-	} else {
-		task, seErr := getTask(routerUUID)
-		if seErr != nil {
-			l.WithError(seErr).Error("vnc error")
-			c.JSON(seErr.ResponseStatus, gin.H{"error": seErr.Error()})
-			return
-		}
-		l = l.WithField(config.TaskIdKey, task.TaskId)
-		network = task.Network
-	}
-
-	vncUrl, ok := network.GetUrl("vnc")
+	vncUrl, ok := mapperEntity.Network.GetUrl("vnc")
 	if !ok {
 		err := fmt.Errorf("vnc url is not available")
 		l.WithError(err).WithField("url", vncUrl).Warn("vnc error")
@@ -391,18 +365,28 @@ func TaskDescribe(c *gin.Context) {
 		c.Error(utils.AuthApiErr("auth data not provided")).SetType(gin.ErrorTypePublic)
 		return
 	}
-	routerUUID := c.Param("task")
-	l := log.WithField("user", user).WithField(config.RouterUUID, routerUUID)
-	l.Debug("Get task status")
 
-	task, seErr := getTask(routerUUID)
-	if seErr != nil {
+	routerUUID := c.Param("task")
+	l := log.WithField(config.RouterUUID, routerUUID).WithField("user", user)
+
+	// Think about better impl
+	var apiErr *utils.APIError
+	mapperEntity, err := mapper.Find(routerUUID, false)
+	if err != nil || mapperEntity == nil {
+		apiErr = utils.NotFoundApiErr("session timed out or not found")
+	} else if mapperEntity.Status == mapper.Queued {
+		apiErr = utils.NotFoundApiErr("session creation is in queue")
+	} else if mapperEntity.Status == mapper.Stopped {
+		apiErr = utils.NotFoundApiErr(string(mapperEntity.StopReason))
+	}
+
+	if apiErr != nil {
 		l.Error("Failed to get task status")
-		c.Error(utils.NotFoundApiErr(seErr.Error())).SetType(gin.ErrorTypePublic)
+		c.Error(utils.NotFoundApiErr(apiErr.Error())).SetType(gin.ErrorTypePublic)
 		return
 	}
 
-	result, err := service.DescribeTask(task.TaskId)
+	result, err := service.DescribeTask(mapperEntity.TaskId)
 
 	if err != nil {
 		l.Error("Failed to get task status")
@@ -415,8 +399,8 @@ func TaskDescribe(c *gin.Context) {
 }
 
 func Downloads(c *gin.Context) {
-	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
-	url, ok := sess.Network.GetUrl("fileserver")
+	mapperEntity := c.MustGet(config.RouterUUID).(*mapper.Mapper)
+	url, ok := mapperEntity.Network.GetUrl("fileserver")
 	if !ok {
 		log.Error("failed to get `fileserver` url from session")
 		c.Error(utils.UnknownErr(fmt.Errorf("failed to get `fileserver` url from session"))).SetType(gin.ErrorTypePublic)
@@ -435,8 +419,8 @@ func Downloads(c *gin.Context) {
 }
 
 func Clipboard(c *gin.Context) {
-	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
-	url, ok := sess.Network.GetUrl("clipboard")
+	mapperEntity := c.MustGet(config.RouterUUID).(*mapper.Mapper)
+	url, ok := mapperEntity.Network.GetUrl("clipboard")
 	if !ok {
 		log.Error("failed to get `clipboard` url from session")
 		c.Error(utils.UnknownErr(fmt.Errorf("failed to get `clipboard` url from session"))).SetType(gin.ErrorTypePublic)
@@ -454,8 +438,8 @@ func Clipboard(c *gin.Context) {
 }
 
 func Devtools(c *gin.Context) {
-	sess := c.MustGet(config.SessionIdKey).(*sessionmap.Session)
-	url, ok := sess.Network.GetUrl("devtools")
+	mapperEntity := c.MustGet(config.RouterUUID).(*mapper.Mapper)
+	url, ok := mapperEntity.Network.GetUrl("devtools")
 	if !ok {
 		log.Error("failed to get `devtools` url from session")
 		c.Error(utils.UnknownErr(fmt.Errorf("failed to get `devtools` url from session"))).SetType(gin.ErrorTypePublic)

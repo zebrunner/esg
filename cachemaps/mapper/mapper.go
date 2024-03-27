@@ -1,21 +1,22 @@
-package new
+package mapper
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
+
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/cachemaps"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
-	"time"
 )
 
 type Status int
 
 const (
-	None Status = iota
-	Queued
+	Queued Status = iota
 	Cypress
 	Active
 	Stopped
@@ -36,33 +37,40 @@ const (
 )
 
 type Mapper struct {
-	RouterUUID    string
-	Capabilities  *capabilities.Capabilities
-	Network       environment.NetworkConfiguration
-	IdleTimeout   float64
-	TaskStatus    Status
-	SessionStatus Status
-	UsageTracked  bool
-	HealthAt      *time.Time
-	AccessedAt    *time.Time
-	TaskId        string        `json:",omitempty"`
-	SessionID     string        `json:",omitempty"`
-	StopReason    StoppedReason `json:",omitempty"`
-	Workspace     string        `json:",omitempty"`
+	RouterUUID   string
+	Capabilities *capabilities.Capabilities
+	Network      environment.NetworkConfiguration
+	IdleTimeout  float64
+	Status       Status
+	UsageTracked bool
+	HealthAt     *time.Time
+	AccessedAt   *time.Time
+	TaskId       string        `json:",omitempty"`
+	SessionID    string        `json:",omitempty"`
+	StopReason   StoppedReason `json:",omitempty"`
+	Workspace    string        `json:",omitempty"`
+}
+
+func (m Mapper) IsIdle() bool {
+	if m.Status != Active {
+		return false
+	}
+
+	idleTime := time.Since(*m.AccessedAt).Seconds()
+	return idleTime > m.IdleTimeout
 }
 
 func CreateEntity(env *environment.ExecutionEnvironment) (*Mapper, error) {
 	creationTime := time.Now()
 	m := &Mapper{
-		RouterUUID:    env.RouterUUID,
-		Capabilities:  env.Capabilities,
-		Network:       *env.Network,
-		IdleTimeout:   float64(env.Capabilities.IdleTimeout),
-		TaskStatus:    Queued,
-		SessionStatus: None,
-		UsageTracked:  false,
-		HealthAt:      &creationTime,
-		AccessedAt:    &creationTime,
+		RouterUUID:   env.RouterUUID,
+		Capabilities: env.Capabilities,
+		Network:      *env.Network,
+		IdleTimeout:  float64(env.Capabilities.IdleTimeout),
+		Status:       Queued,
+		UsageTracked: false,
+		HealthAt:     &creationTime,
+		AccessedAt:   &creationTime,
 	}
 
 	return m, nil
@@ -109,4 +117,25 @@ func Find(uuid string, rewriteAccessTime bool) (*Mapper, error) {
 	}
 
 	return &entity, nil
+}
+
+func WriteShapedEntities(mappers []Mapper, expiration time.Duration) error {
+	rdbPipe := config.RedisMapperClient.Pipeline()
+
+	for _, mapperEntity := range mappers {
+		data, err := json.Marshal(mapperEntity)
+		if err != nil {
+			return err
+		}
+
+		rdbPipe.Set(context.Background(), mapperEntity.RouterUUID, data, expiration)
+		rdbPipe.SRem(context.Background(), string(TASK), mapperEntity.RouterUUID)
+	}
+
+	_, err := rdbPipe.Exec(context.Background())
+	return err
+}
+
+func FindAll(uuids []string) ([]Mapper, error) {
+	return cachemaps.FindAll[Mapper](config.RedisMapperClient.Pipeline(), uuids)
 }
