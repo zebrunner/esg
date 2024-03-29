@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
@@ -95,7 +94,7 @@ func Write(mapper *Mapper, expiration time.Duration) error {
 	return nil
 }
 
-func Find(uuid string, rewriteAccessTime bool) (*Mapper, error) {
+func Find(uuid string) (*Mapper, error) {
 	data, err := config.RedisMapperClient.Get(context.Background(), uuid).Result()
 	if err != nil {
 		return nil, err
@@ -105,16 +104,6 @@ func Find(uuid string, rewriteAccessTime bool) (*Mapper, error) {
 	err = json.Unmarshal([]byte(data), &entity)
 	if err != nil {
 		return nil, err
-	}
-
-	if rewriteAccessTime {
-		curTime := time.Now()
-		entity.AccessedAt = &curTime
-		// -1 keeps the same ttl
-		err = Write(&entity, -1)
-		if err != nil {
-			log.WithError(err).Error("Failed to update last access time")
-		}
 	}
 
 	return &entity, nil

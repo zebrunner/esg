@@ -19,6 +19,7 @@ import (
 	"github.com/zebrunner/esg/cachemaps/definitionmap"
 	"github.com/zebrunner/esg/cachemaps/mapper"
 	"github.com/zebrunner/esg/cachemaps/resourcesToAllocate"
+	"github.com/zebrunner/esg/cachemaps/utilsmap"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/handlers"
 	"github.com/zebrunner/esg/service"
@@ -84,7 +85,7 @@ func CreateRouter() *gin.Engine {
 			genericHub.DELETE("/tasks/:uuid", handlers.AbortTask) // to be able to abort generic tasks by taskId
 		}
 
-		cachedSeleniumSession := selenium.Group("/", handlers.ValidateMapperPresence, handlers.ValidateSessionStatus)
+		cachedSeleniumSession := selenium.Group("/", handlers.ValidateMapperPresence, handlers.ValidateSessionStatus, handlers.UpdateLastAccessTime)
 		{
 			cachedSeleniumSession.DELETE("/session/:uuid", handlers.CloseSession)
 			cachedSeleniumSession.Any("/session/:uuid/*action", handlers.Proxy)
@@ -176,20 +177,21 @@ func main() {
 	if err != nil {
 		utils.ExitWithError(err, "Failed to describe target group", targetGrouLog)
 	} else if len(targetGroup.LoadBalancerArns) < 1 || targetGroup.LoadBalancerArns[0] == nil {
-		utils.ExitWithError(fmt.Errorf("Target group is not attached to load balancer"), "Failed to describe target group", targetGrouLog)
+		utils.ExitWithError(fmt.Errorf("target group is not attached to load balancer"), "Failed to describe target group", targetGrouLog)
 	}
 
 	loadBalancer, err := service.DescribeLoadBalancer(*targetGroup.LoadBalancerArns[0])
 	if err != nil {
 		utils.ExitWithError(err, "Failed to describe load balancer", targetGrouLog)
 	} else if loadBalancer.DNSName == nil || *loadBalancer.DNSName == "" {
-		utils.ExitWithError(fmt.Errorf("Load balancer without public dns"), "Failed to describe load balancer", targetGrouLog)
+		utils.ExitWithError(fmt.Errorf("load balancer without public dns"), "Failed to describe load balancer", targetGrouLog)
 	} else {
 		config.Conf.AwsEsgDns = *loadBalancer.DNSName
 	}
 
 	for {
-		if definitionmap.IsRefreshDone() {
+		if utilsmap.IsTaskDefenitionRefreshDone() {
+			definitionmap.SaveAndUpdateDefinitions()
 			break
 		}
 		time.Sleep(5 * time.Second)

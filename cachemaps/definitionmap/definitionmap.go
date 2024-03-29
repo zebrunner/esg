@@ -13,9 +13,8 @@ import (
 )
 
 var (
-	definitionsMap             map[string]int64
-	TaskDefenititonRefreshDone = "done"
-	mutex                      = &sync.RWMutex{}
+	definitionsMap map[string]int64
+	mutex          = &sync.RWMutex{}
 )
 
 type hashRevision struct {
@@ -80,10 +79,6 @@ func getDefinitions() (map[string]int64, error) {
 			continue
 		}
 
-		if data == TaskDefenititonRefreshDone {
-			continue
-		}
-
 		var hr hashRevision
 		err = json.Unmarshal([]byte(data), &hr)
 		if err != nil {
@@ -95,53 +90,19 @@ func getDefinitions() (map[string]int64, error) {
 	return definitionsMap, nil
 }
 
-// Remove definition from redis by overrideDefenititonHash
-func Remove(key string) error {
-	return config.RedisDefinitionClient.Del(context.Background(), key).Err()
-}
-
-// Adds to redis taskDefenititonRefreshDone record,
-// which means that refresh was successfully performed and all supported task definition revisions are placed in redis
-func SetRefreshDone() error {
-	err := config.RedisDefinitionClient.Set(context.Background(), TaskDefenititonRefreshDone, TaskDefenititonRefreshDone, 0).Err()
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// Checks for existing of taskDefenititonRefreshDone record.
-// If found:
-// 1) Initializes definitionsMap, that will be used for revision search on task create calls. One for every router
-// 2) Launches new thread, in which every 10 minutes definitionsMap is updated by definitions from redis
-func IsRefreshDone() bool {
-	exists, err := config.RedisDefinitionClient.Exists(context.Background(), TaskDefenititonRefreshDone).Result()
-	if err != nil {
-		return false
-	}
-
-	if exists == 0 {
-		return false
-	}
-
-	defMap, err := getDefinitions()
-	if err != nil {
-		log.WithError(err).Warn("Failed to get all definitions")
-		return false
-	}
-
-	definitionsMap = defMap
+// Launches new thread, in which every 10 minutes definitionsMap is updated by definitions from redis
+func SaveAndUpdateDefinitions() {
 	go func() {
 		for {
-			time.Sleep(10 * time.Minute)
 			defMap, err := getDefinitions()
 			if err != nil {
-				log.Warn("Failed to update definitions info")
+				log.Warn("Failed to get all definitions")
 				continue
+			} else {
+				definitionsMap = defMap
 			}
-			definitionsMap = defMap
+
+			time.Sleep(10 * time.Minute)
 		}
 	}()
-
-	return true
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/zebrunner/esg/cachemaps/definitionmap"
 	"github.com/zebrunner/esg/cachemaps/mapper"
+	"github.com/zebrunner/esg/cachemaps/utilsmap"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/db"
 	"github.com/zebrunner/esg/environment"
@@ -297,7 +298,7 @@ func StopIdleTasks(wg *sync.WaitGroup) {
 		}
 
 		// get actual record of the session and validate idle timeout one more time
-		mapperEntity, err := mapper.Find(mapperEntity.SessionID, false)
+		mapperEntity, err := mapper.Find(mapperEntity.SessionID)
 		if err != nil {
 			continue
 		}
@@ -435,7 +436,7 @@ func ManageTaskDefinitions() {
 		utils.ExitWithError(err, "Failed to refresh task definitions", log.NewEntry(log.StandardLogger()))
 	}
 
-	definitionmap.SetRefreshDone()
+	utilsmap.SetTaskDefenitionRefreshDone()
 	log.Info("Service started")
 
 	for {
@@ -507,9 +508,9 @@ func main() {
 
 	// on shutdown actions
 	log.Info("Shutdown scaler ...")
-	err = definitionmap.Remove(definitionmap.TaskDefenititonRefreshDone)
+	err = utilsmap.UnsetTaskDefenitionRefreshDone()
 	if err != nil {
-		log.WithError(err).Error("Failed to unmark task definition refresh")
+		log.WithError(err).Error("Failed to mark task definition refresh as undone")
 	}
 
 	// wait for the end of a resources shaping

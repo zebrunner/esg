@@ -107,7 +107,7 @@ func ValidateGenericMapperPresence(c *gin.Context) {
 	uuid := c.Param("uuid")
 
 	var seErr *utils.SeleniumError
-	mapperEntity, err := mapper.Find(uuid, false)
+	mapperEntity, err := mapper.Find(uuid)
 
 	if err != nil || mapperEntity == nil {
 		seErr = utils.NoSuchSessionErr(fmt.Errorf("session timed out or not found"))
@@ -131,7 +131,7 @@ func ValidateMapperPresence(c *gin.Context) {
 	uuid := c.Param("uuid")
 
 	var seErr *utils.SeleniumError
-	mapperEntity, err := mapper.Find(uuid, false)
+	mapperEntity, err := mapper.Find(uuid)
 	if err != nil || mapperEntity == nil {
 		seErr = utils.NoSuchSessionErr(fmt.Errorf("session timed out or not found"))
 	} else if mapperEntity.Status == mapper.Queued {
@@ -187,6 +187,22 @@ func APIAuthentication(c *gin.Context) {
 		c.Abort()
 		return
 	}
+}
+
+func UpdateLastAccessTime(c *gin.Context) {
+	mapperEntity := c.MustGet(config.RouterUUID).(*mapper.Mapper)
+
+	accessedAt := time.Now()
+	mapperEntity.AccessedAt = &accessedAt
+	err := mapper.Write(mapperEntity, -1)
+	if err != nil {
+		log.WithField(config.SessionIdKey, mapperEntity.SessionID).WithField(config.RouterUUID, mapperEntity.RouterUUID).WithError(err).Error("Failed to update last access time")
+	} else {
+		log.WithField(config.SessionIdKey, mapperEntity.SessionID).WithField(config.RouterUUID, mapperEntity.RouterUUID).WithError(err).Info("Updated last acess time")
+	}
+
+	c.Set(config.RouterUUID, mapperEntity)
+	c.Next()
 }
 
 func LowLvlAuthentication(c *gin.Context) {

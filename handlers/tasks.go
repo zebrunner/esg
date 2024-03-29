@@ -156,18 +156,6 @@ func ProxyMitm(c *gin.Context) {
 			r.Host = url.Host
 			r.URL.Path = getRemainingPath(r.URL.Path)
 		},
-		ModifyResponse: func(r *http.Response) error {
-			// Delete it when accessed at will be updated in middleware ???
-			accessedAt := time.Now()
-			mapperEntity.AccessedAt = &accessedAt
-
-			err := mapper.Write(mapperEntity, -1)
-			if err != nil {
-				log.WithField(config.SessionIdKey, mapperEntity.SessionID).WithField(config.RouterUUID, mapperEntity.RouterUUID).WithError(err).Error("Failed to update last access time")
-			}
-
-			return nil
-		},
 	}).ServeHTTP(c.Writer, c.Request)
 }
 
@@ -195,9 +183,17 @@ func AbortTask(c *gin.Context) {
 		l = l.WithField("workspace", mapperEntity.Workspace)
 	}
 
-	err := service.StopTask(*mapperEntity, mapper.TaskAborted)
-	if err != nil {
-		l.WithError(err).Warn("Failed to stop task")
+	mapperEntity.StopReason = mapper.TaskAborted
+	if mapperEntity.TaskId == "" {
+		err := mapper.WritedByWorker(mapperEntity, nil, nil, 0)
+		if err != nil {
+			l.WithError(err).Error("Failed to update task's cache!")
+		}
+	} else {
+		err := service.StopTask(*mapperEntity, mapperEntity.StopReason)
+		if err != nil {
+			l.WithError(err).Warn("Failed to stop task")
+		}
 	}
 
 	l.Info("task aborted")
@@ -212,7 +208,7 @@ func MarkAsFinished(c *gin.Context) {
 		l = l.WithField("workspace", mapperEntity.Workspace)
 	}
 
-	m, err := mapper.Find(mapperEntity.RouterUUID, false)
+	m, err := mapper.Find(mapperEntity.RouterUUID)
 	if err == nil && m.Status != mapper.Stopped {
 		mapperEntity.Status = mapper.Stopped
 		mapperEntity.StopReason = mapper.TaskFinished
@@ -351,7 +347,7 @@ func TaskDescribe(c *gin.Context) {
 
 	// Think about better impl
 	var apiErr *utils.APIError
-	mapperEntity, err := mapper.Find(routerUUID, false)
+	mapperEntity, err := mapper.Find(routerUUID)
 	if err != nil || mapperEntity == nil {
 		apiErr = utils.NotFoundApiErr("session timed out or not found")
 	} else if mapperEntity.Status == mapper.Queued {
