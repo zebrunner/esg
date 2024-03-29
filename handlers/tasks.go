@@ -16,7 +16,6 @@ import (
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps/mapper"
-	"github.com/zebrunner/esg/cachemaps/utilsmap"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/db"
@@ -188,25 +187,6 @@ func CloseSession(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"value": nil})
 }
 
-// #1056: Small chance of double shaping on generic task abort
-func LockGenericTaskCache(c *gin.Context) {
-	mapperEntity := c.MustGet(config.RouterUUID).(*mapper.Mapper)
-
-	for {
-		if ok := utilsmap.AcquireLock(mapperEntity.RouterUUID, 0); ok {
-			break
-		}
-		time.Sleep(10 * time.Second)
-	}
-
-	c.Next()
-
-	err := utilsmap.ReleaseLock(mapperEntity.RouterUUID)
-	if err != nil {
-		log.WithField(config.RouterUUID, mapperEntity.RouterUUID).WithError(err).Error("Failed to release lock for mapper cache!")
-	}
-}
-
 func AbortTask(c *gin.Context) {
 	mapperEntity := c.MustGet(config.RouterUUID).(*mapper.Mapper)
 
@@ -251,7 +231,7 @@ func MarkAsFinished(c *gin.Context) {
 }
 
 func Vnc(c *gin.Context) {
-	mapperEntity := c.MustGet(config.TaskIdKey).(*mapper.Mapper)
+	mapperEntity := c.MustGet(config.RouterUUID).(*mapper.Mapper)
 	l := log.WithField(config.RouterUUID, mapperEntity.RouterUUID)
 	l.Debug("Vnc request")
 

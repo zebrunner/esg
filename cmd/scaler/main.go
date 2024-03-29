@@ -185,7 +185,7 @@ func StopLostTasks(keys []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 
 	for _, task := range tasks {
 		if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
-			if time.Since(*task.StartedAt) <= config.Conf.TaskUncachedTimeout {
+			if time.Since(*task.StartedAt) <= config.Conf.ServiceStartupTimeout {
 				continue
 			}
 			taskId := strings.Split(*task.TaskArn, "/")[2]

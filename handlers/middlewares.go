@@ -3,10 +3,12 @@ package handlers
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps/mapper"
+	"github.com/zebrunner/esg/cachemaps/utilsmap"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/db"
 	"github.com/zebrunner/esg/utils"
@@ -69,7 +71,7 @@ func SeleniumError(c *gin.Context) {
 			if m.SessionID != "" {
 				l = l.WithField(config.SessionIdKey, m.SessionID)
 			}
-		} 
+		}
 	}
 
 	for _, err := range c.Errors {
@@ -99,6 +101,30 @@ func SeleniumError(c *gin.Context) {
 	}).Warn("Error sent to selenium")
 
 	seErr.SendEncodedResponse(c, enableDebug)
+}
+
+func ValidateGenericMapperPresence(c *gin.Context) {
+	uuid := c.Param("uuid")
+
+	var seErr *utils.SeleniumError
+	mapperEntity, err := mapper.Find(uuid, false)
+
+	if err != nil || mapperEntity == nil {
+		seErr = utils.NoSuchSessionErr(fmt.Errorf("session timed out or not found"))
+	} else if mapperEntity.Status == mapper.Stopped {
+		seErr = utils.SessionStoppedErr(fmt.Errorf(string(mapperEntity.StopReason)))
+	}
+
+	if seErr != nil {
+		log.WithField(config.RouterUUID, uuid).WithError(seErr).Error("can't access session")
+
+		c.Error(seErr).SetType(gin.ErrorTypePublic)
+		c.Abort()
+		return
+	}
+
+	c.Set(config.RouterUUID, mapperEntity)
+	c.Next()
 }
 
 func ValidateMapperPresence(c *gin.Context) {
@@ -183,5 +209,24 @@ func LowLvlAuthentication(c *gin.Context) {
 		c.Error(utils.AuthApiErr("provided credentials not valid")).SetType(gin.ErrorTypePublic)
 		c.Abort()
 		return
+	}
+}
+
+// #1056: Small chance of double shaping on generic task abort
+func LockGenericTaskCache(c *gin.Context) {
+	mapperEntity := c.MustGet(config.RouterUUID).(*mapper.Mapper)
+
+	for {
+		if ok := utilsmap.AcquireLock(mapperEntity.RouterUUID, 0); ok {
+			break
+		}
+		time.Sleep(10 * time.Second)
+	}
+
+	c.Next()
+
+	err := utilsmap.ReleaseLock(mapperEntity.RouterUUID)
+	if err != nil {
+		log.WithField(config.RouterUUID, mapperEntity.RouterUUID).WithError(err).Error("Failed to release lock for mapper cache!")
 	}
 }

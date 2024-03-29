@@ -31,9 +31,7 @@ const (
 	TaskLost           StoppedReason = "task aborted as it wasn't found in cache"
 	TaskAborted        StoppedReason = "task aborted"
 	TaskFinished       StoppedReason = "task finished"
-	// Implement?
-	SessiongStartupFailure StoppedReason = "healthy task failed to start session"
-	SessionIdleTimeout     StoppedReason = "session stopped due IDLE timeout"
+	SessionIdleTimeout StoppedReason = "session stopped due IDLE timeout"
 )
 
 type Mapper struct {
@@ -60,7 +58,7 @@ func (m Mapper) IsIdle() bool {
 	return idleTime > m.IdleTimeout
 }
 
-func CreateEntity(env *environment.ExecutionEnvironment) (*Mapper, error) {
+func CreateEntity(env *environment.ExecutionEnvironment, expiration time.Duration) (*Mapper, error) {
 	creationTime := time.Now()
 	m := &Mapper{
 		RouterUUID:   env.RouterUUID,
@@ -71,9 +69,12 @@ func CreateEntity(env *environment.ExecutionEnvironment) (*Mapper, error) {
 		UsageTracked: false,
 		HealthAt:     &creationTime,
 		AccessedAt:   &creationTime,
+		Workspace:    env.Workspace,
 	}
 
-	return m, nil
+	err := WritedByWorker(m, nil, nil, expiration)
+
+	return m, err
 }
 
 func Write(mapper *Mapper, expiration time.Duration) error {

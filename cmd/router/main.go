@@ -75,18 +75,16 @@ func CreateRouter() *gin.Engine {
 
 	selenium := hub.Group("/", handlers.SeleniumError)
 	{
-		selenium.POST("/session", handlers.Create) // Auth logic moved to handler
+		selenium.POST("/session", handlers.Create)                                   // Auth logic moved to handler
+		selenium.GET("/ws/vnc/:uuid", handlers.ValidateMapperPresence, handlers.Vnc) // sessionId passed for linux browsers and redroid session. taskId passed for cypress
 
-		cachedSeleniumHub := selenium.Group("/", handlers.ValidateMapperPresence)
-		cachedSeleniumHub.GET("/ws/vnc/:uuid", handlers.Vnc) // sessionId passed for linux browsers and redroid session. taskId passed for cypress
-
-		genericHub := cachedSeleniumHub.Group("/", handlers.LockGenericTaskCache)
+		genericHub := selenium.Group("/", handlers.ValidateGenericMapperPresence)
 		{
 			genericHub.POST("/tasks/:uuid", handlers.MarkAsFinished)
 			genericHub.DELETE("/tasks/:uuid", handlers.AbortTask) // to be able to abort generic tasks by taskId
 		}
 
-		cachedSeleniumSession := cachedSeleniumHub.Group("/", handlers.ValidateSessionStatus)
+		cachedSeleniumSession := selenium.Group("/", handlers.ValidateMapperPresence, handlers.ValidateSessionStatus)
 		{
 			cachedSeleniumSession.DELETE("/session/:uuid", handlers.CloseSession)
 			cachedSeleniumSession.Any("/session/:uuid/*action", handlers.Proxy)
