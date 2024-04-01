@@ -488,6 +488,7 @@ func main() {
 	defer config.RedisDefinitionClient.Close()
 	defer config.RedisResourcesClient.Close()
 	mapper.InitMapperWorkers()
+	utilsmap.SetScalerVersion()
 
 	err = service.InitScalingData()
 	if err != nil {

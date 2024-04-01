@@ -1,12 +1,15 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"runtime"
 	"strings"
 	"time"
 
+	"github.com/zebrunner/esg/cachemaps/utilsmap"
+	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/utils"
 
 	"github.com/gin-gonic/gin"
@@ -17,20 +20,18 @@ var (
 	startTime time.Time
 	Revision  = "undefined"
 	BuildTime = "undefined"
-	Version   = "undefined"
 )
 
 func init() {
 	startTime = time.Now()
 	Revision = os.Getenv("REVISION")
 	BuildTime = os.Getenv("BUILD_TIME")
-	Version = os.Getenv("VERSION")
 }
 
 func Ping(c *gin.Context) {
 	c.JSON(http.StatusOK, map[string]interface{}{
 		"uptime":  time.Since(startTime),
-		"version": Version,
+		"version": config.Version,
 	})
 }
 
@@ -43,7 +44,7 @@ func ClusterStatus(c *gin.Context) {
 			"build": gin.H{
 				"revission": Revision,
 				"time":      BuildTime,
-				"version":   Version,
+				"version":   config.Version,
 			},
 			"go": gin.H{
 				"version": runtime.Version(),
@@ -123,5 +124,11 @@ func ListDrivers(c *gin.Context) {
 }
 
 func Welcome(c *gin.Context) {
-	c.String(http.StatusOK, "Welcome to Zebrunner Elastic Selenium Grid!")
+	scalerVersion, err := utilsmap.GetScalerVersion()
+	if err != nil {
+		scalerVersion = "undefined"
+	}
+	welcomeMsg := fmt.Sprintf("Welcome to Zebrunner Elastic Selenium Grid!\nrouter: %s\nscaler: %s", config.Version, scalerVersion)
+
+	c.String(http.StatusOK, welcomeMsg)
 }

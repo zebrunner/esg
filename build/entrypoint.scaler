@@ -1,5 +1,7 @@
 #!/bin/sh
 
+export VERSION=2.8
+
 finish() {
   ppid=$1
   if [ -n "$ppid" ]; then
