@@ -16,6 +16,7 @@ type Status int
 
 const (
 	Queued Status = iota
+	// Delete after https://github.com/zebrunner/entrypoint/issues/85 is resolved
 	Cypress
 	Active
 	Stopped

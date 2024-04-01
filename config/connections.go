@@ -20,7 +20,7 @@ var (
 func InitCache() error {
 	//default PoolTimeout - 4 seconds
 
-	// DB 2 - for mapper
+	// DB 0 - for mapper
 	RedisMapperClient = redis.NewClient(&redis.Options{
 		Addr:        Conf.RedisConnectionString,
 		Password:    "",
@@ -63,6 +63,7 @@ func InitCache() error {
 		return err
 	}
 
+	// DB 3 - for utility records (key lockers, key markers, etc...)
 	RedisUtilityClient = redis.NewClient(&redis.Options{
 		Addr:        Conf.RedisConnectionString,
 		Password:    "",
