@@ -159,8 +159,10 @@ func main() {
 		utils.ExitWithError(err, "Failed to init Redis client", log.NewEntry(log.StandardLogger()))
 	}
 
+	defer config.RedisMapperClient.Close()
 	defer config.RedisDefinitionClient.Close()
 	defer config.RedisResourcesClient.Close()
+	defer config.RedisUtilityClient.Close()
 	mapper.InitMapperWorkers()
 	resourcesToAllocate.InitResourceWorker()
 

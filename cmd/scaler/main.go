@@ -485,8 +485,10 @@ func main() {
 	if err != nil {
 		utils.ExitWithError(err, "Failed to init redis connection", log.NewEntry(log.StandardLogger()))
 	}
+	defer config.RedisMapperClient.Close()
 	defer config.RedisDefinitionClient.Close()
 	defer config.RedisResourcesClient.Close()
+	defer config.RedisUtilityClient.Close()
 	mapper.InitMapperWorkers()
 
 	err = service.InitScalingData()
