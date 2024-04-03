@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"runtime"
@@ -124,4 +125,13 @@ func ListDrivers(c *gin.Context) {
 
 func Welcome(c *gin.Context) {
 	c.String(http.StatusOK, "Welcome to Zebrunner Elastic Selenium Grid!")
+}
+
+func WelcomeWithInstallationRef(c *gin.Context) {
+	htmlStr := fmt.Sprintf("<html><body>Welcome to Zebrunner Elastic Selenium Grid! AWS cluster is not configured correctly."+
+		"<br><a href=https://github.com/zebrunner/e3s/blob/%v/docs/installation.md>Documentation</a></body></html>", Version)
+
+	c.Writer.WriteHeader(http.StatusOK)
+	c.Writer.Write([]byte(htmlStr))
+	c.Abort()
 }
