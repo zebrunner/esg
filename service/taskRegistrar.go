@@ -42,6 +42,10 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 		Overrides:      &ecs.TaskOverride{ContainerOverrides: env.ContainerOverrides()},
 		PlacementStrategy: []*ecs.PlacementStrategy{
 			{
+				Field: aws.String("cpu"),
+				Type:  aws.String("binpack"),
+			},
+			{
 				Field: aws.String("memory"),
 				Type:  aws.String("binpack"),
 			},
