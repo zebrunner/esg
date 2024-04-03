@@ -1,6 +1,7 @@
 #!/bin/sh
 
-export VERSION=2.8
+. version
+export VERSION=$VERSION
 
 finish() {
   ppid=$1

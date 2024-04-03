@@ -42,7 +42,6 @@ func ClusterStatus(c *gin.Context) {
 			"ready":   true,
 			"message": "Server is running",
 			"build": gin.H{
-				"revission": Revision,
 				"time":      BuildTime,
 				"version":   config.Version,
 			},
