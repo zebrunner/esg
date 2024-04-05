@@ -31,8 +31,10 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 	mavenDir := "/root/.m2/repository"
 	mavenVolume := "maven"
 
+	branch := ""
 	branchArg := ""
 	if caps.Branch != "" {
+		branch = caps.Branch.ToPrimitive()
 		branchArg = "--branch=" + caps.Branch.ToPrimitive()
 	}
 
@@ -129,6 +131,7 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 		Essential:  true,
 		Env: map[string]string{
 			"COMMAND": launchCommand.ToPrimitive(),
+                        "branch": branch,
 		},
 		Mounts:           mounts,
 		WorkingDirectory: workDir,
