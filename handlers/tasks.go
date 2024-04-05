@@ -17,6 +17,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps/sessionmap"
 	"github.com/zebrunner/esg/cachemaps/taskmap"
+	"github.com/zebrunner/esg/cachemaps/utilsmap"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/db"
@@ -24,6 +25,7 @@ import (
 	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
+	"github.com/zebrunner/esg/zebrunner"
 	"golang.org/x/net/websocket"
 )
 
@@ -190,6 +192,26 @@ func CloseSession(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"value": nil})
 }
 
+// #1056: Small chance of double shaping on generic task abort
+func LockGenericTaskCache(c *gin.Context) {
+	task := c.MustGet(config.TaskIdKey).(*taskmap.Task)
+
+	for {
+		if ok := utilsmap.AcquireLock(task.TaskId, 0); ok {
+			break
+		}
+
+		time.Sleep(10 * time.Second)
+	}
+
+	c.Next()
+
+	err := utilsmap.ReleaseLock(task.TaskId)
+	if err != nil {
+		log.WithField(config.TaskIdKey, task.TaskId).WithError(err).Error("Failed to release lock for task cache!")
+	}
+}
+
 func AbortTask(c *gin.Context) {
 	task := c.MustGet(config.TaskIdKey).(*taskmap.Task)
 
@@ -205,6 +227,32 @@ func AbortTask(c *gin.Context) {
 	}
 
 	l.Info("task aborted")
+	c.JSON(http.StatusNoContent, gin.H{})
+}
+
+func MarkAsFinished(c *gin.Context) {
+	task := c.MustGet(config.TaskIdKey).(*taskmap.Task)
+
+	l := log.WithField(config.RouterUUID, task.RouterUUID).WithField(config.TaskIdKey, task.TaskId)
+	if !config.Conf.SingleTenant {
+		l = l.WithField("workspace", task.Workspace)
+	}
+
+	cachedTask, err := taskmap.Find(task.TaskId, false)
+	if err == nil && cachedTask.Status != taskmap.TaskStopped {
+		task.Status = taskmap.TaskStopped
+		task.StopReason = taskmap.TaskFinished
+		err = taskmap.Write(task.TaskId, task, -1)
+		if err != nil {
+			log.WithError(err).Error("Failed to mark generec task as stopped in cache")
+		}
+	}
+
+	go func() {
+		zebrunner.AbortLaunch(task.RouterUUID, task.Workspace, task.Capabilities.LaunchUUID.ToPrimitive(), "Executor finished")
+		l.Info("Generic task finished")
+	}()
+
 	c.JSON(http.StatusNoContent, gin.H{})
 }
 

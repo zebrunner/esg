@@ -3,6 +3,9 @@
 # Edit at https://www.toptal.com/developers/gitignore?templates=go,visualstudiocode,intellij+all,macos
 
 ### Go ###
+# Any init internal scripts and etc. 
+111_*/
+
 # Binaries for programs and plugins
 *.exe
 *.exe~

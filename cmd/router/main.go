@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"net/http"
 	"net/http/httputil"
 	"os"
@@ -103,7 +104,11 @@ func CreateRouter() *gin.Engine {
 			devtoolsHub.GET("/page/:target-id")
 		}
 
-		seleniumHub.DELETE("/tasks/:task", handlers.AbortTask) // to be able to abort generic tasks by taskId
+		genericHub := seleniumHub.Group("/", handlers.LockGenericTaskCache)
+		{
+			genericHub.POST("/tasks/:task", handlers.MarkAsFinished)
+			genericHub.DELETE("/tasks/:task", handlers.AbortTask) // to be able to abort generic tasks by taskId
+		}
 	}
 
 	httpHub := hub.Group("/", handlers.APIError)
@@ -129,42 +134,6 @@ func refreshIMDSV2Token() {
 		log.Debug("Successfully generated IMDSV2 token")
 		time.Sleep(2*time.Hour + 30*time.Minute)
 	}
-}
-
-func registerTargetInTargetGroup(targetGroup string, port int64) error {
-	tg, err := service.DescribeTargetGroup(targetGroup)
-	if err != nil {
-		return err
-	}
-
-	err = service.RegisterTarget(tg, port)
-	if err != nil {
-		return err
-	}
-
-	// wait until alb actually starts distributing requests to that specific target
-	// average time is between 5 to 15 seconds
-	time.Sleep(25 * time.Second)
-
-	return nil
-}
-
-func deregisterTargetFromTargetGroup(targetGroup string, port int64) error {
-	tg, err := service.DescribeTargetGroup(targetGroup)
-	if err != nil {
-		return err
-	}
-
-	err = service.DeregisterTarget(tg, port)
-	if err != nil {
-		return err
-	}
-
-	// wait until alb actually stops distributing requests to that specific target
-	// average time is between 5 to 15 seconds
-	time.Sleep(25 * time.Second)
-
-	return nil
 }
 
 func main() {
@@ -207,6 +176,23 @@ func main() {
 
 	go refreshIMDSV2Token()
 
+	targetGrouLog := log.WithFields(log.Fields{"port": config.Conf.ExternalPort, "targetGroup": config.Conf.AwsTargetGroup})
+	targetGroup, err := service.DescribeTargetGroup(config.Conf.AwsTargetGroup)
+	if err != nil {
+		utils.ExitWithError(err, "Failed to describe target group", targetGrouLog)
+	} else if len(targetGroup.LoadBalancerArns) < 1 || targetGroup.LoadBalancerArns[0] == nil {
+		utils.ExitWithError(fmt.Errorf("Target group is not attached to load balancer"), "Failed to describe target group", targetGrouLog)
+	}
+
+	loadBalancer, err := service.DescribeLoadBalancer(*targetGroup.LoadBalancerArns[0])
+	if err != nil {
+		utils.ExitWithError(err, "Failed to describe load balancer", targetGrouLog)
+	} else if loadBalancer.DNSName == nil || *loadBalancer.DNSName == "" {
+		utils.ExitWithError(fmt.Errorf("Load balancer without public dns"), "Failed to describe load balancer", targetGrouLog)
+	} else {
+		config.Conf.AwsEsgDns = *loadBalancer.DNSName
+	}
+
 	for {
 		if definitionmap.IsRefreshDone() {
 			break
@@ -233,24 +219,31 @@ func main() {
 		}
 	}()
 
-	targetGrouLog := log.WithFields(log.Fields{"port": config.Conf.ExternalPort, "targetGroup": config.Conf.AwsTargetGroup})
-	err = registerTargetInTargetGroup(config.Conf.AwsTargetGroup, config.Conf.ExternalPort)
+	err = service.RegisterTarget(targetGroup, config.Conf.ExternalPort)
 	if err != nil {
 		utils.ExitWithError(err, "Failed to append target to the elb target group", targetGrouLog)
+	} else {
+		// wait until alb actually starts distributing requests to that specific target
+		// average time is between 5 to 15 seconds
+		time.Sleep(25 * time.Second)
+		targetGrouLog.Info("Registered target in target group")
 	}
-	targetGrouLog.Info("Registered target in target group")
 
 	log.Info("Service started")
+
 	<-quit
 
 	log.Info("Shutdown router ...")
 	ctx, cancel := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout+5*time.Second)
 	defer cancel()
 
-	err = deregisterTargetFromTargetGroup(config.Conf.AwsTargetGroup, config.Conf.ExternalPort)
+	err = service.DeregisterTarget(targetGroup, config.Conf.ExternalPort)
 	if err != nil {
 		targetGrouLog.WithError(err).Fatal("Failed to detach target from the elb target group")
 	} else {
+		// wait until alb actually stops distributing requests to that specific target
+		// average time is between 5 to 15 seconds
+		time.Sleep(25 * time.Second)
 		targetGrouLog.Info("Deregistered target from target group")
 	}
 
@@ -260,7 +253,6 @@ func main() {
 	}
 
 	var wg sync.WaitGroup
-
 	for routerUUID, ctx := range service.GenericCtxWorker.CtxMap {
 		wg.Add(1)
 		go func(routerUUID string, ctx context.Context) {
