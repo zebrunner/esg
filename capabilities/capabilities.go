@@ -277,12 +277,13 @@ type Capabilities struct {
 	MitmMemory int64Wrapper
 
 	// generic launcher caps
-	RepositoryUrl stringWrapper
-	Branch        stringWrapper
-	Image         stringWrapper
-	LaunchCommand stringWrapper
-	EnvVariables  mapStrStrWrapper
-	LaunchUUID    stringWrapper
+	RepositoryUrl     stringWrapper
+	RepositoryForkUrl stringWrapper
+	Branch            stringWrapper
+	Image             stringWrapper
+	LaunchCommand     stringWrapper
+	EnvVariables      mapStrStrWrapper
+	LaunchUUID        stringWrapper
 }
 
 func (c *Capabilities) ToMap() (newMap map[string]interface{}) {
@@ -472,11 +473,12 @@ func (c *Capabilities) ParseRequestCaps(reqCaps map[string]interface{}) error {
 		"mitmcpu":    &c.MitmCpu,
 		"mitmmemory": &c.MitmMemory,
 
-		"repositoryurl": &c.RepositoryUrl,
-		"branch":        &c.Branch,
-		"image":         &c.Image,
-		"launchcommand": &c.LaunchCommand,
-		"envvariables":  &c.EnvVariables,
+		"repositoryurl":     &c.RepositoryUrl,
+		"repositoryforkurl": &c.RepositoryForkUrl,
+		"branch":            &c.Branch,
+		"image":             &c.Image,
+		"launchcommand":     &c.LaunchCommand,
+		"envvariables":      &c.EnvVariables,
 	}
 
 	errs := make([]string, 0)
