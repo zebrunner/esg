@@ -40,6 +40,11 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 		return nil, fmt.Errorf("executor repository is not specified! RepositoryUrl='%s'", caps.RepositoryUrl)
 	}
 
+	repositoryUrl := caps.RepositoryUrl
+	if caps.RepositoryForkUrl != "" && caps.RepositoryForkUrl != "url" {
+		repositoryUrl = caps.RepositoryForkUrl
+	}
+
 	//executorImage := "maven:3.8-openjdk-11"
 	if caps.Image == "" {
 		return nil, fmt.Errorf("executor container image is not specified! Image='%s'", caps.Image)
@@ -47,7 +52,7 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 	executorImage := caps.Image
 	//fmt.Printf("executorImage: %s\n", executorImage)
 
-	cloneCommand := fmt.Sprintf("git clone --progress --depth=1 --single-branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
+	cloneCommand := fmt.Sprintf("git clone --progress --depth=1 --single-branch %s %s %s", branchArg, repositoryUrl, workDir)
 	//fmt.Printf("cloneCommand: %s\n", cloneCommand)
 
 	taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
