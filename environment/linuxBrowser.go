@@ -2,6 +2,7 @@ package environment
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -82,14 +83,14 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 			StartPeriod: aws.Int64(0),
 		},
 	}
-	browserContainer.SetCpu(&caps.Cpu, 1024, conf.MaxCpu)
-	browserContainer.SetMemory(&caps.Memory, 1024, conf.MaxMemory)
 
 	recorderContainer := Container{
-		Name:       "recorder",
-		Image:      recorderImage,
-		cpu:        recorderCpu,
-		memory:     recorderMemory,
+		Name:  "recorder",
+		Image: recorderImage,
+		Res: Resources{
+			Cpu:    recorderCpu,
+			Memory: recorderMemory,
+		},
 		Privileged: false,
 		Essential:  false,
 		Env: map[string]string{
@@ -133,10 +134,12 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 	}
 
 	uploaderContainer := Container{
-		Name:       "uploader",
-		Image:      uploaderImage,
-		cpu:        64,  // with 32  uploading is aborted
-		memory:     256, // 64 works for single thread. for backgroud copying it is not enough
+		Name:  "uploader",
+		Image: uploaderImage,
+		Res: Resources{
+			Cpu:    64,  // with 32  uploading is aborted
+			Memory: 256, // 64 works for single thread. for backgroud copying it is not enough
+		},
 		Privileged: false,
 		Essential:  false,
 		Env: map[string]string{
@@ -151,8 +154,10 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 	}
 
 	containers := []*Container{&browserContainer, &recorderContainer, &uploaderContainer}
+
+	var mitmContainer Container
 	if caps.Mitm {
-		mitmContainer := Container{
+		mitmContainer = Container{
 			Name:       "mitm",
 			Image:      mitmImage,
 			Privileged: false,
@@ -174,13 +179,10 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 			mitmContainer.Env["PROXY_TYPE"] = caps.MitmType.ToPrimitive()
 		}
 
-		mitmContainer.SetCpu(&caps.MitmCpu, 512, conf.MaxCpu)
-		mitmContainer.SetMemory(&caps.MitmMemory, 512, conf.MaxMemory)
-
 		containers = append(containers, &mitmContainer)
-
 		browserContainer.Links = []string{"mitm"}
 	}
+
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
 		Schema:               buildSchema(containers),
@@ -212,9 +214,116 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 		environment.Network.Endpoints["healthcheck"].Path = "/wd/hub/"
 	}
 
+	browseMinRes := Resources{Cpu: 1024, Memory: 1024}
 	if caps.Mitm {
+		// set resources for both mitm and browser containers
+		mitmMinRes := Resources{Cpu: 512, Memory: 512}
+
+		calculateResourcesForSeveralContainers(&environment,
+			resourceCalculatorHelper{
+				MinimumRes: browseMinRes,
+				Container:  &browserContainer,
+				Memory:     &caps.Memory,
+				Cpu:        &caps.Cpu,
+			},
+			resourceCalculatorHelper{
+				MinimumRes: mitmMinRes,
+				Container:  &mitmContainer,
+				Memory:     &caps.MitmMemory,
+				Cpu:        &caps.MitmCpu,
+			},
+		)
+
+		mitmContainer.CalculateResource(mitmMinRes, environment.CapacityProvider, caps, environment.Containers)
 		environment.Network.Endpoints["proxyHandlerPort"] = &Endpoint{ContainerPort: proxyHandlerPort, HostPort: 0, Path: "/"}
+	} else {
+		browserContainer.CalculateResource(Resources{Cpu: 1024, Memory: 1024}, environment.CapacityProvider, caps, environment.Containers)
 	}
 
 	return &environment, nil
+}
+
+type resourceCalculatorHelper struct {
+	MinimumRes Resources
+	Container  *Container
+	Memory     capabilities.Wrapper[int64]
+	Cpu        capabilities.Wrapper[int64]
+	wantedRes  Resources
+}
+
+func calculateResourcesForSeveralContainers(env *ExecutionEnvironment, resourcesArr ...resourceCalculatorHelper) {
+	freeResource, ok := CapacityProvdirResourcesLimit[env.CapacityProvider]
+	if !ok {
+		for _, r := range resourcesArr {
+			r.Container.Res = r.MinimumRes
+		}
+
+		return
+	}
+
+	for _, r := range resourcesArr {
+		// Clear current container resources setting as it will be configured later
+		r.Container.Res = Resources{0, 0}
+	}
+
+	busyResources := SumResources(env.Containers)
+	freeResource.Remove(&busyResources)
+
+	totalWantedResources := Resources{0, 0}
+	for _, r := range resourcesArr {
+		wantedCpu := r.Cpu.ToPrimitive() - r.MinimumRes.Cpu
+		if wantedCpu < 0 {
+			wantedCpu = 0
+		}
+
+		wantedMemory := r.Memory.ToPrimitive() - r.MinimumRes.Memory
+		if wantedMemory < 0 {
+			wantedMemory = 0
+		}
+
+		// wanted resources not including minimal values
+		r.wantedRes = Resources{Cpu: wantedCpu, Memory: wantedMemory}
+		totalWantedResources.Add(&r.wantedRes)
+
+		isCpuOk, isMemoryOk := freeResource.Compare(r.MinimumRes)
+		if !isCpuOk || !isMemoryOk {
+			r.Container.Res = Resources{-1, -1}
+			return
+		}
+
+		freeResource.Remove(&r.MinimumRes)
+	}
+
+	getExceedCoefficient := func(wantedTotal int64, freeTotal int64) float64 {
+		// round up float 2 decimal (1.3333211 -> 1.34)
+		exceedsMaximum := math.Ceil((float64(wantedTotal)/float64(freeTotal))*100) / 100
+		if exceedsMaximum == 0 {
+			exceedsMaximum = 0.01
+		}
+
+		return exceedsMaximum
+	}
+
+	cpuEnough, memoryEnough := freeResource.Compare(totalWantedResources)
+	if !cpuEnough {
+		cpuExceedsMaximum := getExceedCoefficient(totalWantedResources.Cpu, freeResource.Cpu)
+		for _, r := range resourcesArr {
+			// decrease cpu in the same proportion for all conainers
+			r.wantedRes.Cpu = int64(float64(r.wantedRes.Cpu) / cpuExceedsMaximum)
+		}
+	}
+
+	if !memoryEnough {
+		memoryExceedsMaximum := getExceedCoefficient(totalWantedResources.Memory, freeResource.Memory)
+		for _, r := range resourcesArr {
+			// decrease cpu in the same proportion for all conainers
+			r.wantedRes.Cpu = int64(float64(r.wantedRes.Cpu) / memoryExceedsMaximum)
+		}
+	}
+
+	for _, r := range resourcesArr {
+		r.Container.Res = Resources{Cpu: r.MinimumRes.Cpu + r.wantedRes.Cpu, Memory: r.MinimumRes.Memory + r.wantedRes.Memory}
+		r.Cpu.From(r.Container.Res.Cpu)
+		r.Memory.From(r.Container.Res.Memory)
+	}
 }

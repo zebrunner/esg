@@ -22,6 +22,7 @@ import (
 	"github.com/zebrunner/esg/cachemaps/sessionmap"
 	"github.com/zebrunner/esg/cachemaps/taskmap"
 	"github.com/zebrunner/esg/config"
+	"github.com/zebrunner/esg/environment"
 	"github.com/zebrunner/esg/handlers"
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
@@ -173,6 +174,15 @@ func main() {
 		utils.ExitWithError(err, "Failed to start aws session", log.NewEntry(log.StandardLogger()))
 	}
 	service.AwsSess = aws
+
+	scalersMap, err := service.InitScalingData()
+	if err != nil {
+		utils.ExitWithError(err, "Failed to init scaling data", log.NewEntry(log.StandardLogger()))
+	}
+
+	for capacityProvider, scaler := range scalersMap {
+		environment.CapacityProvdirResourcesLimit[capacityProvider] = environment.Resources{Cpu: scaler.InstanceResources.CPU, Memory: scaler.InstanceResources.Memory}
+	}
 
 	go refreshIMDSV2Token()
 

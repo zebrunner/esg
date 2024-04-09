@@ -48,14 +48,14 @@ func buildWindowsBrowser(workspace string, routerUUID string, caps *capabilities
 			StartPeriod: aws.Int64(0),
 		},
 	}
-	browserContainer.SetCpu(&caps.Cpu, 1024, conf.MaxCpu)
-	browserContainer.SetMemory(&caps.Memory, 1024, conf.MaxMemory)
 
 	recorderContainer := Container{
-		Name:       "recorder",
-		Image:      winRecorderImage,
-		cpu:        8,
-		memory:     8,
+		Name:  "recorder",
+		Image: winRecorderImage,
+		Res: Resources{
+			Cpu:    8,
+			Memory: 8,
+		},
 		Privileged: false,
 		Essential:  false,
 		Env: map[string]string{
@@ -75,10 +75,12 @@ func buildWindowsBrowser(workspace string, routerUUID string, caps *capabilities
 	}
 
 	uploaderContainer := Container{
-		Name:       "uploader",
-		Image:      winUploaderImage,
-		cpu:        16,
-		memory:     16,
+		Name:  "uploader",
+		Image: winUploaderImage,
+		Res: Resources{
+			Cpu:    16,
+			Memory: 16,
+		},
 		Privileged: false,
 		Essential:  false,
 		Env: map[string]string{
@@ -100,6 +102,7 @@ func buildWindowsBrowser(workspace string, routerUUID string, caps *capabilities
 	}
 
 	containers := []*Container{&browserContainer, &recorderContainer, &uploaderContainer}
+
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
 		Schema:               buildSchema(containers),
@@ -120,6 +123,8 @@ func buildWindowsBrowser(workspace string, routerUUID string, caps *capabilities
 		CapacityProvider: config.Conf.AwsWinCapacityProvider,
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
 	}
+
+	browserContainer.CalculateResource(Resources{Cpu: 1024, Memory: 1024}, environment.CapacityProvider, caps, environment.Containers)
 
 	return &environment, nil
 }
