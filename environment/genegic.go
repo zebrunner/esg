@@ -232,6 +232,10 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
 	}
 
-	executorContainer.CalculateResource(Resources{Cpu: 1024, Memory: 1024}, environment.CapacityProvider, caps, environment.Containers)
+	err := executorContainer.CalculateResource(Resources{Cpu: 1024, Memory: 1024}, environment.CapacityProvider, caps, environment.Containers)
+	if err != nil {
+		return nil, err
+	}
+
 	return &environment, nil
 }
