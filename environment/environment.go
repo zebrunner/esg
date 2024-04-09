@@ -54,6 +54,12 @@ const (
 	genericPort int64 = 22
 	minCpu      int64 = 128
 	minMemory   int64 = 256
+
+	memoryDeviation int64 = 600
+)
+
+var (
+	CapacityProvdirResourcesLimit = make(map[string]Resources)
 )
 
 type NetworkConfiguration struct {
@@ -278,8 +284,7 @@ func (e *ExecutionEnvironment) HashRegisterDefinition() string {
 		containers = append(containers, &Container{
 			Name:             container.Name,
 			Image:            container.Image,
-			cpu:              container.cpu,
-			memory:           container.memory,
+			Res:              container.Res,
 			Essential:        container.Essential,
 			Privileged:       container.Privileged,
 			Ports:            container.Ports,
@@ -307,22 +312,14 @@ func (e *ExecutionEnvironment) HashRegisterDefinition() string {
 }
 
 func (env *ExecutionEnvironment) GetAllocationResources() *resourcesToAllocate.ResourcesToAllocate {
-	var cpu int64 = 0
-	var memory int64 = 0
+	containersResources := SumResources(env.Containers)
 
-	for _, container := range env.Containers {
-		cpu += container.cpu
-		memory += container.memory
-	}
-
-	resources := resourcesToAllocate.ResourcesToAllocate{
+	return &resourcesToAllocate.ResourcesToAllocate{
 		RouterUUID:       env.RouterUUID,
-		Cpu:              cpu,
-		Memory:           memory,
+		Cpu:              containersResources.Cpu,
+		Memory:           containersResources.Memory,
 		CapacityProvider: env.CapacityProvider,
 	}
-
-	return &resources
 }
 
 func (env *ExecutionEnvironment) GetFamilyRevision() (string, error) {

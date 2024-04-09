@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/aws/aws-sdk-go/service/elbv2"
 	"github.com/gin-gonic/gin"
 
 	log "github.com/sirupsen/logrus"
@@ -21,6 +22,7 @@ import (
 	"github.com/zebrunner/esg/cachemaps/resourcesToAllocate"
 	"github.com/zebrunner/esg/cachemaps/utilsmap"
 	"github.com/zebrunner/esg/config"
+	"github.com/zebrunner/esg/environment"
 	"github.com/zebrunner/esg/handlers"
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
@@ -49,7 +51,7 @@ func ReverseProxy() gin.HandlerFunc {
 	}
 }
 
-func CreateRouter() *gin.Engine {
+func getRouterBasis() *gin.Engine {
 	r := gin.New()
 	r.ForwardedByClientIP = true
 
@@ -67,6 +69,25 @@ func CreateRouter() *gin.Engine {
 		lowLvlApi.GET("/tasks/:task/status", handlers.TaskDescribe)
 	}
 
+	return r
+}
+
+func CreateMockRouter() *gin.Engine {
+	r := getRouterBasis()
+
+	hub := r.Group("/")
+	hub.Any("/wd/hub/*action", ReverseProxy())
+	{
+		hub.GET("/", handlers.WelcomeWithInstallationRef)
+		hub.GET("/ping", handlers.Ping)
+	}
+
+	return r
+}
+
+func CreateRouter() *gin.Engine {
+	r := getRouterBasis()
+
 	hub := r.Group("/")
 	hub.Any("/wd/hub/*action", ReverseProxy())
 	{
@@ -76,7 +97,7 @@ func CreateRouter() *gin.Engine {
 
 	selenium := hub.Group("/", handlers.SeleniumError)
 	{
-		selenium.POST("/session", handlers.Create)                                   // Auth logic moved to handler
+		selenium.POST("/session", handlers.Create) // Auth logic moved to handler
 		selenium.GET("/ws/vnc/:uuid", handlers.ValidateMapperPresence, handlers.Vnc)
 
 		genericHub := selenium.Group("/", handlers.ValidateGenericMapperPresence)
@@ -126,16 +147,65 @@ func CreateRouter() *gin.Engine {
 	return r
 }
 
-func refreshIMDSV2Token() {
-	for {
-		err := utils.RefreshIMDSV2Token()
-		if err != nil {
-			utils.ExitWithError(err, "Failed to generate IMDSV2 token", log.NewEntry(log.StandardLogger()))
-		}
-
-		log.Debug("Successfully generated IMDSV2 token")
-		time.Sleep(2*time.Hour + 30*time.Minute)
+func InitClusterInfo() (*elbv2.TargetGroup, error) {
+	aws, err := service.InitAws()
+	if err != nil {
+		log.WithError(err).Error("Failed to start aws session")
+		return nil, err
 	}
+	service.AwsSess = aws
+
+	err = utils.RefreshIMDSV2Token()
+	if err != nil {
+		log.WithError(err).Error("Failed to generate IMDSV2 token")
+		return nil, err
+	} else {
+		go func() {
+			for {
+				time.Sleep(2*time.Hour + 30*time.Minute)
+				err := utils.RefreshIMDSV2Token()
+				if err != nil {
+					log.WithError(err).Error("Failed to generate IMDSV2 token")
+				} else {
+					log.Debug("Successfully generated IMDSV2 token")
+				}
+			}
+		}()
+	}
+
+	scalersMap, err := service.InitScalingData()
+	if err != nil {
+		log.WithError(err).Error("Failed to init scaling data")
+		return nil, err
+	}
+
+	for capacityProvider, scaler := range scalersMap {
+		environment.CapacityProvdirResourcesLimit[capacityProvider] = environment.Resources{Cpu: scaler.InstanceResources.CPU, Memory: scaler.InstanceResources.Memory}
+	}
+
+	l := log.WithField("targetGroup", config.Conf.AwsTargetGroup)
+	targetGroup, err := service.DescribeTargetGroup(config.Conf.AwsTargetGroup)
+	if err != nil {
+		l.WithError(err).Error("Failed to describe target group")
+		return nil, err
+	} else if len(targetGroup.LoadBalancerArns) < 1 || targetGroup.LoadBalancerArns[0] == nil {
+		err = fmt.Errorf("target group is not attached to load balancer")
+		l.WithError(err).Error("Failed to describe target group")
+		return nil, err
+	}
+
+	loadBalancer, err := service.DescribeLoadBalancer(*targetGroup.LoadBalancerArns[0])
+	if err != nil {
+		l.WithError(err).Error("Failed to describe load balancer")
+		return nil, err
+	} else if loadBalancer.DNSName == nil || *loadBalancer.DNSName == "" {
+		err = fmt.Errorf("load balancer without public dns")
+		l.WithError(err).Error("Failed to describe load balancer")
+		return nil, err
+	}
+	config.Conf.AwsEsgDns = *loadBalancer.DNSName
+
+	return targetGroup, nil
 }
 
 func main() {
@@ -151,7 +221,6 @@ func main() {
 	if err != nil {
 		utils.ExitWithError(err, "Failed to init DB client", log.NewEntry(log.StandardLogger()))
 	}
-
 	defer config.DbConnection.Close()
 
 	err = config.InitCache()
@@ -159,36 +228,26 @@ func main() {
 		utils.ExitWithError(err, "Failed to init Redis client", log.NewEntry(log.StandardLogger()))
 	}
 
+	defer config.RedisMapperClient.Close()
 	defer config.RedisDefinitionClient.Close()
 	defer config.RedisResourcesClient.Close()
+	defer config.RedisUtilityClient.Close()
 	mapper.InitMapperWorkers()
 	resourcesToAllocate.InitResourceWorker()
 
-	aws, err := service.InitAws()
+	targetGroup, err := InitClusterInfo()
 	if err != nil {
-		utils.ExitWithError(err, "Failed to start aws session", log.NewEntry(log.StandardLogger()))
-	}
-	service.AwsSess = aws
-
-	go refreshIMDSV2Token()
-
-	targetGrouLog := log.WithFields(log.Fields{"port": config.Conf.ExternalPort, "targetGroup": config.Conf.AwsTargetGroup})
-	targetGroup, err := service.DescribeTargetGroup(config.Conf.AwsTargetGroup)
-	if err != nil {
-		utils.ExitWithError(err, "Failed to describe target group", targetGrouLog)
-	} else if len(targetGroup.LoadBalancerArns) < 1 || targetGroup.LoadBalancerArns[0] == nil {
-		utils.ExitWithError(fmt.Errorf("target group is not attached to load balancer"), "Failed to describe target group", targetGrouLog)
-	}
-
-	loadBalancer, err := service.DescribeLoadBalancer(*targetGroup.LoadBalancerArns[0])
-	if err != nil {
-		utils.ExitWithError(err, "Failed to describe load balancer", targetGrouLog)
-	} else if loadBalancer.DNSName == nil || *loadBalancer.DNSName == "" {
-		utils.ExitWithError(fmt.Errorf("load balancer without public dns"), "Failed to describe load balancer", targetGrouLog)
+		log.WithError(err).Error("Failed to init cluster info")
+		startMockRouter()
 	} else {
-		config.Conf.AwsEsgDns = *loadBalancer.DNSName
+		startRouter(targetGroup)
 	}
 
+	log.Info("Router exited")
+}
+
+func startRouter(targetGroup *elbv2.TargetGroup) {
+	// wait until task definitions are updated
 	for {
 		if utilsmap.IsTaskDefenitionRefreshDone() {
 			definitionmap.SaveAndUpdateDefinitions()
@@ -197,35 +256,37 @@ func main() {
 		time.Sleep(5 * time.Second)
 	}
 
+	// init all service workers
 	service.InitInstanceWorker()
 	service.InitWaitWorker()
 
+	// create sigterm listener chan
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
+	// wrapping router by http.Server object and starting it in new thread to wait for quit chan signal
 	srv := &http.Server{
 		Addr:    listen,
 		Handler: CreateRouter(),
 	}
 
 	go func() {
-		// service connections
 		log.Infof("Listening on %s", listen)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.WithError(err).Fatal("Failed to start router")
 		}
 	}()
 
-	err = service.RegisterTarget(targetGroup, config.Conf.ExternalPort)
+	l := log.WithField("targetGroup", config.Conf.AwsTargetGroup)
+	err := service.RegisterTarget(targetGroup, config.Conf.ExternalPort)
 	if err != nil {
-		utils.ExitWithError(err, "Failed to append target to the elb target group", targetGrouLog)
+		utils.ExitWithError(err, "Failed to append target to the elb target group", l)
 	} else {
 		// wait until alb actually starts distributing requests to that specific target
 		// average time is between 5 to 15 seconds
 		time.Sleep(25 * time.Second)
-		targetGrouLog.Info("Registered target in target group")
+		l.Info("Registered target in target group")
 	}
-
 	log.Info("Service started")
 
 	<-quit
@@ -236,12 +297,12 @@ func main() {
 
 	err = service.DeregisterTarget(targetGroup, config.Conf.ExternalPort)
 	if err != nil {
-		targetGrouLog.WithError(err).Fatal("Failed to detach target from the elb target group")
+		l.WithError(err).Fatal("Failed to detach target from the elb target group")
 	} else {
 		// wait until alb actually stops distributing requests to that specific target
 		// average time is between 5 to 15 seconds
 		time.Sleep(25 * time.Second)
-		targetGrouLog.Info("Deregistered target from target group")
+		l.Info("Deregistered target from target group")
 	}
 
 	log.Info("finalizing connections...")
@@ -261,5 +322,17 @@ func main() {
 	}
 
 	wg.Wait()
-	log.Info("Router exited")
+}
+
+func startMockRouter() {
+	// create sigterm listener chan
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	log.Infof("Starting mock listener on %s", listen)
+	go CreateMockRouter().Run(listen)
+
+	<-quit
+
+	log.Info("Shutdown router ...")
 }

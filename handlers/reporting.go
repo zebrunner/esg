@@ -131,3 +131,12 @@ func Welcome(c *gin.Context) {
 
 	c.String(http.StatusOK, welcomeMsg)
 }
+
+func WelcomeWithInstallationRef(c *gin.Context) {
+	htmlStr := fmt.Sprintf("<html><body>Welcome to Zebrunner Elastic Selenium Grid! AWS cluster is not configured correctly."+
+		"<br><a href=https://github.com/zebrunner/e3s/blob/%v/docs/installation.md>Documentation</a></body></html>", Version)
+
+	c.Writer.WriteHeader(http.StatusOK)
+	c.Writer.Write([]byte(htmlStr))
+	c.Abort()
+}

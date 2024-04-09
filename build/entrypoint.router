@@ -107,6 +107,9 @@ fi
 if [ ! -z ${SINGLE_TENANT} ]; then
   CMD_ARGS="${CMD_ARGS} -single-tenant=${SINGLE_TENANT}"
 fi
+if [ ! -z ${PRODUCTION_ENV} ]; then
+  CMD_ARGS="${CMD_ARGS} -production-env=${PRODUCTION_ENV}"
+fi
 if [ ! -z ${EXTERNAL_PORT} ]; then
   CMD_ARGS="${CMD_ARGS} -external-port ${EXTERNAL_PORT}"
 fi

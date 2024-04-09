@@ -485,16 +485,22 @@ func main() {
 	if err != nil {
 		utils.ExitWithError(err, "Failed to init redis connection", log.NewEntry(log.StandardLogger()))
 	}
+	defer config.RedisMapperClient.Close()
 	defer config.RedisDefinitionClient.Close()
 	defer config.RedisResourcesClient.Close()
+	defer config.RedisUtilityClient.Close()
 	mapper.InitMapperWorkers()
 	utilsmap.SetScalerVersion()
 
-	err = service.InitScalingData()
+	scalersMap, err := service.InitScalingData()
 	if err != nil {
 		utils.ExitWithError(err, "Failed to init scaling data", log.NewEntry(log.StandardLogger()))
 	}
-	service.StartScalers()
+	service.StartScalers(scalersMap)
+
+	for capacityProvider, scaler := range scalersMap {
+		environment.CapacityProvdirResourcesLimit[capacityProvider] = environment.Resources{Cpu: scaler.InstanceResources.CPU, Memory: scaler.InstanceResources.Memory}
+	}
 
 	go refreshIMDSV2Token()
 
