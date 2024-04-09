@@ -2,6 +2,7 @@ package config
 
 import (
 	"flag"
+	"os"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -25,6 +26,7 @@ var (
 	RouterUUID   = "_uuid"
 	TaskIdKey    = "_taskId"
 	SessionIdKey = "sessionId"
+	Version      = os.Getenv("VERSION")
 )
 
 type Config struct {

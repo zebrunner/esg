@@ -1,8 +1,8 @@
 #!/bin/sh
 
-export REVISION=$(git rev-parse HEAD)
+. version
+export VERSION=$VERSION
 export BUILD_TIME=$(date -Iseconds)
-export VERSION=$(git describe --tags $(git rev-list --tags --max-count=1))
 
 finish() {
   ppid=$1

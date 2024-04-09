@@ -1,5 +1,8 @@
 #!/bin/sh
 
+. version
+export VERSION=$VERSION
+
 finish() {
   ppid=$1
   if [ -n "$ppid" ]; then
