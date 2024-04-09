@@ -18,13 +18,11 @@ import (
 
 var (
 	startTime time.Time
-	Revision  = "undefined"
 	BuildTime = "undefined"
 )
 
 func init() {
 	startTime = time.Now()
-	Revision = os.Getenv("REVISION")
 	BuildTime = os.Getenv("BUILD_TIME")
 }
 
@@ -42,8 +40,8 @@ func ClusterStatus(c *gin.Context) {
 			"ready":   true,
 			"message": "Server is running",
 			"build": gin.H{
-				"time":      BuildTime,
-				"version":   config.Version,
+				"time":    BuildTime,
+				"version": config.Version,
 			},
 			"go": gin.H{
 				"version": runtime.Version(),
@@ -133,8 +131,15 @@ func Welcome(c *gin.Context) {
 }
 
 func WelcomeWithInstallationRef(c *gin.Context) {
+	scalerVersion, err := utilsmap.GetScalerVersion()
+	if err != nil {
+		scalerVersion = "undefined"
+	}
+
 	htmlStr := fmt.Sprintf("<html><body>Welcome to Zebrunner Elastic Selenium Grid! AWS cluster is not configured correctly."+
-		"<br><a href=https://github.com/zebrunner/e3s/blob/%v/docs/installation.md>Documentation</a></body></html>", Version)
+		"<br>router: %[1]s"+
+		"<br>scaler: %s"+
+		"<br><a href=https://github.com/zebrunner/e3s/blob/%[1]v/docs/installation.md>Documentation</a></body></html>", config.Version, scalerVersion)
 
 	c.Writer.WriteHeader(http.StatusOK)
 	c.Writer.Write([]byte(htmlStr))
