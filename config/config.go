@@ -50,7 +50,6 @@ type Config struct {
 	CypressIdleTimeout           time.Duration
 	SessionDeleteTimeout         time.Duration
 	ServiceStartupTimeout        time.Duration
-	TaskUncachedTimeout          time.Duration
 	InstanceCooldownTimeout      time.Duration
 	ContainerInstanceInitTimeout time.Duration
 	MaxTimeout                   time.Duration
@@ -74,8 +73,9 @@ type Config struct {
 
 	ExcludeBrowsers string
 
-	SingleTenant bool
-	ExternalPort int64
+	ProductionEnv bool
+	SingleTenant  bool
+	ExternalPort  int64
 }
 
 func init() {
@@ -97,7 +97,6 @@ func init() {
 	flag.DurationVar(&Conf.CypressIdleTimeout, "cypress-idle-timeout", 30*time.Second, "Cypress task idle timeout in time.Duration format") // cyserver get task's status every 5 seconds
 	flag.DurationVar(&Conf.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
 	flag.DurationVar(&Conf.ServiceStartupTimeout, "service-startup-timeout", 10*time.Minute, "Service startup timeout in time.Duration format")
-	flag.DurationVar(&Conf.TaskUncachedTimeout, "task-uncached-timeout", 30*time.Second, "Time for task to be cached on start in time.Duration format")
 	flag.DurationVar(&Conf.InstanceCooldownTimeout, "instance-cooldown-timeout", 4*time.Minute, "Time after instance start when shutdown is prohibited on scale down in time.Duration format")
 	flag.DurationVar(&Conf.ContainerInstanceInitTimeout, "container-instance-init-timeout", 10*time.Minute, "Time for ec2 instance after launch to initialize container-instance for asg in time.Duration format")
 	flag.DurationVar(&Conf.MaxTimeout, "max-timeout", 24*time.Hour, "Maximum valid task/session timeout in time.Duration format")
@@ -121,6 +120,7 @@ func init() {
 	flag.StringVar(&Conf.ExcludeBrowsers, "exclude-browsers", "", "Pattern for excluding browsers from available images")
 
 	flag.BoolVar(&Conf.SingleTenant, "single-tenant", false, "Single tenant mode")
+	flag.BoolVar(&Conf.ProductionEnv, "production-env", true, "Service configuration mode")
 	flag.Int64Var(&Conf.ExternalPort, "external-port", 0, "Router's external listening port")
 }
 

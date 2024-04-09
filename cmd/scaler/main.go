@@ -14,8 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/zebrunner/esg/cachemaps/definitionmap"
 	"github.com/zebrunner/esg/cachemaps/mapper"
-	"github.com/zebrunner/esg/cachemaps/sessionmap"
-	"github.com/zebrunner/esg/cachemaps/taskmap"
+	"github.com/zebrunner/esg/cachemaps/utilsmap"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/db"
 	"github.com/zebrunner/esg/environment"
@@ -45,9 +44,6 @@ func ManageTasksAndSession(iterationCh chan<- interface{}) {
 		wg.Add(1)
 		go StopIdleTasks(&wg)
 
-		wg.Add(1)
-		go StopCypressIdleTasks(svc, &wg)
-
 		LaunchTasksProcessors(svc, &wg)
 
 		wg.Wait()
@@ -59,74 +55,87 @@ func ManageTasksAndSession(iterationCh chan<- interface{}) {
 }
 
 func LaunchTasksProcessors(svc *ecs.ECS, wg *sync.WaitGroup) {
-	taskIds, err := taskmap.Keys()
+	routerUuids, err := mapper.GetKeys(mapper.TASK)
 	if err != nil {
 		log.WithError(err).Warn("Failed to get list of taskmap keys!")
 		return
 	}
 
+	mapperEntities, err := mapper.FindAll(routerUuids)
+	if err != nil {
+		log.WithError(err).Warn("Failed to get cached mapper enties")
+		return
+	}
+
+	taskIds := make([]string, 0)
+	for _, mapperEntity := range mapperEntities {
+		if mapperEntity.TaskId != "" {
+			taskIds = append(taskIds, mapperEntity.TaskId)
+		}
+	}
+
+	for i := 0; i < len(mapperEntities); i++ {
+		taskIds[i] = mapperEntities[i].TaskId
+	}
+
 	wg.Add(1)
 	go StopLostTasks(taskIds, svc, wg)
 
-	if len(taskIds) <= 0 {
+	if len(routerUuids) <= 0 {
 		return
 	}
-	log.WithField("keys:", taskIds).Trace("cached task keys")
 
 	tasks := service.GetTasksByTaskIds(taskIds, svc)
+
 	if len(tasks) <= 0 {
 		return
 	}
 
-	cachedTasks, err := taskmap.Tasks(taskIds)
-	if err != nil {
-		log.WithError(err).Warn("Failed to get cached tasks")
-		return
-	}
-
-	cachedTasksMap := make(map[string]taskmap.Task, len(cachedTasks))
-	for _, cachedTask := range cachedTasks {
-		cachedTasksMap[cachedTask.TaskId] = cachedTask
+	taskIdMapperMap := make(map[string]mapper.Mapper)
+	for _, mapperEntity := range mapperEntities {
+		if mapperEntity.TaskId != "" {
+			taskIdMapperMap[mapperEntity.TaskId] = mapperEntity
+		}
 	}
 
 	wg.Add(1)
-	go StopUnhealthyTasks(tasks, cachedTasksMap, wg)
+	go StopUnhealthyTasks(tasks, taskIdMapperMap, wg)
 
 	wg.Add(1)
-	go TrackResourceUsage(tasks, cachedTasksMap, wg)
+	go TrackResourceUsage(tasks, taskIdMapperMap, wg)
 }
 
-func StopUnhealthyTasks(tasks []*ecs.Task, cachedTasksMap map[string]taskmap.Task, wg *sync.WaitGroup) {
+func StopUnhealthyTasks(tasks []*ecs.Task, cachedTasksMap map[string]mapper.Mapper, wg *sync.WaitGroup) {
 	for _, task := range tasks {
 		taskId := strings.Split(*task.TaskArn, "/")[2]
 		l := log.WithField(config.TaskIdKey, taskId)
 		// stop zombie and UNHEALTHY tasks that are not pending for stop.
 		// resource usage register and taskId mark for removal is performed only for stopped tasks
 		if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
-			cachedTask, ok := cachedTasksMap[taskId]
+			mapperEntity, ok := cachedTasksMap[taskId]
 			if !ok {
 				l.Warn("Failed to find task in cache")
 				continue
 			}
 
-			if cachedTask.Status == taskmap.TaskQueued {
+			if mapperEntity.Status == mapper.Queued {
 				continue
 			}
 
 			if *task.HealthStatus == "UNHEALTHY" {
 				l.Warn("Aborting task due to UNHEALTHY HealthStatus")
-				err := service.StopTask(cachedTask, taskmap.TaskUnhealthy)
+				err := service.StopTask(mapperEntity, mapper.TaskUnhealthy)
 				if err != nil {
 					l.WithError(err).Error("Failed to stop the task")
 				}
 			} else {
-				maxTimeout := time.Duration(cachedTask.Capabilities.MaxTimeout) * time.Second
+				maxTimeout := time.Duration(mapperEntity.Capabilities.MaxTimeout) * time.Second
 				if task.CreatedAt != nil && time.Since(*task.CreatedAt) > maxTimeout {
 					l.WithField("maxTimeout", maxTimeout).Warn("Aborting task due to the max timeout")
-					err := service.StopTask(cachedTask, taskmap.TaskMaxTimeout)
+					err := service.StopTask(mapperEntity, mapper.TaskMaxTimeout)
 					if err != nil {
 						l.WithError(err).Error("Failed to stop task. Trying to stop forcibly")
-						err := service.StopTaskForcibly(cachedTask.TaskId, taskmap.TaskMaxTimeout)
+						err := service.StopTaskForcibly(mapperEntity.TaskId, mapper.TaskMaxTimeout)
 						if err != nil {
 							l.WithError(err).Error("Failed to stop task forcibly")
 						}
@@ -135,6 +144,7 @@ func StopUnhealthyTasks(tasks []*ecs.Task, cachedTasksMap map[string]taskmap.Tas
 			}
 		}
 	}
+
 	wg.Done()
 }
 
@@ -176,14 +186,14 @@ func StopLostTasks(keys []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 
 	for _, task := range tasks {
 		if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
-			if time.Since(*task.StartedAt) <= config.Conf.TaskUncachedTimeout {
+			if time.Since(*task.StartedAt) <= config.Conf.ServiceStartupTimeout {
 				continue
 			}
 			taskId := strings.Split(*task.TaskArn, "/")[2]
 			l := log.WithField(config.TaskIdKey, taskId)
 			l.Warn("Unrecognized task detected! Aborting")
 
-			err := service.StopTaskForcibly(taskId, taskmap.TaskLost)
+			err := service.StopTaskForcibly(taskId, mapper.TaskLost)
 			if err != nil {
 				l.WithError(err).Error("Failed to stop the task")
 			}
@@ -193,10 +203,10 @@ func StopLostTasks(keys []string, svc *ecs.ECS, wg *sync.WaitGroup) {
 	wg.Done()
 }
 
-func TrackResourceUsage(tasks []*ecs.Task, cachedTasksMap map[string]taskmap.Task, wg *sync.WaitGroup) {
+func TrackResourceUsage(tasks []*ecs.Task, cachedTasksMap map[string]mapper.Mapper, wg *sync.WaitGroup) {
 	// analyze tasks response
-	tasksCacheToUpdate := make([]taskmap.Task, 0)
-	tasksToTrack := make(map[*taskmap.Task]*ecs.Task)
+	tasksCacheToUpdate := make([]mapper.Mapper, 0)
+	tasksToTrack := make(map[*mapper.Mapper]*ecs.Task)
 	for _, task := range tasks {
 		taskId := strings.Split(*task.TaskArn, "/")[2]
 		l := log.WithField(config.TaskIdKey, taskId)
@@ -218,11 +228,11 @@ func TrackResourceUsage(tasks []*ecs.Task, cachedTasksMap map[string]taskmap.Tas
 			continue
 		}
 
-		if cachedTask.Status != taskmap.TaskStopped {
+		if cachedTask.Status != mapper.Stopped {
 			// cypress is not marked as stopped in cache after finish
-			if cachedTask.Status == taskmap.TaskCypress {
-				cachedTask.Status = taskmap.TaskStopped
-				cachedTask.StopReason = taskmap.TaskFinished
+			if cachedTask.Status == mapper.Cypress {
+				cachedTask.Status = mapper.Stopped
+				cachedTask.StopReason = mapper.TaskFinished
 			} else {
 				continue
 			}
@@ -237,9 +247,9 @@ func TrackResourceUsage(tasks []*ecs.Task, cachedTasksMap map[string]taskmap.Tas
 		}
 
 		// Don't track Unhealthy/StartupFailure/Lost tasks
-		if cachedTask.StopReason == taskmap.TaskStartupFailure ||
-			cachedTask.StopReason == taskmap.TaskUnhealthy ||
-			cachedTask.StopReason == taskmap.TaskLost {
+		if cachedTask.StopReason == mapper.TaskStartupFailure ||
+			cachedTask.StopReason == mapper.TaskUnhealthy ||
+			cachedTask.StopReason == mapper.TaskLost {
 			l.Info("Not tracking task with stop reason:", cachedTask.StopReason)
 			continue
 		}
@@ -248,7 +258,7 @@ func TrackResourceUsage(tasks []*ecs.Task, cachedTasksMap map[string]taskmap.Tas
 	}
 
 	// Set tracked status and expiration time 5 minutes to be able to return taskId and stop reason for task
-	err := taskmap.WriteAll(tasksCacheToUpdate, 5*time.Minute)
+	err := mapper.WriteShapedEntities(tasksCacheToUpdate, 5*time.Minute)
 	if err != nil {
 		log.WithError(err).Error("Failed to update tracked tasks!")
 	} else {
@@ -261,119 +271,56 @@ func TrackResourceUsage(tasks []*ecs.Task, cachedTasksMap map[string]taskmap.Tas
 }
 
 func StopIdleTasks(wg *sync.WaitGroup) {
-	sessions, err := sessionmap.Sessions()
+	routerUuids, err := mapper.GetKeys(mapper.SESSION)
 	if err != nil {
-		log.WithError(err).Error("Failed to get list of sessionmap keys!")
+		log.WithError(err).Error("Failed to list uuid keys from sessions set!")
 		wg.Done()
 		return
 	}
 
-	if len(sessions) > 0 {
-		log.WithField("sessions", sessions).Trace("cached sessions")
+	mapperEntities, err := mapper.FindAll(routerUuids)
+	if err != nil {
+		log.WithError(err).Error("Failed to get mapper entities!")
+		wg.Done()
+		return
 	}
 
-	for _, session := range sessions {
-		idle := session.IsIdle()
+	for _, mapperEntity := range mapperEntities {
+		idle := mapperEntity.IsIdle()
 
 		if !idle {
 			continue
 		}
 
-		l := log.WithFields(log.Fields{config.TaskIdKey: session.TaskId, config.SessionIdKey: session.SessionID})
+		l := log.WithFields(log.Fields{config.TaskIdKey: mapperEntity.TaskId, config.SessionIdKey: mapperEntity.SessionID, config.RouterUUID: mapperEntity.RouterUUID})
 		if !config.Conf.SingleTenant {
-			l = l.WithField("workspace", session.Workspace)
+			l = l.WithField("workspace", mapperEntity.Workspace)
 		}
 
 		// get actual record of the session and validate idle timeout one more time
-		sess, err := sessionmap.Find(session.SessionID, false)
+		mapperEntity, err := mapper.Find(mapperEntity.SessionID)
 		if err != nil {
 			continue
 		}
 
-		idle = sess.IsIdle()
+		idle = mapperEntity.IsIdle()
 
 		if !idle {
 			continue
 		}
 
 		wg.Add(1)
-		go func(s *sessionmap.Session, l *log.Entry, wg *sync.WaitGroup) {
-			selenium.CloseSession(s, sessionmap.SessionIdleTimeout)
-			cachedTask, err := taskmap.Find(s.TaskId, false)
-			if err != nil {
-				l.WithError(err).Error("Failed to find cached task with idle session!")
-				wg.Done()
-				return
-			}
+		go func(m *mapper.Mapper, l *log.Entry, wg *sync.WaitGroup) {
+			selenium.CloseSession(m)
 
-			err = service.StopTask(*cachedTask, taskmap.TaskAborted)
+			err = service.StopTask(*m, mapper.SessionIdleTimeout)
 			if err != nil {
 				l.WithError(err).Error("Failed to stop idle driver task!")
 			} else {
 				l.Warn("task aborted due to the session idle timeout")
 			}
-
 			wg.Done()
-		}(sess, l, wg)
-	}
-
-	wg.Done()
-}
-
-func StopCypressIdleTasks(svc *ecs.ECS, wg *sync.WaitGroup) {
-	keys, err := taskmap.CypressSetKeys()
-	if err != nil {
-		log.WithError(err).Error("Failed to get set of cypress keys!")
-		wg.Done()
-		return
-	}
-
-	if len(keys) == 0 {
-		wg.Done()
-		return
-	}
-
-	cachedTasks, err := taskmap.Tasks(keys)
-	if err != nil {
-		log.WithError(err).Error("Failed to get tasks from cypress keys!")
-		wg.Done()
-		return
-	}
-
-	tasksToStop := make([]string, 0)
-	cachedTasksMap := make(map[string]taskmap.Task)
-	for _, cachedTask := range cachedTasks {
-		l := log.WithField(config.TaskIdKey, cachedTask.TaskId)
-		idleTime := time.Since(cachedTask.AccessedAt).Seconds()
-		if idleTime > config.Conf.CypressIdleTimeout.Seconds() {
-			l.Debug("StopCypressIdleTasks: analyzing task for idleTimeout")
-			tasksToStop = append(tasksToStop, cachedTask.TaskId)
-			cachedTasksMap[cachedTask.TaskId] = cachedTask
-		}
-	}
-
-	if len(tasksToStop) == 0 {
-		wg.Done()
-		return
-	}
-
-	tasks := service.GetTasksByTaskIds(tasksToStop, svc)
-	for _, task := range tasks {
-		taskId := strings.Split(*task.TaskArn, "/")[2]
-		l := log.WithField(config.TaskIdKey, taskId)
-
-		if *task.LastStatus == "STOPPED" || *task.DesiredStatus == "STOPPED" {
-			taskmap.RemoveFromCypressSet(taskId)
-		} else {
-			err := service.StopTask(cachedTasksMap[taskId], taskmap.TaskAborted)
-			if err != nil {
-				l.WithError(err).Error("Failed to stop cypress idle task!")
-				continue
-			}
-
-			taskmap.RemoveFromCypressSet(taskId)
-			l.Warn("cypress task aborted due to the idle timeout")
-		}
+		}(mapperEntity, l, wg)
 	}
 
 	wg.Done()
@@ -489,7 +436,7 @@ func ManageTaskDefinitions() {
 		utils.ExitWithError(err, "Failed to refresh task definitions", log.NewEntry(log.StandardLogger()))
 	}
 
-	definitionmap.SetRefreshDone()
+	utilsmap.SetTaskDefenitionRefreshDone()
 	log.Info("Service started")
 
 	for {
@@ -538,24 +485,21 @@ func main() {
 	if err != nil {
 		utils.ExitWithError(err, "Failed to init redis connection", log.NewEntry(log.StandardLogger()))
 	}
-	defer config.RedisSessionsClient.Close()
-	defer config.RedisTasksClient.Close()
+	defer config.RedisMapperClient.Close()
 	defer config.RedisDefinitionClient.Close()
-	defer config.RedisCypressSetClient.Close()
-	defer config.RedisIdMapperClient.Close()
 	defer config.RedisResourcesClient.Close()
+	defer config.RedisUtilityClient.Close()
+	mapper.InitMapperWorkers()
 
-	mapper.InitUUIDMapWorkers()
-	taskmap.InitTaskmapWorkers()
-	sessionmap.InitSessionmapWorker()
-	// scaler don't need ResourceWorker
-	// resourcesToAllocate.InitResourceWorker()
-
-	err = service.InitScalingData()
+	scalersMap, err := service.InitScalingData()
 	if err != nil {
 		utils.ExitWithError(err, "Failed to init scaling data", log.NewEntry(log.StandardLogger()))
 	}
-	service.StartScalers()
+	service.StartScalers(scalersMap)
+
+	for capacityProvider, scaler := range scalersMap {
+		environment.CapacityProvdirResourcesLimit[capacityProvider] = environment.Resources{Cpu: scaler.InstanceResources.CPU, Memory: scaler.InstanceResources.Memory}
+	}
 
 	go refreshIMDSV2Token()
 
@@ -570,9 +514,9 @@ func main() {
 
 	// on shutdown actions
 	log.Info("Shutdown scaler ...")
-	err = definitionmap.Remove(definitionmap.TaskDefenititonRefreshDone)
+	err = utilsmap.UnsetTaskDefenitionRefreshDone()
 	if err != nil {
-		log.WithError(err).Error("Failed to unmark task definition refresh")
+		log.WithError(err).Error("Failed to mark task definition refresh as undone")
 	}
 
 	// wait for the end of a resources shaping

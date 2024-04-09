@@ -18,15 +18,11 @@ import (
 	"github.com/zebrunner/esg/utils"
 )
 
-var (
-	scalersMap map[string]scaler
-)
-
 type scaler struct {
-	capacityProviderName string
+	InstanceResources    Resources
+	CapacityProviderName string
 	autoscalingGroupName string
 	resourcesPerWeight   Resources
-	instanceResources    Resources
 	instanceMinWeight    int64
 	log                  *log.Entry
 }
@@ -36,18 +32,7 @@ type Resources struct {
 	Memory int64
 }
 
-func InitScalingData() error {
-	var err error
-	scalersMap, err = initScalers()
-	if err != nil {
-		log.WithError(err).Error("Failed to create scaler instances")
-		return err
-	}
-
-	return nil
-}
-
-func StartScalers() {
+func StartScalers(scalersMap map[string]scaler) {
 	for _, s := range scalersMap {
 		go func(s scaler) {
 			for {
@@ -63,11 +48,11 @@ func StartScalers() {
 			}
 		}(s)
 
-		log.WithFields(log.Fields{"instanceResources": s.instanceResources, "minInstanceWeight": s.instanceMinWeight, "capacityProvider": s.capacityProviderName, "asg": s.autoscalingGroupName}).Info("Started scaler")
+		log.WithFields(log.Fields{"instanceResources": s.InstanceResources, "minInstanceWeight": s.instanceMinWeight, "capacityProvider": s.CapacityProviderName, "asg": s.autoscalingGroupName}).Info("Started scaler")
 	}
 }
 
-func initScalers() (map[string]scaler, error) {
+func InitScalingData() (map[string]scaler, error) {
 	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
 	if err != nil {
 		return nil, err
@@ -143,15 +128,15 @@ func initScalers() (map[string]scaler, error) {
 		instanceInfo := instanceTypesResult.InstanceTypes[0]
 
 		s := scaler{
-			capacityProviderName: *capacityProvider.Name,
+			CapacityProviderName: *capacityProvider.Name,
 			autoscalingGroupName: asgName,
 			resourcesPerWeight:   Resources{CPU: (*instanceInfo.VCpuInfo.DefaultVCpus * 1024) / minWeight, Memory: (*instanceInfo.MemoryInfo.SizeInMiB) / minWeight},
-			instanceResources:    Resources{CPU: *instanceInfo.VCpuInfo.DefaultVCpus * 1024, Memory: *instanceInfo.MemoryInfo.SizeInMiB},
+			InstanceResources:    Resources{CPU: *instanceInfo.VCpuInfo.DefaultVCpus * 1024, Memory: *instanceInfo.MemoryInfo.SizeInMiB},
 			instanceMinWeight:    minWeight,
 			log:                  log.WithFields(log.Fields{"asg": asgName, "capacityProvider": *capacityProvider.Name}),
 		}
 
-		scalers[s.capacityProviderName] = s
+		scalers[s.CapacityProviderName] = s
 	}
 
 	return scalers, nil
@@ -178,8 +163,8 @@ func (s *scaler) generateEmptyResources(capacity int) []*Resources {
 	var i int64 = int64(capacity)
 	for ; i >= s.instanceMinWeight; i -= s.instanceMinWeight {
 		resources = append(resources, &Resources{
-			CPU:    s.instanceResources.CPU,
-			Memory: s.instanceResources.Memory,
+			CPU:    s.InstanceResources.CPU,
+			Memory: s.InstanceResources.Memory,
 		})
 	}
 
@@ -224,7 +209,7 @@ func (s *scaler) calculateResources(tasks []*ecs.Task, currentCapacity int, stat
 }
 
 func (s *scaler) getResourcesForAllocation() []*resourcesToAllocate.ResourcesToAllocate {
-	resources, err := resourcesToAllocate.GetEntitiesOfCapacityProvider(s.capacityProviderName)
+	resources, err := resourcesToAllocate.GetEntitiesOfCapacityProvider(s.CapacityProviderName)
 	if err != nil {
 		log.WithError(err).Error("Failed to get resources for allocation")
 		return nil
@@ -328,7 +313,7 @@ func (s *scaler) AdjustCapacity() {
 	}
 
 	svc := ecs.New(session)
-	tasks, err := GetCapacityProviderTasks(svc, s.capacityProviderName)
+	tasks, err := GetCapacityProviderTasks(svc, s.CapacityProviderName)
 	if err != nil {
 		s.log.WithError(err).Error("Failed to get list of running task")
 		return
@@ -472,7 +457,7 @@ func (s *scaler) ScaleDown(session *awsSession.Session, asg *autoscaling.Group, 
 		return
 	}
 
-	containerInstances, err := DescribeActiveContainerInstancesOfCapacityProvider(ciArns, svc, s.capacityProviderName)
+	containerInstances, err := DescribeActiveContainerInstancesOfCapacityProvider(ciArns, svc, s.CapacityProviderName)
 	if err != nil {
 		s.log.WithError(err).Error("Failed to describe container instances")
 		return
@@ -602,7 +587,7 @@ func (s *scaler) StopEc2ZombieInstances() {
 		return
 	}
 
-	containerInstances, err := DescribeActiveContainerInstancesOfCapacityProvider(ciArns, svc, s.capacityProviderName)
+	containerInstances, err := DescribeActiveContainerInstancesOfCapacityProvider(ciArns, svc, s.CapacityProviderName)
 	if err != nil {
 		l.WithError(err).Error("Failed to describe container instances")
 		return
