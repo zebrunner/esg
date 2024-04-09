@@ -51,7 +51,7 @@ func ReverseProxy() gin.HandlerFunc {
 	}
 }
 
-func getRoutetBasis() *gin.Engine {
+func getRouterBasis() *gin.Engine {
 	r := gin.New()
 	r.ForwardedByClientIP = true
 
@@ -73,7 +73,7 @@ func getRoutetBasis() *gin.Engine {
 }
 
 func CreateMockRouter() *gin.Engine {
-	r := getRoutetBasis()
+	r := getRouterBasis()
 
 	hub := r.Group("/")
 	hub.Any("/wd/hub/*action", ReverseProxy())
@@ -86,7 +86,7 @@ func CreateMockRouter() *gin.Engine {
 }
 
 func CreateRouter() *gin.Engine {
-	r := getRoutetBasis()
+	r := getRouterBasis()
 
 	hub := r.Group("/")
 	hub.Any("/wd/hub/*action", ReverseProxy())
