@@ -104,9 +104,6 @@ fi
 if [ ! -z ${EXCLUDE_BROWSERS} ]; then
   CMD_ARGS="${CMD_ARGS} -exclude-browsers ${EXCLUDE_BROWSERS}"
 fi
-if [ ! -z ${SINGLE_TENANT} ]; then
-  CMD_ARGS="${CMD_ARGS} -single-tenant=${SINGLE_TENANT}"
-fi
 if [ ! -z ${PRODUCTION_ENV} ]; then
   CMD_ARGS="${CMD_ARGS} -production-env=${PRODUCTION_ENV}"
 fi

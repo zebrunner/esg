@@ -103,11 +103,10 @@ func TrackResourcesUsage(cachedTask *mapper.Mapper, task *ecs.Task) {
 		memUsage += cachedTask.Capabilities.MitmMemory.ToPrimitive()
 	}
 
-	if !conf.SingleTenant {
-		// add workspace/tenant to the url
-		requestUrl.Host = cachedTask.Workspace + "." + requestUrl.Host
-		l = l.WithField("workspace", cachedTask.Workspace)
-	}
+	l = l.WithField("workspace", cachedTask.Workspace)
+
+	// add workspace/tenant to the url
+	requestUrl.Host = cachedTask.Workspace + "." + requestUrl.Host
 	requestUrl.Path = USAGE_API_PATH
 	requestBody := map[string]interface{}{
 		"cpu":       strconv.FormatInt(cpuUsage, 10) + " millicores",
@@ -164,7 +163,7 @@ func AbortLaunch(routerUUID, workspace, launchUUID, reason string) {
 		return
 	}
 
-	l := log.WithFields(log.Fields{config.RouterUUID: routerUUID, "comment": reason})
+	l := log.WithFields(log.Fields{config.RouterUUID: routerUUID, "comment": reason, "workspace": workspace})
 
 	requestUrl, err := url.ParseRequestURI(
 		fmt.Sprintf("%s%s?ciRunId=%s", conf.ZebrunnerHost, ABORT_API_PATH, launchUUID))
@@ -173,11 +172,7 @@ func AbortLaunch(routerUUID, workspace, launchUUID, reason string) {
 		return
 	}
 
-	if !conf.SingleTenant {
-		l = l.WithField("workspace", workspace)
-		requestUrl.Host = workspace + "." + requestUrl.Host
-	}
-
+	requestUrl.Host = workspace + "." + requestUrl.Host
 	requestBody := map[string]interface{}{
 		"comment": reason,
 	}

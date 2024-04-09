@@ -58,11 +58,6 @@ func Create(c *gin.Context) {
 		return
 	}
 
-	// not adding workspace to logs because as for now user and workspace have the same value
-	// if !config.Conf.SingleTenant {
-	// l = l.WithField("workspace", workspace)
-	// }
-
 	reqCaps, configurationCaps, err := capabilities.ParseRequestCapabilities(c.Request.Body)
 	if err != nil {
 		l.WithError(err).Error("Failed to process capabilities")
@@ -178,10 +173,7 @@ func CloseSession(c *gin.Context) {
 func AbortTask(c *gin.Context) {
 	mapperEntity := c.MustGet(config.RouterUUID).(*mapper.Mapper)
 
-	l := log.WithField(config.RouterUUID, mapperEntity.RouterUUID).WithField(config.TaskIdKey, mapperEntity.TaskId)
-	if !config.Conf.SingleTenant {
-		l = l.WithField("workspace", mapperEntity.Workspace)
-	}
+	l := log.WithField(config.RouterUUID, mapperEntity.RouterUUID).WithField(config.TaskIdKey, mapperEntity.TaskId).WithField("workspace", mapperEntity.Workspace)
 
 	mapperEntity.StopReason = mapper.TaskAborted
 	if mapperEntity.TaskId == "" {
@@ -203,10 +195,7 @@ func AbortTask(c *gin.Context) {
 func MarkAsFinished(c *gin.Context) {
 	mapperEntity := c.MustGet(config.RouterUUID).(*mapper.Mapper)
 
-	l := log.WithField(config.RouterUUID, mapperEntity.RouterUUID).WithField(config.TaskIdKey, mapperEntity.TaskId)
-	if !config.Conf.SingleTenant {
-		l = l.WithField("workspace", mapperEntity.Workspace)
-	}
+	l := log.WithField(config.RouterUUID, mapperEntity.RouterUUID).WithField(config.TaskIdKey, mapperEntity.TaskId).WithField("workspace", mapperEntity.Workspace)
 
 	m, err := mapper.Find(mapperEntity.RouterUUID)
 	if err == nil && m.Status != mapper.Stopped {

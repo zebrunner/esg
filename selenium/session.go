@@ -85,10 +85,8 @@ func WaitForSessionStart(ctx context.Context, request *http.Request) *startSessR
 }
 
 func CloseSession(mapperEntity *mapper.Mapper) {
-	l := log.WithFields(log.Fields{config.TaskIdKey: mapperEntity.TaskId, config.SessionIdKey: mapperEntity.SessionID, config.RouterUUID: mapperEntity.RouterUUID})
-	if !config.Conf.SingleTenant {
-		l = l.WithField("workspace", mapperEntity.Workspace)
-	}
+	l := log.WithFields(log.Fields{config.TaskIdKey: mapperEntity.TaskId, config.SessionIdKey: mapperEntity.SessionID,
+		config.RouterUUID: mapperEntity.RouterUUID, "workspace": mapperEntity.Workspace})
 
 	conf := &config.Conf
 	client := http.Client{}

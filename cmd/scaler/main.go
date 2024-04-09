@@ -242,9 +242,7 @@ func TrackResourceUsage(tasks []*ecs.Task, cachedTasksMap map[string]mapper.Mapp
 		cachedTask.UsageTracked = true
 		tasksCacheToUpdate = append(tasksCacheToUpdate, cachedTask)
 
-		if !config.Conf.SingleTenant {
-			l = l.WithField("workspace", cachedTask.Workspace)
-		}
+		l = l.WithField("workspace", cachedTask.Workspace)
 
 		// Don't track Unhealthy/StartupFailure/Lost tasks
 		if cachedTask.StopReason == mapper.TaskStartupFailure ||
@@ -292,10 +290,8 @@ func StopIdleTasks(wg *sync.WaitGroup) {
 			continue
 		}
 
-		l := log.WithFields(log.Fields{config.TaskIdKey: mapperEntity.TaskId, config.SessionIdKey: mapperEntity.SessionID, config.RouterUUID: mapperEntity.RouterUUID})
-		if !config.Conf.SingleTenant {
-			l = l.WithField("workspace", mapperEntity.Workspace)
-		}
+		l := log.WithFields(log.Fields{config.TaskIdKey: mapperEntity.TaskId, config.SessionIdKey: mapperEntity.SessionID,
+			config.RouterUUID: mapperEntity.RouterUUID, "workspace": mapperEntity.Workspace})
 
 		// get actual record of the session and validate idle timeout one more time
 		mapperEntity, err := mapper.Find(mapperEntity.SessionID)
