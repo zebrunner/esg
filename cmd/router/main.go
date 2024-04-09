@@ -19,8 +19,7 @@ import (
 	"github.com/zebrunner/esg/cachemaps/definitionmap"
 	"github.com/zebrunner/esg/cachemaps/mapper"
 	"github.com/zebrunner/esg/cachemaps/resourcesToAllocate"
-	"github.com/zebrunner/esg/cachemaps/sessionmap"
-	"github.com/zebrunner/esg/cachemaps/taskmap"
+	"github.com/zebrunner/esg/cachemaps/utilsmap"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/handlers"
 	"github.com/zebrunner/esg/service"
@@ -56,16 +55,16 @@ func CreateRouter() *gin.Engine {
 
 	r.Use(gin.LoggerWithFormatter(utils.TraceLogFromating), gin.Recovery())
 
-	api := r.Group("/api", handlers.APIError, handlers.LowLvlAuthentication)
+	lowLvlApi := r.Group("/api", handlers.APIError, handlers.LowLvlAuthentication)
 	{
-		api.POST("/users", handlers.CreateUser)
-		api.DELETE("/users/:username", handlers.DeleteUser)
-		api.PUT("/users/:username/refresh-token", handlers.RefreshToken)
-		api.PUT("/users/:username/activation", handlers.UserActivation)
-		api.GET("/logs/:session", handlers.Logs)
-		api.GET("/video/:session", handlers.Video)
-		api.GET("/tasks/:task/log", handlers.TaskLog)
-		api.GET("/tasks/:task/status", handlers.TaskDescribe)
+		lowLvlApi.POST("/users", handlers.CreateUser)
+		lowLvlApi.DELETE("/users/:username", handlers.DeleteUser)
+		lowLvlApi.PUT("/users/:username/refresh-token", handlers.RefreshToken)
+		lowLvlApi.PUT("/users/:username/activation", handlers.UserActivation)
+		lowLvlApi.GET("/logs/:session", handlers.Logs)
+		lowLvlApi.GET("/video/:session", handlers.Video)
+		lowLvlApi.GET("/tasks/:task/log", handlers.TaskLog)
+		lowLvlApi.GET("/tasks/:task/status", handlers.TaskDescribe)
 	}
 
 	hub := r.Group("/")
@@ -73,41 +72,44 @@ func CreateRouter() *gin.Engine {
 	{
 		hub.GET("/", handlers.Welcome)
 		hub.GET("/ping", handlers.Ping)
-		// sessionId passed for linux browsers and redroid session. taskId passed for cypress
-		hub.GET("/ws/vnc/:uuid", handlers.Vnc)
 	}
 
-	seleniumHub := hub.Group("/", handlers.SeleniumError)
+	selenium := hub.Group("/", handlers.SeleniumError)
 	{
-		seleniumHub.POST("/session", handlers.Create) // Auth logic moved to handler
-		seleniumHub.DELETE("/session/:session", handlers.CloseSession)
-		seleniumHub.Any("/session/:session/*action", handlers.Proxy)
+		selenium.POST("/session", handlers.Create)                                   // Auth logic moved to handler
+		selenium.GET("/ws/vnc/:uuid", handlers.ValidateMapperPresence, handlers.Vnc)
 
-		seleniumHub.Any("/download/:session/*action", handlers.Downloads)
-
-		seleniumHub.GET("/clipboard/:session", handlers.Clipboard)
-		seleniumHub.POST("/clipboard/:session", handlers.Clipboard)
-
-		proxyHandlerHub := seleniumHub.Group("/proxy/:session", handlers.ProxyMitm)
+		genericHub := selenium.Group("/", handlers.ValidateGenericMapperPresence)
 		{
-			proxyHandlerHub.GET("/download/har/:flow")
-			proxyHandlerHub.GET("/download/dump/:flow")
-			proxyHandlerHub.POST("/mitm-restart")
-			proxyHandlerHub.DELETE("/clear-flows")
+			genericHub.POST("/tasks/:uuid", handlers.MarkAsFinished)
+			genericHub.DELETE("/tasks/:uuid", handlers.AbortTask) // to be able to abort generic tasks by uuid
 		}
 
-		devtoolsHub := seleniumHub.Group("/devtools/:session", handlers.Devtools)
+		cachedSeleniumSession := selenium.Group("/", handlers.ValidateMapperPresence, handlers.ValidateSessionStatus, handlers.UpdateLastAccessTime)
 		{
-			devtoolsHub.GET("/")
-			devtoolsHub.GET("/browser")
-			devtoolsHub.GET("/page")
-			devtoolsHub.GET("/page/:target-id")
-		}
+			cachedSeleniumSession.DELETE("/session/:uuid", handlers.CloseSession)
+			cachedSeleniumSession.Any("/session/:uuid/*action", handlers.Proxy)
 
-		genericHub := seleniumHub.Group("/", handlers.LockGenericTaskCache)
-		{
-			genericHub.POST("/tasks/:task", handlers.MarkAsFinished)
-			genericHub.DELETE("/tasks/:task", handlers.AbortTask) // to be able to abort generic tasks by taskId
+			cachedSeleniumSession.Any("/download/:uuid/*action", handlers.Downloads)
+
+			cachedSeleniumSession.GET("/clipboard/:uuid", handlers.Clipboard)
+			cachedSeleniumSession.POST("/clipboard/:uuid", handlers.Clipboard)
+
+			proxyHandlerHub := cachedSeleniumSession.Group("/proxy/:uuid", handlers.ProxyMitm)
+			{
+				proxyHandlerHub.GET("/download/har/:flow")
+				proxyHandlerHub.GET("/download/dump/:flow")
+				proxyHandlerHub.POST("/mitm-restart")
+				proxyHandlerHub.DELETE("/clear-flows")
+			}
+
+			devtoolsHub := cachedSeleniumSession.Group("/devtools/:uuid", handlers.Devtools)
+			{
+				devtoolsHub.GET("/")
+				devtoolsHub.GET("/browser")
+				devtoolsHub.GET("/page")
+				devtoolsHub.GET("/page/:target-id")
+			}
 		}
 	}
 
@@ -118,7 +120,7 @@ func CreateRouter() *gin.Engine {
 		httpHub.GET("/logs/:session", handlers.Logs)
 		httpHub.GET("/video/:session", handlers.Video)
 		httpHub.GET("/tasks/:task/log", handlers.TaskLog)
-		httpHub.GET("/tasks/:task/status", handlers.TaskDescribe)
+		httpHub.GET("/tasks/:task/status", handlers.LowLvlAuthentication, handlers.TaskDescribe)
 	}
 
 	return r
@@ -157,15 +159,11 @@ func main() {
 		utils.ExitWithError(err, "Failed to init Redis client", log.NewEntry(log.StandardLogger()))
 	}
 
-	defer config.RedisSessionsClient.Close()
-	defer config.RedisTasksClient.Close()
+	defer config.RedisMapperClient.Close()
 	defer config.RedisDefinitionClient.Close()
-	defer config.RedisCypressSetClient.Close()
-	defer config.RedisIdMapperClient.Close()
 	defer config.RedisResourcesClient.Close()
-	mapper.InitUUIDMapWorkers()
-	taskmap.InitTaskmapWorkers()
-	sessionmap.InitSessionmapWorker()
+	defer config.RedisUtilityClient.Close()
+	mapper.InitMapperWorkers()
 	resourcesToAllocate.InitResourceWorker()
 
 	aws, err := service.InitAws()
@@ -181,20 +179,21 @@ func main() {
 	if err != nil {
 		utils.ExitWithError(err, "Failed to describe target group", targetGrouLog)
 	} else if len(targetGroup.LoadBalancerArns) < 1 || targetGroup.LoadBalancerArns[0] == nil {
-		utils.ExitWithError(fmt.Errorf("Target group is not attached to load balancer"), "Failed to describe target group", targetGrouLog)
+		utils.ExitWithError(fmt.Errorf("target group is not attached to load balancer"), "Failed to describe target group", targetGrouLog)
 	}
 
 	loadBalancer, err := service.DescribeLoadBalancer(*targetGroup.LoadBalancerArns[0])
 	if err != nil {
 		utils.ExitWithError(err, "Failed to describe load balancer", targetGrouLog)
 	} else if loadBalancer.DNSName == nil || *loadBalancer.DNSName == "" {
-		utils.ExitWithError(fmt.Errorf("Load balancer without public dns"), "Failed to describe load balancer", targetGrouLog)
+		utils.ExitWithError(fmt.Errorf("load balancer without public dns"), "Failed to describe load balancer", targetGrouLog)
 	} else {
 		config.Conf.AwsEsgDns = *loadBalancer.DNSName
 	}
 
 	for {
-		if definitionmap.IsRefreshDone() {
+		if utilsmap.IsTaskDefenitionRefreshDone() {
+			definitionmap.SaveAndUpdateDefinitions()
 			break
 		}
 		time.Sleep(5 * time.Second)

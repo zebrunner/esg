@@ -14,7 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/aws/aws-sdk-go/service/s3"
 	log "github.com/sirupsen/logrus"
-	"github.com/zebrunner/esg/cachemaps/taskmap"
+	"github.com/zebrunner/esg/cachemaps/mapper"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
 	"github.com/zebrunner/esg/utils"
@@ -112,7 +112,7 @@ func ConstDelay(t time.Duration) func(int) time.Duration {
 	}
 }
 
-func StopTaskForcibly(taskId string, stopReason taskmap.StoppedReason) error {
+func StopTaskForcibly(taskId string, stopReason mapper.StoppedReason) error {
 	svc := ecs.New(AwsSess)
 
 	stopTaskInput := &ecs.StopTaskInput{
@@ -141,18 +141,25 @@ func StopTaskForcibly(taskId string, stopReason taskmap.StoppedReason) error {
 	return err
 }
 
-func StopTask(cachedTask taskmap.Task, stopReason taskmap.StoppedReason) error {
-	err := StopTaskForcibly(cachedTask.TaskId, stopReason)
+func StopTask(mapperEntity mapper.Mapper, stopReason mapper.StoppedReason) error {
+	l := log.WithField(config.TaskIdKey, mapperEntity.TaskId).WithField(config.RouterUUID, mapperEntity.RouterUUID)
+
+	err := StopTaskForcibly(mapperEntity.TaskId, stopReason)
 	if err != nil {
-		log.WithError(err).WithField(config.TaskIdKey, cachedTask.TaskId).Error("Failed to stop task!")
+		l.WithError(err).Error("Failed to stop task!")
 		return err
 	}
 
-	cachedTask.Status = taskmap.TaskStopped
-	cachedTask.StopReason = stopReason
-	err = taskmap.UpdateTask(cachedTask, 10*time.Minute)
+	mapperEntity.Status = mapper.Stopped
+	mapperEntity.StopReason = stopReason
+	setsToDettach := []mapper.SetType{}
+	if mapperEntity.SessionID != "" {
+		setsToDettach = append(setsToDettach, mapper.SESSION)
+	}
+
+	err = mapper.WritedByWorker(&mapperEntity, nil, setsToDettach, 10*time.Minute)
 	if err != nil {
-		log.WithError(err).WithField(config.TaskIdKey, cachedTask.TaskId).Error("Failed to update task's cache!")
+		l.WithError(err).Error("Failed to update task's cache!")
 		return err
 	}
 
