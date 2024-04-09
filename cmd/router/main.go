@@ -167,6 +167,10 @@ func main() {
 	mapper.InitMapperWorkers()
 	resourcesToAllocate.InitResourceWorker()
 
+	if config.Conf.ProductionEnv {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
 	aws, err := service.InitAws()
 	if err != nil {
 		utils.ExitWithError(err, "Failed to start aws session", log.NewEntry(log.StandardLogger()))
