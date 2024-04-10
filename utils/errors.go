@@ -116,26 +116,8 @@ func NoSuchSessionErr(err error, extraInfo ...string) *SeleniumError {
 
 func SessionStoppedErr(err error, extraInfo ...string) *SeleniumError {
 	return &SeleniumError{
-		ResponseStatus: http.StatusForbidden,
+		ResponseStatus: http.StatusConflict,
 		Name:           "session stopped",
-		MainErr:        err,
-		DebugInfo:      extraInfo,
-	}
-}
-
-func NoSuchTaskErr(err error, extraInfo ...string) *SeleniumError {
-	return &SeleniumError{
-		ResponseStatus: http.StatusNotFound,
-		Name:           "invalid task id",
-		MainErr:        err,
-		DebugInfo:      extraInfo,
-	}
-}
-
-func TaskStoppedErr(err error, extraInfo ...string) *SeleniumError {
-	return &SeleniumError{
-		ResponseStatus: http.StatusForbidden,
-		Name:           "task stopped",
 		MainErr:        err,
 		DebugInfo:      extraInfo,
 	}
