@@ -42,10 +42,6 @@ type Config struct {
 	AwsTargetGroup           string
 	AwsEsgDns                string
 
-	// Session resource limitations
-	MaxMemory int64
-	MaxCpu    int64
-
 	// Timeouts
 	MaxIdleTimeout               time.Duration
 	IdleTimeout                  time.Duration
@@ -90,9 +86,6 @@ func init() {
 	flag.StringVar(&Conf.AwsSecretAccessKey, "aws-secret-access-key", "", "Secret key for AWS services")
 	flag.StringVar(&Conf.AwsTaskRoleArn, "aws-task-role-arn", "", "Role that would be assigned to all task's definitions")
 	flag.StringVar(&Conf.AwsTargetGroup, "aws-target-group", "", "Application load balancer name")
-
-	flag.Int64Var(&Conf.MaxMemory, "max-memory", 28675, "maximum memory limitation for session") // max memory for c5a.4xlarge
-	flag.Int64Var(&Conf.MaxCpu, "max-cpu", 16384, "maximum CPU limitation for session")          //max cpu for c5a.4xlarge
 
 	flag.DurationVar(&Conf.MaxIdleTimeout, "max-idle-timeout", 20*time.Minute, "Maximum session idle timeout time that could be set by user's capabilities")
 	flag.DurationVar(&Conf.IdleTimeout, "idle-timeout", 60*time.Second, "Session idle timeout in time.Duration format")
