@@ -80,6 +80,10 @@ func TrackResourcesUsage(cachedTask *mapper.Mapper, task *ecs.Task) {
 	healthAt := *cachedTask.HealthAt
 
 	provisioningTime := healthAt.Sub(startedAt) //diff between healthAt and startedAt provide task preparation time
+	if provisioningTime < 0 {
+		provisioningTime = 0 // case when generic task executed faster, than task's healthcheck and entity cache rewrite
+	}
+
 	l.Trace("provisioningSeconds: ", provisioningTime.Seconds())
 	l = l.WithField("provisioningSeconds", provisioningTime.Seconds())
 	netTime := int64(math.Ceil(duration.Seconds() - provisioningTime.Seconds()))
