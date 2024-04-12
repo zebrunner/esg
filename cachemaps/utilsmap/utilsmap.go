@@ -10,7 +10,7 @@ import (
 
 const (
 	TaskDefenititonRefreshDone = "done"
-	ScalerVersion              = "scalerV"
+	ScalerVersion              = "scalerVersion"
 )
 
 func AcquireLock(key string, expiration time.Duration) bool {

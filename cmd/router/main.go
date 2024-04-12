@@ -100,7 +100,7 @@ func CreateRouter() *gin.Engine {
 		selenium.POST("/session", handlers.Create) // Auth logic moved to handler
 		selenium.GET("/ws/vnc/:uuid", handlers.ValidateMapperPresence, handlers.Vnc)
 
-		genericHub := selenium.Group("/", handlers.ValidateGenericMapperPresence)
+		genericHub := selenium.Group("/", handlers.ValidateGenericMapperPresence, handlers.LockGenericTaskCache)
 		{
 			genericHub.POST("/tasks/:uuid", handlers.MarkAsFinished)
 			genericHub.DELETE("/tasks/:uuid", handlers.AbortTask) // to be able to abort generic tasks by uuid

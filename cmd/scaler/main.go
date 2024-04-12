@@ -59,13 +59,13 @@ func LaunchTasksProcessors(svc *ecs.ECS, wg *sync.WaitGroup) {
 	if err != nil {
 		log.WithError(err).Warn("Failed to get list of taskmap keys!")
 		return
-	}
+		}
 
 	mapperEntities, err := mapper.FindAll(routerUuids)
 	if err != nil {
 		log.WithError(err).Warn("Failed to get cached mapper enties")
 		return
-	}
+		}
 
 	taskIds := make([]string, 0)
 	for _, mapperEntity := range mapperEntities {
@@ -74,14 +74,10 @@ func LaunchTasksProcessors(svc *ecs.ECS, wg *sync.WaitGroup) {
 		}
 	}
 
-	for i := 0; i < len(mapperEntities); i++ {
-		taskIds[i] = mapperEntities[i].TaskId
-	}
-
 	wg.Add(1)
 	go StopLostTasks(taskIds, svc, wg)
 
-	if len(routerUuids) <= 0 {
+	if len(taskIds) <= 0 {
 		return
 	}
 
@@ -298,13 +294,13 @@ func StopIdleTasks(wg *sync.WaitGroup) {
 		}
 
 		// get actual record of the session and validate idle timeout one more time
-		mapperEntity, err := mapper.Find(mapperEntity.SessionID)
+		mapperEntity, err := mapper.Find(mapperEntity.RouterUUID)
 		if err != nil {
+			l.WithError(err).Error("Failed to get mapperEntity!")
 			continue
 		}
 
 		idle = mapperEntity.IsIdle()
-
 		if !idle {
 			continue
 		}

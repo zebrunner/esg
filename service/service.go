@@ -441,7 +441,7 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l 
 					s.Log.WithError(err).Error("Failed to append to task set on finalize!")
 				}
 
-				err = utilsmap.ReleaseLock(s.MapperEntity.TaskId)
+				err = utilsmap.ReleaseLock(s.MapperEntity.RouterUUID)
 				if err != nil {
 					s.Log.WithError(err).Error("Failed to release lock on finalize!")
 				}
