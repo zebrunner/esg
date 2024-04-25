@@ -278,7 +278,6 @@ type Capabilities struct {
 
 	// generic launcher caps
 	RepositoryUrl     stringWrapper
-	RepositoryForkUrl stringWrapper
 	Branch            stringWrapper
 	Image             stringWrapper
 	LaunchCommand     stringWrapper
@@ -474,7 +473,6 @@ func (c *Capabilities) ParseRequestCaps(reqCaps map[string]interface{}) error {
 		"mitmmemory": &c.MitmMemory,
 
 		"repositoryurl":     &c.RepositoryUrl,
-		"repositoryforkurl": &c.RepositoryForkUrl,
 		"branch":            &c.Branch,
 		"image":             &c.Image,
 		"launchcommand":     &c.LaunchCommand,
