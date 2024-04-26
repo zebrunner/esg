@@ -32,7 +32,6 @@ func GetEntitiesOfCapacityProvider(capacityProvider string) ([]*ResourcesToAlloc
 		return nil, err
 	}
 
-
 	resources := make([]*ResourcesToAllocate, 0, len(keysSet))
 	for uuid := range keysSet {
 		data, err := config.RedisResourcesClient.Get(context.Background(), uuid).Result()

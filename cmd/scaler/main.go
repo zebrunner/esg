@@ -59,13 +59,13 @@ func LaunchTasksProcessors(svc *ecs.ECS, wg *sync.WaitGroup) {
 	if err != nil {
 		log.WithError(err).Warn("Failed to get list of taskmap keys!")
 		return
-		}
+	}
 
 	mapperEntities, err := mapper.FindAll(routerUuids)
 	if err != nil {
 		log.WithError(err).Warn("Failed to get cached mapper enties")
 		return
-		}
+	}
 
 	taskIds := make([]string, 0)
 	for _, mapperEntity := range mapperEntities {

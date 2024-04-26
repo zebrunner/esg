@@ -254,6 +254,6 @@ func buildCypress(workspace string, routerUUID string, caps *capabilities.Capabi
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return &environment, nil
 }
