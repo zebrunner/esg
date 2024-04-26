@@ -217,6 +217,10 @@ func main() {
 		DisableColors: true,
 	})
 
+	if config.Conf.ProductionEnv {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
 	err := config.InitDBConnection(config.Conf.DbConnectionString)
 	if err != nil {
 		utils.ExitWithError(err, "Failed to init DB client", log.NewEntry(log.StandardLogger()))
