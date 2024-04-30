@@ -141,14 +141,14 @@ func calculateResources(env *ExecutionEnvironment, resourcesArr ...*resourceCalc
 
 		wantedCpu := r.Cpu.ToPrimitive() - r.MinimumRes.Cpu
 		if wantedCpu < 0 {
-			log.WithFields(log.Fields{"wantedCpu": r.Cpu.ToPrimitive(), "minimumCpu": r.MinimumRes.Cpu, "container": r.Container.Name}).Debug("Increased requested cpu to min values")
+ 			log.WithFields(log.Fields{"wantedCpu": r.Cpu.ToPrimitive(), "minimumCpu": r.MinimumRes.Cpu, "container": r.Container.Name}).Trace("Increased requested cpu to min values")
 			r.Cpu.From(r.MinimumRes.Cpu)
 			wantedCpu = 0
 		}
 
 		wantedMemory := r.Memory.ToPrimitive() - r.MinimumRes.Memory
 		if wantedMemory < 0 {
-			log.WithFields(log.Fields{"wantedMemory": r.Memory.ToPrimitive(), "minimumMemory": r.MinimumRes.Memory, "container": r.Container.Name}).Debug("Increased requested memory to min values")
+			log.WithFields(log.Fields{"wantedMemory": r.Memory.ToPrimitive(), "minimumMemory": r.MinimumRes.Memory, "container": r.Container.Name}).Trace("Increased requested memory to min values")
 			r.Memory.From(r.MinimumRes.Memory)
 			wantedMemory = 0
 		}
@@ -174,7 +174,7 @@ func calculateResources(env *ExecutionEnvironment, resourcesArr ...*resourceCalc
 	if !cpuEnough {
 		if resourcesLeft.Cpu == 0 {
 			for _, r := range resourcesArr {
-				log.WithFields(log.Fields{"wantedCpu": r.wantedRes.Cpu, "availiableCpu": r.MinimumRes.Cpu, "container": r.Container.Name}).Debug("Decreased requested cpu to min values")
+				log.WithFields(log.Fields{"wantedCpu": r.wantedRes.Cpu, "availiableCpu": r.MinimumRes.Cpu, "container": r.Container.Name}).Trace("Decreased requested cpu to min values")
 				r.wantedRes.Cpu = 0
 			}
 		} else {
@@ -183,7 +183,7 @@ func calculateResources(env *ExecutionEnvironment, resourcesArr ...*resourceCalc
 				// decrease cpu in the same proportion for all conainers
 				oldCpu := r.wantedRes.Cpu + r.MinimumRes.Cpu
 				r.wantedRes.Cpu = int64(float64(r.wantedRes.Cpu) / cpuExceedsMaximum)
-				log.WithFields(log.Fields{"wantedCpu": oldCpu, "availiableCpu": r.wantedRes.Cpu + r.MinimumRes.Cpu, "container": r.Container.Name}).Debug("Decreased requested cpu")
+				log.WithFields(log.Fields{"wantedCpu": oldCpu, "availiableCpu": r.wantedRes.Cpu + r.MinimumRes.Cpu, "container": r.Container.Name}).Trace("Decreased requested cpu")
 			}
 		}
 	}
@@ -191,7 +191,7 @@ func calculateResources(env *ExecutionEnvironment, resourcesArr ...*resourceCalc
 	if !memoryEnough {
 		if resourcesLeft.Memory == 0 {
 			for _, r := range resourcesArr {
-				log.WithFields(log.Fields{"wantedMemory": r.wantedRes.Memory, "availiableMemory": r.MinimumRes.Memory, "container": r.Container.Name}).Debug("Decreased requested memory to min values")
+				log.WithFields(log.Fields{"wantedMemory": r.wantedRes.Memory, "availiableMemory": r.MinimumRes.Memory, "container": r.Container.Name}).Trace("Decreased requested memory to min values")
 				r.wantedRes.Memory = 0
 			}
 		} else {
@@ -200,7 +200,7 @@ func calculateResources(env *ExecutionEnvironment, resourcesArr ...*resourceCalc
 				// decrease memory in the same proportion for all conainers
 				oldMemory := r.wantedRes.Memory + r.MinimumRes.Memory
 				r.wantedRes.Memory = int64(float64(r.wantedRes.Memory) / memoryExceedsMaximum)
-				log.WithFields(log.Fields{"wantedMemory": oldMemory, "availiableMemory": r.wantedRes.Memory + r.MinimumRes.Memory, "container": r.Container.Name}).Debug("Decreased requested memory")
+				log.WithFields(log.Fields{"wantedMemory": oldMemory, "availiableMemory": r.wantedRes.Memory + r.MinimumRes.Memory, "container": r.Container.Name}).Trace("Decreased requested memory")
 			}
 		}
 	}
