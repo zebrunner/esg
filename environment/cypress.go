@@ -250,7 +250,14 @@ func buildCypress(workspace string, routerUUID string, caps *capabilities.Capabi
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
 	}
 
-	err = cypressContainer.CalculateResource(Resources{Cpu: 1024, Memory: 2048}, environment.CapacityProvider, caps, environment.Containers)
+	err = calculateResources(&environment,
+		&resourceCalculatorHelper{
+			MinimumRes: Resources{Cpu: 1024, Memory: 2048},
+			Container:  &cypressContainer,
+			Memory:     &caps.Memory,
+			Cpu:        &caps.Cpu,
+		},
+	)
 	if err != nil {
 		return nil, err
 	}

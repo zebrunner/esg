@@ -5,7 +5,12 @@ import (
 	"math"
 
 	"github.com/aws/aws-sdk-go/service/ecs"
+	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/capabilities"
+)
+
+var (
+	capacityProviderResourcesLimit = make(map[string]smallestInstanceResources)
 )
 
 type envVariables = map[string]string
@@ -26,6 +31,18 @@ type portMapping struct {
 type Resources struct {
 	Cpu    int64
 	Memory int64
+}
+
+type smallestInstanceResources struct {
+	res             Resources
+	memoryDeviation int64
+}
+
+func AddSmallestInstanceResources(cpu int64, memory int64, capacityProvider string) {
+	capacityProviderResourcesLimit[capacityProvider] = smallestInstanceResources{
+		res:             Resources{Cpu: cpu, Memory: memory},
+		memoryDeviation: getMemoryDeviation(memory),
+	}
 }
 
 type Container struct {
@@ -86,53 +103,6 @@ func SumResources(containers []*Container) Resources {
 	return resources
 }
 
-func (c *Container) CalculateResource(minRes Resources, capasityProviderName string, caps *capabilities.Capabilities, otherContainers []*Container) error {
-	maxRes, ok := CapacityProvdirResourcesLimit[capasityProviderName]
-	if !ok {
-		maxRes = minRes
-	} else {
-		busyResources := SumResources(otherContainers)
-		maxRes.Remove(&busyResources)
-		maxRes.Remove(&Resources{0, memoryDeviation})
-	}
-
-	cpu, err := applyConstraints(caps.Cpu.ToPrimitive(), minRes.Cpu, maxRes.Cpu)
-	if err != nil {
-		return err
-	}
-
-	c.Res.Cpu = cpu
-	caps.Cpu.From(cpu)
-
-	memory, err := applyConstraints(caps.Memory.ToPrimitive(), minRes.Memory, maxRes.Memory)
-	if err != nil {
-		return err
-	}
-
-	c.Res.Memory = memory
-	caps.Memory.From(memory)
-
-	return nil
-}
-
-func applyConstraints(desiredAmount int64, min int64, max int64) (int64, error) {
-	resource := min
-	if desiredAmount > resource {
-		resource = desiredAmount
-	}
-
-	if resource > max {
-		resource = max
-	}
-
-	// If max is smaller than min value -> env is not supported with current min instance type
-	if max < min {
-		return -1, fmt.Errorf("environment is not supported with current min instance type")
-	}
-
-	return resource, nil
-}
-
 type resourceCalculatorHelper struct {
 	MinimumRes Resources
 	Container  *Container
@@ -141,34 +111,45 @@ type resourceCalculatorHelper struct {
 	wantedRes  Resources
 }
 
-func calculateResourcesForSeveralContainers(env *ExecutionEnvironment, resourcesArr ...resourceCalculatorHelper) error {
-	freeResource, ok := CapacityProvdirResourcesLimit[env.CapacityProvider]
-	if !ok {
-		for _, r := range resourcesArr {
-			r.Container.Res = r.MinimumRes
-		}
-
-		return nil
-	}
-
+func calculateResources(env *ExecutionEnvironment, resourcesArr ...*resourceCalculatorHelper) error {
 	for _, r := range resourcesArr {
 		// Clear current container resources setting as it will be configured later
 		r.Container.Res = Resources{0, 0}
 	}
 
-	busyResources := SumResources(env.Containers)
-	freeResource.Remove(&busyResources)
-	freeResource.Remove(&Resources{0, memoryDeviation})
+	resourcesLeft := Resources{0, 0}
+	resLimit, ok := capacityProviderResourcesLimit[env.CapacityProvider]
+	if !ok {
+		resLimit = smallestInstanceResources{res: Resources{0, 0}}
+		for _, r := range resourcesArr {
+			resourcesLeft.Add(&r.MinimumRes)
+		}
+	} else {
+		resourcesLeft = resLimit.res
+		busyResources := SumResources(env.Containers)
+		resourcesLeft.Remove(&busyResources)
+		resourcesLeft.Remove(&Resources{0, resLimit.memoryDeviation})
+	}
 
 	totalWantedResources := Resources{0, 0}
 	for _, r := range resourcesArr {
+		isCpuOk, isMemoryOk := resourcesLeft.Compare(r.MinimumRes)
+		if !isCpuOk || !isMemoryOk {
+			r.Container.Res = Resources{-1, -1}
+			return fmt.Errorf("environment is not supported with current min instance type")
+		}
+
 		wantedCpu := r.Cpu.ToPrimitive() - r.MinimumRes.Cpu
 		if wantedCpu < 0 {
+			log.WithFields(log.Fields{"wantedCpu": r.Cpu.ToPrimitive(), "minimumCpu": r.MinimumRes.Cpu, "container": r.Container.Name}).Info("Increased requested cpu to min values")
+			r.Cpu.From(r.MinimumRes.Cpu)
 			wantedCpu = 0
 		}
 
 		wantedMemory := r.Memory.ToPrimitive() - r.MinimumRes.Memory
 		if wantedMemory < 0 {
+			log.WithFields(log.Fields{"wantedMemory": r.Memory.ToPrimitive(), "minimumMemory": r.MinimumRes.Memory, "container": r.Container.Name}).Info("Increased requested memory to min values")
+			r.Memory.From(r.MinimumRes.Memory)
 			wantedMemory = 0
 		}
 
@@ -176,13 +157,7 @@ func calculateResourcesForSeveralContainers(env *ExecutionEnvironment, resources
 		r.wantedRes = Resources{Cpu: wantedCpu, Memory: wantedMemory}
 		totalWantedResources.Add(&r.wantedRes)
 
-		isCpuOk, isMemoryOk := freeResource.Compare(r.MinimumRes)
-		if !isCpuOk || !isMemoryOk {
-			r.Container.Res = Resources{-1, -1}
-			return fmt.Errorf("environment is not supported with current min instance type")
-		}
-
-		freeResource.Remove(&r.MinimumRes)
+		resourcesLeft.Remove(&r.MinimumRes)
 	}
 
 	getExceedCoefficient := func(wantedTotal int64, freeTotal int64) float64 {
@@ -195,28 +170,59 @@ func calculateResourcesForSeveralContainers(env *ExecutionEnvironment, resources
 		return exceedsMaximum
 	}
 
-	cpuEnough, memoryEnough := freeResource.Compare(totalWantedResources)
+	cpuEnough, memoryEnough := resourcesLeft.Compare(totalWantedResources)
 	if !cpuEnough {
-		cpuExceedsMaximum := getExceedCoefficient(totalWantedResources.Cpu, freeResource.Cpu)
-		for _, r := range resourcesArr {
-			// decrease cpu in the same proportion for all conainers
-			r.wantedRes.Cpu = int64(float64(r.wantedRes.Cpu) / cpuExceedsMaximum)
+		if resourcesLeft.Cpu == 0 {
+			for _, r := range resourcesArr {
+				log.WithFields(log.Fields{"wantedCpu": r.wantedRes.Cpu, "availiableCpu": r.MinimumRes.Cpu, "container": r.Container.Name}).Info("Decreased requested cpu to min values")
+				r.wantedRes.Cpu = 0
+			}
+		} else {
+			cpuExceedsMaximum := getExceedCoefficient(totalWantedResources.Cpu, resourcesLeft.Cpu)
+			for _, r := range resourcesArr {
+				// decrease cpu in the same proportion for all conainers
+				oldCpu := r.wantedRes.Cpu + r.MinimumRes.Cpu
+				r.wantedRes.Cpu = int64(float64(r.wantedRes.Cpu) / cpuExceedsMaximum)
+				log.WithFields(log.Fields{"wantedCpu": oldCpu, "availiableCpu": r.wantedRes.Cpu + r.MinimumRes.Cpu, "container": r.Container.Name}).Info("Decreased requested cpu")
+			}
 		}
 	}
 
 	if !memoryEnough {
-		memoryExceedsMaximum := getExceedCoefficient(totalWantedResources.Memory, freeResource.Memory)
-		for _, r := range resourcesArr {
-			// decrease cpu in the same proportion for all conainers
-			r.wantedRes.Cpu = int64(float64(r.wantedRes.Cpu) / memoryExceedsMaximum)
+		if resourcesLeft.Memory == 0 {
+			for _, r := range resourcesArr {
+				log.WithFields(log.Fields{"wantedMemory": r.wantedRes.Memory, "availiableMemory": r.MinimumRes.Memory, "container": r.Container.Name}).Info("Decreased requested memory to min values")
+				r.wantedRes.Memory = 0
+			}
+		} else {
+			memoryExceedsMaximum := getExceedCoefficient(totalWantedResources.Memory, resourcesLeft.Memory)
+			log.Info("memoryExceedsMaximum: ", memoryExceedsMaximum)
+			for _, r := range resourcesArr {
+				// decrease memory in the same proportion for all conainers
+				oldMemory := r.wantedRes.Memory + r.MinimumRes.Memory
+				r.wantedRes.Memory = int64(float64(r.wantedRes.Memory) / memoryExceedsMaximum)
+				log.WithFields(log.Fields{"wantedMemory": oldMemory, "availiableMemory": r.wantedRes.Memory + r.MinimumRes.Memory, "container": r.Container.Name}).Info("Decreased requested memory")
+			}
 		}
 	}
-
 	for _, r := range resourcesArr {
-		r.Container.Res = Resources{Cpu: r.MinimumRes.Cpu + r.wantedRes.Cpu, Memory: r.MinimumRes.Memory + r.wantedRes.Memory}
+		r.Container.Res = Resources{
+			Cpu:    r.MinimumRes.Cpu + r.wantedRes.Cpu,
+			Memory: r.MinimumRes.Memory + r.wantedRes.Memory,
+		}
 		r.Cpu.From(r.Container.Res.Cpu)
 		r.Memory.From(r.Container.Res.Memory)
 	}
 
 	return nil
+}
+
+func getMemoryDeviation(memory int64) int64 {
+	basePercent := 2.8
+	mbInGb := 1024
+	// with bigger decreaseIndex bigger total memory deviation percent
+	decreaseIndex := 16
+	// deviationPercent is closer to basePercent with more memory on instance
+	deviationPercent := (basePercent + float64(decreaseIndex)/(float64(memory)/float64(mbInGb)))
+	return int64(math.Ceil(deviationPercent / 100 * float64(memory)))
 }
