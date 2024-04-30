@@ -14,7 +14,8 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/zebrunner/esg/cachemaps/taskmap"
+
+	"github.com/zebrunner/esg/cachemaps/mapper"
 	"github.com/zebrunner/esg/config"
 )
 
@@ -23,7 +24,7 @@ const (
 	ABORT_API_PATH = "/api/reporting/api/project-test-runs/abort"
 )
 
-func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
+func TrackResourcesUsage(cachedTask *mapper.Mapper, task *ecs.Task) {
 	//log.Info("Task:", task)
 	conf := &config.Conf
 	if conf.ZebrunnerHost == "" {
@@ -32,8 +33,8 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 	}
 
 	l := log.WithField(config.RouterUUID, cachedTask.RouterUUID).WithField(config.TaskIdKey, cachedTask.TaskId)
-	if cachedTask.CurrentSessionID != "" {
-		l = l.WithField(config.SessionIdKey, cachedTask.CurrentSessionID)
+	if cachedTask.SessionID != "" {
+		l = l.WithField(config.SessionIdKey, cachedTask.SessionID)
 	}
 
 	requestUrl, err := url.ParseRequestURI(conf.ZebrunnerHost)
@@ -119,7 +120,7 @@ func TrackResourcesUsage(cachedTask *taskmap.Task, task *ecs.Task) {
 		"seconds":   netTime, // register only net time without provisioning time
 		"platform":  platformName,
 		"taskId":    cachedTask.RouterUUID,
-		"sessionId": cachedTask.CurrentSessionID,
+		"sessionId": cachedTask.SessionID,
 	}
 	l.Trace("request body to track resources: ", requestBody)
 

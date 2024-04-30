@@ -4,12 +4,12 @@ services:
     build:
       context: ../
       dockerfile: build/Dockerfile.router
-    image: public.ecr.aws/zebrunner/router:latest
+    image: public.ecr.aws/zebrunner/router:$ROUTER_VERSION
   scaler:
     build:
       context: ../
       dockerfile: build/Dockerfile.scaler
-    image: public.ecr.aws/zebrunner/scaler:latest
+    image: public.ecr.aws/zebrunner/scaler:$SCALER_VERSION
   e3s-migration:
     build:
       context: ../

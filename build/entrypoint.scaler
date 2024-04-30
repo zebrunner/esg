@@ -1,5 +1,8 @@
 #!/bin/sh
 
+. version
+export VERSION=$VERSION
+
 finish() {
   ppid=$1
   if [ -n "$ppid" ]; then
@@ -58,12 +61,6 @@ if [ ! -z ${LOG_LEVEL} ]; then
 fi
 if [ ! -z ${DATABASE} ]; then
   CMD_ARGS="${CMD_ARGS} -db-connection ${DATABASE}"
-fi
-if [ ! -z ${MAX_MEMORY} ]; then
-  CMD_ARGS="${CMD_ARGS} -max-memory ${MAX_MEMORY}"
-fi
-if [ ! -z ${MAX_CPU} ]; then
-  CMD_ARGS="${CMD_ARGS} -max-cpu ${MAX_CPU}"
 fi
 if [ ! -z ${MAX_IDLE_TIMEOUT} ]; then
   CMD_ARGS="${CMD_ARGS} -max-idle-timeout ${MAX_IDLE_TIMEOUT}"

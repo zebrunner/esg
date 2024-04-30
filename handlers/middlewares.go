@@ -3,11 +3,12 @@ package handlers
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
-	"github.com/zebrunner/esg/cachemaps/sessionmap"
-	"github.com/zebrunner/esg/cachemaps/taskmap"
+	"github.com/zebrunner/esg/cachemaps/mapper"
+	"github.com/zebrunner/esg/cachemaps/utilsmap"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/db"
 	"github.com/zebrunner/esg/utils"
@@ -50,53 +51,26 @@ func APIError(c *gin.Context) {
 }
 
 func SeleniumError(c *gin.Context) {
-	// Add sessionID to gin context for logging purposes
-	l := log.NewEntry(log.StandardLogger())
-
-	if routerUUID := c.Param("session"); routerUUID != "" {
-		sess, seErr := getSession(routerUUID)
-		if seErr != nil {
-			l.WithField(config.SessionIdKey, routerUUID).WithError(seErr).Error("can't access session")
-			c.Error(seErr).SetType(gin.ErrorTypePublic)
-			c.Abort()
-		} else {
-			c.Set(config.SessionIdKey, sess)
-		}
-	}
-
-	if routerUUID := c.Param("task"); routerUUID != "" {
-		task, seErr := getTask(routerUUID)
-		if seErr != nil {
-			l.WithField(config.RouterUUID, routerUUID).WithError(seErr).Error("can't access task")
-			c.Error(seErr).SetType(gin.ErrorTypePublic)
-			c.Abort()
-		} else {
-			c.Set(config.TaskIdKey, task)
-		}
-	}
-
 	c.Next()
 
 	if c.Errors.Last() == nil {
 		return
 	}
 
+	l := log.NewEntry(log.StandardLogger())
 	enableDebug := true
-	if taskObject, ok := c.Get(config.TaskIdKey); ok {
-		if task, ok := taskObject.(*taskmap.Task); ok {
-			// Capabilities.EnableDebug by default - false
-			enableDebug = task.Capabilities.EnableDebug.ToPrimitive()
-			l = l.WithField(config.RouterUUID, task.RouterUUID).WithField(config.TaskIdKey, task.TaskId)
-		} else {
-			l.Warn("TaskIdKey was used for storing something other than task cache!")
-		}
-	}
 
-	if sessionObject, ok := c.Get(config.SessionIdKey); ok {
-		if session, ok := sessionObject.(*sessionmap.Session); ok {
-			l = l.WithField(config.RouterUUID, session.RouterUUID).WithField(config.SessionIdKey, session.SessionID)
-		} else {
-			l.Warn("SessionIdKey was used for storing something other than session cache!")
+	if mapperEntity, ok := c.Get(config.RouterUUID); ok {
+		if m, ok := mapperEntity.(*mapper.Mapper); ok {
+			// Capabilities.EnableDebug by default - false
+			enableDebug = m.Capabilities.EnableDebug.ToPrimitive()
+			l = l.WithField(config.RouterUUID, m.RouterUUID)
+			if m.TaskId != "" {
+				l = l.WithField(config.TaskIdKey, m.TaskId)
+			}
+			if m.SessionID != "" {
+				l = l.WithField(config.SessionIdKey, m.SessionID)
+			}
 		}
 	}
 
@@ -115,7 +89,7 @@ func SeleniumError(c *gin.Context) {
 	}
 
 	if seErr == nil {
-		l.Debug("SeleniumError(): intercepted error is either not public or not Selenium Error type. Setting default values...")
+		l.Debug("SeleniumError(): intercepted error is either not public or not Selenium type error. Setting default values...")
 		seErr = utils.UnknownErr(fmt.Errorf("internal server error"))
 	}
 
@@ -129,30 +103,66 @@ func SeleniumError(c *gin.Context) {
 	seErr.SendEncodedResponse(c, enableDebug)
 }
 
-func getSession(id string) (*sessionmap.Session, *utils.SeleniumError) {
-	session, _ := sessionmap.FindByRouterUUID(id)
-	if session == nil {
-		return nil, utils.NoSuchSessionErr(fmt.Errorf("session timed out or not found"))
+func ValidateGenericMapperPresence(c *gin.Context) {
+	uuid := c.Param("uuid")
+
+	var seErr *utils.SeleniumError
+	mapperEntity, err := mapper.Find(uuid)
+
+	if err != nil || mapperEntity == nil {
+		seErr = utils.NoSuchSessionErr(fmt.Errorf("session timed out or not found"))
+	} else if mapperEntity.Status == mapper.Stopped {
+		seErr = utils.SessionStoppedErr(fmt.Errorf(string(mapperEntity.StopReason)))
 	}
 
-	if session.Status == sessionmap.SessionStopped {
-		return session, utils.SessionStoppedErr(fmt.Errorf(string(session.StopReason)))
+	if seErr != nil {
+		log.WithField(config.RouterUUID, uuid).WithError(seErr).Error("can't access session")
+
+		c.Error(seErr).SetType(gin.ErrorTypePublic)
+		c.Abort()
+		return
 	}
 
-	return session, nil
+	c.Set(config.RouterUUID, mapperEntity)
+	c.Next()
 }
 
-func getTask(id string) (*taskmap.Task, *utils.SeleniumError) {
-	task, _ := taskmap.FindByRouterUUID(id)
-	if task == nil {
-		return nil, utils.NoSuchTaskErr(fmt.Errorf("task timed out or not found"))
+func ValidateMapperPresence(c *gin.Context) {
+	uuid := c.Param("uuid")
+
+	var seErr *utils.SeleniumError
+	mapperEntity, err := mapper.Find(uuid)
+	if err != nil || mapperEntity == nil {
+		seErr = utils.NoSuchSessionErr(fmt.Errorf("session timed out or not found"))
+	} else if mapperEntity.Status == mapper.Queued {
+		seErr = utils.NoSuchSessionErr(fmt.Errorf("session creation is in queue"))
+	} else if mapperEntity.Status == mapper.Stopped {
+		seErr = utils.SessionStoppedErr(fmt.Errorf(string(mapperEntity.StopReason)))
 	}
 
-	if task.Status == taskmap.TaskStopped {
-		return task, utils.TaskStoppedErr(fmt.Errorf(string(task.StopReason)))
+	if seErr != nil {
+		log.WithField(config.RouterUUID, uuid).WithError(seErr).Error("can't access session")
+
+		c.Error(seErr).SetType(gin.ErrorTypePublic)
+		c.Abort()
+		return
 	}
 
-	return task, nil
+	c.Set(config.RouterUUID, mapperEntity)
+	c.Next()
+}
+
+// Must be used only after ValidateMapperPresence() func
+func ValidateSessionStatus(c *gin.Context) {
+	mapperEntity := c.MustGet(config.RouterUUID).(*mapper.Mapper)
+	if mapperEntity.SessionID == "" {
+		seErr := utils.NoSuchSessionErr(fmt.Errorf("session not found"))
+		c.Error(seErr).SetType(gin.ErrorTypePublic)
+		c.Abort()
+		return
+	}
+
+	c.Next()
 }
 
 func APIAuthentication(c *gin.Context) {
@@ -179,6 +189,20 @@ func APIAuthentication(c *gin.Context) {
 	}
 }
 
+func UpdateLastAccessTime(c *gin.Context) {
+	mapperEntity := c.MustGet(config.RouterUUID).(*mapper.Mapper)
+
+	accessedAt := time.Now()
+	mapperEntity.AccessedAt = &accessedAt
+	err := mapper.Write(mapperEntity, -1)
+	if err != nil {
+		log.WithField(config.SessionIdKey, mapperEntity.SessionID).WithField(config.RouterUUID, mapperEntity.RouterUUID).WithError(err).Error("Failed to update last access time")
+	}
+
+	c.Set(config.RouterUUID, mapperEntity)
+	c.Next()
+}
+
 func LowLvlAuthentication(c *gin.Context) {
 	username, password, ok := c.Request.BasicAuth()
 	if !ok {
@@ -199,5 +223,24 @@ func LowLvlAuthentication(c *gin.Context) {
 		c.Error(utils.AuthApiErr("provided credentials not valid")).SetType(gin.ErrorTypePublic)
 		c.Abort()
 		return
+	}
+}
+
+// #1056: Small chance of double shaping on generic task abort
+func LockGenericTaskCache(c *gin.Context) {
+	mapperEntity := c.MustGet(config.RouterUUID).(*mapper.Mapper)
+
+	for {
+		if ok := utilsmap.AcquireLock(mapperEntity.RouterUUID, 0); ok {
+			break
+		}
+		time.Sleep(10 * time.Second)
+	}
+
+	c.Next()
+
+	err := utilsmap.ReleaseLock(mapperEntity.RouterUUID)
+	if err != nil {
+		log.WithField(config.RouterUUID, mapperEntity.RouterUUID).WithError(err).Error("Failed to release lock for mapper cache!")
 	}
 }

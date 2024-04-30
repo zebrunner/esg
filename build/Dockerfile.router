@@ -1,8 +1,12 @@
 FROM golang:1.18-alpine
 
-RUN apk add -U tzdata git && rm -Rf /var/cache/apk/*
+RUN apk add -U tzdata && rm -Rf /var/cache/apk/*
 
 WORKDIR /esg
+
+# create file, that contains build tag
+COPY ./build/.env version
+RUN . version && echo "VERSION=$ROUTER_VERSION" > version
 
 # Download dependencies
 COPY ./go.mod .
@@ -44,10 +48,6 @@ ENV S3_AWS_SECRET_ACCESS_KEY=
 
 ENV DATABASE=
 
-ENV MAX_MEMORY=
-
-ENV MAX_CPU=
-
 #time.Duration format: 1m0s
 ENV MAX_IDLE_TIMEOUT=
 ENV IDLE_TIMEOUT=
@@ -62,10 +62,13 @@ ENV ZEBRUNNER_INTEGRATION_PASSWORD=
 
 ENV EXCLUDE_BROWSERS=
 
+ENV PRODUCTION_ENV=
+
 ENV EXTERNAL_PORT=
 
-RUN apk add -U git tzdata
-COPY ./.git /
+RUN apk add -U tzdata
+
+COPY --from=0 /esg/version /version
 
 COPY --from=0 /esg/router /router
 

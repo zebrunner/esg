@@ -2,6 +2,10 @@ FROM golang:1.18-alpine
 
 WORKDIR /esg
 
+# create file, that contains build tag
+COPY ./build/.env version
+RUN . version && echo "VERSION=$SCALER_VERSION" > version
+
 # Download dependencies
 COPY ./go.mod .
 COPY ./go.sum .
@@ -33,10 +37,6 @@ ENV LOG_LEVEL=
 
 ENV DATABASE=
 
-ENV MAX_MEMORY=
-
-ENV MAX_CPU=
-
 #time.Duration format: 1m0s
 ENV MAX_IDLE_TIMEOUT=
 ENV IDLE_TIMEOUT=
@@ -49,6 +49,7 @@ ENV ZEBRUNNER_INTEGRATION_PASSWORD=
 ENV EXCLUDE_BROWSERS=
 
 COPY --from=0 /esg/scaler /scaler
+COPY --from=0 /esg/version /version
 
 COPY ./build/entrypoint.scaler /entrypoint.sh
 

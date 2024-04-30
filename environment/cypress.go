@@ -54,10 +54,12 @@ func buildCypress(workspace string, routerUUID string, caps *capabilities.Capabi
 	}
 
 	cloneContainer := Container{
-		Name:       "clone",
-		Image:      cloneImage,
-		cpu:        minCpu,
-		memory:     512, //increased memory to fix OOM for huge repositories (3K+ branches)
+		Name:  "clone",
+		Image: cloneImage,
+		Res: Resources{
+			Cpu:    minCpu,
+			Memory: 512, //increased memory to fix OOM for huge repositories (3K+ branches)
+		},
 		Privileged: false,
 		Essential:  false,
 		Mounts:     []string{taskVolume, logVolume},
@@ -71,10 +73,12 @@ func buildCypress(workspace string, routerUUID string, caps *capabilities.Capabi
 	}
 
 	entrypointContainer := Container{
-		Name:       "entrypoint",
-		Image:      entrypointImage,
-		cpu:        16,
-		memory:     16,
+		Name:  "entrypoint",
+		Image: entrypointImage,
+		Res: Resources{
+			Cpu:    16,
+			Memory: 16,
+		},
 		Privileged: false,
 		Essential:  false,
 		Env: map[string]string{
@@ -148,14 +152,13 @@ func buildCypress(workspace string, routerUUID string, caps *capabilities.Capabi
 	//basic auth header for executor-logs service
 	basicAuthHeader := "Authorization: Basic " + b64.StdEncoding.EncodeToString([]byte(conf.ZebrunnerIntegrationUser+":"+conf.ZebrunnerIntegrationPassword))
 
-	cypressContainer.SetCpu(&caps.Cpu, 1024, conf.MaxCpu)
-	cypressContainer.SetMemory(&caps.Memory, 2048, conf.MaxMemory) // 2Gb RAM is minimal for cypress due to the potential memory leaks
-
 	recorderContainer := Container{
-		Name:       "recorder",
-		Image:      cypressRecorderImage,
-		cpu:        recorderCpu,
-		memory:     2048,
+		Name:  "recorder",
+		Image: cypressRecorderImage,
+		Res: Resources{
+			Cpu:    recorderCpu,
+			Memory: 2048,
+		},
 		Privileged: false,
 		Essential:  false,
 		Env: map[string]string{
@@ -194,10 +197,12 @@ func buildCypress(workspace string, routerUUID string, caps *capabilities.Capabi
 	}
 
 	uploaderContainer := Container{
-		Name:       "uploader",
-		Image:      uploaderImage,
-		cpu:        64,  // with 32  uploading is aborted
-		memory:     256, // 64 works for single thread. for backgroud copying it is not enough
+		Name:  "uploader",
+		Image: uploaderImage,
+		Res: Resources{
+			Cpu:    64,  // with 32  uploading is aborted
+			Memory: 256, // 64 works for single thread. for backgroud copying it is not enough
+		},
 		Privileged: false,
 		Essential:  false,
 		Env: map[string]string{
@@ -243,6 +248,18 @@ func buildCypress(workspace string, routerUUID string, caps *capabilities.Capabi
 		RouterUUID:       routerUUID,
 		CapacityProvider: config.Conf.AwsLinuxCapacityProvider,
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
+	}
+
+	err = calculateResources(&environment,
+		&resourceCalculatorHelper{
+			MinimumRes: Resources{Cpu: 1024, Memory: 2048},
+			Container:  &cypressContainer,
+			Memory:     &caps.Memory,
+			Cpu:        &caps.Cpu,
+		},
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	return &environment, nil

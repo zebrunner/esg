@@ -82,14 +82,14 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 			StartPeriod: aws.Int64(0),
 		},
 	}
-	browserContainer.SetCpu(&caps.Cpu, 1024, conf.MaxCpu)
-	browserContainer.SetMemory(&caps.Memory, 1024, conf.MaxMemory)
 
 	recorderContainer := Container{
-		Name:       "recorder",
-		Image:      recorderImage,
-		cpu:        recorderCpu,
-		memory:     recorderMemory,
+		Name:  "recorder",
+		Image: recorderImage,
+		Res: Resources{
+			Cpu:    recorderCpu,
+			Memory: recorderMemory,
+		},
 		Privileged: false,
 		Essential:  false,
 		Env: map[string]string{
@@ -133,10 +133,12 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 	}
 
 	uploaderContainer := Container{
-		Name:       "uploader",
-		Image:      uploaderImage,
-		cpu:        64,  // with 32  uploading is aborted
-		memory:     256, // 64 works for single thread. for backgroud copying it is not enough
+		Name:  "uploader",
+		Image: uploaderImage,
+		Res: Resources{
+			Cpu:    64,  // with 32  uploading is aborted
+			Memory: 256, // 64 works for single thread. for backgroud copying it is not enough
+		},
 		Privileged: false,
 		Essential:  false,
 		Env: map[string]string{
@@ -151,8 +153,10 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 	}
 
 	containers := []*Container{&browserContainer, &recorderContainer, &uploaderContainer}
+
+	var mitmContainer Container
 	if caps.Mitm {
-		mitmContainer := Container{
+		mitmContainer = Container{
 			Name:       "mitm",
 			Image:      mitmImage,
 			Privileged: false,
@@ -174,13 +178,10 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 			mitmContainer.Env["PROXY_TYPE"] = caps.MitmType.ToPrimitive()
 		}
 
-		mitmContainer.SetCpu(&caps.MitmCpu, 512, conf.MaxCpu)
-		mitmContainer.SetMemory(&caps.MitmMemory, 512, conf.MaxMemory)
-
 		containers = append(containers, &mitmContainer)
-
 		browserContainer.Links = []string{"mitm"}
 	}
+
 	environment := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
 		Schema:               buildSchema(containers),
@@ -212,8 +213,27 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 		environment.Network.Endpoints["healthcheck"].Path = "/wd/hub/"
 	}
 
+	calcArr := make([]*resourceCalculatorHelper, 0)
+	calcArr = append(calcArr, &resourceCalculatorHelper{
+		MinimumRes: Resources{Cpu: 1024, Memory: 1024},
+		Container:  &browserContainer,
+		Memory:     &caps.Memory,
+		Cpu:        &caps.Cpu,
+	})
+
 	if caps.Mitm {
 		environment.Network.Endpoints["proxyHandlerPort"] = &Endpoint{ContainerPort: proxyHandlerPort, HostPort: 0, Path: "/"}
+		calcArr = append(calcArr, &resourceCalculatorHelper{
+			MinimumRes: Resources{Cpu: 512, Memory: 512},
+			Container:  &mitmContainer,
+			Memory:     &caps.MitmMemory,
+			Cpu:        &caps.MitmCpu,
+		})
+	}
+
+	err = calculateResources(&environment, calcArr...)
+	if err != nil {
+		return nil, err
 	}
 
 	return &environment, nil

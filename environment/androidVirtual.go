@@ -40,14 +40,14 @@ func buildAppiumRedroid(workspace string, routerUUID string, caps *capabilities.
 			"VERBOSE": "1",
 		},
 	}
-	deviceContainer.SetCpu(&caps.Cpu, 2048, conf.MaxCpu)
-	deviceContainer.SetMemory(&caps.Memory, 2048, conf.MaxMemory)
 
 	appiumContainer := Container{
-		Name:       "appium",
-		Image:      appiumImage,
-		cpu:        appiumCpu,
-		memory:     appiumMemory,
+		Name:  "appium",
+		Image: appiumImage,
+		Res: Resources{
+			Cpu:    appiumCpu,
+			Memory: appiumMemory,
+		},
 		Privileged: false,
 		Essential:  true,
 		Ports: map[string]portMapping{
@@ -72,10 +72,12 @@ func buildAppiumRedroid(workspace string, routerUUID string, caps *capabilities.
 	}
 
 	uploaderContainer := Container{
-		Name:       "uploader",
-		Image:      uploaderImage,
-		cpu:        64,  // with 32  uploading is aborted
-		memory:     256, // 64 works for single thread. for background copying it is not enough
+		Name:  "uploader",
+		Image: uploaderImage,
+		Res: Resources{
+			Cpu:    64,  // with 32  uploading is aborted
+			Memory: 256, // 64 works for single thread. for background copying it is not enough
+		},
 		Privileged: false,
 		Essential:  false,
 		Env: map[string]string{
@@ -110,6 +112,18 @@ func buildAppiumRedroid(workspace string, routerUUID string, caps *capabilities.
 		RouterUUID:       routerUUID,
 		CapacityProvider: config.Conf.AwsLinuxCapacityProvider,
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
+	}
+
+	err = calculateResources(&environment,
+		&resourceCalculatorHelper{
+			MinimumRes: Resources{Cpu: 2048, Memory: 2048},
+			Container:  &deviceContainer,
+			Memory:     &caps.Memory,
+			Cpu:        &caps.Cpu,
+		},
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	return &environment, nil

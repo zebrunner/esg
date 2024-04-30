@@ -14,8 +14,6 @@ import (
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps/mapper"
-	"github.com/zebrunner/esg/cachemaps/sessionmap"
-	"github.com/zebrunner/esg/cachemaps/taskmap"
 	"github.com/zebrunner/esg/cachemaps/utilsmap"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
@@ -65,7 +63,7 @@ type startBasis struct {
 	Phases       []phase
 	Task         *ecs.Task
 	TaskId       *string
-	CachedTask   *taskmap.Task
+	MapperEntity *mapper.Mapper
 	Reply        map[string]interface{}
 }
 
@@ -93,7 +91,7 @@ func (s *startBasis) registerTaskPhase(ctx context.Context) (essential *utils.Se
 			case taskArn := <-waitRequest.ResponseCh:
 				taskId := strings.Split(taskArn, "/")[2]
 				log.WithField(config.TaskIdKey, taskId).Warn("Task registered after context is done")
-				StopTaskForcibly(taskId, taskmap.TaskStartupFailure)
+				StopTaskForcibly(taskId, mapper.TaskStartupFailure)
 				return
 			}
 		}()
@@ -109,24 +107,7 @@ func (s *startBasis) registerTaskPhase(ctx context.Context) (essential *utils.Se
 		taskId := strings.Split(taskArn, "/")[2]
 
 		s.Log = s.Log.WithField(config.TaskIdKey, taskId)
-		s.TaskId = &taskId
-
-		var err error
-		for {
-			s.CachedTask, err = taskmap.CreateEntity(taskId, s.Env)
-			if err == nil {
-				break
-			}
-			s.Log.WithError(err).Error("Failed to cach task")
-			time.Sleep(5 * time.Second)
-			if ctx.Err() != nil {
-				nonEssential = err
-				return
-			}
-		}
-
-		// add task to ctx, so we can add taskId to selenium err log if any failure will happen later
-		s.GinCtx.Set(config.TaskIdKey, s.CachedTask)
+		s.MapperEntity.TaskId = taskId
 
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Debug("task registered")
 		s.Reply = map[string]interface{}{"taskId": s.Env.RouterUUID}
@@ -136,7 +117,7 @@ func (s *startBasis) registerTaskPhase(ctx context.Context) (essential *utils.Se
 
 func (s *startBasis) startTaskPhase(ctx context.Context) (essential *utils.SeleniumError, nonEssential error) {
 	s.Log.Info("task starting")
-	waitRequest := taskWaiter.waitFor(ctx, *s.TaskId)
+	waitRequest := taskWaiter.waitFor(ctx, s.MapperEntity.TaskId)
 	select {
 	case <-ctx.Done():
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("Task startup timed out")
@@ -151,8 +132,8 @@ func (s *startBasis) startTaskPhase(ctx context.Context) (essential *utils.Selen
 		return
 	case s.Task = <-waitRequest.ResponseCh:
 		healthyTime := time.Now()
-		s.CachedTask.HealthAt = &healthyTime
-		s.CachedTask.Status = taskmap.TaskActive
+		s.MapperEntity.HealthAt = &healthyTime
+		s.MapperEntity.AccessedAt = &healthyTime
 
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("task started")
 		s.Reply = map[string]interface{}{"taskId": s.Env.RouterUUID}
@@ -188,7 +169,7 @@ func (s *startBasis) setNetworkPhase(ctx context.Context) (essential *utils.Sele
 			return
 		}
 
-		s.CachedTask.Network = *s.Env.Network
+		s.MapperEntity.Network = *s.Env.Network
 
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("network environment set")
 		s.Reply = map[string]interface{}{"taskId": s.Env.RouterUUID}
@@ -259,24 +240,7 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (essential *utils.Sel
 			s.Log.WithError(nonEssential).Error("Failed to modify driver reply")
 			return
 		}
-
-		var sess *sessionmap.Session
-		for {
-			sess, err = sessionmap.CreateEntity(sessionId, s.Env, s.TaskId)
-			if err == nil {
-				break
-			}
-			s.Log.WithError(err).Error("Failed to cach session")
-			time.Sleep(5 * time.Second)
-			if ctx.Err() != nil {
-				nonEssential = err
-				return
-			}
-		}
-		s.CachedTask.CurrentSessionID = sessionId
-
-		// add session to ctx, so we can add it to selenium err log if any failure will happen later
-		s.GinCtx.Set(config.SessionIdKey, sess)
+		s.MapperEntity.SessionID = sessionId
 
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("driver started")
 		return nil, nil
@@ -354,51 +318,40 @@ func (starter basicStarter) StartService(startupTime context.Context) (map[strin
 	starter.basis.ServiceStart = time.Now()
 	starter.basis.Log.Info("service starting")
 
-	if err := mapper.InitEntity(starter.basis.Env.RouterUUID); err != nil {
-		return nil, utils.CreationErr(fmt.Errorf("service startup failed"), err.Error())
-	}
-
 	for i := 0; true; i++ {
 		logCopy := *starter.basis.Log
+		mapperEntityCopy := *starter.basis.MapperEntity
 		starter.basis.Log = starter.basis.Log.WithField("attempt", i)
 		success := true
 
 		for _, phase := range starter.basis.Phases {
 			essential, nonEssential := phase(startupTime)
-			if starter.basis.Request.Context().Err() != nil {
-				// stop service starter, return error
-				if starter.basis.CachedTask != nil {
-					StopTask(*starter.basis.CachedTask, taskmap.TaskStartupFailure)
-				}
-				seErr := utils.CreationErr(fmt.Errorf("service start has been canceled"))
-				return nil, seErr
+
+			me, _ := mapper.Find(starter.basis.MapperEntity.RouterUUID)
+			var exitError *utils.SeleniumError
+			if essential != nil {
+				starter.basis.MapperEntity.StopReason = mapper.TaskStartupFailure
+				exitError = essential
+			} else if me != nil && (me.StopReason == mapper.TaskAborted || me.StopReason == mapper.TaskFinished) {
+				starter.basis.MapperEntity.StopReason = me.StopReason
+				exitError = utils.CreationErr(fmt.Errorf(string(me.StopReason)))
+			} else if starter.basis.Request.Context().Err() != nil {
+				starter.basis.MapperEntity.StopReason = mapper.TaskStartupFailure
+				exitError = utils.CreationErr(fmt.Errorf("service start has been canceled"))
 			}
 
-			if essential != nil {
-				// stop service starter, return error
-				if starter.basis.CachedTask != nil {
-					StopTask(*starter.basis.CachedTask, taskmap.TaskStartupFailure)
-				}
-				return nil, essential
+			if exitError != nil {
+				starter.basis.GinCtx.Set(config.RouterUUID, starter.basis.MapperEntity)
+				starter.finalizeOnFailure()
+				return nil, exitError
 			}
 
 			if nonEssential != nil {
 				// flush data, next retry
-				if starter.basis.CachedTask != nil {
-					// check abort status in case of non esential error
-					task, err := taskmap.Find(starter.basis.CachedTask.TaskId, false)
-					if err == nil && (task.StopReason == taskmap.TaskAborted || task.StopReason == taskmap.TaskFinished) {
-						// stop service starter, return error
-						return nil, utils.CreationErr(fmt.Errorf(string(task.StopReason)))
-					}
-					StopTask(*starter.basis.CachedTask, taskmap.TaskStartupFailure)
-				}
+				StopTaskForcibly(starter.basis.MapperEntity.TaskId, mapper.TaskStartupFailure)
 				starter.basis.Log = &logCopy
+				starter.basis.MapperEntity = &mapperEntityCopy
 				starter.basis.Task = nil
-				starter.basis.TaskId = nil
-				starter.basis.CachedTask = nil
-				starter.basis.GinCtx.Set(config.TaskIdKey, "")
-				starter.basis.GinCtx.Set(config.SessionIdKey, "")
 				// flag for retries execution
 				success = false
 				break
@@ -407,6 +360,7 @@ func (starter basicStarter) StartService(startupTime context.Context) (map[strin
 
 		if success {
 			// all phases executed, no errors, finalize service start and return reply
+			starter.basis.GinCtx.Set(config.RouterUUID, starter.basis.MapperEntity)
 			starter.finalize()
 			starter.basis.Log.Info("service started")
 			return starter.basis.Reply, nil
@@ -414,6 +368,19 @@ func (starter basicStarter) StartService(startupTime context.Context) (map[strin
 	}
 
 	return nil, utils.UnknownErr(fmt.Errorf("service startup failed"))
+}
+
+func (starter basicStarter) finalizeOnFailure() {
+	// stop service starter, return error
+	if starter.basis.MapperEntity.TaskId != "" {
+		StopTaskForcibly(starter.basis.MapperEntity.TaskId, starter.basis.MapperEntity.StopReason)
+	}
+
+	starter.basis.MapperEntity.Status = mapper.Stopped
+	err := mapper.WritedByWorker(starter.basis.MapperEntity, []mapper.SetType{mapper.TASK}, nil, 10*time.Minute)
+	if err != nil {
+		starter.basis.Log.WithError(err).Error("Failed to update task's cache!")
+	}
 }
 
 func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l *log.Entry) ServiceStarter {
@@ -426,6 +393,13 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l 
 		Reply:   make(map[string]interface{}, 0),
 	}
 
+	var err error
+	basis.MapperEntity, err = mapper.CreateEntity(env, 15*time.Minute)
+	if err != nil {
+		basis.Log.WithError(err).Error("Failed to create mapper entity")
+	}
+	basis.GinCtx.Set(config.RouterUUID, basis.MapperEntity)
+
 	var starter ServiceStarter
 	if strings.Contains(env.TaskDefinitionFamily, "generic") {
 		basis.appendPhase(basis.registerTaskPhase).appendPhase(basis.startTaskPhase)
@@ -435,24 +409,39 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l 
 			finalizeFunc: func(s *startBasis) {
 				// #1056: Small chance of double shaping on generic task abort
 				for {
-					if ok := utilsmap.AcquireLock(s.CachedTask.TaskId, 0); !ok {
-						time.Sleep(10 * time.Second)
-						continue
+					if ok := utilsmap.AcquireLock(s.MapperEntity.RouterUUID, 0); ok {
+						break
 					}
-
-					cachedTask, err := taskmap.Find(s.CachedTask.TaskId, false)
-					if err == nil && cachedTask.Status != taskmap.TaskStopped {
-						s.CachedTask.Status = taskmap.TaskActive
-						err = taskmap.UpdateTask(*s.CachedTask, 0)
-						if err != nil {
-							s.Log.WithError(err).Error("Failed to recache task on finalize!")
-						}
-					}
-
-					break
+					time.Sleep(10 * time.Second)
 				}
 
-				err := utilsmap.ReleaseLock(s.CachedTask.TaskId)
+				actuallMapperEntity, _ := mapper.Find(s.MapperEntity.RouterUUID)
+				if actuallMapperEntity == nil || actuallMapperEntity.StopReason == "" {
+					s.MapperEntity.Status = mapper.Active
+				} else if actuallMapperEntity.Status == mapper.Stopped {
+					s.MapperEntity.Status = actuallMapperEntity.Status
+					s.MapperEntity.StopReason = actuallMapperEntity.StopReason
+				} else {
+					s.MapperEntity.StopReason = actuallMapperEntity.StopReason
+					s.MapperEntity.Status = mapper.Stopped
+
+					err := StopTaskForcibly(s.MapperEntity.TaskId, actuallMapperEntity.StopReason)
+					if err != nil {
+						s.Log.WithError(err).Error("Failed to stop generic task on finalize!")
+					}
+				}
+
+				err = mapper.Write(s.MapperEntity, 0)
+				if err != nil {
+					s.Log.WithError(err).Error("Failed to recache task on finalize!")
+				}
+
+				err = mapper.AppendToSet(mapper.TASK, s.MapperEntity.RouterUUID)
+				if err != nil {
+					s.Log.WithError(err).Error("Failed to append to task set on finalize!")
+				}
+
+				err = utilsmap.ReleaseLock(s.MapperEntity.RouterUUID)
 				if err != nil {
 					s.Log.WithError(err).Error("Failed to release lock on finalize!")
 				}
@@ -464,13 +453,14 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l 
 		starter = basicStarter{
 			basis: basis,
 			finalizeFunc: func(s *startBasis) {
-				s.CachedTask.Status = taskmap.TaskCypress
-				s.CachedTask.AccessedAt = time.Now()
-				err := taskmap.UpdateTask(*s.CachedTask, 0)
+				accessedAt := time.Now()
+				s.MapperEntity.AccessedAt = &accessedAt
+				s.MapperEntity.Status = mapper.Cypress
+
+				err := mapper.WritedByWorker(s.MapperEntity, []mapper.SetType{mapper.TASK}, nil, 0)
 				if err != nil {
-					basis.Log.WithError(err).Error("Failed to recache task on finalize!")
+					basis.Log.WithError(err).Error("Failed to recache mapper on finalize!")
 				}
-				taskmap.AddToCypressSet(s.CachedTask.TaskId)
 			},
 		}
 	} else {
@@ -478,8 +468,11 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l 
 		starter = basicStarter{
 			basis: basis,
 			finalizeFunc: func(s *startBasis) {
-				//cache all collected data during startup
-				err := taskmap.UpdateTask(*s.CachedTask, 0)
+				accessedAt := time.Now()
+				s.MapperEntity.AccessedAt = &accessedAt
+				s.MapperEntity.Status = mapper.Active
+
+				err := mapper.WritedByWorker(s.MapperEntity, []mapper.SetType{mapper.SESSION, mapper.TASK}, nil, 0)
 				if err != nil {
 					basis.Log.WithError(err).Error("Failed to recache task on finalize!")
 				}

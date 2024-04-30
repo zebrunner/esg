@@ -5,10 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/zebrunner/esg/cachemaps/sessionmap"
+	"github.com/zebrunner/esg/cachemaps/mapper"
 	"github.com/zebrunner/esg/config"
 )
 
@@ -85,26 +84,17 @@ func WaitForSessionStart(ctx context.Context, request *http.Request) *startSessR
 	return &sessReq
 }
 
-func CloseSession(session *sessionmap.Session, stopReason sessionmap.StoppedReason) {
-	l := log.WithFields(log.Fields{config.TaskIdKey: session.TaskId, config.SessionIdKey: session.SessionID, config.RouterUUID: session.RouterUUID})
+func CloseSession(mapperEntity *mapper.Mapper) {
+	l := log.WithFields(log.Fields{config.TaskIdKey: mapperEntity.TaskId, config.SessionIdKey: mapperEntity.SessionID, config.RouterUUID: mapperEntity.RouterUUID})
 	if !config.Conf.SingleTenant {
-		l = l.WithField("workspace", session.Workspace)
-	}
-
-	// Set SessionStopped status and expiration time 10 minutes to be able to return sessionID and stop reason for session
-	session.Status = sessionmap.SessionStopped
-	session.StopReason = stopReason
-
-	err := sessionmap.WriteSession(*session, 10*time.Minute)
-	if err != nil {
-		l.WithError(err).Error("Driver session not marked as stopped!")
+		l = l.WithField("workspace", mapperEntity.Workspace)
 	}
 
 	conf := &config.Conf
 	client := http.Client{}
-	sessionUrl, ok := session.Network.GetUrl("driver")
+	sessionUrl, ok := mapperEntity.Network.GetUrl("driver")
 	if ok {
-		sessionUrl.Path = sessionUrl.Path + fmt.Sprintf("session/%s", session.SessionID)
+		sessionUrl.Path = sessionUrl.Path + fmt.Sprintf("session/%s", mapperEntity.SessionID)
 		timeoutCtx, cancel := context.WithTimeout(context.Background(), conf.SessionDeleteTimeout)
 		defer cancel()
 		req, err := http.NewRequestWithContext(timeoutCtx, http.MethodDelete, sessionUrl.String(), nil)
