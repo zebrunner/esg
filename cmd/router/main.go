@@ -180,7 +180,7 @@ func InitClusterInfo() (*elbv2.TargetGroup, error) {
 	}
 
 	for capacityProvider, scaler := range scalersMap {
-		environment.CapacityProvdirResourcesLimit[capacityProvider] = environment.Resources{Cpu: scaler.InstanceResources.CPU, Memory: scaler.InstanceResources.Memory}
+		environment.AddSmallestInstanceResources(scaler.InstanceResources.CPU, scaler.InstanceResources.Memory, capacityProvider)
 	}
 
 	l := log.WithField("targetGroup", config.Conf.AwsTargetGroup)

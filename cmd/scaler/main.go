@@ -495,7 +495,7 @@ func main() {
 	service.StartScalers(scalersMap)
 
 	for capacityProvider, scaler := range scalersMap {
-		environment.CapacityProvdirResourcesLimit[capacityProvider] = environment.Resources{Cpu: scaler.InstanceResources.CPU, Memory: scaler.InstanceResources.Memory}
+		environment.AddSmallestInstanceResources(scaler.InstanceResources.CPU, scaler.InstanceResources.Memory, capacityProvider)
 	}
 
 	go refreshIMDSV2Token()

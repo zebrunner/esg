@@ -124,7 +124,15 @@ func buildWindowsBrowser(workspace string, routerUUID string, caps *capabilities
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
 	}
 
-	err = browserContainer.CalculateResource(Resources{Cpu: 1024, Memory: 1024}, environment.CapacityProvider, caps, environment.Containers)
+	err = calculateResources(&environment,
+		&resourceCalculatorHelper{
+			MinimumRes: Resources{Cpu: 1024, Memory: 1024},
+			Container:  &browserContainer,
+			Memory:     &caps.Memory,
+			Cpu:        &caps.Cpu,
+		},
+	)
+
 	if err != nil {
 		return nil, err
 	}

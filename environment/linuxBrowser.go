@@ -213,32 +213,25 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 		environment.Network.Endpoints["healthcheck"].Path = "/wd/hub/"
 	}
 
-	browseMinRes := Resources{Cpu: 1024, Memory: 1024}
+	calcArr := make([]*resourceCalculatorHelper, 0)
+	calcArr = append(calcArr, &resourceCalculatorHelper{
+		MinimumRes: Resources{Cpu: 1024, Memory: 1024},
+		Container:  &browserContainer,
+		Memory:     &caps.Memory,
+		Cpu:        &caps.Cpu,
+	})
+
 	if caps.Mitm {
 		environment.Network.Endpoints["proxyHandlerPort"] = &Endpoint{ContainerPort: proxyHandlerPort, HostPort: 0, Path: "/"}
-		// set resources for both mitm and browser containers
-		mitmMinRes := Resources{Cpu: 512, Memory: 512}
-
-		calculateResourcesForSeveralContainers(&environment,
-			resourceCalculatorHelper{
-				MinimumRes: browseMinRes,
-				Container:  &browserContainer,
-				Memory:     &caps.Memory,
-				Cpu:        &caps.Cpu,
-			},
-			resourceCalculatorHelper{
-				MinimumRes: mitmMinRes,
-				Container:  &mitmContainer,
-				Memory:     &caps.MitmMemory,
-				Cpu:        &caps.MitmCpu,
-			},
-		)
-
-		err = mitmContainer.CalculateResource(mitmMinRes, environment.CapacityProvider, caps, environment.Containers)
-	} else {
-		err = browserContainer.CalculateResource(Resources{Cpu: 1024, Memory: 1024}, environment.CapacityProvider, caps, environment.Containers)
+		calcArr = append(calcArr, &resourceCalculatorHelper{
+			MinimumRes: Resources{Cpu: 512, Memory: 512},
+			Container:  &mitmContainer,
+			Memory:     &caps.MitmMemory,
+			Cpu:        &caps.MitmCpu,
+		})
 	}
 
+	err = calculateResources(&environment, calcArr...)
 	if err != nil {
 		return nil, err
 	}

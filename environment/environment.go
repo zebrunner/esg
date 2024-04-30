@@ -54,12 +54,6 @@ const (
 	genericPort int64 = 22
 	minCpu      int64 = 128
 	minMemory   int64 = 256
-
-	memoryDeviation int64 = 600
-)
-
-var (
-	CapacityProvdirResourcesLimit = make(map[string]Resources)
 )
 
 type NetworkConfiguration struct {

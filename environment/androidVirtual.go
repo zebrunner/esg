@@ -114,7 +114,14 @@ func buildAppiumRedroid(workspace string, routerUUID string, caps *capabilities.
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
 	}
 
-	err = deviceContainer.CalculateResource(Resources{Cpu: 2048, Memory: 2048}, environment.CapacityProvider, caps, environment.Containers)
+	err = calculateResources(&environment,
+		&resourceCalculatorHelper{
+			MinimumRes: Resources{Cpu: 2048, Memory: 2048},
+			Container:  &deviceContainer,
+			Memory:     &caps.Memory,
+			Cpu:        &caps.Cpu,
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
