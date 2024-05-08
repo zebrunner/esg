@@ -238,6 +238,7 @@ func TrackResourceUsage(tasks []*ecs.Task, cachedTasksMap map[string]mapper.Mapp
 		cachedTask.UsageTracked = true
 		tasksCacheToUpdate = append(tasksCacheToUpdate, cachedTask)
 
+		l = l.WithField(config.RouterUUID, cachedTask.RouterUUID)
 		if !config.Conf.SingleTenant {
 			l = l.WithField("workspace", cachedTask.Workspace)
 		}
