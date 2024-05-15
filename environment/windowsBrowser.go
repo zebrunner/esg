@@ -58,6 +58,9 @@ func buildWindowsBrowser(workspace string, routerUUID string, caps *capabilities
 		},
 		Privileged: false,
 		Essential:  false,
+		Ports: map[string]portMapping{
+			"recorder": {recorderdPort, 0},
+		},
 		Env: map[string]string{
 			"ROUTER_UUID": routerUUID,
 			"LOG_DIR":     logDir,
@@ -65,7 +68,14 @@ func buildWindowsBrowser(workspace string, routerUUID string, caps *capabilities
 			"LOG_FILE":    "session.log",
 		},
 		Mounts:      []string{logVolume},
-		HealthCheck: nil,
+		// TODO: impl healtchek by powershell
+		HealthCheck: &ecs.HealthCheck{
+			Command:     []*string{aws.String("CMD-SHELL"), aws.String(fmt.Sprintf("curl -f localhost:%v || exit 1", recorderdPort))},
+			Interval:    aws.Int64(5),
+			Retries:     aws.Int64(4),
+			Timeout:     aws.Int64(5),
+			StartPeriod: aws.Int64(0),
+		},
 		DependsOn: []*ecs.ContainerDependency{
 			{
 				Condition:     aws.String("START"),
@@ -116,6 +126,8 @@ func buildWindowsBrowser(workspace string, routerUUID string, caps *capabilities
 			Endpoints: map[string]*Endpoint{
 				"driver":      {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
 				"healthcheck": {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
+				"recorderStart": {ContainerPort: recorderdPort, HostPort: 0, Path: "/start"},
+				"recorderStop":  {ContainerPort: recorderdPort, HostPort: 0, Path: "/stop"},
 			},
 		},
 		Workspace:        workspace,

@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/utils"
 )
 
 var instanceWorker *instanceWatchWorker
@@ -125,10 +126,7 @@ func (w *instanceWatchWorker) start() {
 						log.WithField("taskArn", taskArn).WithError(err).Trace("instanceWatchWorker: error sent back to request")
 
 						req := w.requests[taskArn]
-						select {
-						case req.NonEssentialErrCh <- err:
-						default:
-						}
+						utils.SendToChanIfNotBlocked(req.NonEssentialErrCh, err)
 						delete(w.requests, taskArn)
 					}
 				}
@@ -154,10 +152,7 @@ func (w *instanceWatchWorker) start() {
 				for _, taskArn := range taskArns {
 					log.WithField("taskArn", taskArn).WithError(err).Trace("instanceWatchWorker: described instance is sent back to request")
 					req := w.requests[taskArn]
-					select {
-					case req.ResponseCh <- ec2Instance:
-					default:
-					}
+					utils.SendToChanIfNotBlocked(req.ResponseCh, ec2Instance)
 					delete(w.requests, taskArn)
 				}
 			}

@@ -103,7 +103,7 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 	launchCommand := caps.LaunchCommand
 
 	//basic auth header for executor-logs service
-	basicAuthHeader := "Authorization: Basic " + b64.StdEncoding.EncodeToString([]byte(conf.ZebrunnerIntegrationUser+":"+conf.ZebrunnerIntegrationPassword))
+	basicAuthHeader := "Basic " + b64.StdEncoding.EncodeToString([]byte(conf.ZebrunnerIntegrationUser+":"+conf.ZebrunnerIntegrationPassword))
 
 	mounts := []string{entrypointVolume, taskVolume, logVolume}
 	if includeMaven {
@@ -168,6 +168,9 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 		},
 		Privileged: false,
 		Essential:  false,
+		Ports: map[string]portMapping{
+			"recorder": {recorderdPort, 0},
+		},
 		Env: map[string]string{
 			"ROUTER_UUID":          routerUUID,
 			"ENABLE_VIDEO":         "false",
@@ -175,10 +178,14 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 			"BASIC_AUTH":           basicAuthHeader,
 			"LOG_FILE":             "console.log",
 		},
-		Mounts:      []string{logVolume},
-		Command:     []string{"-c", "/entrypoint.sh"}, // + taskLogRedirect}, //TODO: restore redirect
-		EntryPoint:  []string{"/bin/sh"},
-		HealthCheck: nil,
+		Mounts: []string{logVolume},
+		HealthCheck: &ecs.HealthCheck{
+			Command:     []*string{aws.String("CMD-SHELL"), aws.String(fmt.Sprintf("curl -f localhost:%v || exit 1", recorderdPort))},
+			Interval:    aws.Int64(5),
+			Retries:     aws.Int64(4),
+			Timeout:     aws.Int64(5),
+			StartPeriod: aws.Int64(0),
+		},
 	}
 	if caps.EnvVariables != nil {
 		for v, k := range caps.EnvVariables {
@@ -226,7 +233,9 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 		Network: &NetworkConfiguration{
 			IP: "",
 			Endpoints: map[string]*Endpoint{
-				"driver": {ContainerPort: genericPort, HostPort: 0, Path: "/"},
+				"driver":        {ContainerPort: genericPort, HostPort: 0, Path: "/"},
+				"recorderStart": {ContainerPort: recorderdPort, HostPort: 0, Path: "/start"},
+				"recorderStop":  {ContainerPort: recorderdPort, HostPort: 0, Path: "/stop"},
 			},
 		},
 		Workspace:        workspace,

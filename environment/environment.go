@@ -30,7 +30,7 @@ const (
 	imageRepo            = "public.ecr.aws/zebrunner/"
 	uploaderImage        = imageRepo + "uploader:3.5"
 	mitmImage            = imageRepo + "mitmproxy:2.1"
-	recorderImage        = imageRepo + "recorder:1.5"
+	recorderImage        = imageRepo + "recorder:2.0-beta2"
 	cypressRecorderImage = imageRepo + "cypress-recorder:1.3"
 	appiumImage          = imageRepo + "appium:2.0.15"
 	cloneImage           = imageRepo + "git:2.36.2"
@@ -47,6 +47,7 @@ const (
 	fileserverPort   int64 = 8080
 	clipboardPort    int64 = 9090
 	proxyHandlerPort int64 = 8060
+	recorderdPort    int64 = 9080
 
 	recorderCpu    int64 = 320
 	recorderMemory int64 = 1024

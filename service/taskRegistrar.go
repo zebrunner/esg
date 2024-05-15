@@ -13,6 +13,7 @@ import (
 	"github.com/zebrunner/esg/cachemaps/resourcesToAllocate"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
+	"github.com/zebrunner/esg/utils"
 )
 
 type registerWaitRequest struct {
@@ -26,11 +27,8 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 
 	family, err := env.GetFamilyRevision()
 	if err != nil {
+		utils.SendToChanIfNotBlocked(waitRequest.EssentialErrCh , fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily))
 		log.WithError(err).Error("image not found")
-		select {
-		case waitRequest.EssentialErrCh <- fmt.Errorf("image not found: '%s'", env.TaskDefinitionFamily):
-		default:
-		}
 
 		return
 	}
@@ -94,10 +92,7 @@ out:
 
 		if outputErr == nil {
 			// All is ok. We got task then we can return it.
-			select {
-			case waitRequest.ResponseCh <- *resultRunTask.Tasks[0].TaskArn:
-			default:
-			}
+			utils.SendToChanIfNotBlocked(waitRequest.ResponseCh, *resultRunTask.Tasks[0].TaskArn)
 
 			if resourceAllocationEntity != nil {
 				go func(rta *resourcesToAllocate.ResourcesToAllocate) {
@@ -123,10 +118,7 @@ out:
 		time.Sleep(sleepRateLimit)
 	}
 
-	select {
-	case waitRequest.EssentialErrCh <- essentialError:
-	default:
-	}
+	utils.SendToChanIfNotBlocked(waitRequest.EssentialErrCh, essentialError)
 
 	if resourceAllocationEntity != nil {
 		go func(rta *resourcesToAllocate.ResourcesToAllocate) {

@@ -104,31 +104,19 @@ func (w *waitWorker) start() {
 				if strings.Contains(*task.TaskDefinitionArn, "generic") {
 					if ok, container := utils.IsTaskFinishedSuccessfully(task); ok {
 						l.Info("task already finished")
-						select {
-						case req.ResponseCh <- task:
-						default:
-						}
+						utils.SendToChanIfNotBlocked(req.ResponseCh, task)
 					} else {
 						l.Error("Generic task stopped: ", *task)
 
 						if container.Reason != nil && strings.Contains(*container.Reason, "CannotPullContainerError") {
-							select {
-							case req.EssentialErrCh <- fmt.Errorf(utils.GetContainerExitReason(container)):
-							default:
-							}
+							utils.SendToChanIfNotBlocked(req.EssentialErrCh, fmt.Errorf(utils.GetContainerExitReason(container)))
 						} else {
-							select {
-							case req.NonEssentialErrCh <- fmt.Errorf(utils.GetContainerExitReason(container)):
-							default:
-							}
+							utils.SendToChanIfNotBlocked(req.NonEssentialErrCh, fmt.Errorf(utils.GetContainerExitReason(container)))
 						}
 					}
 				} else {
 					l.Error("Task stopped: ", *task)
-					select {
-					case req.NonEssentialErrCh <- fmt.Errorf("task stopped with reason: %s", *task.StoppedReason):
-					default:
-					}
+					utils.SendToChanIfNotBlocked(req.NonEssentialErrCh, fmt.Errorf("task stopped with reason: %s", *task.StoppedReason))
 				}
 
 				delete(w.requests, taskId)
@@ -156,23 +144,14 @@ func (w *waitWorker) start() {
 				}
 
 				if essential != nil {
-					select {
-					case req.EssentialErrCh <- essential:
-					default:
-					}
+					utils.SendToChanIfNotBlocked(req.EssentialErrCh, essential)
 				} else {
-					select {
-					case req.NonEssentialErrCh <- fmt.Errorf("task unhealthy"):
-					default:
-					}
+					utils.SendToChanIfNotBlocked(req.NonEssentialErrCh, fmt.Errorf("task unhealthy"))
 				}
 
 				delete(w.requests, taskId)
 			case "HEALTHY":
-				select {
-				case req.ResponseCh <- task:
-				default:
-				}
+				utils.SendToChanIfNotBlocked(req.ResponseCh, task)
 
 				delete(w.requests, taskId)
 			}

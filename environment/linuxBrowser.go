@@ -75,7 +75,7 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 		Command:    []string{"-c", "/entrypoint.sh" + taskLogRedirect},
 		EntryPoint: []string{"/bin/sh"},
 		HealthCheck: &ecs.HealthCheck{
-			Command:     []*string{aws.String("CMD-SHELL"), aws.String("curl -f localhost:4444/status || exit 1")},
+			Command:     []*string{aws.String("CMD-SHELL"), aws.String(fmt.Sprintf("curl -f localhost:%v/status || exit 1", seleniumPort))},
 			Interval:    aws.Int64(5),
 			Retries:     aws.Int64(4),
 			Timeout:     aws.Int64(5),
@@ -92,6 +92,9 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 		},
 		Privileged: false,
 		Essential:  false,
+		Ports: map[string]portMapping{
+			"recorder": {recorderdPort, 0},
+		},
 		Env: map[string]string{
 			"ROUTER_UUID":          routerUUID,
 			"LOG_DIR":              logDir,
@@ -102,11 +105,15 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 			"BASIC_AUTH":           "",
 			// "CODEC":                caps.VideoCodec.ToPrimitive(), // temporary disabled
 		},
-		Mounts:      []string{logVolume},
-		Links:       []string{"browser"},
-		Command:     []string{"-c", "/entrypoint.sh" + ">>" + logDir + "/video.log 2>&1"},
-		EntryPoint:  []string{"/bin/sh"},
-		HealthCheck: nil,
+		Mounts: []string{logVolume},
+		Links:  []string{"browser"},
+		HealthCheck: &ecs.HealthCheck{
+			Command:     []*string{aws.String("CMD-SHELL"), aws.String(fmt.Sprintf("curl -f localhost:%v || exit 1", recorderdPort))},
+			Interval:    aws.Int64(5),
+			Retries:     aws.Int64(4),
+			Timeout:     aws.Int64(5),
+			StartPeriod: aws.Int64(0),
+		},
 	}
 
 	if caps.EnableVideo.ToPrimitive() {
@@ -194,12 +201,14 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 		Network: &NetworkConfiguration{
 			IP: "",
 			Endpoints: map[string]*Endpoint{
-				"driver":      {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
-				"vnc":         {ContainerPort: vncPort, HostPort: 0, Path: "/"},
-				"clipboard":   {ContainerPort: clipboardPort, HostPort: 0, Path: "/"},
-				"devtools":    {ContainerPort: devtoolsPort, HostPort: 0, Path: "/"},
-				"fileserver":  {ContainerPort: fileserverPort, HostPort: 0, Path: "/"},
-				"healthcheck": {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
+				"driver":        {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
+				"vnc":           {ContainerPort: vncPort, HostPort: 0, Path: "/"},
+				"clipboard":     {ContainerPort: clipboardPort, HostPort: 0, Path: "/"},
+				"devtools":      {ContainerPort: devtoolsPort, HostPort: 0, Path: "/"},
+				"fileserver":    {ContainerPort: fileserverPort, HostPort: 0, Path: "/"},
+				"healthcheck":   {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
+				"recorderStart": {ContainerPort: recorderdPort, HostPort: 0, Path: "/start"},
+				"recorderStop":  {ContainerPort: recorderdPort, HostPort: 0, Path: "/stop"},
 			},
 		},
 		Workspace:        workspace,

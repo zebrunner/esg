@@ -47,10 +47,7 @@ func ManageTasksAndSession(iterationCh chan<- interface{}) {
 		LaunchTasksProcessors(svc, &wg)
 
 		wg.Wait()
-		select {
-		case iterationCh <- "done":
-		default:
-		}
+		utils.SendToChanIfNotBlocked(iterationCh, "done")
 	}
 }
 
