@@ -180,11 +180,11 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 		},
 		Mounts: []string{logVolume},
 		HealthCheck: &ecs.HealthCheck{
-			Command:     []*string{aws.String("CMD-SHELL"), aws.String(fmt.Sprintf("curl -f localhost:%v || exit 1", recorderdPort))},
+			Command:     []*string{aws.String("CMD-SHELL"), aws.String("pgrep recorder")},
 			Interval:    aws.Int64(5),
 			Retries:     aws.Int64(4),
 			Timeout:     aws.Int64(5),
-			StartPeriod: aws.Int64(0),
+			StartPeriod: aws.Int64(2),
 		},
 	}
 	if caps.EnvVariables != nil {
