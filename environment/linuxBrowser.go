@@ -83,6 +83,11 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 		},
 	}
 
+	recorderLogLvl := "debug"
+	if config.Conf.LogLevel == "info" {
+		recorderLogLvl = "info"
+	}
+
 	recorderContainer := Container{
 		Name:  "recorder",
 		Image: recorderImage,
@@ -99,6 +104,7 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 			"ROUTER_UUID":          routerUUID,
 			"LOG_DIR":              logDir,
 			"TASK_LOG":             logDir + "/task.log",
+			"LOG_LEVEL":            recorderLogLvl,
 			"LOG_FILE":             "session.log",
 			"ENABLE_VIDEO":         strconv.FormatBool(caps.EnableVideo.ToPrimitive()),
 			"ENABLE_REALTIME_LOGS": "false",

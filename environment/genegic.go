@@ -159,6 +159,11 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 	executorContainer.Env["UUID"] = routerUUID
 	executorContainer.Env["E3S_DNS"] = config.Conf.AwsEsgDns
 
+	recorderLogLvl := "debug"
+	if config.Conf.LogLevel == "info" {
+		recorderLogLvl = "info"
+	}
+
 	recorderContainer := Container{
 		Name:  "recorder",
 		Image: recorderImage,
@@ -175,6 +180,7 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 			"ROUTER_UUID":          routerUUID,
 			"ENABLE_VIDEO":         "false",
 			"ENABLE_REALTIME_LOGS": "true",
+			"LOG_LEVEL":            recorderLogLvl,
 			"BASIC_AUTH":           basicAuthHeader,
 			"LOG_FILE":             "console.log",
 		},

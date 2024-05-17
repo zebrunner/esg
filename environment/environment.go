@@ -286,7 +286,6 @@ func (e *ExecutionEnvironment) HashRegisterDefinition() string {
 			Mounts:           container.Mounts,
 			Links:            container.Links,
 			Command:          container.Command,
-			Env:              container.Env,
 			EntryPoint:       container.EntryPoint,
 			WorkingDirectory: container.WorkingDirectory,
 			HealthCheck:      healthCheck,
