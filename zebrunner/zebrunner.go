@@ -22,6 +22,7 @@ import (
 const (
 	USAGE_API_PATH     = "/api/engine-utilization/v1/engine-usages"
 	ABORT_API_PATH     = "/api/reporting/v1/launches/uuid"
+	// TODO: delete as only all on-prem tenants will be upgraded
 	OLD_ABORT_API_PATH = "/api/reporting/api/project-test-runs/abort"
 )
 
