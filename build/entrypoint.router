@@ -110,6 +110,9 @@ fi
 if [ ! -z ${AWS_TARGET_GROUP} ]; then
   CMD_ARGS="${CMD_ARGS} -aws-target-group ${AWS_TARGET_GROUP}"
 fi
+if [ ! -z ${OLD_ABORT_API} ]; then
+  CMD_ARGS="${CMD_ARGS} -old-abort-api=${OLD_ABORT_API}"
+fi
 
 echo "CMD_ARGS: $CMD_ARGS"
 

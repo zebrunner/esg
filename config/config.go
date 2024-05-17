@@ -74,6 +74,8 @@ type Config struct {
 	ProductionEnv bool
 	SingleTenant  bool
 	ExternalPort  int64
+
+	OldAbortApi bool
 }
 
 func init() {
@@ -117,6 +119,8 @@ func init() {
 	flag.BoolVar(&Conf.SingleTenant, "single-tenant", false, "Single tenant mode")
 	flag.BoolVar(&Conf.ProductionEnv, "production-env", true, "Service configuration mode")
 	flag.Int64Var(&Conf.ExternalPort, "external-port", 0, "Router's external listening port")
+
+	flag.BoolVar(&Conf.OldAbortApi, "old-abort-api", false, "Usage of reporting's old api abort path")
 }
 
 func (c *Config) ParseLogLevel() logrus.Level {

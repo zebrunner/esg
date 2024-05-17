@@ -372,14 +372,23 @@ func (starter basicStarter) StartService(startupTime context.Context) (map[strin
 
 func (starter basicStarter) finalizeOnFailure() {
 	// stop service starter, return error
-	if starter.basis.MapperEntity.TaskId != "" {
-		StopTaskForcibly(starter.basis.MapperEntity.TaskId, starter.basis.MapperEntity.StopReason)
-	}
-
 	starter.basis.MapperEntity.Status = mapper.Stopped
-	err := mapper.WritedByWorker(starter.basis.MapperEntity, []mapper.SetType{mapper.TASK}, nil, 10*time.Minute)
-	if err != nil {
-		starter.basis.Log.WithError(err).Error("Failed to update task's cache!")
+	if starter.basis.MapperEntity.TaskId == "" {
+		err := mapper.WritedByWorker(starter.basis.MapperEntity, nil, nil, 5*time.Minute)
+		if err != nil {
+			starter.basis.Log.WithError(err).Error("Failed to update task's cache!")
+		}
+
+	} else {
+		err := StopTaskForcibly(starter.basis.MapperEntity.TaskId, starter.basis.MapperEntity.StopReason)
+		if err != nil {
+			starter.basis.Log.WithError(err).Error("Failed to stop task on failure")
+		}
+
+		err = mapper.WritedByWorker(starter.basis.MapperEntity, []mapper.SetType{mapper.TASK}, nil, 0)
+		if err != nil {
+			starter.basis.Log.WithError(err).Error("Failed to update task's cache!")
+		}
 	}
 }
 
@@ -431,14 +440,9 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l 
 					}
 				}
 
-				err = mapper.Write(s.MapperEntity, 0)
+				err := mapper.WritedByWorker(s.MapperEntity, []mapper.SetType{mapper.TASK}, nil, 0)
 				if err != nil {
-					s.Log.WithError(err).Error("Failed to recache task on finalize!")
-				}
-
-				err = mapper.AppendToSet(mapper.TASK, s.MapperEntity.RouterUUID)
-				if err != nil {
-					s.Log.WithError(err).Error("Failed to append to task set on finalize!")
+					basis.Log.WithError(err).Error("Failed to recache task on finalize!")
 				}
 
 				err = utilsmap.ReleaseLock(s.MapperEntity.RouterUUID)
