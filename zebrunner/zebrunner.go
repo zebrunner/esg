@@ -21,7 +21,7 @@ import (
 
 const (
 	USAGE_API_PATH     = "/api/engine-utilization/v1/engine-usages"
-	ABORT_API_PATH     = "/api/reporting/v1/launches/uuid:"
+	ABORT_API_PATH     = "/api/reporting/v1/launches/uuid"
 	OLD_ABORT_API_PATH = "/api/reporting/api/project-test-runs/abort"
 )
 
@@ -175,7 +175,7 @@ func AbortLaunch(routerUUID, workspace, launchUUID, reason string) {
 	if config.Conf.OldAbortApi {
 		abortPath = fmt.Sprintf("%s%s?ciRunId=%s", conf.ZebrunnerHost, OLD_ABORT_API_PATH, launchUUID)
 	} else {
-		abortPath = fmt.Sprintf("%s%s%s:abort", conf.ZebrunnerHost, ABORT_API_PATH, launchUUID)
+		abortPath = fmt.Sprintf("%s%s:%s:abort", conf.ZebrunnerHost, ABORT_API_PATH, launchUUID)
 	}
 
 	requestUrl, err := url.ParseRequestURI(abortPath)
@@ -220,6 +220,6 @@ func AbortLaunch(routerUUID, workspace, launchUUID, reason string) {
 			"response": data,
 		}).Error("Failed to abort launch!")
 	} else {
-		l.Debug("launch aborted")
+		l.WithField("abortPath", abortPath).Debug("launch aborted")
 	}
 }
