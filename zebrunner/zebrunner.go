@@ -220,6 +220,6 @@ func AbortLaunch(routerUUID, workspace, launchUUID, reason string) {
 			"response": data,
 		}).Error("Failed to abort launch!")
 	} else {
-		l.WithField("abortPath", abortPath).Debug("launch aborted")
+		l.Debug("launch aborted")
 	}
 }
