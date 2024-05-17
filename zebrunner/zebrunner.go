@@ -20,8 +20,10 @@ import (
 )
 
 const (
-	USAGE_API_PATH = "/api/engine-utilization/v1/engine-usages"
-	ABORT_API_PATH = "/api/reporting/v1/launches/uuid:"
+	USAGE_API_PATH     = "/api/engine-utilization/v1/engine-usages"
+	ABORT_API_PATH     = "/api/reporting/v1/launches/uuid"
+	// TODO: delete as only all on-prem tenants will be upgraded
+	OLD_ABORT_API_PATH = "/api/reporting/api/project-test-runs/abort"
 )
 
 func TrackResourcesUsage(cachedTask *mapper.Mapper, task *ecs.Task) {
@@ -170,8 +172,14 @@ func AbortLaunch(routerUUID, workspace, launchUUID, reason string) {
 
 	l := log.WithFields(log.Fields{config.RouterUUID: routerUUID, "comment": reason})
 
-	requestUrl, err := url.ParseRequestURI(
-		fmt.Sprintf("%s%s%s:abort", conf.ZebrunnerHost, ABORT_API_PATH, launchUUID))
+	abortPath := ""
+	if config.Conf.OldAbortApi {
+		abortPath = fmt.Sprintf("%s%s?ciRunId=%s", conf.ZebrunnerHost, OLD_ABORT_API_PATH, launchUUID)
+	} else {
+		abortPath = fmt.Sprintf("%s%s:%s:abort", conf.ZebrunnerHost, ABORT_API_PATH, launchUUID)
+	}
+
+	requestUrl, err := url.ParseRequestURI(abortPath)
 	if err != nil {
 		l.WithError(err).Error("Failed to parse zebrunner base url")
 		return
@@ -206,7 +214,7 @@ func AbortLaunch(routerUUID, workspace, launchUUID, reason string) {
 		return
 	}
 
-	if resp.StatusCode != http.StatusAccepted && resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusAccepted && resp.StatusCode != http.StatusOK {
 		data := map[string]interface{}{}
 		l.WithFields(log.Fields{
 			"status":   resp.Status,
