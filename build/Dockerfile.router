@@ -66,6 +66,8 @@ ENV PRODUCTION_ENV=
 
 ENV EXTERNAL_PORT=
 
+ENV OLD_ABORT_API=
+
 RUN apk add -U tzdata
 
 COPY --from=0 /esg/version /version
