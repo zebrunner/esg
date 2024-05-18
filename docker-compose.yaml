@@ -3,7 +3,7 @@ name: backend
 services:
   scaler:
     container_name: scaler
-    image: public.ecr.aws/zebrunner/scaler:3.0
+    image: public.ecr.aws/zebrunner/scaler:2.9.2
     env_file:
       - scaler.env
       - data.env
@@ -14,7 +14,7 @@ services:
 #      - "${HOME}/.aws:/root/.aws"
   router_1:
     container_name: router_1
-    image: public.ecr.aws/zebrunner/router:3.0
+    image: public.ecr.aws/zebrunner/router:2.9.2
     environment:
       - EXTERNAL_PORT=$ROUTER_PORT_1
     env_file:
@@ -32,7 +32,7 @@ services:
     #      - "${HOME}/.aws:/root/.aws"
   router_2:
     container_name: router_2
-    image: public.ecr.aws/zebrunner/router:3.0
+    image: public.ecr.aws/zebrunner/router:2.9.2
     environment:
       - EXTERNAL_PORT=$ROUTER_PORT_2
     env_file:
