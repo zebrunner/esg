@@ -83,17 +83,12 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 		},
 	}
 
-	recorderLogLvl := "debug"
-	if config.Conf.LogLevel == "info" {
-		recorderLogLvl = "info"
-	}
-
 	recorderContainer := Container{
 		Name:  "recorder",
 		Image: recorderImage,
 		Res: Resources{
-			Cpu:    recorderCpu,
-			Memory: recorderMemory,
+			Cpu:    160, // was 320
+			Memory: 512, // was 1024
 		},
 		Privileged: false,
 		Essential:  false,
@@ -104,7 +99,7 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 			"ROUTER_UUID":          routerUUID,
 			"LOG_DIR":              logDir,
 			"TASK_LOG":             logDir + "/task.log",
-			"LOG_LEVEL":            recorderLogLvl,
+			"LOG_LEVEL":            config.Conf.RecorderLogLvl,
 			"LOG_FILE":             "session.log",
 			"ENABLE_VIDEO":         strconv.FormatBool(caps.EnableVideo.ToPrimitive()),
 			"ENABLE_REALTIME_LOGS": "false",
@@ -114,6 +109,7 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 		Mounts: []string{logVolume},
 		Links:  []string{"browser"},
 		HealthCheck: &ecs.HealthCheck{
+			// check if recorder's binary process is running, no curl is downloaded inside of container
 			Command:     []*string{aws.String("CMD-SHELL"), aws.String("pgrep recorder")},
 			Interval:    aws.Int64(5),
 			Retries:     aws.Int64(4),

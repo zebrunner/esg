@@ -77,17 +77,6 @@ func startSession(ctx context.Context, env *environment.ExecutionEnvironment, se
 		return
 	}
 
-	url, ok := env.Network.GetUrl("recorderStart")
-	if !ok {
-		utils.SendToChanIfNotBlocked(sessReq.NonEssentialErrCh, fmt.Errorf("failed to get url of recorder"))
-		return
-	}
-	
-	err = SendToRecorder(url)
-	if err != nil {
-		utils.SendToChanIfNotBlocked(sessReq.NonEssentialErrCh, fmt.Errorf("failed to start recorder"))
-	}
-
 	utils.SendToChanIfNotBlocked(sessReq.ResponseCh, reply)
 }
 
@@ -110,7 +99,14 @@ func CloseSession(mapperEntity *mapper.Mapper) {
 	}
 
 	conf := &config.Conf
-	client := http.Client{}
+
+	go func() {
+		err := stopRecording(&mapperEntity.Network)
+		if err != nil {
+			log.WithError(err).Error("Failed to start recording")
+		}
+	}()
+
 	sessionUrl, ok := mapperEntity.Network.GetUrl("driver")
 	if ok {
 		sessionUrl.Path = sessionUrl.Path + fmt.Sprintf("session/%s", mapperEntity.SessionID)
@@ -124,7 +120,7 @@ func CloseSession(mapperEntity *mapper.Mapper) {
 		req.Host = "localhost"
 
 		l.WithFields(log.Fields{"method": req.Method, "url": req.URL}).Debug("closing driver")
-		resp, err := client.Do(req)
+		resp, err := httpClient.Do(req)
 		if err != nil {
 			l.WithError(err).Error("Failed to close driver")
 			return
@@ -139,15 +135,4 @@ func CloseSession(mapperEntity *mapper.Mapper) {
 	}
 
 	l.Debug("driver closed")
-
-	url, ok := mapperEntity.Network.GetUrl("recorderStop")
-	if !ok {
-		l.Error("Recorder stop url not found")
-		return
-	}
-
-	err := SendToRecorder(url)
-	if err != nil {
-		l.WithError(err).Error("Failed to stop recorder")
-	}
 }

@@ -58,8 +58,8 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 		Name:  "clone",
 		Image: cloneImage,
 		Res: Resources{
-			Cpu:    minCpu,
-			Memory: 512, //increased memory to fix OOM for huge repositories (3K+ branches)
+			Cpu:    cloneContainerMinCpu,
+			Memory: cloneContainerMinMemory,
 		},
 		Privileged: false,
 		Essential:  false,
@@ -159,17 +159,12 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 	executorContainer.Env["UUID"] = routerUUID
 	executorContainer.Env["E3S_DNS"] = config.Conf.AwsEsgDns
 
-	recorderLogLvl := "debug"
-	if config.Conf.LogLevel == "info" {
-		recorderLogLvl = "info"
-	}
-
 	recorderContainer := Container{
 		Name:  "recorder",
 		Image: recorderImage,
 		Res: Resources{
-			Cpu:    32,
-			Memory: 256, // with 128 failed for cyserver "OutOfMemoryError: Container killed due to memory usage"
+			Cpu:    16, // was 32
+			Memory: 64, // was 256 // with 128 failed for cyserver "OutOfMemoryError: Container killed due to memory usage"
 		},
 		Privileged: false,
 		Essential:  false,
@@ -180,12 +175,13 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 			"ROUTER_UUID":          routerUUID,
 			"ENABLE_VIDEO":         "false",
 			"ENABLE_REALTIME_LOGS": "true",
-			"LOG_LEVEL":            recorderLogLvl,
+			"LOG_LEVEL":            config.Conf.RecorderLogLvl,
 			"BASIC_AUTH":           basicAuthHeader,
 			"LOG_FILE":             "console.log",
 		},
 		Mounts: []string{logVolume},
 		HealthCheck: &ecs.HealthCheck{
+			// check if recorder's binary process is running, no curl is downloaded inside of container
 			Command:     []*string{aws.String("CMD-SHELL"), aws.String("pgrep recorder")},
 			Interval:    aws.Int64(5),
 			Retries:     aws.Int64(4),

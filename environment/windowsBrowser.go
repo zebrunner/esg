@@ -49,11 +49,6 @@ func buildWindowsBrowser(workspace string, routerUUID string, caps *capabilities
 		},
 	}
 
-	recorderLogLvl := "debug"
-	if config.Conf.LogLevel == "info" {
-		recorderLogLvl = "info"
-	}
-
 	recorderContainer := Container{
 		Name:  "recorder",
 		Image: winRecorderImage,
@@ -70,7 +65,7 @@ func buildWindowsBrowser(workspace string, routerUUID string, caps *capabilities
 			"ROUTER_UUID": routerUUID,
 			"LOG_DIR":     logDir,
 			"TASK_LOG":    logDir + "/" + "task.log",
-			"LOG_LEVEL":   recorderLogLvl,
+			"LOG_LEVEL":   config.Conf.RecorderLogLvl,
 			"LOG_FILE":    "session.log",
 		},
 		Mounts: []string{logVolume},

@@ -30,17 +30,18 @@ const (
 	imageRepo            = "public.ecr.aws/zebrunner/"
 	uploaderImage        = imageRepo + "uploader:3.5"
 	mitmImage            = imageRepo + "mitmproxy:2.1"
-	recorderImage        = imageRepo + "recorder:2.0"
+	recorderImage        = imageRepo + "recorder:2.0-beta2"
 	cypressRecorderImage = imageRepo + "cypress-recorder:1.3"
 	appiumImage          = imageRepo + "appium:2.0.15"
 	cloneImage           = imageRepo + "git:2.36.2"
 	entrypointImage      = imageRepo + "entrypoint:2.5.1"
 	mavenImage           = imageRepo + "m2-repo-carina:1.5"
 	winUploaderImage     = imageRepo + "uploader:1.1-win"
-	winRecorderImage     = imageRepo + "recorder:2.0-win"
+	winRecorderImage     = imageRepo + "recorder:2.0-win-beta1"
 )
 
 const (
+	genericPort      int64 = 22
 	seleniumPort     int64 = 4444
 	vncPort          int64 = 5900
 	devtoolsPort     int64 = 7070
@@ -49,12 +50,8 @@ const (
 	proxyHandlerPort int64 = 8060
 	recorderdPort    int64 = 9080
 
-	recorderCpu    int64 = 320
-	recorderMemory int64 = 1024
-
-	genericPort int64 = 22
-	minCpu      int64 = 128
-	minMemory   int64 = 256
+	cloneContainerMinCpu    int64 = 128
+	cloneContainerMinMemory int64 = 512 //increased memory to fix OOM for huge repositories (3K+ branches)
 )
 
 type NetworkConfiguration struct {
