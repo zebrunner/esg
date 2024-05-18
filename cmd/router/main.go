@@ -203,7 +203,14 @@ func InitClusterInfo() (*elbv2.TargetGroup, error) {
 		l.WithError(err).Error("Failed to describe load balancer")
 		return nil, err
 	}
-	config.Conf.AwsEsgDns = *loadBalancer.DNSName
+
+	listener, err := service.DescribeListener(*loadBalancer.LoadBalancerArn)
+	if err != nil {
+		l.WithError(err).Error("Failed to describe load balancer")
+		return nil, err
+	}
+
+	config.Conf.AwsEsgUrl = fmt.Sprintf("%s://%s", *listener.Protocol, *loadBalancer.DNSName)
 
 	return targetGroup, nil
 }
