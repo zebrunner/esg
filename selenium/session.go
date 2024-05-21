@@ -77,6 +77,13 @@ func startSession(ctx context.Context, env *environment.ExecutionEnvironment, se
 		return
 	}
 
+	go func() {
+		err := startRecording(env.Network)
+		if err != nil {
+			log.WithError(err).Error("Failed to start recording")
+		}
+	}()
+
 	utils.SendToChanIfNotBlocked(sessReq.ResponseCh, reply)
 }
 
