@@ -45,6 +45,26 @@ func DescribeTargetGroup(tgName string) (*elbv2.TargetGroup, error) {
 	return describeTGOutput.TargetGroups[0], nil
 }
 
+func DescribeListener(lbArn string) (*elbv2.Listener, error) {
+	svc := elbv2.New(AwsSess)
+
+	describeListenerInput := elbv2.DescribeListenersInput{
+		LoadBalancerArn: &lbArn,
+	}
+
+	describeListenerOutput, err := utils.RetryThrottling(svc.DescribeListeners)(&describeListenerInput)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(describeListenerOutput.Listeners) < 1 || describeListenerOutput.Listeners[0] == nil {
+		return nil, fmt.Errorf("no listener is attached to load balancer: %s", lbArn)
+	}
+
+	return describeListenerOutput.Listeners[0], nil
+
+}
+
 func RegisterTarget(targetGroup *elbv2.TargetGroup, port int64) error {
 	id, err := getTargetId(targetGroup)
 	if err != nil {

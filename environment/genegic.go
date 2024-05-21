@@ -157,7 +157,7 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 	}
 
 	executorContainer.Env["UUID"] = routerUUID
-	executorContainer.Env["E3S_DNS"] = config.Conf.AwsEsgDns
+	executorContainer.Env["E3S_URL"] = config.Conf.AwsEsgUrl
 
 	recorderContainer := Container{
 		Name:  "recorder",

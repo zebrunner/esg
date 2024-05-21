@@ -26,6 +26,6 @@ Suitable for personal usage and in big clusters:
 
 ### Documentation 
 
-* [Installation](https://github.com/zebrunner/e3s/blob/main/docs/installation.md)
-* [Capabilities](https://github.com/zebrunner/e3s/blob/main/docs/capabilities.md)
-* [Errors](https://github.com/zebrunner/e3s/blob/main/docs/errors.md)
+* [Prerequisites](https://github.com/zebrunner/e3s/blob/main/docs/prerequisites.md)
+* [ECS E3S cluster creation](https://github.com/zebrunner/e3s/blob/main/docs/ecs_e3s_cluster_creation.md)
+* [Usage](https://github.com/zebrunner/e3s/blob/main/docs/usage.md)

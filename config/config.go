@@ -40,7 +40,7 @@ type Config struct {
 	AwsSecretAccessKey       string
 	AwsTaskRoleArn           string
 	AwsTargetGroup           string
-	AwsEsgDns                string
+	AwsEsgUrl                string
 
 	// Timeouts
 	MaxIdleTimeout               time.Duration
