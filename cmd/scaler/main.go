@@ -394,7 +394,7 @@ func buildEnvsFromImages(images []string) ([]*environment.ExecutionEnvironment, 
 }
 
 func refreshTaskDefinitions(taskDefinitionCacheTtl time.Duration) error {
-	images, err := utils.ListImages()
+	images, err := service.ListImages()
 	if err != nil {
 		log.WithError(err).Error("Failed to get images list")
 		return err

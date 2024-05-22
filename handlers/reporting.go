@@ -10,6 +10,7 @@ import (
 
 	"github.com/zebrunner/esg/cachemaps/utilsmap"
 	"github.com/zebrunner/esg/config"
+	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
 
 	"github.com/gin-gonic/gin"
@@ -53,7 +54,7 @@ func ClusterStatus(c *gin.Context) {
 
 func ListDrivers(c *gin.Context) {
 	// TODO: Refactor code: code must be split in few different functions
-	images, err := utils.ListImages()
+	images, err := service.ListImages()
 	if err != nil {
 		log.WithError(err).Warn("Failed to get browser list")
 		c.Error(utils.NotFoundApiErr("failed to get browser list")).SetType(gin.ErrorTypePublic)
