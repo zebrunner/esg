@@ -5,8 +5,9 @@ services:
     container_name: scaler
     image: public.ecr.aws/zebrunner/scaler:2.9.3
     env_file:
-      - scaler.env
-      - data.env
+      - ./properties/config.env
+      - ./properties/scaler.env
+      - ./properties/data.env
     networks:
       - service-network
     restart: always
@@ -18,8 +19,9 @@ services:
     environment:
       - EXTERNAL_PORT=$ROUTER_PORT_1
     env_file:
-      - router.env
-      - data.env
+      - ./properties/config.env
+      - ./properties/router.env
+      - ./properties/data.env
     ports:
       - "$ROUTER_PORT_1:4444"
     logging:
@@ -36,8 +38,9 @@ services:
     environment:
       - EXTERNAL_PORT=$ROUTER_PORT_2
     env_file:
-      - router.env
-      - data.env
+      - ./properties/config.env
+      - ./properties/router.env
+      - ./properties/data.env
     ports:
         - "$ROUTER_PORT_2:4444"
     logging:
