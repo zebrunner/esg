@@ -1,7 +1,7 @@
-# 
+#!/bin/bash
 # get base directory
 BASEDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-. "$BASEDIR/../router.env"
+. "$BASEDIR/../properties/config.env"
 
 listProfiles="aws iam list-instance-profiles"
 lisRolesPolicies="aws iam list-attached-role-policies" # --role-name
