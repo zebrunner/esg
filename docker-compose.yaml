@@ -5,6 +5,7 @@ services:
     container_name: scaler
     image: public.ecr.aws/zebrunner/scaler:2.9.3
     env_file:
+      - config.env
       - scaler.env
       - data.env
     networks:
@@ -18,6 +19,7 @@ services:
     environment:
       - EXTERNAL_PORT=$ROUTER_PORT_1
     env_file:
+      - config.env
       - router.env
       - data.env
     ports:
@@ -36,6 +38,7 @@ services:
     environment:
       - EXTERNAL_PORT=$ROUTER_PORT_2
     env_file:
+      - config.env
       - router.env
       - data.env
     ports:
