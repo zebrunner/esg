@@ -45,7 +45,6 @@ type Config struct {
 	// Timeouts
 	MaxIdleTimeout               time.Duration
 	IdleTimeout                  time.Duration
-	CypressIdleTimeout           time.Duration
 	SessionDeleteTimeout         time.Duration
 	ServiceStartupTimeout        time.Duration
 	InstanceCooldownTimeout      time.Duration
@@ -91,7 +90,6 @@ func init() {
 
 	flag.DurationVar(&Conf.MaxIdleTimeout, "max-idle-timeout", 20*time.Minute, "Maximum session idle timeout time that could be set by user's capabilities")
 	flag.DurationVar(&Conf.IdleTimeout, "idle-timeout", 60*time.Second, "Session idle timeout in time.Duration format")
-	flag.DurationVar(&Conf.CypressIdleTimeout, "cypress-idle-timeout", 30*time.Second, "Cypress task idle timeout in time.Duration format") // cyserver get task's status every 5 seconds
 	flag.DurationVar(&Conf.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
 	flag.DurationVar(&Conf.ServiceStartupTimeout, "service-startup-timeout", 10*time.Minute, "Service startup timeout in time.Duration format")
 	flag.DurationVar(&Conf.InstanceCooldownTimeout, "instance-cooldown-timeout", 4*time.Minute, "Time after instance start when shutdown is prohibited on scale down in time.Duration format")
