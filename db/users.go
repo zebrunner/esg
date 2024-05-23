@@ -37,7 +37,7 @@ func generatePassword() (string, error) {
 	return password.Generate(passwordLength, digitCount, symbolCount, noUpper, allowRepeat)
 }
 
-func CreateUser(name string, password *string) (string, *utils.APIError) {
+func CreateUser(name string) (string, *utils.APIError) {
 	dbUser, _ := GetUser(name)
 	if dbUser != nil {
 		return "", utils.InvalidApiRequestErr("user with this name already exists")
@@ -45,8 +45,7 @@ func CreateUser(name string, password *string) (string, *utils.APIError) {
 
 	pwd, err := generatePassword()
 	if err != nil {
-		log.WithError(err).Error("Failed to generate password")
-		pwd = *password
+		return "", utils.UnknownApiErr(fmt.Sprintf("Could not generate password for user '%s': %s", name, err.Error()))
 	}
 
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(pwd), bcrypt.DefaultCost)
