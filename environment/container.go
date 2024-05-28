@@ -13,26 +13,6 @@ var (
 	capacityProviderResourcesLimit = make(map[string]smallestInstanceResources)
 )
 
-type envVariables = map[string]string
-
-type volume struct {
-	HostPath      string
-	ContainerPath string
-	Driver        string
-	Scope         string
-	ReadOnly      bool
-}
-
-type portMapping struct {
-	ContainerPort int64
-	HostPort      int64
-}
-
-type Resources struct {
-	Cpu    int64
-	Memory int64
-}
-
 type smallestInstanceResources struct {
 	res             Resources
 	memoryDeviation int64
@@ -45,20 +25,41 @@ func AddSmallestInstanceResources(cpu int64, memory int64, capacityProvider stri
 	}
 }
 
+type EnvVariables = map[string]string
+
+type Volume struct {
+	HostPath      string
+	ContainerPath string
+	Driver        string
+	Scope         string
+	ReadOnly      bool
+}
+
+type PortMapping struct {
+	ContainerPort int64
+	HostPort      int64
+}
+
+type Resources struct {
+	Cpu    int64
+	Memory int64
+}
+
 type Container struct {
-	Name  string
-	Image string
+	Name         string
+	Image        string
+	ImageIsConst bool
 
 	Res Resources
 
 	Essential  bool
 	Privileged bool
 
-	Ports            map[string]portMapping
+	Ports            map[string]PortMapping
 	Mounts           []string // List of volume names
 	Links            []string // List of linked containers
 	Command          []string // Comma separated container startup command
-	Env              envVariables
+	Env              EnvVariables
 	EntryPoint       []string
 	WorkingDirectory string
 
@@ -103,7 +104,7 @@ func SumResources(containers []*Container) Resources {
 	return resources
 }
 
-type resourceCalculatorHelper struct {
+type ResourceCalculationHelper struct {
 	MinimumRes Resources
 	Container  *Container
 	Memory     capabilities.Wrapper[int64]
@@ -111,7 +112,7 @@ type resourceCalculatorHelper struct {
 	wantedRes  Resources
 }
 
-func calculateResources(env *ExecutionEnvironment, resourcesArr ...*resourceCalculatorHelper) error {
+func CalculateResources(env *ExecutionEnvironment, resourcesArr ...*ResourceCalculationHelper) error {
 	for _, r := range resourcesArr {
 		// Clear current container resources setting as it will be configured later
 		r.Container.Res = Resources{0, 0}
@@ -141,7 +142,7 @@ func calculateResources(env *ExecutionEnvironment, resourcesArr ...*resourceCalc
 
 		wantedCpu := r.Cpu.ToPrimitive() - r.MinimumRes.Cpu
 		if wantedCpu < 0 {
- 			log.WithFields(log.Fields{"wantedCpu": r.Cpu.ToPrimitive(), "minimumCpu": r.MinimumRes.Cpu, "container": r.Container.Name}).Trace("Increased requested cpu to min values")
+			log.WithFields(log.Fields{"wantedCpu": r.Cpu.ToPrimitive(), "minimumCpu": r.MinimumRes.Cpu, "container": r.Container.Name}).Trace("Increased requested cpu to min values")
 			r.Cpu.From(r.MinimumRes.Cpu)
 			wantedCpu = 0
 		}

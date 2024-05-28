@@ -1,4 +1,4 @@
-package environment
+package builder
 
 import (
 	"strings"
@@ -8,12 +8,14 @@ import (
 
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
+	"github.com/zebrunner/esg/environment"
+	"github.com/zebrunner/esg/images"
 
 	b64 "encoding/base64"
 	"fmt"
 )
 
-func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
+func buildGeneric(workspace string, routerUUID string, image *images.Image, caps *capabilities.Capabilities) (*environment.ExecutionEnvironment, error) {
 	conf := &config.Conf
 
 	caps.EnableVNC = false
@@ -42,22 +44,16 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 		return nil, fmt.Errorf("executor repository is not specified! RepositoryUrl='%s'", caps.RepositoryUrl)
 	}
 
-	//executorImage := "maven:3.8-openjdk-11"
-	if caps.Image == "" {
-		return nil, fmt.Errorf("executor container image is not specified! Image='%s'", caps.Image)
-	}
-	executorImage := caps.Image
-	//fmt.Printf("executorImage: %s\n", executorImage)
-
 	cloneCommand := fmt.Sprintf("git clone --progress --depth=1 --single-branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
 	//fmt.Printf("cloneCommand: %s\n", cloneCommand)
 
 	taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
 
-	cloneContainer := Container{
-		Name:  "clone",
-		Image: cloneImage,
-		Res: Resources{
+	cloneContainer := environment.Container{
+		Name:         "clone",
+		Image:        cloneImage,
+		ImageIsConst: true,
+		Res: environment.Resources{
 			Cpu:    minCpu,
 			Memory: 512, //increased memory to fix OOM for huge repositories (3K+ branches)
 		},
@@ -68,10 +64,11 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 		EntryPoint: []string{"/bin/sh"},
 	}
 
-	entrypointContainer := Container{
-		Name:  "entrypoint",
-		Image: entrypointImage,
-		Res: Resources{
+	entrypointContainer := environment.Container{
+		Name:         "entrypoint",
+		Image:        entrypointImage,
+		ImageIsConst: true,
+		Res: environment.Resources{
 			Cpu:    16,
 			Memory: 16,
 		},
@@ -82,12 +79,13 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 	}
 
 	includeMaven := strings.Contains(caps.Image.ToPrimitive(), "maven")
-	var mavenContainer *Container = nil
+	var mavenContainer *environment.Container = nil
 	if includeMaven {
-		mavenContainer = &Container{
-			Name:  "maven",
-			Image: mavenImage,
-			Res: Resources{
+		mavenContainer = &environment.Container{
+			Name:         "maven",
+			Image:        mavenImage,
+			ImageIsConst: true,
+			Res: environment.Resources{
 				Cpu:    16,
 				Memory: 16,
 			},
@@ -125,11 +123,11 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 		ContainerName: aws.String("clone"),
 		Condition:     aws.String("COMPLETE"),
 	})
-	executorContainer := Container{
-		Name:       "executor",
-		Image:      executorImage.ToPrimitive(),
-		Privileged: false,
-		Essential:  true,
+	executorContainer := environment.Container{
+		Name:         "executor",
+		ImageIsConst: false,
+		Privileged:   false,
+		Essential:    true,
 		Env: map[string]string{
 			"COMMAND": launchCommand.ToPrimitive(),
 			"branch":  branch,
@@ -149,6 +147,10 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 		DependsOn: dependsOn,
 	}
 
+	if image != nil {
+		executorContainer.Image = image.GetUrl()
+	}
+
 	if caps.EnvVariables != nil {
 		for v, k := range caps.EnvVariables {
 			//fmt.Printf("var: %v; %v\n", v, k)
@@ -159,10 +161,11 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 	executorContainer.Env["UUID"] = routerUUID
 	executorContainer.Env["E3S_URL"] = config.Conf.AwsEsgUrl
 
-	recorderContainer := Container{
-		Name:  "recorder",
-		Image: recorderImage,
-		Res: Resources{
+	recorderContainer := environment.Container{
+		Name:         "recorder",
+		Image:        recorderImage,
+		ImageIsConst: true,
+		Res: environment.Resources{
 			Cpu:    32,
 			Memory: 256, // with 128 failed for cyserver "OutOfMemoryError: Container killed due to memory usage"
 		},
@@ -187,10 +190,11 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 		}
 	}
 
-	uploaderContainer := Container{
-		Name:  "uploader",
-		Image: uploaderImage,
-		Res: Resources{
+	uploaderContainer := environment.Container{
+		Name:         "uploader",
+		Image:        uploaderImage,
+		ImageIsConst: true,
+		Res: environment.Resources{
 			Cpu:    64,
 			Memory: 64,
 		},
@@ -206,38 +210,36 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 		HealthCheck: nil,
 	}
 
-	volumes := make(map[string]volume, 0)
-	volumes[entrypointVolume] = volume{Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false}
-	volumes[taskVolume] = volume{Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false}
-	volumes[logVolume] = volume{Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false}
+	volumes := make(map[string]environment.Volume, 0)
+	volumes[entrypointVolume] = environment.Volume{Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false}
+	volumes[taskVolume] = environment.Volume{Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false}
+	volumes[logVolume] = environment.Volume{Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false}
 
-	containers := []*Container{&cloneContainer, &entrypointContainer, &recorderContainer, &uploaderContainer, &executorContainer}
+	containers := []*environment.Container{&cloneContainer, &entrypointContainer, &recorderContainer, &uploaderContainer, &executorContainer}
 	if includeMaven {
 		containers = append(containers, mavenContainer)
-		volumes[mavenVolume] = volume{Driver: "local", Scope: "task", ContainerPath: mavenDir, ReadOnly: false}
+		volumes[mavenVolume] = environment.Volume{Driver: "local", Scope: "task", ContainerPath: mavenDir, ReadOnly: false}
 	}
 
-	environment := ExecutionEnvironment{
+	env := environment.ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
 		Schema:               buildSchema(containers),
 		Containers:           containers,
 		Capabilities:         caps,
 		Volumes:              volumes,
-		Network: &NetworkConfiguration{
+		Network: &environment.NetworkConfiguration{
 			IP: "",
-			Endpoints: map[string]*Endpoint{
+			Endpoints: map[string]*environment.Endpoint{
 				"driver": {ContainerPort: genericPort, HostPort: 0, Path: "/"},
 			},
 		},
-		Workspace:        workspace,
-		RouterUUID:       routerUUID,
 		CapacityProvider: config.Conf.AwsLinuxCapacityProvider,
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
 	}
 
-	err := calculateResources(&environment,
-		&resourceCalculatorHelper{
-			MinimumRes: Resources{Cpu: 1024, Memory: 1024},
+	err := environment.CalculateResources(&env,
+		&environment.ResourceCalculationHelper{
+			MinimumRes: environment.Resources{Cpu: 1024, Memory: 1024},
 			Container:  &executorContainer,
 			Memory:     &caps.Memory,
 			Cpu:        &caps.Cpu,
@@ -247,5 +249,5 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 		return nil, err
 	}
 
-	return &environment, nil
+	return &env, nil
 }

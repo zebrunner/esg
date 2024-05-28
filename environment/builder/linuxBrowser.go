@@ -1,4 +1,4 @@
-package environment
+package builder
 
 import (
 	"fmt"
@@ -9,17 +9,14 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
+	"github.com/zebrunner/esg/environment"
+	"github.com/zebrunner/esg/images"
 
 	log "github.com/sirupsen/logrus"
 )
 
-func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
+func buildBrowser(workspace string, routerUUID string, image *images.Image, caps *capabilities.Capabilities) (*environment.ExecutionEnvironment, error) {
 	conf := &config.Conf
-
-	browserImage, err := buildImage(caps)
-	if err != nil {
-		return nil, err
-	}
 
 	log.Trace("caps: ", caps)
 
@@ -52,16 +49,16 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 		// geckodriver case to define log level
 		driverArgs = ", \"--log=info\""
 	}
-	browserContainer := Container{
-		Name:      "browser",
-		Image:     browserImage,
-		Essential: true,
-		Ports: map[string]portMapping{
-			"driver":         {seleniumPort, 0},
-			"vnc":            {vncPort, 0},
-			"devtools":       {devtoolsPort, 0},
-			"fileserverPort": {fileserverPort, 0},
-			"clipboardPort":  {clipboardPort, 0},
+	browserContainer := environment.Container{
+		Name:         "browser",
+		ImageIsConst: false,
+		Essential:    true,
+		Ports: map[string]environment.PortMapping{
+			"driver":         {ContainerPort: seleniumPort, HostPort: 0},
+			"vnc":            {ContainerPort: vncPort, HostPort: 0},
+			"devtools":       {ContainerPort: devtoolsPort, HostPort: 0},
+			"fileserverPort": {ContainerPort: fileserverPort, HostPort: 0},
+			"clipboardPort":  {ContainerPort: clipboardPort, HostPort: 0},
 		},
 		Env: map[string]string{
 			"DRIVER_ARGS":       driverArgs,
@@ -83,10 +80,15 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 		},
 	}
 
-	recorderContainer := Container{
-		Name:  "recorder",
-		Image: recorderImage,
-		Res: Resources{
+	if image != nil {
+		browserContainer.Image = image.GetUrl()
+	}
+
+	recorderContainer := environment.Container{
+		Name:         "recorder",
+		Image:        recorderImage,
+		ImageIsConst: true,
+		Res: environment.Resources{
 			Cpu:    recorderCpu,
 			Memory: recorderMemory,
 		},
@@ -132,10 +134,11 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 		}
 	}
 
-	uploaderContainer := Container{
-		Name:  "uploader",
-		Image: uploaderImage,
-		Res: Resources{
+	uploaderContainer := environment.Container{
+		Name:         "uploader",
+		Image:        uploaderImage,
+		ImageIsConst: true,
+		Res: environment.Resources{
 			Cpu:    64,  // with 32  uploading is aborted
 			Memory: 256, // 64 works for single thread. for backgroud copying it is not enough
 		},
@@ -152,22 +155,23 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 		HealthCheck: nil,
 	}
 
-	containers := []*Container{&browserContainer, &recorderContainer, &uploaderContainer}
+	containers := []*environment.Container{&browserContainer, &recorderContainer, &uploaderContainer}
 
-	var mitmContainer Container
+	var mitmContainer environment.Container
 	if caps.Mitm {
-		mitmContainer = Container{
-			Name:       "mitm",
-			Image:      mitmImage,
-			Privileged: false,
-			Essential:  false,
+		mitmContainer = environment.Container{
+			Name:         "mitm",
+			Image:        mitmImage,
+			ImageIsConst: true,
+			Privileged:   false,
+			Essential:    false,
 			Env: map[string]string{
 				"LOG_DIR":    logDir,
 				"PROXY_ARGS": caps.MitmArgs.ToPrimitive(),
 			},
-			Ports: map[string]portMapping{
-				"fileserverPort":   {fileserverPort, 0},
-				"proxyHandlerPort": {proxyHandlerPort, 0},
+			Ports: map[string]environment.PortMapping{
+				"fileserverPort":   {ContainerPort: fileserverPort, HostPort: 0},
+				"proxyHandlerPort": {ContainerPort: proxyHandlerPort, HostPort: 0},
 			},
 			Mounts:     []string{logVolume},
 			Command:    []string{"-c", "/entrypoint.sh"},
@@ -182,18 +186,18 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 		browserContainer.Links = []string{"mitm"}
 	}
 
-	environment := ExecutionEnvironment{
+	env := environment.ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
 		Schema:               buildSchema(containers),
 		Containers:           containers,
 		Capabilities:         caps,
-		Volumes: map[string]volume{
+		Volumes: map[string]environment.Volume{
 			logVolume: {ContainerPath: logDir, Driver: "local", Scope: "task", ReadOnly: false},
 			shmVolume: {ContainerPath: shmDir, HostPath: shmDir, ReadOnly: false}, // no way to reuse local task volume due to the reset of permissions on browser container start
 		},
-		Network: &NetworkConfiguration{
+		Network: &environment.NetworkConfiguration{
 			IP: "",
-			Endpoints: map[string]*Endpoint{
+			Endpoints: map[string]*environment.Endpoint{
 				"driver":      {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
 				"vnc":         {ContainerPort: vncPort, HostPort: 0, Path: "/"},
 				"clipboard":   {ContainerPort: clipboardPort, HostPort: 0, Path: "/"},
@@ -202,39 +206,37 @@ func buildBrowser(workspace string, routerUUID string, caps *capabilities.Capabi
 				"healthcheck": {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
 			},
 		},
-		Workspace:        workspace,
-		RouterUUID:       routerUUID,
 		CapacityProvider: config.Conf.AwsLinuxCapacityProvider,
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
 	}
 
 	if caps.BrowserName == "firefox" {
-		environment.Network.Endpoints["driver"].Path = "/wd/hub/"
-		environment.Network.Endpoints["healthcheck"].Path = "/wd/hub/"
+		env.Network.Endpoints["driver"].Path = "/wd/hub/"
+		env.Network.Endpoints["healthcheck"].Path = "/wd/hub/"
 	}
 
-	calcArr := make([]*resourceCalculatorHelper, 0)
-	calcArr = append(calcArr, &resourceCalculatorHelper{
-		MinimumRes: Resources{Cpu: 1024, Memory: 1024},
+	calcArr := make([]*environment.ResourceCalculationHelper, 0)
+	calcArr = append(calcArr, &environment.ResourceCalculationHelper{
+		MinimumRes: environment.Resources{Cpu: 1024, Memory: 1024},
 		Container:  &browserContainer,
 		Memory:     &caps.Memory,
 		Cpu:        &caps.Cpu,
 	})
 
 	if caps.Mitm {
-		environment.Network.Endpoints["proxyHandlerPort"] = &Endpoint{ContainerPort: proxyHandlerPort, HostPort: 0, Path: "/"}
-		calcArr = append(calcArr, &resourceCalculatorHelper{
-			MinimumRes: Resources{Cpu: 512, Memory: 512},
+		env.Network.Endpoints["proxyHandlerPort"] = &environment.Endpoint{ContainerPort: proxyHandlerPort, HostPort: 0, Path: "/"}
+		calcArr = append(calcArr, &environment.ResourceCalculationHelper{
+			MinimumRes: environment.Resources{Cpu: 512, Memory: 512},
 			Container:  &mitmContainer,
 			Memory:     &caps.MitmMemory,
 			Cpu:        &caps.MitmCpu,
 		})
 	}
 
-	err = calculateResources(&environment, calcArr...)
+	err = environment.CalculateResources(&env, calcArr...)
 	if err != nil {
 		return nil, err
 	}
 
-	return &environment, nil
+	return &env, nil
 }

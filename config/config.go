@@ -8,19 +8,12 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const (
+	// public zebrunner ECR docker registry
+	ZebrunnerEcrRegistryUri = "public.ecr.aws/zebrunner/"
+)
+
 var (
-	SupportedRepositories = []string{
-		"chrome",
-		"firefox",
-		"edge",
-		"redroid",
-		"cypress-chrome",
-		"cypress-chromium",
-		"cypress-edge",
-		"cypress-firefox",
-		"windows-chrome",
-		"windows-edge",
-	}
 	VendorPrefix = "zebrunner"
 	Conf         = Config{}
 	RouterUUID   = "_uuid"
@@ -144,8 +137,4 @@ func (c *Config) ParseLogLevel() logrus.Level {
 	default:
 		return logrus.DebugLevel
 	}
-}
-
-func (c *Config) ZebrunnerIsIntegrated() bool {
-	return c.ZebrunnerHost != "" && c.ZebrunnerIntegrationUser != "" && c.ZebrunnerIntegrationPassword != ""
 }

@@ -21,7 +21,7 @@ type registerWaitRequest struct {
 	ResponseCh        chan string
 }
 
-func registerTask(ctx context.Context, env environment.ExecutionEnvironment, waitRequest registerWaitRequest) {
+func registerTask(ctx context.Context, env *environment.ExecutionEnvironment, routerUUID string, waitRequest registerWaitRequest) {
 	svc := ecs.New(AwsSess)
 
 	family, err := env.GetFamilyRevision()
@@ -112,7 +112,7 @@ out:
 
 		if resourceAllocationEntity == nil {
 			go func() {
-				resourceAllocationEntity = env.GetAllocationResources()
+				resourceAllocationEntity = env.GetAllocationResources(routerUUID)
 				err := resourcesToAllocate.AddEntity(resourceAllocationEntity)
 				if err != nil {
 					log.WithError(err).Error("Failed to add allocation resource to cache")
@@ -138,14 +138,14 @@ out:
 	}
 }
 
-func WaitForTaskRegister(ctx context.Context, env environment.ExecutionEnvironment) *registerWaitRequest {
+func WaitForTaskRegister(ctx context.Context, env *environment.ExecutionEnvironment, routerUUID string) *registerWaitRequest {
 	waitReq := registerWaitRequest{
 		NonEssentialErrCh: make(chan error),
 		EssentialErrCh:    make(chan error),
 		ResponseCh:        make(chan string),
 	}
 
-	go registerTask(ctx, env, waitReq)
+	go registerTask(ctx, env, routerUUID, waitReq)
 
 	return &waitReq
 }

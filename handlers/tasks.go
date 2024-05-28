@@ -19,7 +19,7 @@ import (
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/db"
-	"github.com/zebrunner/esg/environment"
+	"github.com/zebrunner/esg/environment/builder"
 	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
@@ -72,19 +72,25 @@ func Create(c *gin.Context) {
 	log.Trace("Request capabilitites: ", reqCaps.ToMap())
 	log.Trace("Container configuration: ", configurationCaps.ToMap())
 
-	env, err := environment.Build(workspace, configurationCaps)
+	// env, err := environment.Build(configurationCaps)
+	env, routerUUID, err := builder.BuildEnvForTaskDefinitionOverride(workspace, configurationCaps)
 	if err != nil {
 		log.WithError(err).Error("Failed to build execution environment")
 		c.Error(utils.CreationErr(fmt.Errorf("failed to create executor"), err.Error())).SetType(gin.ErrorTypePublic)
 		return
 	}
-	env.ReqCapabilities = reqCaps
-	l = l.WithField("family", env.TaskDefinitionFamily).WithField(config.RouterUUID, env.RouterUUID)
+	l = l.WithField("family", env.TaskDefinitionFamily).WithField(config.RouterUUID, routerUUID)
 
 	l.Info("new request")
-	l.WithField("env", env).Debug("Env details")
 
-	resp, seErr := service.GetServiceStarter(env, c, l).StartService(startupTime)
+	resp, seErr := service.GetServiceStarter(
+		env,
+		workspace,
+		routerUUID,
+		reqCaps,
+		c,
+		l,
+	).StartService(startupTime)
 	if seErr != nil {
 		c.Error(seErr).SetType(gin.ErrorTypePublic)
 	} else {

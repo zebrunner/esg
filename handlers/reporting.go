@@ -5,16 +5,12 @@ import (
 	"net/http"
 	"os"
 	"runtime"
-	"strings"
 	"time"
 
 	"github.com/zebrunner/esg/cachemaps/utilsmap"
 	"github.com/zebrunner/esg/config"
-	"github.com/zebrunner/esg/service"
-	"github.com/zebrunner/esg/utils"
 
 	"github.com/gin-gonic/gin"
-	log "github.com/sirupsen/logrus"
 )
 
 var (
@@ -54,71 +50,71 @@ func ClusterStatus(c *gin.Context) {
 
 func ListDrivers(c *gin.Context) {
 	// TODO: Refactor code: code must be split in few different functions
-	images, err := service.ListImages()
-	if err != nil {
-		log.WithError(err).Warn("Failed to get browser list")
-		c.Error(utils.NotFoundApiErr("failed to get browser list")).SetType(gin.ErrorTypePublic)
-		return
-	}
+	// TODO: redirect to e3s-definitions
 
-	var browsersResponse []map[string]interface{}
+	// images, err := environment.ListImages()
+	// if err != nil {
+	// 	log.WithError(err).Warn("Failed to get browser list")
+	// 	c.Error(utils.NotFoundApiErr("failed to get browser list")).SetType(gin.ErrorTypePublic)
+	// 	return
+	// }
 
-	imagesPlatforms := map[string]string{
-		"redroid": "android",
-	}
-	cypressPlatforms := map[string]string{
-		"cypress-chrome":   "cypress",
-		"cypress-chromium": "cypress",
-		"cypress-edge":     "cypress",
-		"cypress-firefox":  "cypress",
-	}
+	// var browsersResponse []map[string]interface{}
 
-	windowsPlatforms := map[string]string{
-		"windows-chrome": "windows",
-		"windows-edge":   "windows",
-	}
+	// imagesPlatforms := map[string]string{
+	// 	"redroid": "android",
+	// }
+	// cypressPlatforms := map[string]string{
+	// 	"cypress-chrome":   "cypress",
+	// 	"cypress-chromium": "cypress",
+	// 	"cypress-edge":     "cypress",
+	// 	"cypress-firefox":  "cypress",
+	// }
 
-	for _, image := range images {
-		name := strings.Split(image, ":")[0]
-		version := strings.Split(image, ":")[1]
+	// windowsPlatforms := map[string]string{
+	// 	"windows-chrome": "windows",
+	// 	"windows-edge":   "windows",
+	// }
 
-		if version == "debug" {
-			continue
-		}
+	// for _, image := range images {
 
-		if name == "edge" {
-			name = "MicrosoftEdge"
-		}
+	// 	if image.Tag == "debug" {
+	// 		continue
+	// 	}
+		
+	// 	if image.Repository == "edge" {
+	// 		image.Repository = "MicrosoftEdge"
+	// 	}
 
-		browserData := map[string]interface{}{
-			"name":     name,
-			"version":  version,
-			"platform": "linux",
-		}
+	// 	browserData := map[string]interface{}{
+	// 		"name":     image.Repository,
+	// 		"version":  image.Tag,
+	// 		"platform": "linux",
+	// 	}
 
-		if _, ok := imagesPlatforms[name]; ok {
-			// hardcoded browser name and verion for ReDroid emulator
-			if browserData["version"] == "latest" {
-				continue
-			}
-			browserData["platform"] = imagesPlatforms[name]
-			browserData["browserName"] = "chrome"
-			browserData["browserVersion"] = "107.0"
-		}
+	// 	if _, ok := imagesPlatforms[image.Repository]; ok {
+	// 		// hardcoded browser name and verion for ReDroid emulator
+	// 		if browserData["version"] == "latest" {
+	// 			continue
+	// 		}
+	// 		browserData["platform"] = imagesPlatforms[image.Repository]
+	// 		browserData["browserName"] = "chrome"
+	// 		browserData["browserVersion"] = "107.0"
+	// 	}
 
-		if _, ok := cypressPlatforms[name]; ok {
-			browserData["image"] = "public.ecr.aws/zebrunner/" + image
-			browserData["platform"] = cypressPlatforms[name]
-		}
+	// 	if _, ok := cypressPlatforms[image.Repository]; ok {
+	// 		browserData["image"] = image.GetImageUri()
+	// 		browserData["platform"] = cypressPlatforms[image.Repository]
+	// 	}
 
-		if platform, ok := windowsPlatforms[name]; ok {
-			browserData["name"] = strings.TrimPrefix(name, "windows-")
-			browserData["platform"] = platform
-		}
+	// 	if platform, ok := windowsPlatforms[image.Repository]; ok {
+	// 		browserData["name"] = strings.TrimPrefix(image.Repository, "windows-")
+	// 		browserData["platform"] = platform
+	// 	}
 
-		browsersResponse = append(browsersResponse, browserData)
-	}
-	c.JSON(http.StatusOK, browsersResponse)
+	// 	browsersResponse = append(browsersResponse, browserData)
+	// }
+	// c.JSON(http.StatusOK, browsersResponse)
 }
 
 func Welcome(c *gin.Context) {

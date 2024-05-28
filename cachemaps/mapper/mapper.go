@@ -58,10 +58,10 @@ func (m Mapper) IsIdle() bool {
 	return idleTime > m.IdleTimeout
 }
 
-func CreateEntity(env *environment.ExecutionEnvironment, expiration time.Duration) (*Mapper, error) {
+func CreateEntity(env *environment.ExecutionEnvironment, workspace string, routerUUID string, expiration time.Duration) (*Mapper, error) {
 	creationTime := time.Now()
 	m := &Mapper{
-		RouterUUID:   env.RouterUUID,
+		RouterUUID:   routerUUID,
 		Capabilities: env.Capabilities,
 		Network:      *env.Network,
 		IdleTimeout:  float64(env.Capabilities.IdleTimeout),
@@ -69,7 +69,7 @@ func CreateEntity(env *environment.ExecutionEnvironment, expiration time.Duratio
 		UsageTracked: false,
 		HealthAt:     &creationTime,
 		AccessedAt:   &creationTime,
-		Workspace:    env.Workspace,
+		Workspace:    workspace,
 	}
 
 	err := WritedByWorker(m, nil, nil, expiration)
