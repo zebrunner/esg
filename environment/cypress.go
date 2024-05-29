@@ -1,4 +1,4 @@
-package builder
+package environment
 
 import (
 	"github.com/aws/aws-sdk-go/aws"
@@ -6,7 +6,7 @@ import (
 
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
-	"github.com/zebrunner/esg/environment"
+	"github.com/zebrunner/esg/environment/network"
 	"github.com/zebrunner/esg/images"
 
 	"fmt"
@@ -15,7 +15,7 @@ import (
 	b64 "encoding/base64"
 )
 
-func buildCypress(workspace string, routerUUID string, image images.Image, caps *capabilities.Capabilities) (*environment.ExecutionEnvironment, error) {
+func buildCypress(workspace string, routerUUID string, image images.Image, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
 	conf := &config.Conf
 
 	workDir := "/tmp/zebrunner"
@@ -46,10 +46,10 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 		cloneCommand = fmt.Sprintf("git clone --progress --depth=1 --single-branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
 	}
 
-	cloneContainer := environment.Container{
+	cloneContainer := Container{
 		Name:  "clone",
 		Image: cloneImage,
-		Res: environment.Resources{
+		Res: Resources{
 			Cpu:    minCpu,
 			Memory: 512, //increased memory to fix OOM for huge repositories (3K+ branches)
 		},
@@ -65,10 +65,10 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 		launchCommand = caps.LaunchCommand.ToPrimitive()
 	}
 
-	entrypointContainer := environment.Container{
+	entrypointContainer := Container{
 		Name:  "entrypoint",
 		Image: entrypointImage,
-		Res: environment.Resources{
+		Res: Resources{
 			Cpu:    16,
 			Memory: 16,
 		},
@@ -96,12 +96,12 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 		entrypointContainer.Env["DEBUG"] = "true"
 	}
 
-	cypressContainer := environment.Container{
+	cypressContainer := Container{
 		Name:       "browser",
-		Image:      image.GetUrl(),
+		image:      &image,
 		Privileged: false,
 		Essential:  true,
-		Ports: map[string]environment.PortMapping{
+		Ports: map[string]PortMapping{
 			"vnc": {HostPort: vncPort, ContainerPort: 0},
 		},
 		Env: map[string]string{
@@ -145,10 +145,10 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 	//basic auth header for executor-logs service
 	basicAuthHeader := "Authorization: Basic " + b64.StdEncoding.EncodeToString([]byte(conf.ZebrunnerIntegrationUser+":"+conf.ZebrunnerIntegrationPassword))
 
-	recorderContainer := environment.Container{
+	recorderContainer := Container{
 		Name:  "recorder",
 		Image: cypressRecorderImage,
-		Res: environment.Resources{
+		Res: Resources{
 			Cpu:    recorderCpu,
 			Memory: 2048,
 		},
@@ -189,10 +189,10 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 		}
 	}
 
-	uploaderContainer := environment.Container{
+	uploaderContainer := Container{
 		Name:  "uploader",
 		Image: uploaderImage,
-		Res: environment.Resources{
+		Res: Resources{
 			Cpu:    32,
 			Memory: 256, // 64 works for single thread. for backgroud copying it is not enough
 		},
@@ -219,22 +219,22 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 	// }
 	// log.Trace("Overidden TaskDefinitionFamily for cypress: " + familyDefinition)
 
-	containers := []*environment.Container{&cloneContainer, &entrypointContainer, &cypressContainer, &recorderContainer, &uploaderContainer}
-	env := environment.ExecutionEnvironment{
+	containers := []*Container{&cloneContainer, &entrypointContainer, &cypressContainer, &recorderContainer, &uploaderContainer}
+	env := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
 		Schema:               buildSchema(containers),
 		Containers:           containers,
 		Capabilities:         caps,
-		Volumes: map[string]environment.Volume{
+		Volumes: map[string]Volume{
 			taskVolume:       {Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false},
 			logVolume:        {Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false},
 			cypressVolume:    {Driver: "local", Scope: "task", ContainerPath: cypressDir, ReadOnly: false},
 			entrypointVolume: {Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false},
 			shmVolume:        {ContainerPath: shmDir, HostPath: shmDir, ReadOnly: false}, // no way to reuse local task volume due to the reset of permissions on browser container start
 		},
-		Network: &environment.NetworkConfiguration{
+		Network: &network.NetworkConfiguration{
 			IP: "",
-			Endpoints: map[string]*environment.Endpoint{
+			Endpoints: map[string]*network.Endpoint{
 				"vnc": {ContainerPort: vncPort, HostPort: 0, Path: "/"},
 			},
 		},
@@ -242,9 +242,9 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
 	}
 
-	err := environment.CalculateResources(&env,
-		&environment.ResourceCalculationHelper{
-			MinimumRes: environment.Resources{Cpu: 1024, Memory: 2048},
+	err := CalculateResources(&env,
+		&ResourceCalculationHelper{
+			MinimumRes: Resources{Cpu: 1024, Memory: 2048},
 			Container:  &cypressContainer,
 			Memory:     &caps.Memory,
 			Cpu:        &caps.Cpu,

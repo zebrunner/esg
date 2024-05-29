@@ -20,4 +20,3 @@ services:
       context: ../
       dockerfile: build/Dockerfile.e3s-definitions
     image: public.ecr.aws/zebrunner/e3s-definitions:latest
-    

@@ -7,6 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/capabilities"
+	"github.com/zebrunner/esg/images"
 )
 
 var (
@@ -46,8 +47,9 @@ type Resources struct {
 }
 
 type Container struct {
-	Name         string
-	Image        string
+	Name  string
+	Image string
+	image *images.Image
 
 	Res Resources
 
@@ -72,6 +74,22 @@ func (c *Container) Cpu() int64 {
 
 func (c *Container) Memory() int64 {
 	return c.Res.Memory
+}
+
+func (c Container) getImageUrl() string {
+	if c.image == nil {
+		return c.Image
+	}
+
+	return c.image.GetUrl()
+}
+
+func (c Container) getImageNameTag() string {
+	if c.image == nil {
+		return c.Image
+	}
+
+	return c.image.ToString()
 }
 
 func (r Resources) Compare(res Resources) (cpuBool bool, memoryBool bool) {

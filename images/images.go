@@ -15,6 +15,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
+
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
 )
@@ -63,6 +64,22 @@ func GetGenericImage(genericImg string) (*Image, error) {
 
 	return &Image{Repository: GENERIC, RegistryUri: imgArr[0], Tag: imgArr[1]}, nil
 }
+
+func GetUtilityImage(genericImg string) (*Image, error) {
+	imgArr := strings.Split(genericImg, ":")
+	if len(imgArr) != 2 {
+		err := fmt.Errorf("failed to parse generic image")
+		return nil, err
+	}
+
+	if imgArr[0] == "" {
+		err := fmt.Errorf("generic image uri is empty")
+		return nil, err
+	}
+
+	return &Image{Repository: GENERIC, RegistryUri: imgArr[0], Tag: imgArr[1]}, nil
+}
+
 
 func imageComparator(a Image, b Image) int {
 	if a.Repository != b.Repository {

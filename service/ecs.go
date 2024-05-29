@@ -16,7 +16,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps/mapper"
 	"github.com/zebrunner/esg/config"
-	"github.com/zebrunner/esg/environment"
 
 	"github.com/zebrunner/esg/utils"
 )
@@ -55,37 +54,17 @@ func InitAws() (*awsSession.Session, error) {
 	return sess, nil
 }
 
-func CreateTaskDefinition(environment *environment.ExecutionEnvironment) (*ecs.TaskDefinition, error) {
+func CreateTaskDefinition(definitions []*ecs.ContainerDefinition, volumes []*ecs.Volume, taskDefinitionFamily string, taskRoleArn string) (*ecs.TaskDefinition, error) {
 	svc := ecs.New(AwsSess)
 
 	networkMode := "bridge"
 	input := ecs.RegisterTaskDefinitionInput{
 		NetworkMode:          &networkMode,
-		ContainerDefinitions: environment.ContainerDefinitions(),
-		Family:               &environment.TaskDefinitionFamily,
-		TaskRoleArn:          &environment.TaskRoleArn,
+		ContainerDefinitions: definitions,
+		Volumes:              volumes,
+		Family:               &taskDefinitionFamily,
+		TaskRoleArn:          &taskRoleArn,
 	}
-
-	volumes := []*ecs.Volume{}
-	for n, v := range environment.Volumes {
-		if v.HostPath != "" {
-			volumes = append(volumes, &ecs.Volume{
-				Host: &ecs.HostVolumeProperties{
-					SourcePath: aws.String(v.HostPath),
-				},
-				Name: aws.String(n),
-			})
-		} else {
-			volumes = append(volumes, &ecs.Volume{
-				DockerVolumeConfiguration: &ecs.DockerVolumeConfiguration{
-					Driver: aws.String(v.Driver),
-					Scope:  aws.String(v.Scope),
-				},
-				Name: aws.String(n),
-			})
-		}
-	}
-	input.Volumes = volumes
 
 	var err error
 	i := 0
@@ -182,7 +161,7 @@ func DescribeTask(taskArn string) (*ecs.DescribeTasksOutput, error) {
 
 func DescribeTasks(taskArns []string) ([]*ecs.Task, error) {
 	svc := ecs.New(AwsSess)
-	taskPages := paginate(taskArns, 100)
+	taskPages := utils.Paginate(taskArns, 100)
 	resultArr := make([]*ecs.Task, 0)
 
 	for _, tasks := range taskPages {

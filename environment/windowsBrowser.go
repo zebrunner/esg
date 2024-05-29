@@ -1,4 +1,4 @@
-package builder
+package environment
 
 import (
 	"fmt"
@@ -8,11 +8,11 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
-	"github.com/zebrunner/esg/environment"
+	"github.com/zebrunner/esg/environment/network"
 	"github.com/zebrunner/esg/images"
 )
 
-func buildWindowsBrowser(workspace string, routerUUID string, image images.Image, caps *capabilities.Capabilities) (*environment.ExecutionEnvironment, error) {
+func buildWindowsBrowser(workspace string, routerUUID string, image images.Image, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
 	conf := &config.Conf
 
 	caps.EnableVNC = false
@@ -23,11 +23,11 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 
 	log.Trace("caps: ", caps)
 
-	browserContainer := environment.Container{
+	browserContainer := Container{
 		Name:      "browser",
-		Image:     image.GetUrl(),
+		image:     &image,
 		Essential: true,
-		Ports: map[string]environment.PortMapping{
+		Ports: map[string]PortMapping{
 			"driver": {ContainerPort: seleniumPort, HostPort: 0},
 		},
 		Mounts: []string{logVolume},
@@ -46,10 +46,10 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 		},
 	}
 
-	recorderContainer := environment.Container{
+	recorderContainer := Container{
 		Name:  "recorder",
 		Image: winRecorderImage,
-		Res: environment.Resources{
+		Res: Resources{
 			Cpu:    8,
 			Memory: 8,
 		},
@@ -71,10 +71,10 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 		},
 	}
 
-	uploaderContainer := environment.Container{
+	uploaderContainer := Container{
 		Name:  "uploader",
 		Image: winUploaderImage,
-		Res: environment.Resources{
+		Res: Resources{
 			Cpu:    16,
 			Memory: 16,
 		},
@@ -98,19 +98,19 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 		},
 	}
 
-	containers := []*environment.Container{&browserContainer, &recorderContainer, &uploaderContainer}
+	containers := []*Container{&browserContainer, &recorderContainer, &uploaderContainer}
 
-	env := environment.ExecutionEnvironment{
+	env := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
 		Schema:               buildSchema(containers),
 		Containers:           containers,
 		Capabilities:         caps,
-		Volumes: map[string]environment.Volume{
+		Volumes: map[string]Volume{
 			logVolume: {ContainerPath: logDir, Driver: "local", Scope: "task", ReadOnly: false},
 		},
-		Network: &environment.NetworkConfiguration{
+		Network: &network.NetworkConfiguration{
 			IP: "",
-			Endpoints: map[string]*environment.Endpoint{
+			Endpoints: map[string]*network.Endpoint{
 				"driver":      {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
 				"healthcheck": {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
 			},
@@ -119,9 +119,9 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
 	}
 
-	err := environment.CalculateResources(&env,
-		&environment.ResourceCalculationHelper{
-			MinimumRes: environment.Resources{Cpu: 1024, Memory: 1024},
+	err := CalculateResources(&env,
+		&ResourceCalculationHelper{
+			MinimumRes: Resources{Cpu: 1024, Memory: 1024},
 			Container:  &browserContainer,
 			Memory:     &caps.Memory,
 			Cpu:        &caps.Cpu,

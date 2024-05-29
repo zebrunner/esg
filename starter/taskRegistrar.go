@@ -1,4 +1,4 @@
-package service
+package starter
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	"github.com/zebrunner/esg/cachemaps/resourcesToAllocate"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
+	"github.com/zebrunner/esg/service"
 )
 
 type registerWaitRequest struct {
@@ -22,7 +23,7 @@ type registerWaitRequest struct {
 }
 
 func registerTask(ctx context.Context, env *environment.ExecutionEnvironment, routerUUID string, waitRequest registerWaitRequest) {
-	svc := ecs.New(AwsSess)
+	svc := ecs.New(service.AwsSess)
 
 	family, err := env.GetFamilyRevision()
 	if err != nil {

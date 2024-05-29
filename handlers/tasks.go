@@ -19,9 +19,10 @@ import (
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/db"
-	"github.com/zebrunner/esg/environment/builder"
+	"github.com/zebrunner/esg/environment"
 	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/service"
+	"github.com/zebrunner/esg/starter"
 	"github.com/zebrunner/esg/utils"
 	"github.com/zebrunner/esg/zebrunner"
 	"golang.org/x/net/websocket"
@@ -73,7 +74,7 @@ func Create(c *gin.Context) {
 	log.Trace("Container configuration: ", configurationCaps.ToMap())
 
 	// env, err := environment.Build(configurationCaps)
-	env, routerUUID, err := builder.BuildEnvForTaskDefinitionOverride(workspace, configurationCaps)
+	env, routerUUID, err := environment.BuildEnvForTaskDefinitionOverride(workspace, configurationCaps)
 	if err != nil {
 		log.WithError(err).Error("Failed to build execution environment")
 		c.Error(utils.CreationErr(fmt.Errorf("failed to create executor"), err.Error())).SetType(gin.ErrorTypePublic)
@@ -83,7 +84,7 @@ func Create(c *gin.Context) {
 
 	l.Info("new request")
 
-	resp, seErr := service.GetServiceStarter(
+	resp, seErr := starter.GetServiceStarter(
 		env,
 		workspace,
 		routerUUID,

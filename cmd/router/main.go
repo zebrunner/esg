@@ -25,6 +25,7 @@ import (
 	"github.com/zebrunner/esg/environment"
 	"github.com/zebrunner/esg/handlers"
 	"github.com/zebrunner/esg/service"
+	"github.com/zebrunner/esg/starter"
 	"github.com/zebrunner/esg/utils"
 )
 
@@ -218,7 +219,7 @@ func InitClusterInfo() (*elbv2.TargetGroup, error) {
 			log.WithError(err).Error("Failed to get expected response from e3s definitions service")
 			return nil, err
 		} else if ok {
-			definitionmap.ActualizeDefinitionsMap(time.Minute * 15)
+			go definitionmap.ActualizeDefinitionsMap(time.Minute * 15)
 			break
 		}
 
@@ -270,9 +271,9 @@ func main() {
 }
 
 func startRouter(targetGroup *elbv2.TargetGroup) {
-	// init all service workers
-	service.InitInstanceWorker()
-	service.InitWaitWorker()
+	// init all starter workers
+	starter.InitInstanceWorker()
+	starter.InitWaitWorker()
 
 	// create sigterm listener chan
 	quit := make(chan os.Signal, 1)
@@ -325,7 +326,7 @@ func startRouter(targetGroup *elbv2.TargetGroup) {
 	}
 
 	var wg sync.WaitGroup
-	for routerUUID, ctx := range service.GenericCtxWorker.CtxMap {
+	for routerUUID, ctx := range starter.GenericCtxWorker.CtxMap {
 		wg.Add(1)
 		go func(routerUUID string, ctx context.Context) {
 			log.WithField(config.RouterUUID, routerUUID).Info("Waiting for task to start")

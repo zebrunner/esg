@@ -1,4 +1,4 @@
-package service
+package starter
 
 import (
 	"bytes"
@@ -20,6 +20,7 @@ import (
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
 	"github.com/zebrunner/esg/selenium"
+	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
 	"github.com/zebrunner/esg/zebrunner"
 )
@@ -94,7 +95,7 @@ func (s *startBasis) registerTaskPhase(ctx context.Context) (essential *utils.Se
 			case taskArn := <-waitRequest.ResponseCh:
 				taskId := strings.Split(taskArn, "/")[2]
 				log.WithField(config.TaskIdKey, taskId).Warn("Task registered after context is done")
-				StopTaskForcibly(taskId, mapper.TaskStartupFailure)
+				service.StopTaskForcibly(taskId, mapper.TaskStartupFailure)
 				return
 			}
 		}()
@@ -283,7 +284,7 @@ func (starter genericStarter) StartService(startupTime context.Context) (map[str
 	starter.basis.Request = starter.basis.Request.WithContext(genericCtx)
 	go func() {
 		// create new task definition for generic task
-		taskDefinition, err := CreateTaskDefinition(starter.basis.Env)
+		taskDefinition, err := service.CreateTaskDefinition(starter.basis.Env.ContainerDefinitions(), starter.basis.Env.Volume(), starter.basis.Env.TaskDefinitionFamily, starter.basis.Env.TaskRoleArn)
 		// abort launch if failed to create new task definition
 		if err != nil {
 			log.WithError(err).Error("Failed to create task definition")
@@ -355,7 +356,7 @@ func (starter basicStarter) StartService(startupTime context.Context) (map[strin
 
 			if nonEssential != nil {
 				// flush data, next retry
-				StopTaskForcibly(starter.basis.MapperEntity.TaskId, mapper.TaskStartupFailure)
+				service.StopTaskForcibly(starter.basis.MapperEntity.TaskId, mapper.TaskStartupFailure)
 				starter.basis.Log = &logCopy
 				starter.basis.MapperEntity = &mapperEntityCopy
 				starter.basis.Task = nil
@@ -387,7 +388,7 @@ func (starter basicStarter) finalizeOnFailure() {
 		}
 
 	} else {
-		err := StopTaskForcibly(starter.basis.MapperEntity.TaskId, starter.basis.MapperEntity.StopReason)
+		err := service.StopTaskForcibly(starter.basis.MapperEntity.TaskId, starter.basis.MapperEntity.StopReason)
 		if err != nil {
 			starter.basis.Log.WithError(err).Error("Failed to stop task on failure")
 		}
@@ -411,7 +412,7 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, workspace string, 
 	}
 
 	var err error
-	basis.MapperEntity, err = mapper.CreateEntity(env, workspace, routerUUID, 15*time.Minute)
+	basis.MapperEntity, err = mapper.CreateEntity(workspace, routerUUID, env.Capabilities, env.Network, 15*time.Minute)
 	if err != nil {
 		basis.Log.WithError(err).Error("Failed to create mapper entity")
 	}
@@ -442,7 +443,7 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, workspace string, 
 					s.MapperEntity.StopReason = actuallMapperEntity.StopReason
 					s.MapperEntity.Status = mapper.Stopped
 
-					err := StopTaskForcibly(s.MapperEntity.TaskId, actuallMapperEntity.StopReason)
+					err := service.StopTaskForcibly(s.MapperEntity.TaskId, actuallMapperEntity.StopReason)
 					if err != nil {
 						s.Log.WithError(err).Error("Failed to stop generic task on finalize!")
 					}

@@ -1,4 +1,4 @@
-package builder
+package environment
 
 import (
 	"fmt"
@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
-	"github.com/zebrunner/esg/environment"
 	"github.com/zebrunner/esg/images"
 )
 
@@ -42,7 +41,7 @@ const (
 	minMemory   int64 = 256
 )
 
-func BuildEnvForTaskDefinitionGeneration(image images.Image, caps *capabilities.Capabilities) (*environment.ExecutionEnvironment, error) {
+func BuildEnvForTaskDefinitionGeneration(image images.Image, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
 	buildFn, err := getEnvironmentBuilder(caps)
 	if err != nil {
 		return nil, err
@@ -51,7 +50,7 @@ func BuildEnvForTaskDefinitionGeneration(image images.Image, caps *capabilities.
 	return buildFn("", "", image, caps)
 }
 
-func BuildEnvForTaskDefinitionOverride(workspace string, caps *capabilities.Capabilities) (*environment.ExecutionEnvironment, string, error) {
+func BuildEnvForTaskDefinitionOverride(workspace string, caps *capabilities.Capabilities) (*ExecutionEnvironment, string, error) {
 	image, err := buildImageFromCaps(caps)
 	if err != nil {
 		return nil, "", err
@@ -68,30 +67,30 @@ func BuildEnvForTaskDefinitionOverride(workspace string, caps *capabilities.Capa
 	return env, routerUUID, err
 }
 
-type envBuilder func(string, string, images.Image, *capabilities.Capabilities) (*environment.ExecutionEnvironment, error)
+type envBuilder func(string, string, images.Image, *capabilities.Capabilities) (*ExecutionEnvironment, error)
 
 func getEnvironmentBuilder(caps *capabilities.Capabilities) (envBuilder, error) {
 	platform := strings.ToLower(caps.PlatformName.ToPrimitive())
 
 	switch platform {
-	case environment.GENERIC.String():
+	case GENERIC.String():
 		return buildGeneric, nil
-	case environment.LINUX.String():
+	case LINUX.String():
 		return buildBrowser, nil
-	case environment.WINDOWS.String():
+	case WINDOWS.String():
 		return buildWindowsBrowser, nil
-	case environment.CYPRESS.String():
+	case CYPRESS.String():
 		return buildCypress, nil
-	case environment.ANDROID.String():
+	case ANDROID.String():
 		return buildAppiumRedroid, nil
-	case environment.ANY.String():
+	case ANY.String():
 		return buildBrowser, nil
 	default:
 		return nil, fmt.Errorf("platform is not supported. platformName=%s", caps.PlatformName)
 	}
 }
 
-func buildSchema(containers []*environment.Container) string {
+func buildSchema(containers []*Container) string {
 	namesArr := make([]string, 0)
 	for _, container := range containers {
 		namesArr = append(namesArr, container.Name)
@@ -103,21 +102,21 @@ func buildSchema(containers []*environment.Container) string {
 
 func buildImageFromCaps(caps *capabilities.Capabilities) (*images.Image, error) {
 	switch caps.PlatformName.ToPrimitive() {
-	case environment.GENERIC.String():
+	case GENERIC.String():
 		return images.GetGenericImage(caps.Image.ToPrimitive())
-	case environment.LINUX.String():
+	case LINUX.String():
 		tag := caps.BrowserVersion.ToPrimitive()
 		repository, err := images.RepositoryFromString(caps.BrowserName.ToPrimitive())
 		return &images.Image{Repository: repository, Tag: tag}, err
-	case environment.WINDOWS.String():
+	case WINDOWS.String():
 		tag := caps.BrowserVersion.ToPrimitive()
 		repository, err := images.RepositoryFromString(fmt.Sprintf("windows-%s", caps.BrowserName.ToPrimitive()))
 		return &images.Image{Repository: repository, Tag: tag}, err
-	case environment.CYPRESS.String():
+	case CYPRESS.String():
 		tag := caps.BrowserVersion.ToPrimitive()
 		repository, err := images.RepositoryFromString(fmt.Sprintf("windows-%s", caps.BrowserName.ToPrimitive()))
 		return &images.Image{Repository: repository, Tag: tag}, err
-	case environment.ANDROID.String():
+	case ANDROID.String():
 		tag := caps.PlatformVersion.ToPrimitive()
 		repository, err := images.RepositoryFromString(caps.DeviceName.ToPrimitive())
 		return &images.Image{Repository: repository, Tag: tag}, err
@@ -134,8 +133,8 @@ func buildTaskDefinitionFamily(caps *capabilities.Capabilities) string {
 	}
 
 	platformName := strings.ToLower(caps.PlatformName.ToPrimitive())
-	if caps.PlatformName == "" || platformName == environment.ANY.String() {
-		platformName = environment.LINUX.String()
+	if caps.PlatformName == "" || platformName == ANY.String() {
+		platformName = LINUX.String()
 	}
 	familyParts = append(familyParts, platformName)
 

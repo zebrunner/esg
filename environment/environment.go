@@ -2,8 +2,7 @@ package environment
 
 import (
 	"fmt"
-	"net/url"
-	"strconv"
+
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -12,6 +11,7 @@ import (
 	"github.com/zebrunner/esg/cachemaps/definitionmap"
 	"github.com/zebrunner/esg/cachemaps/resourcesToAllocate"
 	"github.com/zebrunner/esg/capabilities"
+	"github.com/zebrunner/esg/environment/network"
 	"github.com/zebrunner/esg/utils"
 )
 
@@ -31,24 +31,13 @@ func (e ENV_TYPE) String() string {
 	return [...]string{"generic", "linux", "windows", "cypress", "android", "any"}[e]
 }
 
-type NetworkConfiguration struct {
-	IP        string
-	Endpoints map[string]*Endpoint
-}
-
-type Endpoint struct {
-	HostPort      int64
-	ContainerPort int64
-	Path          string
-}
-
 type ExecutionEnvironment struct {
 	TaskDefinitionFamily string
 	Schema               string
 	TaskRoleArn          string
 	CapacityProvider     string
 	Containers           []*Container
-	Network              *NetworkConfiguration
+	Network              *network.NetworkConfiguration
 	Volumes              map[string]Volume
 	Capabilities         *capabilities.Capabilities
 }
@@ -114,7 +103,7 @@ func (e *ExecutionEnvironment) HashOvverideDefinition() string {
 
 		c := &Container{
 			Name:             container.Name,
-			Image:            container.Image,
+			Image:            container.getImageNameTag(),
 			Essential:        container.Essential,
 			Privileged:       container.Privileged,
 			Ports:            container.Ports,
@@ -145,9 +134,10 @@ func (env *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefiniti
 	for _, c := range env.Containers {
 		cpu := c.Cpu()
 		memory := c.Memory()
+		imageUrl := c.getImageUrl()
 		definition := ecs.ContainerDefinition{
 			Name:        &c.Name,
-			Image:       &c.Image,
+			Image:       &imageUrl,
 			Cpu:         &cpu,
 			Memory:      &memory,
 			Essential:   &c.Essential,
@@ -197,6 +187,30 @@ func (env *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefiniti
 	return definitions
 }
 
+func (env *ExecutionEnvironment) Volume() []*ecs.Volume {
+	volumes := []*ecs.Volume{}
+	for n, v := range env.Volumes {
+		if v.HostPath != "" {
+			volumes = append(volumes, &ecs.Volume{
+				Host: &ecs.HostVolumeProperties{
+					SourcePath: aws.String(v.HostPath),
+				},
+				Name: aws.String(n),
+			})
+		} else {
+			volumes = append(volumes, &ecs.Volume{
+				DockerVolumeConfiguration: &ecs.DockerVolumeConfiguration{
+					Driver: aws.String(v.Driver),
+					Scope:  aws.String(v.Scope),
+				},
+				Name: aws.String(n),
+			})
+		}
+	}
+
+	return volumes
+}
+
 func (env *ExecutionEnvironment) HashRegisterDefinition() string {
 	containers := make([]*Container, 0)
 	for _, container := range env.Containers {
@@ -224,9 +238,9 @@ func (env *ExecutionEnvironment) HashRegisterDefinition() string {
 			}
 		}
 
-		containers = append(containers, &Container{
+		c := &Container{
 			Name:             container.Name,
-			Image:            container.Image,
+			Image:            container.getImageUrl(),
 			Res:              container.Res,
 			Essential:        container.Essential,
 			Privileged:       container.Privileged,
@@ -237,7 +251,9 @@ func (env *ExecutionEnvironment) HashRegisterDefinition() string {
 			WorkingDirectory: container.WorkingDirectory,
 			HealthCheck:      healthCheck,
 			DependsOn:        dependsOn,
-		})
+		}
+
+		containers = append(containers, c)
 	}
 
 	registerDefinitionData := &ExecutionEnvironment{
@@ -273,19 +289,4 @@ func (env *ExecutionEnvironment) GetFamilyRevision() (string, error) {
 	}
 
 	return fmt.Sprint(env.TaskDefinitionFamily, ":", revision), nil
-}
-
-func (n *NetworkConfiguration) GetUrl(endpointName string) (u *url.URL, ok bool) {
-	endpoint, ok := n.Endpoints[endpointName]
-	if !ok {
-		return nil, false
-	}
-
-	ip := n.IP
-	if ip == "" {
-		return nil, false
-	}
-
-	host := ip + ":" + strconv.FormatInt(endpoint.HostPort, 10)
-	return &url.URL{Scheme: "http", Host: host, Path: endpoint.Path}, true
 }
