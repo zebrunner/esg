@@ -55,7 +55,7 @@ func getRouterBasis() *gin.Engine {
 	r := gin.New()
 	r.ForwardedByClientIP = true
 
-	r.Use(gin.LoggerWithFormatter(utils.TraceLogFromating), gin.Recovery())
+	r.Use(gin.LoggerWithFormatter(utils.TraceLogFromating), gin.Recovery(), handlers.DeleteALBCookie)
 
 	lowLvlApi := r.Group("/api", handlers.APIError, handlers.LowLvlAuthentication)
 	{

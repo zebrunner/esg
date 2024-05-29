@@ -244,3 +244,13 @@ func LockGenericTaskCache(c *gin.Context) {
 		log.WithField(config.RouterUUID, mapperEntity.RouterUUID).WithError(err).Error("Failed to release lock for mapper cache!")
 	}
 }
+
+func DeleteALBCookie(c *gin.Context) {
+	c.Next()
+	if _, err := c.Cookie("AWSALBTG"); err == nil {
+		c.SetCookie("AWSALBTG", "", -1, "", "", false, false)
+	}
+	if _, err := c.Cookie("AWSALBTGCORS"); err == nil {
+		c.SetCookie("AWSALBTGCORS", "", -1, "", "", false, false)
+	}
+}
