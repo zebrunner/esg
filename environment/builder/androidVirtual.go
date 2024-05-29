@@ -78,7 +78,7 @@ func buildAppiumRedroid(workspace string, routerUUID string, image *images.Image
 		Image:        uploaderImage,
 		ImageIsConst: true,
 		Res: environment.Resources{
-			Cpu:    64,  // with 32  uploading is aborted
+			Cpu:    32,
 			Memory: 256, // 64 works for single thread. for background copying it is not enough
 		},
 		Privileged: false,

@@ -7,7 +7,7 @@ services:
     volumes:
       - "pgdata-volume:/var/lib/postgresql/data"
     env_file:
-      - ../data.env
+      - ../properties/data.env
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
@@ -21,7 +21,7 @@ services:
     image: public.ecr.aws/zebrunner/e3s-migration:latest
     container_name: e3s-migration
     env_file:
-      - ../data.env
+      - ../properties/data.env
     depends_on:
       db:
         condition: service_healthy
