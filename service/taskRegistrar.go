@@ -51,7 +51,6 @@ func registerTask(ctx context.Context, env *environment.ExecutionEnvironment, ro
 	l.WithField("runTaskInput", runTaskInput).Trace("Res runTaskInput")
 
 	// TODO: explicitly minimize errors range to wait only by well-known reasons aka RESOURCE:CPU etc
-	// TODO: convert existing hard-coded 25 retries into the queue or provisioning timeout: https://github.com/zebrunner/esg/issues/72
 	// [VD] "i" retry should be ~15 if instances can be started in 1 min and 25 if ~2 min
 	var essentialError error
 	var resourceAllocationEntity *resourcesToAllocate.ResourcesToAllocate

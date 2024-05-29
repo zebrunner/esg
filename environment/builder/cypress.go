@@ -15,7 +15,7 @@ import (
 	b64 "encoding/base64"
 )
 
-func buildCypress(workspace string, routerUUID string, image *images.Image, caps *capabilities.Capabilities) (*environment.ExecutionEnvironment, error) {
+func buildCypress(workspace string, routerUUID string, image images.Image, caps *capabilities.Capabilities) (*environment.ExecutionEnvironment, error) {
 	conf := &config.Conf
 
 	workDir := "/tmp/zebrunner"
@@ -47,9 +47,8 @@ func buildCypress(workspace string, routerUUID string, image *images.Image, caps
 	}
 
 	cloneContainer := environment.Container{
-		Name:         "clone",
-		Image:        cloneImage,
-		ImageIsConst: true,
+		Name:  "clone",
+		Image: cloneImage,
 		Res: environment.Resources{
 			Cpu:    minCpu,
 			Memory: 512, //increased memory to fix OOM for huge repositories (3K+ branches)
@@ -67,9 +66,8 @@ func buildCypress(workspace string, routerUUID string, image *images.Image, caps
 	}
 
 	entrypointContainer := environment.Container{
-		Name:         "entrypoint",
-		Image:        entrypointImage,
-		ImageIsConst: true,
+		Name:  "entrypoint",
+		Image: entrypointImage,
 		Res: environment.Resources{
 			Cpu:    16,
 			Memory: 16,
@@ -99,10 +97,10 @@ func buildCypress(workspace string, routerUUID string, image *images.Image, caps
 	}
 
 	cypressContainer := environment.Container{
-		Name:         "browser",
-		ImageIsConst: false,
-		Privileged:   false,
-		Essential:    true,
+		Name:       "browser",
+		Image:      image.GetUrl(),
+		Privileged: false,
+		Essential:  true,
 		Ports: map[string]environment.PortMapping{
 			"vnc": {HostPort: vncPort, ContainerPort: 0},
 		},
@@ -134,10 +132,6 @@ func buildCypress(workspace string, routerUUID string, image *images.Image, caps
 		},
 	}
 
-	if image != nil {
-		cypressContainer.Image = image.GetUrl()
-	}
-
 	if caps.EnvVariables != nil {
 		for v, k := range caps.EnvVariables {
 			//fmt.Printf("var: %v; %v\n", v, k)
@@ -152,9 +146,8 @@ func buildCypress(workspace string, routerUUID string, image *images.Image, caps
 	basicAuthHeader := "Authorization: Basic " + b64.StdEncoding.EncodeToString([]byte(conf.ZebrunnerIntegrationUser+":"+conf.ZebrunnerIntegrationPassword))
 
 	recorderContainer := environment.Container{
-		Name:         "recorder",
-		Image:        cypressRecorderImage,
-		ImageIsConst: true,
+		Name:  "recorder",
+		Image: cypressRecorderImage,
 		Res: environment.Resources{
 			Cpu:    recorderCpu,
 			Memory: 2048,
@@ -197,9 +190,8 @@ func buildCypress(workspace string, routerUUID string, image *images.Image, caps
 	}
 
 	uploaderContainer := environment.Container{
-		Name:         "uploader",
-		Image:        uploaderImage,
-		ImageIsConst: true,
+		Name:  "uploader",
+		Image: uploaderImage,
 		Res: environment.Resources{
 			Cpu:    32,
 			Memory: 256, // 64 works for single thread. for backgroud copying it is not enough

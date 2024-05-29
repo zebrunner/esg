@@ -15,7 +15,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func buildBrowser(workspace string, routerUUID string, image *images.Image, caps *capabilities.Capabilities) (*environment.ExecutionEnvironment, error) {
+func buildBrowser(workspace string, routerUUID string, image images.Image, caps *capabilities.Capabilities) (*environment.ExecutionEnvironment, error) {
 	conf := &config.Conf
 
 	log.Trace("caps: ", caps)
@@ -50,9 +50,9 @@ func buildBrowser(workspace string, routerUUID string, image *images.Image, caps
 		driverArgs = ", \"--log=info\""
 	}
 	browserContainer := environment.Container{
-		Name:         "browser",
-		ImageIsConst: false,
-		Essential:    true,
+		Name:      "browser",
+		Image:     image.GetUrl(),
+		Essential: true,
 		Ports: map[string]environment.PortMapping{
 			"driver":         {ContainerPort: seleniumPort, HostPort: 0},
 			"vnc":            {ContainerPort: vncPort, HostPort: 0},
@@ -80,14 +80,9 @@ func buildBrowser(workspace string, routerUUID string, image *images.Image, caps
 		},
 	}
 
-	if image != nil {
-		browserContainer.Image = image.GetUrl()
-	}
-
 	recorderContainer := environment.Container{
-		Name:         "recorder",
-		Image:        recorderImage,
-		ImageIsConst: true,
+		Name:  "recorder",
+		Image: recorderImage,
 		Res: environment.Resources{
 			Cpu:    recorderCpu,
 			Memory: recorderMemory,
@@ -135,9 +130,8 @@ func buildBrowser(workspace string, routerUUID string, image *images.Image, caps
 	}
 
 	uploaderContainer := environment.Container{
-		Name:         "uploader",
-		Image:        uploaderImage,
-		ImageIsConst: true,
+		Name:  "uploader",
+		Image: uploaderImage,
 		Res: environment.Resources{
 			Cpu:    32,  // with 32  uploading is aborted
 			Memory: 256, // 64 works for single thread. for backgroud copying it is not enough
@@ -160,11 +154,10 @@ func buildBrowser(workspace string, routerUUID string, image *images.Image, caps
 	var mitmContainer environment.Container
 	if caps.Mitm {
 		mitmContainer = environment.Container{
-			Name:         "mitm",
-			Image:        mitmImage,
-			ImageIsConst: true,
-			Privileged:   false,
-			Essential:    false,
+			Name:       "mitm",
+			Image:      mitmImage,
+			Privileged: false,
+			Essential:  false,
 			Env: map[string]string{
 				"LOG_DIR":    logDir,
 				"PROXY_ARGS": caps.MitmArgs.ToPrimitive(),

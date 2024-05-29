@@ -18,7 +18,7 @@ const (
 	appiumMemory = 1024
 )
 
-func buildAppiumRedroid(workspace string, routerUUID string, image *images.Image, caps *capabilities.Capabilities) (*environment.ExecutionEnvironment, error) {
+func buildAppiumRedroid(workspace string, routerUUID string, image images.Image, caps *capabilities.Capabilities) (*environment.ExecutionEnvironment, error) {
 	browserVolume := "browser"
 
 	logDir := "/tmp/log"
@@ -29,23 +29,18 @@ func buildAppiumRedroid(workspace string, routerUUID string, image *images.Image
 	conf := &config.Conf
 
 	deviceContainer := environment.Container{
-		Name:         "device",
-		ImageIsConst: false,
-		Privileged:   true,
-		Essential:    true,
+		Name:       "device",
+		Image:      image.GetUrl(),
+		Privileged: true,
+		Essential:  true,
 		Env: map[string]string{
 			"VERBOSE": "1",
 		},
 	}
 
-	if image != nil {
-		deviceContainer.Image = image.GetUrl()
-	}
-
 	appiumContainer := environment.Container{
-		Name:         "appium",
-		Image:        appiumImage,
-		ImageIsConst: true,
+		Name:  "appium",
+		Image: appiumImage,
 		Res: environment.Resources{
 			Cpu:    appiumCpu,
 			Memory: appiumMemory,
@@ -74,9 +69,8 @@ func buildAppiumRedroid(workspace string, routerUUID string, image *images.Image
 	}
 
 	uploaderContainer := environment.Container{
-		Name:         "uploader",
-		Image:        uploaderImage,
-		ImageIsConst: true,
+		Name:  "uploader",
+		Image: uploaderImage,
 		Res: environment.Resources{
 			Cpu:    32,
 			Memory: 256, // 64 works for single thread. for background copying it is not enough

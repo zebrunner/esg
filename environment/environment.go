@@ -114,6 +114,7 @@ func (e *ExecutionEnvironment) HashOvverideDefinition() string {
 
 		c := &Container{
 			Name:             container.Name,
+			Image:            container.Image,
 			Essential:        container.Essential,
 			Privileged:       container.Privileged,
 			Ports:            container.Ports,
@@ -123,10 +124,6 @@ func (e *ExecutionEnvironment) HashOvverideDefinition() string {
 			WorkingDirectory: container.WorkingDirectory,
 			HealthCheck:      healthCheck,
 			DependsOn:        dependsOn,
-		}
-
-		if container.ImageIsConst {
-			c.Image = container.Image
 		}
 
 		overrideContainersData = append(overrideContainersData, c)

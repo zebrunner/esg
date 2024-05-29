@@ -12,24 +12,45 @@ import (
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
-	"github.com/zebrunner/esg/environment"
+	"github.com/zebrunner/esg/definitions"
 	"github.com/zebrunner/esg/handlers"
+	"github.com/zebrunner/esg/images"
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
 )
 
-const listen = ":5555"
+func manageTaskDefinitions() {
+	definitionsCacheTtl := time.Hour * 13
+	for {
+		handlers.DefinitionRefreshDone = false
 
-var (
-	refreshDone = false
-)
+		log.Info("parsing images")
+		images, err := images.ListImages()
+		if err != nil {
+			utils.ExitWithError(err, "failed to generate images", log.NewEntry(log.StandardLogger()))
+		}
+
+		log.Info("refreshing task definitions")
+		err = definitions.RefreshTaskDefinitions(images, definitionsCacheTtl)
+		if err != nil {
+			utils.ExitWithError(err, "failed to refresh task definitions", log.NewEntry(log.StandardLogger()))
+		}
+
+		handlers.DefinitionRefreshDone = true
+
+		log.Info("task definitions refresh finished")
+		time.Sleep(definitionsCacheTtl - time.Hour)
+	}
+}
 
 func CreateRouter() *gin.Engine {
 	r := gin.New()
 
-	r.GET("/ready", handlers.IsTaskDefinitionRefreshDone)
-	r.GET("/execution-environment", handlers.BuildExecutionEnvironment)
-	r.GET("/images", handlers.GetImages)
+	r.GET("/", handlers.Ready)
+	r.GET(definitions.IsReadyPath.String(), handlers.IsTaskDefinitionRefreshDone)
+	r.GET(definitions.GetImagesPath.String(), handlers.GetImages)
+	// TODO: create and implement handler
+	r.GET(definitions.RefreshDefinitionsPath.String())
 
 	return r
 }
@@ -50,31 +71,33 @@ func main() {
 	}
 	defer config.DbConnection.Close()
 
+	err = config.InitCache()
+	if err != nil {
+		utils.ExitWithError(err, "Failed to init Redis client", log.NewEntry(log.StandardLogger()))
+	}
+	defer config.RedisMapperClient.Close()
+	defer config.RedisDefinitionClient.Close()
+	defer config.RedisResourcesClient.Close()
+	defer config.RedisUtilityClient.Close()
+
 	// create sigterm listener chan
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
-	scalersMap, err := service.InitScalingData()
-	if err != nil {
-		utils.ExitWithError(err, "Failed to init scaling data", log.NewEntry(log.StandardLogger()))
-	}
-
-	for capacityProvider, scaler := range scalersMap {
-		environment.AddSmallestInstanceResources(scaler.InstanceResources.CPU, scaler.InstanceResources.Memory, capacityProvider)
-	}
-
 	// wrapping router by http.Server object and starting it in new thread to wait for quit chan signal
 	srv := &http.Server{
-		Addr:    listen,
+		Addr:    definitions.E3SDefinitionsPort,
 		Handler: CreateRouter(),
 	}
 
 	go func() {
-		log.Infof("Listening on %s", listen)
+		log.Infof("Listening on %s", definitions.E3SDefinitionsPort)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.WithError(err).Fatal("Failed to start e3s-definition server")
 		}
 	}()
+
+	go manageTaskDefinitions()
 
 	log.Info("Service started")
 

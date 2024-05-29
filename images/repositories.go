@@ -8,7 +8,8 @@ import (
 )
 
 const (
-	CHROME supportedRepository = iota
+	GENERIC supportedRepository = iota
+	CHROME
 	FIREFOX
 	EDGE
 	REDROID
@@ -23,10 +24,11 @@ const (
 type supportedRepository int
 
 func (repository supportedRepository) String() string {
-	return [...]string{"chrome", "firefox", "edge", "redroid", "windows-chrome", "windows-edge", "cypress-chrome", "cypress-chromium", "cypress-edge", "cypress-firefox"}[repository]
+	// generic is an empty string as it could not be predetermined
+	return [...]string{"", "chrome", "firefox", "edge", "redroid", "windows-chrome", "windows-edge", "cypress-chrome", "cypress-chromium", "cypress-edge", "cypress-firefox"}[repository]
 }
 
-func repositoryFromString(repName string) (supportedRepository, error) {
+func RepositoryFromString(repName string) (supportedRepository, error) {
 	switch repName {
 	case REDROID.String():
 		return REDROID, nil

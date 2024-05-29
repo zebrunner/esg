@@ -369,10 +369,6 @@ func main() {
 
 	// on shutdown actions
 	log.Info("Shutdown scaler ...")
-	err = utilsmap.UnsetTaskDefenitionRefreshDone()
-	if err != nil {
-		log.WithError(err).Error("Failed to mark task definition refresh as undone")
-	}
 
 	// wait for the end of a resources shaping
 	log.Info("Waiting for sessions and tasks processors iteration to finish...")

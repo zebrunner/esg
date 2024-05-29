@@ -42,7 +42,7 @@ const (
 	minMemory   int64 = 256
 )
 
-func BuildEnvForTaskDefinitionGeneration(image *images.Image, caps *capabilities.Capabilities) (*environment.ExecutionEnvironment, error) {
+func BuildEnvForTaskDefinitionGeneration(image images.Image, caps *capabilities.Capabilities) (*environment.ExecutionEnvironment, error) {
 	buildFn, err := getEnvironmentBuilder(caps)
 	if err != nil {
 		return nil, err
@@ -52,18 +52,23 @@ func BuildEnvForTaskDefinitionGeneration(image *images.Image, caps *capabilities
 }
 
 func BuildEnvForTaskDefinitionOverride(workspace string, caps *capabilities.Capabilities) (*environment.ExecutionEnvironment, string, error) {
+	image, err := buildImageFromCaps(caps)
+	if err != nil {
+		return nil, "", err
+	}
+
 	buildFn, err := getEnvironmentBuilder(caps)
 	if err != nil {
 		return nil, "", err
 	}
 
 	routerUUID := uuid.NewString()
-	env, err := buildFn(workspace, routerUUID, nil, caps)
+	env, err := buildFn(workspace, routerUUID, *image, caps)
 
 	return env, routerUUID, err
 }
 
-type envBuilder func(string, string, *images.Image, *capabilities.Capabilities) (*environment.ExecutionEnvironment, error)
+type envBuilder func(string, string, images.Image, *capabilities.Capabilities) (*environment.ExecutionEnvironment, error)
 
 func getEnvironmentBuilder(caps *capabilities.Capabilities) (envBuilder, error) {
 	platform := strings.ToLower(caps.PlatformName.ToPrimitive())
@@ -94,6 +99,31 @@ func buildSchema(containers []*environment.Container) string {
 	sort.Strings(namesArr)
 
 	return strings.Join(namesArr, "-")
+}
+
+func buildImageFromCaps(caps *capabilities.Capabilities) (*images.Image, error) {
+	switch caps.PlatformName.ToPrimitive() {
+	case environment.GENERIC.String():
+		return images.GetGenericImage(caps.Image.ToPrimitive())
+	case environment.LINUX.String():
+		tag := caps.BrowserVersion.ToPrimitive()
+		repository, err := images.RepositoryFromString(caps.BrowserName.ToPrimitive())
+		return &images.Image{Repository: repository, Tag: tag}, err
+	case environment.WINDOWS.String():
+		tag := caps.BrowserVersion.ToPrimitive()
+		repository, err := images.RepositoryFromString(fmt.Sprintf("windows-%s", caps.BrowserName.ToPrimitive()))
+		return &images.Image{Repository: repository, Tag: tag}, err
+	case environment.CYPRESS.String():
+		tag := caps.BrowserVersion.ToPrimitive()
+		repository, err := images.RepositoryFromString(fmt.Sprintf("windows-%s", caps.BrowserName.ToPrimitive()))
+		return &images.Image{Repository: repository, Tag: tag}, err
+	case environment.ANDROID.String():
+		tag := caps.PlatformVersion.ToPrimitive()
+		repository, err := images.RepositoryFromString(caps.DeviceName.ToPrimitive())
+		return &images.Image{Repository: repository, Tag: tag}, err
+	default:
+		return nil, fmt.Errorf("[latform '%s' is not supported", caps.PlatformName.ToPrimitive())
+	}
 }
 
 func buildTaskDefinitionFamily(caps *capabilities.Capabilities) string {

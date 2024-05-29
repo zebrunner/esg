@@ -4,12 +4,15 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/zebrunner/esg/capabilities"
 )
 
 var (
 	DefinitionRefreshDone = false
 )
+
+func Ready(c *gin.Context) {
+	c.String(http.StatusOK, "ready to accept requests")
+}
 
 func IsTaskDefinitionRefreshDone(c *gin.Context) {
 	if DefinitionRefreshDone {
@@ -19,22 +22,10 @@ func IsTaskDefinitionRefreshDone(c *gin.Context) {
 	}
 }
 
-func BuildExecutionEnvironment(c *gin.Context) {
-	if !DefinitionRefreshDone {
-		c.Status(http.StatusServiceUnavailable)
-		return
-	}
-
-	caps := capabilities.Capabilities{}
-	err := c.ShouldBindJSON(&caps)
-	if err != nil {
-		c.String(http.StatusInternalServerError, "failed to get caps from body")
-	}
-
-	
+func GetImages(c *gin.Context) {
 
 }
 
-func GetImages(c *gin.Context) {
+func RefreshDefinitions(c *gin.Context) {
 
 }

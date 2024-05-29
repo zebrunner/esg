@@ -12,7 +12,7 @@ import (
 	"github.com/zebrunner/esg/images"
 )
 
-func buildWindowsBrowser(workspace string, routerUUID string, image *images.Image, caps *capabilities.Capabilities) (*environment.ExecutionEnvironment, error) {
+func buildWindowsBrowser(workspace string, routerUUID string, image images.Image, caps *capabilities.Capabilities) (*environment.ExecutionEnvironment, error) {
 	conf := &config.Conf
 
 	caps.EnableVNC = false
@@ -24,9 +24,9 @@ func buildWindowsBrowser(workspace string, routerUUID string, image *images.Imag
 	log.Trace("caps: ", caps)
 
 	browserContainer := environment.Container{
-		Name:         "browser",
-		ImageIsConst: false,
-		Essential:    true,
+		Name:      "browser",
+		Image:     image.GetUrl(),
+		Essential: true,
 		Ports: map[string]environment.PortMapping{
 			"driver": {ContainerPort: seleniumPort, HostPort: 0},
 		},
@@ -46,14 +46,9 @@ func buildWindowsBrowser(workspace string, routerUUID string, image *images.Imag
 		},
 	}
 
-	if image != nil {
-		browserContainer.Image = image.GetUrl()
-	}
-
 	recorderContainer := environment.Container{
-		Name:         "recorder",
-		Image:        winRecorderImage,
-		ImageIsConst: true,
+		Name:  "recorder",
+		Image: winRecorderImage,
 		Res: environment.Resources{
 			Cpu:    8,
 			Memory: 8,
@@ -77,9 +72,8 @@ func buildWindowsBrowser(workspace string, routerUUID string, image *images.Imag
 	}
 
 	uploaderContainer := environment.Container{
-		Name:         "uploader",
-		Image:        winUploaderImage,
-		ImageIsConst: true,
+		Name:  "uploader",
+		Image: winUploaderImage,
 		Res: environment.Resources{
 			Cpu:    16,
 			Memory: 16,

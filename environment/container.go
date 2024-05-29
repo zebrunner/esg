@@ -48,7 +48,6 @@ type Resources struct {
 type Container struct {
 	Name         string
 	Image        string
-	ImageIsConst bool
 
 	Res Resources
 

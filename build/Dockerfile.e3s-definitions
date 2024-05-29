@@ -12,25 +12,24 @@ RUN go mod download
 # Build esg
 COPY . /esg
 
-RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./cmd/router
+RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./cmd/e3s-definitions
 
 FROM alpine:latest
 
-ENV LISTEN_PORT=4444
+ENV LOG_LEVEL=
 
 ENV AWS_REGION=
 ENV AWS_RETRY=
 ENV AWS_CLUSTER=
-
 ENV AWS_ACESS_KEY_ID=
 ENV AWS_SECRET_ACCESS_KEY=
+ENV AWS_TASK_ROLE=
 
-ENV LOG_LEVEL=
-
+ENV AWS_ELASTIC_CACHE=
 ENV DATABASE=
 
-COPY --from=0 /esg/router /router
+COPY --from=0 /esg/e3s-definitions /router
 
-COPY ./build/entrypoint.router /entrypoint.sh
+COPY ./build/entrypoint.e3s-definitions /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]

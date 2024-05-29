@@ -19,18 +19,6 @@ import (
 	"github.com/zebrunner/esg/utils"
 )
 
-var (
-	imagesArr = []Image{}
-)
-
-func GetStoredImages() []Image {
-	return imagesArr
-}
-
-func StoreImages(imgs []Image) {
-	imagesArr = imgs
-}
-
 type Image struct {
 	Repository  supportedRepository
 	Tag         string
@@ -57,9 +45,19 @@ func (i Image) GetMockCapabilities() ([]*capabilities.Capabilities, error) {
 	return capsList, nil
 }
 
-func ToImage(caps *capabilities.Capabilities) Image {
+func GetGenericImage(genericImg string) (*Image, error) {
+	imgArr := strings.Split(genericImg, ":")
+	if len(imgArr) != 2 {
+		err := fmt.Errorf("failed to parse generic image")
+		return nil, err
+	}
 
-	return Image{}
+	if imgArr[0] == "" {
+		err := fmt.Errorf("generic image uri is empty")
+		return nil, err
+	}
+
+	return &Image{Repository: GENERIC, RegistryUri: imgArr[0], Tag: imgArr[1]}, nil
 }
 
 func imageComparator(a Image, b Image) int {
@@ -157,7 +155,7 @@ func buildImagesFromPublic(wg *sync.WaitGroup, repositories []string, imgsCh cha
 	imgRequestUrl := "https://api.us-east-1.gallery.ecr.aws/describeImageTags"
 
 	for _, repositoryName := range repositories {
-		repository, err := repositoryFromString(repositoryName)
+		repository, err := RepositoryFromString(repositoryName)
 		if err != nil {
 			log.WithError(err).Warn("Failed to get repository from string")
 			errorCh <- err
@@ -230,7 +228,7 @@ func buildImagesFromPrivate(wg *sync.WaitGroup, registryId string, repositories 
 	images := make([]Image, 0, len(imgsDetails))
 	for _, details := range imgsDetails {
 		if details != nil && details.RepositoryName != nil && details.ImageTags != nil {
-			repository, err := repositoryFromString(*details.RepositoryName)
+			repository, err := RepositoryFromString(*details.RepositoryName)
 			if err != nil {
 				log.WithError(err).Error("Failed to get repository from string")
 				errorCh <- err
@@ -260,13 +258,13 @@ func splitRegistryAndRepositories(registry string) (regAlly string, repositories
 	}
 
 	if regArr[0] == "" {
-		err = fmt.Errorf("private registry ally is empty")
+		err = fmt.Errorf("registry ally is empty")
 		return
 	}
 	regAlly = regArr[0]
 
 	if regArr[1] == "" {
-		err = fmt.Errorf("repositories not passed for %s registry ally", regAlly)
+		err = fmt.Errorf("repositories are not passed for %s registry ally", regAlly)
 		return
 	}
 	repositories = strings.Split(regArr[1], ",")
@@ -274,9 +272,9 @@ func splitRegistryAndRepositories(registry string) (regAlly string, repositories
 	return
 }
 
-func GenerateImages() error {
+func ListImages() ([]Image, error) {
 	var excludeRules = getRules()
-
+	// TODO: refactore from here:
 	supportedRepositories := []string{
 		"redroid",
 		"cypress-chrome",
@@ -304,13 +302,14 @@ func GenerateImages() error {
 		for _, registryWithRepositories := range registriesRespositories {
 			registryId, repositories, err := splitRegistryAndRepositories(registryWithRepositories)
 			if err != nil {
-				return err
+				return nil, err
 			}
 
 			wg.Add(1)
 			go buildImagesFromPrivate(&wg, registryId, repositories, imgsCh, errCh)
 		}
 	}
+	// : to here
 
 	doneCh := make(chan interface{})
 	go utils.WaitForAllThreads(&wg, doneCh)
@@ -329,14 +328,13 @@ out:
 				}
 			}
 		case err := <-errCh:
-			return err
+			return nil, err
 		case <-doneCh:
 			break out
 		}
 	}
 
 	slices.SortFunc(images, imageComparator)
-	imagesArr = images
 
-	return nil
+	return images, nil
 }

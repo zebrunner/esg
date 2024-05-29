@@ -20,8 +20,8 @@ import (
 	"github.com/zebrunner/esg/cachemaps/definitionmap"
 	"github.com/zebrunner/esg/cachemaps/mapper"
 	"github.com/zebrunner/esg/cachemaps/resourcesToAllocate"
-	"github.com/zebrunner/esg/cachemaps/utilsmap"
 	"github.com/zebrunner/esg/config"
+	"github.com/zebrunner/esg/definitions"
 	"github.com/zebrunner/esg/environment"
 	"github.com/zebrunner/esg/handlers"
 	"github.com/zebrunner/esg/service"
@@ -212,6 +212,19 @@ func InitClusterInfo() (*elbv2.TargetGroup, error) {
 
 	config.Conf.AwsEsgUrl = fmt.Sprintf("%s://%s", *listener.Protocol, *loadBalancer.DNSName)
 
+	// wait until task definitions are updated
+	for {
+		if ok, err := definitions.IsTaskDefinitionRefreshDone(); err != nil {
+			log.WithError(err).Error("Failed to get expected response from e3s definitions service")
+			return nil, err
+		} else if ok {
+			definitionmap.ActualizeDefinitionsMap(time.Minute * 15)
+			break
+		}
+
+		time.Sleep(5 * time.Second)
+	}
+
 	return targetGroup, nil
 }
 
@@ -238,7 +251,6 @@ func main() {
 	if err != nil {
 		utils.ExitWithError(err, "Failed to init Redis client", log.NewEntry(log.StandardLogger()))
 	}
-
 	defer config.RedisMapperClient.Close()
 	defer config.RedisDefinitionClient.Close()
 	defer config.RedisResourcesClient.Close()
@@ -258,15 +270,6 @@ func main() {
 }
 
 func startRouter(targetGroup *elbv2.TargetGroup) {
-	// wait until task definitions are updated
-	for {
-		if utilsmap.IsTaskDefenitionRefreshDone() {
-			definitionmap.SaveAndUpdateDefinitions()
-			break
-		}
-		time.Sleep(5 * time.Second)
-	}
-
 	// init all service workers
 	service.InitInstanceWorker()
 	service.InitWaitWorker()

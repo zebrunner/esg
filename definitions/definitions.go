@@ -13,23 +13,6 @@ import (
 	"github.com/zebrunner/esg/service"
 )
 
-func UpdateTaskDefinitions(refreshInterval time.Duration) {
-	for {
-		time.Sleep(refreshInterval)
-		log.Info("Starting task definitions update")
-
-		//TODO: relace with actual images renewal
-		images := []images.Image{}
-		err := RefreshTaskDefinitions(images, refreshInterval+time.Hour)
-		if err != nil {
-			log.WithError(err).Error("Failed to update task definitions")
-		} else {
-			// hashRevisionMap = hashRevisionMap
-			log.Info("Task definitions update finished")
-		}
-	}
-}
-
 func RefreshTaskDefinitions(imagesArr []images.Image, taskDefinitionCacheTtl time.Duration) error {
 	hashRevisionMap := make(map[string]int64)
 	for _, img := range imagesArr {
@@ -114,7 +97,7 @@ func buildEnvsFromImage(image images.Image) ([]*environment.ExecutionEnvironment
 
 	envsList := make([]*environment.ExecutionEnvironment, 0)
 	for _, caps := range capsList {
-		env, err := builder.BuildEnvForTaskDefinitionGeneration(&image, caps)
+		env, err := builder.BuildEnvForTaskDefinitionGeneration(image, caps)
 		if err != nil {
 			l.WithError(err).Error("Failed to build execution environment")
 			return nil, err

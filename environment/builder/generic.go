@@ -15,7 +15,7 @@ import (
 	"fmt"
 )
 
-func buildGeneric(workspace string, routerUUID string, image *images.Image, caps *capabilities.Capabilities) (*environment.ExecutionEnvironment, error) {
+func buildGeneric(workspace string, routerUUID string, image images.Image, caps *capabilities.Capabilities) (*environment.ExecutionEnvironment, error) {
 	conf := &config.Conf
 
 	caps.EnableVNC = false
@@ -50,9 +50,8 @@ func buildGeneric(workspace string, routerUUID string, image *images.Image, caps
 	taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
 
 	cloneContainer := environment.Container{
-		Name:         "clone",
-		Image:        cloneImage,
-		ImageIsConst: true,
+		Name:  "clone",
+		Image: cloneImage,
 		Res: environment.Resources{
 			Cpu:    minCpu,
 			Memory: 512, //increased memory to fix OOM for huge repositories (3K+ branches)
@@ -65,9 +64,8 @@ func buildGeneric(workspace string, routerUUID string, image *images.Image, caps
 	}
 
 	entrypointContainer := environment.Container{
-		Name:         "entrypoint",
-		Image:        entrypointImage,
-		ImageIsConst: true,
+		Name:  "entrypoint",
+		Image: entrypointImage,
 		Res: environment.Resources{
 			Cpu:    16,
 			Memory: 16,
@@ -82,9 +80,9 @@ func buildGeneric(workspace string, routerUUID string, image *images.Image, caps
 	var mavenContainer *environment.Container = nil
 	if includeMaven {
 		mavenContainer = &environment.Container{
-			Name:         "maven",
-			Image:        mavenImage,
-			ImageIsConst: true,
+			Name:  "maven",
+			Image: mavenImage,
+
 			Res: environment.Resources{
 				Cpu:    16,
 				Memory: 16,
@@ -124,10 +122,10 @@ func buildGeneric(workspace string, routerUUID string, image *images.Image, caps
 		Condition:     aws.String("COMPLETE"),
 	})
 	executorContainer := environment.Container{
-		Name:         "executor",
-		ImageIsConst: false,
-		Privileged:   false,
-		Essential:    true,
+		Name:       "executor",
+		Image:      image.GetUrl(),
+		Privileged: false,
+		Essential:  true,
 		Env: map[string]string{
 			"COMMAND": launchCommand.ToPrimitive(),
 			"branch":  branch,
@@ -147,10 +145,6 @@ func buildGeneric(workspace string, routerUUID string, image *images.Image, caps
 		DependsOn: dependsOn,
 	}
 
-	if image != nil {
-		executorContainer.Image = image.GetUrl()
-	}
-
 	if caps.EnvVariables != nil {
 		for v, k := range caps.EnvVariables {
 			//fmt.Printf("var: %v; %v\n", v, k)
@@ -162,9 +156,8 @@ func buildGeneric(workspace string, routerUUID string, image *images.Image, caps
 	executorContainer.Env["E3S_URL"] = config.Conf.AwsEsgUrl
 
 	recorderContainer := environment.Container{
-		Name:         "recorder",
-		Image:        recorderImage,
-		ImageIsConst: true,
+		Name:  "recorder",
+		Image: recorderImage,
 		Res: environment.Resources{
 			Cpu:    32,
 			Memory: 256, // with 128 failed for cyserver "OutOfMemoryError: Container killed due to memory usage"
@@ -191,9 +184,8 @@ func buildGeneric(workspace string, routerUUID string, image *images.Image, caps
 	}
 
 	uploaderContainer := environment.Container{
-		Name:         "uploader",
-		Image:        uploaderImage,
-		ImageIsConst: true,
+		Name:  "uploader",
+		Image: uploaderImage,
 		Res: environment.Resources{
 			Cpu:    32,
 			Memory: 64,
