@@ -61,8 +61,8 @@ type Config struct {
 	ReserveInstancesPercent float64
 	ReserveMaxCapacity      int64
 
-	ExcludeBrowsers      string
-	PrivateBrowserImages string
+	ImageRepositories string
+	ExcludeBrowsers   string
 
 	ProductionEnv bool
 	SingleTenant  bool
@@ -106,8 +106,8 @@ func init() {
 	flag.Float64Var(&Conf.ReserveInstancesPercent, "reserve-instances-percent", 0.25, "Reserved cluster capacity quota during scale up and down operations")
 	flag.Int64Var(&Conf.ReserveMaxCapacity, "reserve-max-capacity", 5, "Reservation instance limit")
 
-	flag.StringVar(&Conf.ExcludeBrowsers, "exclude-browsers", "", "Pattern for excluding browsers from available images")
-	flag.StringVar(&Conf.PrivateBrowserImages, "private-browser-images", "", "Pattern for excluding browsers from available images")
+	flag.StringVar(&Conf.ImageRepositories, "image-repositories", "Zebrunner:chrome", "Pattern of supported browsers images")
+	flag.StringVar(&Conf.ExcludeBrowsers, "exclude-browsers", "", "Pattern for excluding browsers from available images")	
 
 	flag.BoolVar(&Conf.SingleTenant, "single-tenant", false, "Single tenant mode")
 	flag.BoolVar(&Conf.ProductionEnv, "production-env", true, "Service configuration mode")

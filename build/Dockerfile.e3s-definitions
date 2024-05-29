@@ -28,6 +28,9 @@ ENV AWS_TASK_ROLE=
 ENV AWS_ELASTIC_CACHE=
 ENV DATABASE=
 
+ENV IMAGE_REPOSITORIES=
+ENV EXCLUDE_BROWSERS=
+
 COPY --from=0 /esg/e3s-definitions /router
 
 COPY ./build/entrypoint.e3s-definitions /entrypoint.sh

@@ -49,6 +49,9 @@ if [ ! -z ${DATABASE} ]; then
   CMD_ARGS="${CMD_ARGS} -db-connection ${DATABASE}"
 fi
 
+if [ ! -z ${IMAGE_REPOSITORIES} ]; then
+  CMD_ARGS="${CMD_ARGS} -image-repositories ${IMAGE_REPOSITORIES}"
+fi
 if [ ! -z ${EXCLUDE_BROWSERS} ]; then
   CMD_ARGS="${CMD_ARGS} -exclude-browsers ${EXCLUDE_BROWSERS}"
 fi

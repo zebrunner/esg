@@ -5,8 +5,9 @@ services:
     container_name: e3s-definitions
     image: public.ecr.aws/zebrunner/e3s-definitions:2.9.3
     env_file:
-      - e3s-definitions.env
-      - data.env
+      - ./properties/config.env
+      - ./properties/e3s-definitions.env
+      - ./properties/data.env
     networks:
       - service-network
     restart: always

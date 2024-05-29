@@ -19,6 +19,10 @@ import (
 	"github.com/zebrunner/esg/utils"
 )
 
+const (
+	zebrunnerPublicRegistry = "zebrunner"
+)
+
 type Image struct {
 	Repository  supportedRepository
 	Tag         string
@@ -267,53 +271,39 @@ func splitRegistryAndRepositories(registry string) (regAlly string, repositories
 		err = fmt.Errorf("repositories are not passed for %s registry ally", regAlly)
 		return
 	}
+
 	repositories = strings.Split(regArr[1], ",")
+	for i := 0; i < len(repositories); i++ {
+		repositories[i] = strings.TrimSpace(repositories[i])
+	}
 
 	return
 }
 
 func ListImages() ([]Image, error) {
-	var excludeRules = getRules()
-	// TODO: refactore from here:
-	supportedRepositories := []string{
-		"redroid",
-		"cypress-chrome",
-		"cypress-chromium",
-		"cypress-edge",
-		"cypress-firefox",
-		"windows-chrome",
-		"windows-edge",
-	}
-
 	imgsCh := make(chan []Image)
 	errCh := make(chan error)
 	wg := sync.WaitGroup{}
-	if config.Conf.PrivateBrowserImages == "" {
-		supportedRepositories = append(supportedRepositories, "chrome", "firefox", "edge")
+
+	registrieswWithRespositories := strings.Split(config.Conf.ImageRepositories, ";")
+	for _, registryWithRepositories := range registrieswWithRespositories {
+		registryId, repositories, err := splitRegistryAndRepositories(registryWithRepositories)
+		if err != nil {
+			return nil, err
+		}
 
 		wg.Add(1)
-		go buildImagesFromPublic(&wg, supportedRepositories, imgsCh, errCh)
-	} else {
-		wg.Add(1)
-		go buildImagesFromPublic(&wg, supportedRepositories, imgsCh, errCh)
-
-		registriesRespositories := strings.Split(config.Conf.PrivateBrowserImages, ";")
-
-		for _, registryWithRepositories := range registriesRespositories {
-			registryId, repositories, err := splitRegistryAndRepositories(registryWithRepositories)
-			if err != nil {
-				return nil, err
-			}
-
-			wg.Add(1)
+		if strings.ToLower(registryId) == zebrunnerPublicRegistry {
+			go buildImagesFromPublic(&wg, repositories, imgsCh, errCh)
+		} else {
 			go buildImagesFromPrivate(&wg, registryId, repositories, imgsCh, errCh)
 		}
 	}
-	// : to here
 
 	doneCh := make(chan interface{})
 	go utils.WaitForAllThreads(&wg, doneCh)
 
+	excludeRules := getRules()
 	images := make([]Image, 0)
 out:
 	for {
