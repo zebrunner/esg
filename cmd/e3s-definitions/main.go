@@ -25,7 +25,7 @@ func manageTaskDefinitions() {
 		handlers.DefinitionRefreshDone = false
 
 		log.Info("parsing images")
-		images, err := images.ListImages()
+		images, err := images.ListImages(config.Conf.ImageRepositories, config.Conf.ExcludeBrowsers)
 		if err != nil {
 			utils.ExitWithError(err, "failed to generate images", log.NewEntry(log.StandardLogger()))
 		}
@@ -49,8 +49,7 @@ func CreateRouter() *gin.Engine {
 	r.GET("/", handlers.Ready)
 	r.GET(definitions.IsReadyPath.String(), handlers.IsTaskDefinitionRefreshDone)
 	r.GET(definitions.GetImagesPath.String(), handlers.GetImages)
-	// TODO: create and implement handler
-	r.GET(definitions.RefreshDefinitionsPath.String())
+	r.GET(definitions.RefreshDefinitionsPath.String(), handlers.RefreshDefinitions)
 
 	return r
 }

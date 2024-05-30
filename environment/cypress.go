@@ -101,7 +101,7 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 		image:      &image,
 		Privileged: false,
 		Essential:  true,
-		Ports: map[string]PortMapping{
+		Ports: map[string]portMapping{
 			"vnc": {HostPort: vncPort, ContainerPort: 0},
 		},
 		Env: map[string]string{
@@ -208,24 +208,13 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 		HealthCheck: nil,
 	}
 
-	// convert image "public.ecr.aws/zebrunner/cypress-chrome:107.0" to task definition failiy: "cypress-cypress-chrome-107-0"
-	// TODO: rework family definitiin generation
-	// familyDefinition := strings.Replace(browserImage, config.ZebrunnerEcrRegistryUri, "", -1)
-	// familyDefinition = strings.Replace(familyDefinition, ":", "-", -1)
-	// familyDefinition = strings.Replace(familyDefinition, ".", "-", -1)
-	// zbrEnv := os.Getenv("ZEBRUNNER_ENV")
-	// if zbrEnv != "" {
-	// familyDefinition = zbrEnv + "-" + familyDefinition
-	// }
-	// log.Trace("Overidden TaskDefinitionFamily for cypress: " + familyDefinition)
-
 	containers := []*Container{&cloneContainer, &entrypointContainer, &cypressContainer, &recorderContainer, &uploaderContainer}
 	env := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
 		Schema:               buildSchema(containers),
 		Containers:           containers,
 		Capabilities:         caps,
-		Volumes: map[string]Volume{
+		Volumes: map[string]volume{
 			taskVolume:       {Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false},
 			logVolume:        {Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false},
 			cypressVolume:    {Driver: "local", Scope: "task", ContainerPath: cypressDir, ReadOnly: false},
@@ -242,8 +231,8 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
 	}
 
-	err := CalculateResources(&env,
-		&ResourceCalculationHelper{
+	err := calculateResources(&env,
+		&resourceCalculationHelper{
 			MinimumRes: Resources{Cpu: 1024, Memory: 2048},
 			Container:  &cypressContainer,
 			Memory:     &caps.Memory,

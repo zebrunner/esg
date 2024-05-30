@@ -2,13 +2,12 @@ package images
 
 import (
 	"fmt"
-	"strings"
 
-	"github.com/zebrunner/esg/capabilities"
+	envtype "github.com/zebrunner/esg/environment/envType"
 )
 
 const (
-	GENERIC supportedRepository = iota
+	GENERIC SupportedRepository = iota
 	CHROME
 	FIREFOX
 	EDGE
@@ -21,14 +20,37 @@ const (
 	CYPRESS_FIREFOX
 )
 
-type supportedRepository int
+type SupportedRepository int
 
-func (repository supportedRepository) String() string {
+func (repository SupportedRepository) String() string {
 	// generic is an empty string as it could not be predetermined
-	return [...]string{"", "chrome", "firefox", "edge", "redroid", "windows-chrome", "windows-edge", "cypress-chrome", "cypress-chromium", "cypress-edge", "cypress-firefox"}[repository]
+	return [...]string{
+		"",
+		"chrome", "firefox", "edge",
+		"redroid",
+		"windows-chrome", "windows-edge",
+		"cypress-chrome", "cypress-chromium", "cypress-edge", "cypress-firefox"}[repository]
 }
 
-func RepositoryFromString(repName string) (supportedRepository, error) {
+func (repository SupportedRepository) GetBrowserName() string {
+	return [...]string{
+		"",
+		"chrome", "firefox", "edge",
+		"redroid",
+		"chrome", "edge",
+		"chrome", "chromium", "edge", "firefox"}[repository]
+}
+
+func (repository SupportedRepository) GetPlatform() envtype.ENV_TYPE {
+	return [...]envtype.ENV_TYPE{
+		envtype.GENERIC,
+		envtype.LINUX, envtype.LINUX, envtype.LINUX,
+		envtype.ANDROID,
+		envtype.WINDOWS, envtype.WINDOWS,
+		envtype.CYPRESS, envtype.CYPRESS, envtype.CYPRESS, envtype.CYPRESS}[repository]
+}
+
+func RepositoryFromString(repName string) (SupportedRepository, error) {
 	switch repName {
 	case REDROID.String():
 		return REDROID, nil
@@ -53,93 +75,4 @@ func RepositoryFromString(repName string) (supportedRepository, error) {
 	default:
 		return 0, fmt.Errorf("repository with name `%s` is not supported", repName)
 	}
-}
-
-type capsForPlatform func(executor string, version string) ([]*capabilities.Capabilities, error)
-
-func (repository supportedRepository) getCapsForPlaformFn() capsForPlatform {
-	return [...]capsForPlatform{capsForAndroid,
-		capsForLinux, capsForLinux, capsForLinux,
-		capsForWindows, capsForWindows,
-		capsForCypress, capsForCypress, capsForCypress, capsForCypress}[repository]
-}
-
-func capsForAndroid(executor string, version string) ([]*capabilities.Capabilities, error) {
-	capsList := make([]*capabilities.Capabilities, 0)
-	caps := capabilities.GetDefaultCaps()
-	reqCaps := map[string]interface{}{
-		"platformName":    "android",
-		"deviceName":      executor,
-		"platformVersion": version,
-	}
-
-	err := caps.ParseRequestCaps(reqCaps)
-	if err != nil {
-		return nil, err
-	}
-
-	return append(capsList, caps), nil
-}
-
-func capsForWindows(executor string, version string) ([]*capabilities.Capabilities, error) {
-	capsList := make([]*capabilities.Capabilities, 0)
-
-	reqCaps := map[string]interface{}{
-		"platformName":   "windows",
-		"browserName":    strings.TrimPrefix(executor, "windows-"),
-		"browserVersion": version,
-	}
-	capsWithoutMitm := capabilities.GetDefaultCaps()
-	err := capsWithoutMitm.ParseRequestCaps(reqCaps)
-	if err != nil {
-		return nil, err
-	}
-
-	capsList = append(capsList, capsWithoutMitm)
-	return capsList, nil
-}
-
-func capsForLinux(executor string, version string) ([]*capabilities.Capabilities, error) {
-	capsList := make([]*capabilities.Capabilities, 0)
-	reqCaps := map[string]interface{}{
-		"platformName":   "linux",
-		"browserName":    executor,
-		"browserVersion": version,
-	}
-
-	capsWithoutMitm := capabilities.GetDefaultCaps()
-	err := capsWithoutMitm.ParseRequestCaps(reqCaps)
-	if err != nil {
-		return nil, err
-	}
-
-	capsList = append(capsList, capsWithoutMitm)
-
-	reqCaps["mitm"] = true
-
-	capsWithMitm := capabilities.GetDefaultCaps()
-	err = capsWithMitm.ParseRequestCaps(reqCaps)
-	if err != nil {
-		return nil, err
-	}
-
-	capsList = append(capsList, capsWithMitm)
-	return capsList, nil
-}
-
-func capsForCypress(executor string, version string) ([]*capabilities.Capabilities, error) {
-	capsList := make([]*capabilities.Capabilities, 0)
-	caps := capabilities.GetDefaultCaps()
-	reqCaps := map[string]interface{}{
-		"platformName":   "cypress",
-		"browserName":    executor,
-		"browserVersion": version,
-	}
-
-	err := caps.ParseRequestCaps(reqCaps)
-	if err != nil {
-		return nil, err
-	}
-
-	return append(capsList, caps), nil
 }

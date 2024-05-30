@@ -15,6 +15,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
+	envtype "github.com/zebrunner/esg/environment/envType"
 
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
@@ -25,14 +26,15 @@ const (
 )
 
 type Image struct {
-	Repository  supportedRepository
-	Tag         string
-	Platform    string
-	RegistryUri string
+	RepositoryName string
+	BrowserName    string
+	Tag            string
+	Platform       envtype.ENV_TYPE
+	RegistryUri    string
 }
 
 func (i Image) ToString() string {
-	return fmt.Sprintf("%s:%s", i.Repository.String(), i.Tag)
+	return fmt.Sprintf("%s:%s", i.RepositoryName, i.Tag)
 }
 
 func (i Image) GetUrl() string {
@@ -40,9 +42,12 @@ func (i Image) GetUrl() string {
 }
 
 func (i Image) GetMockCapabilities() ([]*capabilities.Capabilities, error) {
-	getCapsFn := i.Repository.getCapsForPlaformFn()
+	getCapsFn, err := i.Platform.GetMockCapsBuilder()
+	if err != nil {
+		return nil, err
+	}
 
-	capsList, err := getCapsFn(i.Repository.String(), i.Tag)
+	capsList, err := getCapsFn(i.BrowserName, i.Tag)
 	if err != nil {
 		return nil, err
 	}
@@ -62,28 +67,18 @@ func GetGenericImage(genericImg string) (*Image, error) {
 		return nil, err
 	}
 
-	return &Image{Repository: GENERIC, RegistryUri: imgArr[0], Tag: imgArr[1]}, nil
+	return &Image{
+		RepositoryName: GENERIC.String(),
+		BrowserName:    GENERIC.GetBrowserName(),
+		Platform:       envtype.GENERIC,
+		RegistryUri:    imgArr[0],
+		Tag:            imgArr[1],
+	}, nil
 }
-
-func GetUtilityImage(genericImg string) (*Image, error) {
-	imgArr := strings.Split(genericImg, ":")
-	if len(imgArr) != 2 {
-		err := fmt.Errorf("failed to parse generic image")
-		return nil, err
-	}
-
-	if imgArr[0] == "" {
-		err := fmt.Errorf("generic image uri is empty")
-		return nil, err
-	}
-
-	return &Image{Repository: GENERIC, RegistryUri: imgArr[0], Tag: imgArr[1]}, nil
-}
-
 
 func imageComparator(a Image, b Image) int {
-	if a.Repository != b.Repository {
-		return boolToInt(a.Repository > b.Repository)
+	if a.RepositoryName != b.RepositoryName {
+		return boolToInt(a.RepositoryName > b.RepositoryName)
 	}
 
 	if a.Tag == b.Tag {
@@ -132,23 +127,20 @@ func boolToInt(b bool) int {
 
 type excludeRules []string
 
-func getRules() excludeRules {
-	if config.Conf.ExcludeBrowsers == "" {
+func getRules(rules string) excludeRules {
+	if rules == "" {
 		log.Trace("No exclude rules were found")
 		return nil
 	}
 
 	var er excludeRules
-	er.parseRules()
-	return er
-}
-
-func (er *excludeRules) parseRules() {
-	rulesArr := strings.Split(config.Conf.ExcludeBrowsers, ",")
+	rulesArr := strings.Split(rules, ",")
 	for _, rule := range rulesArr {
 		parsedRule := fmt.Sprintf("^%s$", rule)
-		*er = append(*er, parsedRule)
+		er = append(er, parsedRule)
 	}
+
+	return er
 }
 
 func (er excludeRules) isAcceptableImage(image string) bool {
@@ -224,12 +216,14 @@ func buildImagesFromPublic(wg *sync.WaitGroup, repositories []string, imgsCh cha
 			return
 		}
 
-		images := []Image{}
+		images := make([]Image, 0, len(versions.ImageTagDetails))
 		for _, tag := range versions.ImageTagDetails {
 			images = append(images, Image{
-				Repository:  repository,
-				Tag:         tag.ImageTag,
-				RegistryUri: config.ZebrunnerEcrRegistryUri,
+				RepositoryName: repository.String(),
+				BrowserName:    repository.GetBrowserName(),
+				Platform:       repository.GetPlatform(),
+				Tag:            tag.ImageTag,
+				RegistryUri:    config.ZebrunnerEcrRegistryUri,
 			})
 		}
 
@@ -259,9 +253,11 @@ func buildImagesFromPrivate(wg *sync.WaitGroup, registryId string, repositories 
 			for _, imgTag := range details.ImageTags {
 				if imgTag != nil {
 					images = append(images, Image{
-						Repository:  repository,
-						Tag:         *imgTag,
-						RegistryUri: fmt.Sprintf("arn:aws:ecr:%s:%s:repository", config.Conf.AwsRegion, registryId),
+						RepositoryName: repository.String(),
+						BrowserName:    repository.GetBrowserName(),
+						Platform:       repository.GetPlatform(),
+						Tag:            *imgTag,
+						RegistryUri:    fmt.Sprintf("arn:aws:ecr:%s:%s:repository", config.Conf.AwsRegion, registryId),
 					})
 				}
 			}
@@ -297,12 +293,12 @@ func splitRegistryAndRepositories(registry string) (regAlly string, repositories
 	return
 }
 
-func ListImages() ([]Image, error) {
+func ListImages(imageRepositories string, rules string) ([]Image, error) {
 	imgsCh := make(chan []Image)
 	errCh := make(chan error)
 	wg := sync.WaitGroup{}
 
-	registrieswWithRespositories := strings.Split(config.Conf.ImageRepositories, ";")
+	registrieswWithRespositories := strings.Split(imageRepositories, ";")
 	for _, registryWithRepositories := range registrieswWithRespositories {
 		registryId, repositories, err := splitRegistryAndRepositories(registryWithRepositories)
 		if err != nil {
@@ -320,7 +316,7 @@ func ListImages() ([]Image, error) {
 	doneCh := make(chan interface{})
 	go utils.WaitForAllThreads(&wg, doneCh)
 
-	excludeRules := getRules()
+	excludeRules := getRules(rules)
 	images := make([]Image, 0)
 out:
 	for {

@@ -82,7 +82,6 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 		mavenContainer = &Container{
 			Name:  "maven",
 			Image: mavenImage,
-
 			Res: Resources{
 				Cpu:    16,
 				Memory: 16,
@@ -202,15 +201,15 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 		HealthCheck: nil,
 	}
 
-	volumes := make(map[string]Volume, 0)
-	volumes[entrypointVolume] = Volume{Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false}
-	volumes[taskVolume] = Volume{Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false}
-	volumes[logVolume] = Volume{Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false}
+	volumes := make(map[string]volume, 0)
+	volumes[entrypointVolume] = volume{Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false}
+	volumes[taskVolume] = volume{Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false}
+	volumes[logVolume] = volume{Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false}
 
 	containers := []*Container{&cloneContainer, &entrypointContainer, &recorderContainer, &uploaderContainer, &executorContainer}
 	if includeMaven {
 		containers = append(containers, mavenContainer)
-		volumes[mavenVolume] = Volume{Driver: "local", Scope: "task", ContainerPath: mavenDir, ReadOnly: false}
+		volumes[mavenVolume] = volume{Driver: "local", Scope: "task", ContainerPath: mavenDir, ReadOnly: false}
 	}
 
 	env := ExecutionEnvironment{
@@ -229,8 +228,8 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
 	}
 
-	err := CalculateResources(&env,
-		&ResourceCalculationHelper{
+	err := calculateResources(&env,
+		&resourceCalculationHelper{
 			MinimumRes: Resources{Cpu: 1024, Memory: 1024},
 			Container:  &executorContainer,
 			Memory:     &caps.Memory,

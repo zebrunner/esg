@@ -11,25 +11,10 @@ import (
 	"github.com/zebrunner/esg/cachemaps/definitionmap"
 	"github.com/zebrunner/esg/cachemaps/resourcesToAllocate"
 	"github.com/zebrunner/esg/capabilities"
+	envtype "github.com/zebrunner/esg/environment/envType"
 	"github.com/zebrunner/esg/environment/network"
 	"github.com/zebrunner/esg/utils"
 )
-
-type ENV_TYPE int
-
-// all supported envs
-const (
-	GENERIC ENV_TYPE = iota
-	LINUX
-	WINDOWS
-	CYPRESS
-	ANDROID
-	ANY
-)
-
-func (e ENV_TYPE) String() string {
-	return [...]string{"generic", "linux", "windows", "cypress", "android", "any"}[e]
-}
 
 type ExecutionEnvironment struct {
 	TaskDefinitionFamily string
@@ -38,7 +23,7 @@ type ExecutionEnvironment struct {
 	CapacityProvider     string
 	Containers           []*Container
 	Network              *network.NetworkConfiguration
-	Volumes              map[string]Volume
+	Volumes              map[string]volume
 	Capabilities         *capabilities.Capabilities
 }
 
@@ -54,7 +39,7 @@ func (env *ExecutionEnvironment) ContainerOverrides() []*ecs.ContainerOverride {
 			Command: aws.StringSlice(container.Command),
 		}
 
-		if strings.ToLower(env.Capabilities.PlatformName.ToPrimitive()) != WINDOWS.String() {
+		if strings.ToLower(env.Capabilities.PlatformName.ToPrimitive()) != envtype.WINDOWS.String() {
 			override.MemoryReservation = &memory
 		}
 
@@ -147,7 +132,7 @@ func (env *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefiniti
 			EntryPoint:  aws.StringSlice(c.EntryPoint),
 		}
 
-		if strings.ToLower(env.Capabilities.PlatformName.ToPrimitive()) != WINDOWS.String() {
+		if strings.ToLower(env.Capabilities.PlatformName.ToPrimitive()) != envtype.WINDOWS.String() {
 			definition.MemoryReservation = &memory
 			definition.Privileged = &c.Privileged
 		}

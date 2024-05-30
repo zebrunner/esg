@@ -27,7 +27,7 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 		Name:      "browser",
 		image:     &image,
 		Essential: true,
-		Ports: map[string]PortMapping{
+		Ports: map[string]portMapping{
 			"driver": {ContainerPort: seleniumPort, HostPort: 0},
 		},
 		Mounts: []string{logVolume},
@@ -105,7 +105,7 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 		Schema:               buildSchema(containers),
 		Containers:           containers,
 		Capabilities:         caps,
-		Volumes: map[string]Volume{
+		Volumes: map[string]volume{
 			logVolume: {ContainerPath: logDir, Driver: "local", Scope: "task", ReadOnly: false},
 		},
 		Network: &network.NetworkConfiguration{
@@ -119,8 +119,8 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
 	}
 
-	err := CalculateResources(&env,
-		&ResourceCalculationHelper{
+	err := calculateResources(&env,
+		&resourceCalculationHelper{
 			MinimumRes: Resources{Cpu: 1024, Memory: 1024},
 			Container:  &browserContainer,
 			Memory:     &caps.Memory,

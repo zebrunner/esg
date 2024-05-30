@@ -53,7 +53,7 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 		Name:      "browser",
 		image:     &image,
 		Essential: true,
-		Ports: map[string]PortMapping{
+		Ports: map[string]portMapping{
 			"driver":         {ContainerPort: seleniumPort, HostPort: 0},
 			"vnc":            {ContainerPort: vncPort, HostPort: 0},
 			"devtools":       {ContainerPort: devtoolsPort, HostPort: 0},
@@ -133,7 +133,7 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 		Name:  "uploader",
 		Image: uploaderImage,
 		Res: Resources{
-			Cpu:    32,  // with 32  uploading is aborted
+			Cpu:    32,
 			Memory: 256, // 64 works for single thread. for backgroud copying it is not enough
 		},
 		Privileged: false,
@@ -162,7 +162,7 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 				"LOG_DIR":    logDir,
 				"PROXY_ARGS": caps.MitmArgs.ToPrimitive(),
 			},
-			Ports: map[string]PortMapping{
+			Ports: map[string]portMapping{
 				"fileserverPort":   {ContainerPort: fileserverPort, HostPort: 0},
 				"proxyHandlerPort": {ContainerPort: proxyHandlerPort, HostPort: 0},
 			},
@@ -184,7 +184,7 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 		Schema:               buildSchema(containers),
 		Containers:           containers,
 		Capabilities:         caps,
-		Volumes: map[string]Volume{
+		Volumes: map[string]volume{
 			logVolume: {ContainerPath: logDir, Driver: "local", Scope: "task", ReadOnly: false},
 			shmVolume: {ContainerPath: shmDir, HostPath: shmDir, ReadOnly: false}, // no way to reuse local task volume due to the reset of permissions on browser container start
 		},
@@ -208,8 +208,8 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 		env.Network.Endpoints["healthcheck"].Path = "/wd/hub/"
 	}
 
-	calcArr := make([]*ResourceCalculationHelper, 0)
-	calcArr = append(calcArr, &ResourceCalculationHelper{
+	calcArr := make([]*resourceCalculationHelper, 0)
+	calcArr = append(calcArr, &resourceCalculationHelper{
 		MinimumRes: Resources{Cpu: 1024, Memory: 1024},
 		Container:  &browserContainer,
 		Memory:     &caps.Memory,
@@ -218,7 +218,7 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 
 	if caps.Mitm {
 		env.Network.Endpoints["proxyHandlerPort"] = &network.Endpoint{ContainerPort: proxyHandlerPort, HostPort: 0, Path: "/"}
-		calcArr = append(calcArr, &ResourceCalculationHelper{
+		calcArr = append(calcArr, &resourceCalculationHelper{
 			MinimumRes: Resources{Cpu: 512, Memory: 512},
 			Container:  &mitmContainer,
 			Memory:     &caps.MitmMemory,
@@ -226,7 +226,7 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 		})
 	}
 
-	err = CalculateResources(&env, calcArr...)
+	err = calculateResources(&env, calcArr...)
 	if err != nil {
 		return nil, err
 	}

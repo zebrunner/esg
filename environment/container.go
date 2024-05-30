@@ -3,6 +3,8 @@ package environment
 import (
 	"fmt"
 	"math"
+	"sort"
+	"strings"
 
 	"github.com/aws/aws-sdk-go/service/ecs"
 	log "github.com/sirupsen/logrus"
@@ -26,9 +28,9 @@ func AddSmallestInstanceResources(cpu int64, memory int64, capacityProvider stri
 	}
 }
 
-type EnvVariables = map[string]string
+type envVariables = map[string]string
 
-type Volume struct {
+type volume struct {
 	HostPath      string
 	ContainerPath string
 	Driver        string
@@ -36,7 +38,7 @@ type Volume struct {
 	ReadOnly      bool
 }
 
-type PortMapping struct {
+type portMapping struct {
 	ContainerPort int64
 	HostPort      int64
 }
@@ -56,11 +58,11 @@ type Container struct {
 	Essential  bool
 	Privileged bool
 
-	Ports            map[string]PortMapping
+	Ports            map[string]portMapping
 	Mounts           []string // List of volume names
 	Links            []string // List of linked containers
 	Command          []string // Comma separated container startup command
-	Env              EnvVariables
+	Env              envVariables
 	EntryPoint       []string
 	WorkingDirectory string
 
@@ -121,7 +123,7 @@ func SumResources(containers []*Container) Resources {
 	return resources
 }
 
-type ResourceCalculationHelper struct {
+type resourceCalculationHelper struct {
 	MinimumRes Resources
 	Container  *Container
 	Memory     capabilities.Wrapper[int64]
@@ -129,7 +131,7 @@ type ResourceCalculationHelper struct {
 	wantedRes  Resources
 }
 
-func CalculateResources(env *ExecutionEnvironment, resourcesArr ...*ResourceCalculationHelper) error {
+func calculateResources(env *ExecutionEnvironment, resourcesArr ...*resourceCalculationHelper) error {
 	for _, r := range resourcesArr {
 		// Clear current container resources setting as it will be configured later
 		r.Container.Res = Resources{0, 0}
@@ -242,4 +244,14 @@ func getMemoryDeviation(memory int64) int64 {
 	// deviationPercent is closer to basePercent with more memory on instance
 	deviationPercent := (basePercent + float64(decreaseIndex)/(float64(memory)/float64(mbInGb)))
 	return int64(math.Ceil(deviationPercent / 100 * float64(memory)))
+}
+
+func buildSchema(containers []*Container) string {
+	namesArr := make([]string, 0)
+	for _, container := range containers {
+		namesArr = append(namesArr, container.Name)
+	}
+	sort.Strings(namesArr)
+
+	return strings.Join(namesArr, "-")
 }
