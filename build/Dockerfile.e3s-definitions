@@ -31,7 +31,7 @@ ENV DATABASE=
 ENV IMAGE_REPOSITORIES=
 ENV EXCLUDE_BROWSERS=
 
-COPY --from=0 /esg/e3s-definitions /router
+COPY --from=0 /esg/e3s-definitions /e3s-definitions
 
 COPY ./build/entrypoint.e3s-definitions /entrypoint.sh
 

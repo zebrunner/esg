@@ -65,6 +65,9 @@ fi
 if [ ! -z ${DATABASE} ]; then
   CMD_ARGS="${CMD_ARGS} -db-connection ${DATABASE}"
 fi
+if [ ! -z ${DEFINITIONS_CONNECTION} ]; then
+  CMD_ARGS="${CMD_ARGS} -definitions-connection ${DEFINITIONS_CONNECTION}"
+fi
 
 if [ ! -z ${S3_BUCKET} ]; then
   CMD_ARGS="${CMD_ARGS} -s3-bucket ${S3_BUCKET}"

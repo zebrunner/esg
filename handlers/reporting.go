@@ -3,12 +3,15 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"net/http/httputil"
 	"os"
 	"runtime"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps/utilsmap"
 	"github.com/zebrunner/esg/config"
+	"github.com/zebrunner/esg/definitions"
 
 	"github.com/gin-gonic/gin"
 )
@@ -49,72 +52,16 @@ func ClusterStatus(c *gin.Context) {
 }
 
 func ListDrivers(c *gin.Context) {
-	// TODO: Refactor code: code must be split in few different functions
-	// TODO: redirect to e3s-definitions
-
-	// images, err := environment.ListImages()
-	// if err != nil {
-	// 	log.WithError(err).Warn("Failed to get browser list")
-	// 	c.Error(utils.NotFoundApiErr("failed to get browser list")).SetType(gin.ErrorTypePublic)
-	// 	return
-	// }
-
-	// var browsersResponse []map[string]interface{}
-
-	// imagesPlatforms := map[string]string{
-	// 	"redroid": "android",
-	// }
-	// cypressPlatforms := map[string]string{
-	// 	"cypress-chrome":   "cypress",
-	// 	"cypress-chromium": "cypress",
-	// 	"cypress-edge":     "cypress",
-	// 	"cypress-firefox":  "cypress",
-	// }
-
-	// windowsPlatforms := map[string]string{
-	// 	"windows-chrome": "windows",
-	// 	"windows-edge":   "windows",
-	// }
-
-	// for _, image := range images {
-
-	// 	if image.Tag == "debug" {
-	// 		continue
-	// 	}
-		
-	// 	if image.Repository == "edge" {
-	// 		image.Repository = "MicrosoftEdge"
-	// 	}
-
-	// 	browserData := map[string]interface{}{
-	// 		"name":     image.Repository,
-	// 		"version":  image.Tag,
-	// 		"platform": "linux",
-	// 	}
-
-	// 	if _, ok := imagesPlatforms[image.Repository]; ok {
-	// 		// hardcoded browser name and verion for ReDroid emulator
-	// 		if browserData["version"] == "latest" {
-	// 			continue
-	// 		}
-	// 		browserData["platform"] = imagesPlatforms[image.Repository]
-	// 		browserData["browserName"] = "chrome"
-	// 		browserData["browserVersion"] = "107.0"
-	// 	}
-
-	// 	if _, ok := cypressPlatforms[image.Repository]; ok {
-	// 		browserData["image"] = image.GetImageUri()
-	// 		browserData["platform"] = cypressPlatforms[image.Repository]
-	// 	}
-
-	// 	if platform, ok := windowsPlatforms[image.Repository]; ok {
-	// 		browserData["name"] = strings.TrimPrefix(image.Repository, "windows-")
-	// 		browserData["platform"] = platform
-	// 	}
-
-	// 	browsersResponse = append(browsersResponse, browserData)
-	// }
-	// c.JSON(http.StatusOK, browsersResponse)
+	host := fmt.Sprintf("http://%s", config.Conf.DefinitionsConnectionString)
+	director := func(req *http.Request) {
+		req.URL.Scheme = "http"
+		req.URL.Host = host
+		req.URL.Path = definitions.GetImagesPath.String()
+		req.Host = host
+		logrus.Info("request: ", req.URL.String())
+	}
+	proxy := &httputil.ReverseProxy{Director: director}
+	proxy.ServeHTTP(c.Writer, c.Request)
 }
 
 func Welcome(c *gin.Context) {

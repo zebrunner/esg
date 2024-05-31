@@ -214,10 +214,16 @@ func InitClusterInfo() (*elbv2.TargetGroup, error) {
 	config.Conf.AwsEsgUrl = fmt.Sprintf("%s://%s", *listener.Protocol, *loadBalancer.DNSName)
 
 	// wait until task definitions are updated
+	retryCount := 2
 	for {
 		if ok, err := definitions.IsTaskDefinitionRefreshDone(); err != nil {
-			log.WithError(err).Error("Failed to get expected response from e3s definitions service")
-			return nil, err
+			retryCount--
+			//TODO: delete log
+			log.WithError(err).Error("Failed to get expected response from e3s definitions service TEST DELTEME")
+			if retryCount <= 0 {
+				log.WithError(err).Error("Failed to get expected response from e3s definitions service")
+				return nil, err
+			}
 		} else if ok {
 			go definitionmap.ActualizeDefinitionsMap(time.Minute * 15)
 			break

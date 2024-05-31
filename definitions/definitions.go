@@ -8,7 +8,7 @@ import (
 	"github.com/zebrunner/esg/cachemaps/definitionmap"
 	"github.com/zebrunner/esg/db"
 	"github.com/zebrunner/esg/environment"
-	
+
 	"github.com/zebrunner/esg/images"
 	"github.com/zebrunner/esg/service"
 )
@@ -65,7 +65,7 @@ func compareWithStoredTaskDefinition(env *environment.ExecutionEnvironment) (*db
 			return nil, err
 		}
 	} else if newDbDefinititon.RegisterDefinitionHash != savedDbDefinition.RegisterDefinitionHash {
-		l.Info("Updating definition record")
+		l.Debug("Updating definition record")
 		taskDef, err := service.CreateTaskDefinition(env.ContainerDefinitions(), env.Volume(), env.TaskDefinitionFamily, env.TaskRoleArn)
 		if err != nil {
 			return nil, err

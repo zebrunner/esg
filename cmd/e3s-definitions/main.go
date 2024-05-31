@@ -19,26 +19,30 @@ import (
 	"github.com/zebrunner/esg/utils"
 )
 
+const (
+	listen = ":5555"
+)
+
 func manageTaskDefinitions() {
 	definitionsCacheTtl := time.Hour * 13
 	for {
 		handlers.DefinitionRefreshDone = false
 
-		log.Info("parsing images")
+		log.Info("Parsing images")
 		images, err := images.ListImages(config.Conf.ImageRepositories, config.Conf.ExcludeBrowsers)
 		if err != nil {
 			utils.ExitWithError(err, "failed to generate images", log.NewEntry(log.StandardLogger()))
 		}
 
-		log.Info("refreshing task definitions")
+		log.Info("Refreshing task definitions")
 		err = definitions.RefreshTaskDefinitions(images, definitionsCacheTtl)
 		if err != nil {
 			utils.ExitWithError(err, "failed to refresh task definitions", log.NewEntry(log.StandardLogger()))
 		}
 
-		handlers.DefinitionRefreshDone = true
 
-		log.Info("task definitions refresh finished")
+		log.Info("Task definitions refresh finished")
+		handlers.DefinitionRefreshDone = true
 		time.Sleep(definitionsCacheTtl - time.Hour)
 	}
 }
@@ -49,7 +53,7 @@ func CreateRouter() *gin.Engine {
 	r.GET("/", handlers.Ready)
 	r.GET(definitions.IsReadyPath.String(), handlers.IsTaskDefinitionRefreshDone)
 	r.GET(definitions.GetImagesPath.String(), handlers.GetImages)
-	r.GET(definitions.RefreshDefinitionsPath.String(), handlers.RefreshDefinitions)
+	r.POST(definitions.RefreshDefinitionsPath.String(), handlers.RefreshDefinitions)
 
 	return r
 }
@@ -85,12 +89,12 @@ func main() {
 
 	// wrapping router by http.Server object and starting it in new thread to wait for quit chan signal
 	srv := &http.Server{
-		Addr:    definitions.E3SDefinitionsPort,
+		Addr:    listen,
 		Handler: CreateRouter(),
 	}
 
 	go func() {
-		log.Infof("Listening on %s", definitions.E3SDefinitionsPort)
+		log.Infof("Listening on %s", listen)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.WithError(err).Fatal("Failed to start e3s-definition server")
 		}

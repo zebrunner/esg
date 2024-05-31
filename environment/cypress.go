@@ -102,7 +102,7 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 		Privileged: false,
 		Essential:  true,
 		Ports: map[string]portMapping{
-			"vnc": {HostPort: vncPort, ContainerPort: 0},
+			"vnc": {ContainerPort: vncPort, HostPort: 0},
 		},
 		Env: map[string]string{
 			"COMMAND":           launchCommand,

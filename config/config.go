@@ -45,8 +45,10 @@ type Config struct {
 	MaxTimeout                   time.Duration
 
 	// External connections
-	DbConnectionString           string
-	RedisConnectionString        string
+	DbConnectionString          string
+	RedisConnectionString       string
+	DefinitionsConnectionString string
+
 	ZebrunnerHost                string
 	ZebrunnerIntegrationUser     string
 	ZebrunnerIntegrationPassword string
@@ -90,8 +92,10 @@ func init() {
 	flag.DurationVar(&Conf.ContainerInstanceInitTimeout, "container-instance-init-timeout", 10*time.Minute, "Time for ec2 instance after launch to initialize container-instance for asg in time.Duration format")
 	flag.DurationVar(&Conf.MaxTimeout, "max-timeout", 24*time.Hour, "Maximum valid task/session timeout in time.Duration format")
 
-	flag.StringVar(&Conf.DbConnectionString, "db-connection", "", "Connection string for database")
+	flag.StringVar(&Conf.DbConnectionString, "db-connection", "localhost:5432", "Connection string for database")
 	flag.StringVar(&Conf.RedisConnectionString, "aws-elastic-cache", "localhost:6379", "Connection string for Session cache")
+	flag.StringVar(&Conf.DefinitionsConnectionString, "definitions-connection", "localhost:5555", "Connection string for e3s-definitions service")
+
 	flag.StringVar(&Conf.ZebrunnerHost, "zebrunner-host", "", "Host for zebrunner integration for this environment")
 	flag.StringVar(&Conf.ZebrunnerIntegrationUser, "zebrunner-integration-user", "", "User for zebrunner for current env")
 	flag.StringVar(&Conf.ZebrunnerIntegrationPassword, "zebrunner-integration-password", "", "Password for zebrunner for current env")
@@ -107,7 +111,7 @@ func init() {
 	flag.Int64Var(&Conf.ReserveMaxCapacity, "reserve-max-capacity", 5, "Reservation instance limit")
 
 	flag.StringVar(&Conf.ImageRepositories, "image-repositories", "Zebrunner:chrome", "Pattern of supported browsers images")
-	flag.StringVar(&Conf.ExcludeBrowsers, "exclude-browsers", "", "Pattern for excluding browsers from available images")	
+	flag.StringVar(&Conf.ExcludeBrowsers, "exclude-browsers", "", "Pattern for excluding browsers from available images")
 
 	flag.BoolVar(&Conf.SingleTenant, "single-tenant", false, "Single tenant mode")
 	flag.BoolVar(&Conf.ProductionEnv, "production-env", true, "Service configuration mode")

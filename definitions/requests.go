@@ -3,14 +3,14 @@ package definitions
 import (
 	"fmt"
 	"net/http"
+
+	"github.com/zebrunner/esg/config"
 )
 
 const (
-	IsReadyPath            ApiPath = "/ready"
+	IsReadyPath            ApiPath = "/refresh-complete"
 	GetImagesPath          ApiPath = "/images"
 	RefreshDefinitionsPath ApiPath = "/refresh-definitions"
-
-	E3SDefinitionsPort = ":5555"
 )
 
 type ApiPath string
@@ -20,7 +20,7 @@ func (p ApiPath) String() string {
 }
 
 func IsTaskDefinitionRefreshDone() (bool, error) {
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://localhost:%s", E3SDefinitionsPort), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s", config.Conf.DefinitionsConnectionString), nil)
 	if err != nil {
 		return false, err
 	}
