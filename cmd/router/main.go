@@ -216,6 +216,10 @@ func InitClusterInfo() (*elbv2.TargetGroup, error) {
 }
 
 func main() {
+	defer func() {
+		config.CloseConnections()
+	}()
+
 	flag.Parse()
 
 	log.SetLevel(config.Conf.ParseLogLevel())
@@ -232,17 +236,27 @@ func main() {
 	if err != nil {
 		utils.ExitWithError(err, "Failed to init DB client", log.NewEntry(log.StandardLogger()))
 	}
-	defer config.DbConnection.Close()
 
-	err = config.InitCache()
+	err = config.InitRedisMapperClient()
 	if err != nil {
-		utils.ExitWithError(err, "Failed to init Redis client", log.NewEntry(log.StandardLogger()))
+		utils.ExitWithError(err, "Failed to init redis connection", log.NewEntry(log.StandardLogger()))
 	}
 
-	defer config.RedisMapperClient.Close()
-	defer config.RedisDefinitionClient.Close()
-	defer config.RedisResourcesClient.Close()
-	defer config.RedisUtilityClient.Close()
+	err = config.InitRedisDefinitionClient()
+	if err != nil {
+		utils.ExitWithError(err, "Failed to init redis connection", log.NewEntry(log.StandardLogger()))
+	}
+
+	err = config.InitRedisUtilityClient()
+	if err != nil {
+		utils.ExitWithError(err, "Failed to init redis connection", log.NewEntry(log.StandardLogger()))
+	}
+
+	err = config.InitRedisResourcesClient()
+	if err != nil {
+		utils.ExitWithError(err, "Failed to init redis connection", log.NewEntry(log.StandardLogger()))
+	}
+
 	mapper.InitMapperWorkers()
 	resourcesToAllocate.InitResourceWorker()
 

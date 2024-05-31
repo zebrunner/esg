@@ -17,65 +17,80 @@ var (
 	DbConnection          *sqlx.DB
 )
 
-func InitCache() error {
+func InitRedisMapperClient() error {
+	client, err := newRedisClient(RedisMapperDB)
+	if err != nil {
+		return err
+	}
+	RedisMapperClient = client
+	return nil
+}
+
+func InitRedisDefinitionClient() error {
+	client, err := newRedisClient(RedisDefinitionClientDB)
+	if err != nil {
+		return err
+	}
+	RedisDefinitionClient = client
+	return nil
+}
+
+func InitRedisUtilityClient() error {
+	client, err := newRedisClient(RedisResourcesClientDB)
+	if err != nil {
+		return err
+	}
+	RedisResourcesClient = client
+	return nil
+}
+
+func InitRedisResourcesClient() error {
+	client, err := newRedisClient(RedisUtilityClientDB)
+	if err != nil {
+		return err
+	}
+	RedisUtilityClient = client
+	return nil
+}
+
+/*
+* Close all Redis and Database connections.
+ */
+func CloseConnections() {
+	if RedisMapperClient != nil {
+		RedisMapperClient.Close()
+	}
+	if RedisDefinitionClient != nil {
+		RedisDefinitionClient.Close()
+	}
+	if RedisResourcesClient != nil {
+		RedisResourcesClient.Close()
+	}
+	if RedisUtilityClient != nil {
+		RedisUtilityClient.Close()
+	}
+	if DbConnection != nil {
+		DbConnection.Close()
+	}
+}
+
+func newRedisClient(db int) (*redis.Client, error) {
 	//default PoolTimeout - 4 seconds
-
-	// DB 0 - for mapper
-	RedisMapperClient = redis.NewClient(&redis.Options{
+	client := redis.NewClient(&redis.Options{
 		Addr:        Conf.RedisConnectionString,
 		Password:    "",
-		DB:          0,
+		DB:          db,
 		PoolTimeout: 10 * time.Second,
 	})
 
-	_, err := RedisMapperClient.Ping(context.Background()).Result()
+	_, err := client.Ping(context.Background()).Result()
 	if err != nil {
-		log.WithError(err).Error("Failed to ping redis RedisMapperClient connection")
-		return err
+		log.WithError(err).Errorf("Failed to ping redis %d connection", db)
 	}
+	return client, err
+}
 
-	// DB 1 - for definitions
-	RedisDefinitionClient = redis.NewClient(&redis.Options{
-		Addr:        Conf.RedisConnectionString,
-		Password:    "",
-		DB:          1,
-		PoolTimeout: 10 * time.Second,
-	})
-
-	_, err = RedisDefinitionClient.Ping(context.Background()).Result()
-	if err != nil {
-		log.WithError(err).Error("Failed to ping redis definitions connection")
-		return err
-	}
-
-	// DB 2 - for tasks that are in register queue
-	// Such tasks cannot get into the provisioning pool, but still need to be calculated by scaler
-	RedisResourcesClient = redis.NewClient(&redis.Options{
-		Addr:        Conf.RedisConnectionString,
-		Password:    "",
-		DB:          2,
-		PoolTimeout: 10 * time.Second,
-	})
-
-	_, err = RedisResourcesClient.Ping(context.Background()).Result()
-	if err != nil {
-		log.WithError(err).Error("Failed to ping redis resources connection")
-		return err
-	}
-
-	// DB 3 - for utility records (key lockers, key markers, etc...)
-	RedisUtilityClient = redis.NewClient(&redis.Options{
-		Addr:        Conf.RedisConnectionString,
-		Password:    "",
-		DB:          3,
-		PoolTimeout: 10 * time.Second,
-	})
-
-	_, err = RedisUtilityClient.Ping(context.Background()).Result()
-	if err != nil {
-		log.WithError(err).Error("Failed to ping redis utility connection")
-		return err
-	}
+func InitCache() error {
 
 	return nil
 }
