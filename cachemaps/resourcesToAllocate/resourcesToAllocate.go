@@ -22,7 +22,7 @@ func (rsa *ResourcesToAllocate) generateRedisId() string {
 
 func GetEntitiesOfCapacityProvider(capacityProvider string) ([]*ResourcesToAllocate, error) {
 	keysSet := make(map[string]string)
-	iter := config.RedisResourcesClient.Scan(context.Background(), 0, fmt.Sprintf("%s*", capacityProvider), 50).Iterator()
+	iter := config.REDIS_RESOURCES.GetConnection().Scan(context.Background(), 0, fmt.Sprintf("%s*", capacityProvider), 50).Iterator()
 	for iter.Next(context.Background()) {
 		key := iter.Val()
 		keysSet[key] = key
@@ -34,7 +34,7 @@ func GetEntitiesOfCapacityProvider(capacityProvider string) ([]*ResourcesToAlloc
 
 	resources := make([]*ResourcesToAllocate, 0, len(keysSet))
 	for uuid := range keysSet {
-		data, err := config.RedisResourcesClient.Get(context.Background(), uuid).Result()
+		data, err := config.REDIS_RESOURCES.GetConnection().Get(context.Background(), uuid).Result()
 		if err != nil {
 			if err == redis.Nil {
 				continue

@@ -23,7 +23,7 @@ type ResourceItem struct {
 // Inits worker and starts it in new thread (resource worker).
 // Resource Worker -> Reserves new instances if aws provisioning task pool is exceeded. RemoveEntity should be always performed after AddEntity.
 func InitResourceWorker() {
-	resourceWorker = cachemaps.CreateRedisWorker[ResourceItem](config.RedisResourcesClient, writeRecords)
+	resourceWorker = cachemaps.CreateRedisWorker[ResourceItem](config.REDIS_RESOURCES.GetConnection(), writeRecords)
 	go resourceWorker.Start(4 * time.Second)
 }
 

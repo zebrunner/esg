@@ -237,22 +237,22 @@ func main() {
 		utils.ExitWithError(err, "Failed to init DB client", log.NewEntry(log.StandardLogger()))
 	}
 
-	err = config.InitRedisMapperClient()
+	err = config.REDIS_MAPPER.InitConnection()
 	if err != nil {
 		utils.ExitWithError(err, "Failed to init redis connection", log.NewEntry(log.StandardLogger()))
 	}
 
-	err = config.InitRedisDefinitionClient()
+	err = config.REDIS_DEFINITION.InitConnection()
 	if err != nil {
 		utils.ExitWithError(err, "Failed to init redis connection", log.NewEntry(log.StandardLogger()))
 	}
 
-	err = config.InitRedisUtilityClient()
+	err = config.REDIS_UTILITY.InitConnection()
 	if err != nil {
 		utils.ExitWithError(err, "Failed to init redis connection", log.NewEntry(log.StandardLogger()))
 	}
 
-	err = config.InitRedisResourcesClient()
+	err = config.REDIS_RESOURCES.InitConnection()
 	if err != nil {
 		utils.ExitWithError(err, "Failed to init redis connection", log.NewEntry(log.StandardLogger()))
 	}

@@ -27,14 +27,6 @@ var (
 	TaskIdKey    = "_taskId"
 	SessionIdKey = "sessionId"
 	Version      = os.Getenv("VERSION")
-
-	RedisMapperDB           = 0
-	RedisDefinitionClientDB = 1
-	// for tasks that are in register queue
-	// Such tasks cannot get into the provisioning pool, but still need to be calculated by scaler
-	RedisResourcesClientDB  = 2
-	// for utility records (key lockers, key markers, etc...)
-	RedisUtilityClientDB    = 3
 )
 
 type Config struct {

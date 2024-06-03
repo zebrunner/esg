@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -9,90 +10,48 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var (
-	RedisMapperClient     *redis.Client
-	RedisDefinitionClient *redis.Client
-	RedisResourcesClient  *redis.Client
-	RedisUtilityClient    *redis.Client
-	DbConnection          *sqlx.DB
+type redisDB int
+
+const (
+	REDIS_MAPPER redisDB = iota
+	REDIS_DEFINITION
+	// for tasks that are in register queue
+	// Such tasks cannot get into the provisioning pool, but still need to be calculated by scaler
+	REDIS_RESOURCES
+	// for utility records (key lockers, key markers, etc...)
+	REDIS_UTILITY
 )
 
-func InitRedisMapperClient() error {
-	client, err := newRedisClient(RedisMapperDB)
-	if err != nil {
-		return err
-	}
-	RedisMapperClient = client
-	return nil
-}
+var (
+	connections  = make(map[redisDB]*redis.Client)
+	DbConnection *sqlx.DB
+)
 
-func InitRedisDefinitionClient() error {
-	client, err := newRedisClient(RedisDefinitionClientDB)
-	if err != nil {
-		return err
+func (db redisDB) InitConnection() error {
+	if connections[db] != nil {
+		return fmt.Errorf("'%d' redis connection already initialized", db)
 	}
-	RedisDefinitionClient = client
-	return nil
-}
-
-func InitRedisUtilityClient() error {
-	client, err := newRedisClient(RedisResourcesClientDB)
-	if err != nil {
-		return err
-	}
-	RedisResourcesClient = client
-	return nil
-}
-
-func InitRedisResourcesClient() error {
-	client, err := newRedisClient(RedisUtilityClientDB)
-	if err != nil {
-		return err
-	}
-	RedisUtilityClient = client
-	return nil
-}
-
-/*
-* Close all Redis and Database connections.
- */
-func CloseConnections() {
-	if RedisMapperClient != nil {
-		RedisMapperClient.Close()
-	}
-	if RedisDefinitionClient != nil {
-		RedisDefinitionClient.Close()
-	}
-	if RedisResourcesClient != nil {
-		RedisResourcesClient.Close()
-	}
-	if RedisUtilityClient != nil {
-		RedisUtilityClient.Close()
-	}
-	if DbConnection != nil {
-		DbConnection.Close()
-	}
-}
-
-func newRedisClient(db int) (*redis.Client, error) {
 	//default PoolTimeout - 4 seconds
 	client := redis.NewClient(&redis.Options{
 		Addr:        Conf.RedisConnectionString,
 		Password:    "",
-		DB:          db,
+		DB:          int(db),
 		PoolTimeout: 10 * time.Second,
 	})
 
 	_, err := client.Ping(context.Background()).Result()
 	if err != nil {
 		log.WithError(err).Errorf("Failed to ping redis %d connection", db)
+		//todo should we close connection if Ping was not successful
+		client.Close()
+	} else {
+		connections[db] = client
 	}
-	return client, err
+	return err
 }
 
-func InitCache() error {
-
-	return nil
+func (db redisDB) GetConnection() *redis.Client {
+	return connections[db]
 }
 
 func InitDBConnection(connectionString string) error {
@@ -108,4 +67,19 @@ func InitDBConnection(connectionString string) error {
 		return err
 	}
 	return nil
+}
+
+/*
+* Close all Redis and Database connections.
+ */
+func CloseConnections() {
+	for k, v := range connections {
+		log.Infof("Closing '%d' redis connection.", k)
+		v.Close()
+
+	}
+	if DbConnection != nil {
+		log.Info("Closing database connection.")
+		DbConnection.Close()
+	}
 }

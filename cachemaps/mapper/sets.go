@@ -15,17 +15,17 @@ const (
 )
 
 func AppendToSet(st SetType, uuid string) error {
-	return config.RedisMapperClient.SAdd(context.Background(), string(st), uuid).Err()
+	return config.REDIS_MAPPER.GetConnection().SAdd(context.Background(), string(st), uuid).Err()
 }
 
 func RemoveFromSet(st SetType, uuid string) error {
-	return config.RedisMapperClient.SRem(context.Background(), string(st), uuid).Err()
+	return config.REDIS_MAPPER.GetConnection().SRem(context.Background(), string(st), uuid).Err()
 }
 
 func GetKeys(st SetType) ([]string, error) {
 	keysSet := make(map[string]string)
 
-	iter := config.RedisMapperClient.SScan(context.Background(), string(st), 0, "*", 50).Iterator()
+	iter := config.REDIS_MAPPER.GetConnection().SScan(context.Background(), string(st), 0, "*", 50).Iterator()
 	for iter.Next(context.Background()) {
 		key := iter.Val()
 		keysSet[key] = key
