@@ -13,13 +13,13 @@ import (
 type redisDB int
 
 const (
-	REDIS_MAPPER redisDB = iota
-	REDIS_DEFINITION
+	REDIS_MAPPER_CLIENT redisDB = iota
+	REDIS_DEFINITION_CLIENT
 	// for tasks that are in register queue
 	// Such tasks cannot get into the provisioning pool, but still need to be calculated by scaler
-	REDIS_RESOURCES
+	REDIS_RESOURCES_CLIENT
 	// for utility records (key lockers, key markers, etc...)
-	REDIS_UTILITY
+	REDIS_UTILITY_CLIENT
 )
 
 var (

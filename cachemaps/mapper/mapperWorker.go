@@ -23,7 +23,7 @@ type mapperItem struct {
 }
 
 func InitMapperWorkers() {
-	writeWorker = cachemaps.CreateRedisWorker(config.REDIS_MAPPER.GetConnection(), writeRecords)
+	writeWorker = cachemaps.CreateRedisWorker(config.REDIS_MAPPER_CLIENT.GetConnection(), writeRecords)
 
 	go writeWorker.Start(1500 * time.Millisecond)
 }

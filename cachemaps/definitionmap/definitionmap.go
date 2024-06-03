@@ -37,7 +37,7 @@ func FindRevision(hash string) (int64, bool) {
 
 // Add's new revisions to redis/update's ttl for existing ones
 func WriteAll(definitionsMap map[string]int64, expiration time.Duration) error {
-	rdbPipe := config.REDIS_DEFINITION.GetConnection().Pipeline()
+	rdbPipe := config.REDIS_DEFINITION_CLIENT.GetConnection().Pipeline()
 	hashRevisionMap := make(map[string]hashRevision, len(definitionsMap))
 	for k, v := range definitionsMap {
 		hashRevisionMap[k] = hashRevision{Hash: k, Revision: v}
@@ -49,7 +49,7 @@ func WriteAll(definitionsMap map[string]int64, expiration time.Duration) error {
 // Returns all definitions from redis as map[hash]revision
 func getDefinitions() (map[string]int64, error) {
 	keysSet := make(map[string]string)
-	iter := config.REDIS_DEFINITION.GetConnection().Scan(context.Background(), 0, "*", 50).Iterator()
+	iter := config.REDIS_DEFINITION_CLIENT.GetConnection().Scan(context.Background(), 0, "*", 50).Iterator()
 	for iter.Next(context.Background()) {
 		key := iter.Val()
 		keysSet[key] = key
@@ -60,7 +60,7 @@ func getDefinitions() (map[string]int64, error) {
 		return nil, err
 	}
 
-	rdbPipe := config.REDIS_DEFINITION.GetConnection().Pipeline()
+	rdbPipe := config.REDIS_DEFINITION_CLIENT.GetConnection().Pipeline()
 	for hash := range keysSet {
 		rdbPipe.Get(context.Background(), hash)
 	}

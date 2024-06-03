@@ -87,7 +87,7 @@ func Write(mapper *Mapper, expiration time.Duration) error {
 		return err
 	}
 
-	err = config.REDIS_MAPPER.GetConnection().Set(context.Background(), mapper.RouterUUID, data, expiration).Err()
+	err = config.REDIS_MAPPER_CLIENT.GetConnection().Set(context.Background(), mapper.RouterUUID, data, expiration).Err()
 	if err != nil {
 		return err
 	}
@@ -96,7 +96,7 @@ func Write(mapper *Mapper, expiration time.Duration) error {
 }
 
 func Find(uuid string) (*Mapper, error) {
-	data, err :=  config.REDIS_MAPPER.GetConnection().Get(context.Background(), uuid).Result()
+	data, err := config.REDIS_MAPPER_CLIENT.GetConnection().Get(context.Background(), uuid).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +111,7 @@ func Find(uuid string) (*Mapper, error) {
 }
 
 func WriteShapedEntities(mappers []Mapper, expiration time.Duration) error {
-	rdbPipe := config.REDIS_MAPPER.GetConnection().Pipeline()
+	rdbPipe := config.REDIS_MAPPER_CLIENT.GetConnection().Pipeline()
 
 	for _, mapperEntity := range mappers {
 		data, err := json.Marshal(mapperEntity)
@@ -128,5 +128,5 @@ func WriteShapedEntities(mappers []Mapper, expiration time.Duration) error {
 }
 
 func FindAll(uuids []string) ([]Mapper, error) {
-	return cachemaps.FindAll[Mapper](config.REDIS_MAPPER.GetConnection().Pipeline(), uuids)
+	return cachemaps.FindAll[Mapper](config.REDIS_MAPPER_CLIENT.GetConnection().Pipeline(), uuids)
 }
