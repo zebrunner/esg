@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	GENERIC SupportedRepository = iota
+	GENERIC supportedRepository = iota
 	CHROME
 	FIREFOX
 	EDGE
@@ -20,9 +20,9 @@ const (
 	CYPRESS_FIREFOX
 )
 
-type SupportedRepository int
+type supportedRepository int
 
-func (repository SupportedRepository) String() string {
+func (repository supportedRepository) String() string {
 	// generic is an empty string as it could not be predetermined
 	return [...]string{
 		"",
@@ -32,7 +32,7 @@ func (repository SupportedRepository) String() string {
 		"cypress-chrome", "cypress-chromium", "cypress-edge", "cypress-firefox"}[repository]
 }
 
-func (repository SupportedRepository) GetBrowserName() string {
+func (repository supportedRepository) GetBrowserName() string {
 	return [...]string{
 		"",
 		"chrome", "firefox", "edge",
@@ -41,7 +41,7 @@ func (repository SupportedRepository) GetBrowserName() string {
 		"chrome", "chromium", "edge", "firefox"}[repository]
 }
 
-func (repository SupportedRepository) GetPlatform() envtype.ENV_TYPE {
+func (repository supportedRepository) GetPlatform() envtype.ENV_TYPE {
 	return [...]envtype.ENV_TYPE{
 		envtype.GENERIC,
 		envtype.LINUX, envtype.LINUX, envtype.LINUX,
@@ -50,7 +50,7 @@ func (repository SupportedRepository) GetPlatform() envtype.ENV_TYPE {
 		envtype.CYPRESS, envtype.CYPRESS, envtype.CYPRESS, envtype.CYPRESS}[repository]
 }
 
-func RepositoryFromString(repName string) (SupportedRepository, error) {
+func RepositoryFromString(repName string) (supportedRepository, error) {
 	switch repName {
 	case REDROID.String():
 		return REDROID, nil

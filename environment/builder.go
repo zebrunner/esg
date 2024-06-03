@@ -94,39 +94,20 @@ func getEnvironmentBuilder(caps *capabilities.Capabilities) (envBuilder, error) 
 }
 
 func buildImageFromCaps(caps *capabilities.Capabilities) (*images.Image, error) {
-	var err error
-	var tag string
-	var repository images.SupportedRepository
-
 	switch caps.PlatformName.ToPrimitive() {
 	case envtype.GENERIC.String():
 		return images.GetGenericImage(caps.Image.ToPrimitive())
 	case envtype.LINUX.String():
-		tag = caps.BrowserVersion.ToPrimitive()
-		repository, err = images.RepositoryFromString(caps.BrowserName.ToPrimitive())
+		return images.ImageFromString(caps.BrowserName.ToPrimitive(), caps.BrowserVersion.ToPrimitive())
 	case envtype.WINDOWS.String():
-		tag = caps.BrowserVersion.ToPrimitive()
-		repository, err = images.RepositoryFromString(fmt.Sprintf("windows-%s", caps.BrowserName.ToPrimitive()))
+		return images.ImageFromString(fmt.Sprintf("windows-%s", caps.BrowserName.ToPrimitive()), caps.BrowserVersion.ToPrimitive())
 	case envtype.CYPRESS.String():
-		tag = caps.BrowserVersion.ToPrimitive()
-		repository, err = images.RepositoryFromString(fmt.Sprintf("cypress-%s", caps.BrowserName.ToPrimitive()))
+		return images.ImageFromString(fmt.Sprintf("cypress-%s", caps.BrowserName.ToPrimitive()), caps.BrowserVersion.ToPrimitive())
 	case envtype.ANDROID.String():
-		tag = caps.PlatformVersion.ToPrimitive()
-		repository, err = images.RepositoryFromString(caps.DeviceName.ToPrimitive())
+		return images.ImageFromString(caps.DeviceName.ToPrimitive(), caps.PlatformName.ToPrimitive())
 	default:
-		err = fmt.Errorf("platform '%s' is not supported", caps.PlatformName.ToPrimitive())
+		return nil, fmt.Errorf("platform '%s' is not supported", caps.PlatformName.ToPrimitive())
 	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &images.Image{
-		RepositoryName: repository.String(),
-		BrowserName:    repository.GetBrowserName(),
-		Platform:       repository.GetPlatform(),
-		Tag:            tag,
-	}, nil
 }
 
 func buildTaskDefinitionFamily(caps *capabilities.Capabilities) string {

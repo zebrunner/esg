@@ -76,6 +76,20 @@ func GetGenericImage(genericImg string) (*Image, error) {
 	}, nil
 }
 
+func ImageFromString(image string, tag string) (*Image, error) {
+	repository, err := RepositoryFromString(image)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Image{
+		RepositoryName: repository.String(),
+		BrowserName:    repository.GetBrowserName(),
+		Platform:       repository.GetPlatform(),
+		Tag:            tag,
+	}, nil
+}
+
 func imageComparator(a Image, b Image) int {
 	if a.RepositoryName != b.RepositoryName {
 		return boolToInt(a.RepositoryName > b.RepositoryName)
