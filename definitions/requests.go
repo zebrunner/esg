@@ -2,6 +2,7 @@ package definitions
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/zebrunner/esg/config"
@@ -19,8 +20,12 @@ func (p ApiPath) String() string {
 	return string(p)
 }
 
+func (p ApiPath) StringUrl() string {
+	return fmt.Sprintf("http://%s%s", config.Conf.DefinitionsConnectionString, p.String())
+}
+
 func IsTaskDefinitionRefreshDone() (bool, error) {
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s", config.Conf.DefinitionsConnectionString), nil)
+	req, err := http.NewRequest(http.MethodGet, IsReadyPath.StringUrl(), nil)
 	if err != nil {
 		return false, err
 	}
@@ -37,4 +42,23 @@ func IsTaskDefinitionRefreshDone() (bool, error) {
 	} else {
 		return false, fmt.Errorf("wrong status code: %v", res.StatusCode)
 	}
+}
+
+func ListImages() ([]byte, error) {
+	req, err := http.NewRequest(http.MethodGet, GetImagesPath.StringUrl(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	resBody, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	return resBody, nil
 }

@@ -3,12 +3,11 @@ package handlers
 import (
 	"fmt"
 	"net/http"
-	"net/http/httputil"
 	"os"
 	"runtime"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps/utilsmap"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/definitions"
@@ -52,16 +51,19 @@ func ClusterStatus(c *gin.Context) {
 }
 
 func ListDrivers(c *gin.Context) {
-	host := fmt.Sprintf("http://%s", config.Conf.DefinitionsConnectionString)
-	director := func(req *http.Request) {
-		req.URL.Scheme = "http"
-		req.URL.Host = host
-		req.URL.Path = definitions.GetImagesPath.String()
-		req.Host = host
-		logrus.Info("request: ", req.URL.String())
+	resBody, err := definitions.ListImages()
+	if err != nil {
+		c.Status(http.StatusInternalServerError)
+		log.WithError(err).Error("Failed to list images from e3s-definitions server")
+		return
 	}
-	proxy := &httputil.ReverseProxy{Director: director}
-	proxy.ServeHTTP(c.Writer, c.Request)
+	
+	_, err = c.Writer.Write(resBody)
+	if err != nil {
+		c.Status(http.StatusInternalServerError)
+		log.WithError(err).Error("Failed to write body server")
+		return
+	}
 }
 
 func Welcome(c *gin.Context) {
