@@ -218,8 +218,6 @@ func InitClusterInfo() (*elbv2.TargetGroup, error) {
 	for {
 		if ok, err := definitions.IsTaskDefinitionRefreshDone(); err != nil {
 			retryCount--
-			//TODO: delete log
-			log.WithError(err).Error("Failed to get expected response from e3s definitions service TEST DELTEME")
 			if retryCount <= 0 {
 				log.WithError(err).Error("Failed to get expected response from e3s definitions service")
 				return nil, err

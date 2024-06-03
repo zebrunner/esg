@@ -13,16 +13,16 @@ import (
 )
 
 const (
-	uploaderImage        = config.ZebrunnerEcrRegistryUri + "uploader:3.6"
-	mitmImage            = config.ZebrunnerEcrRegistryUri + "mitmproxy:2.1"
-	recorderImage        = config.ZebrunnerEcrRegistryUri + "recorder:1.5"
-	cypressRecorderImage = config.ZebrunnerEcrRegistryUri + "cypress-recorder:1.3"
-	appiumImage          = config.ZebrunnerEcrRegistryUri + "appium:2.0.15"
-	cloneImage           = config.ZebrunnerEcrRegistryUri + "git:2.36.2"
-	entrypointImage      = config.ZebrunnerEcrRegistryUri + "entrypoint:2.5.2"
-	mavenImage           = config.ZebrunnerEcrRegistryUri + "m2-repo-carina:1.5"
-	winUploaderImage     = config.ZebrunnerEcrRegistryUri + "uploader:1.1-win"
-	winRecorderImage     = config.ZebrunnerEcrRegistryUri + "recorder:1.1-win"
+	uploaderImage        = config.ZebrunnerEcrRegistryUri + "/" + "uploader:3.6"
+	mitmImage            = config.ZebrunnerEcrRegistryUri + "/" + "mitmproxy:2.1"
+	recorderImage        = config.ZebrunnerEcrRegistryUri + "/" + "recorder:1.5"
+	cypressRecorderImage = config.ZebrunnerEcrRegistryUri + "/" + "cypress-recorder:1.3"
+	appiumImage          = config.ZebrunnerEcrRegistryUri + "/" + "appium:2.0.15"
+	cloneImage           = config.ZebrunnerEcrRegistryUri + "/" + "git:2.36.2"
+	entrypointImage      = config.ZebrunnerEcrRegistryUri + "/" + "entrypoint:2.5.2"
+	mavenImage           = config.ZebrunnerEcrRegistryUri + "/" + "m2-repo-carina:1.5"
+	winUploaderImage     = config.ZebrunnerEcrRegistryUri + "/" + "uploader:1.1-win"
+	winRecorderImage     = config.ZebrunnerEcrRegistryUri + "/" + "recorder:1.1-win"
 )
 
 const (
@@ -63,8 +63,11 @@ func BuildEnvForTaskDefinitionOverride(workspace string, caps *capabilities.Capa
 
 	routerUUID := uuid.NewString()
 	env, err := buildFn(workspace, routerUUID, *image, caps)
+	if err != nil {
+		return nil, "", err
+	}
 
-	return env, routerUUID, err
+	return env, routerUUID, nil
 }
 
 type envBuilder func(string, string, images.Image, *capabilities.Capabilities) (*ExecutionEnvironment, error)
@@ -102,7 +105,29 @@ func buildImageFromCaps(caps *capabilities.Capabilities) (*images.Image, error) 
 	case envtype.WINDOWS.String():
 		return images.ImageFromString(fmt.Sprintf("windows-%s", caps.BrowserName.ToPrimitive()), caps.BrowserVersion.ToPrimitive())
 	case envtype.CYPRESS.String():
-		return images.ImageFromString(fmt.Sprintf("cypress-%s", caps.BrowserName.ToPrimitive()), caps.BrowserVersion.ToPrimitive())
+		// TODO: cyserver should make selenium alike session creation requests
+		// delete caps.Image parsing
+		// and leave only // return images.ImageFromString(fmt.Sprintf("cypress-%s", caps.BrowserName.ToPrimitive()), caps.BrowserVersion.ToPrimitive())
+		if caps.Image.ToPrimitive() == "" {
+			return nil, fmt.Errorf("empty image for cypress platform")
+		}
+
+		imgArr := strings.Split(caps.Image.ToPrimitive(), "/")
+		if len(imgArr) == 0 {
+			return nil, fmt.Errorf("invalid image for cypress platform: '%s'", caps.Image.ToPrimitive())
+		}
+
+		repositoryTag := imgArr[len(imgArr)-1]
+		repositoryTagArr := strings.Split(repositoryTag, ":")
+		if len(repositoryTagArr) != 2 || repositoryTagArr[0] == "" || repositoryTagArr[1] == "" {
+			return nil, fmt.Errorf("invalid image for cypress platform: '%s'", caps.Image.ToPrimitive())
+		}
+
+		repository, tag := repositoryTagArr[0], repositoryTagArr[1]
+		caps.BrowserName.From(strings.TrimPrefix(repository, "cypress-"))
+		caps.BrowserVersion.From(tag)
+
+		return images.ImageFromString(repository, tag)
 	case envtype.ANDROID.String():
 		return images.ImageFromString(caps.DeviceName.ToPrimitive(), caps.PlatformName.ToPrimitive())
 	default:

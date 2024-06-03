@@ -19,6 +19,7 @@ import (
 type ExecutionEnvironment struct {
 	TaskDefinitionFamily string
 	Schema               string
+	Type                 envtype.ENV_TYPE
 	TaskRoleArn          string
 	CapacityProvider     string
 	Containers           []*Container

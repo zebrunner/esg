@@ -19,6 +19,7 @@ import (
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
+	envtype "github.com/zebrunner/esg/environment/envType"
 	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
@@ -419,7 +420,7 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, workspace string, 
 	basis.GinCtx.Set(config.RouterUUID, basis.MapperEntity)
 
 	var starter ServiceStarter
-	if strings.Contains(env.TaskDefinitionFamily, "generic") {
+	if env.Type == envtype.GENERIC {
 		basis.appendPhase(basis.registerTaskPhase).appendPhase(basis.startTaskPhase)
 
 		starter = genericStarter{
@@ -460,7 +461,7 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, workspace string, 
 				}
 			},
 		}
-	} else if strings.Contains(env.TaskDefinitionFamily, "cypress") {
+	} else if env.Type == envtype.CYPRESS {
 		basis.appendPhase(basis.registerTaskPhase).appendPhase(basis.startTaskPhase).appendPhase(basis.setNetworkPhase)
 
 		starter = basicStarter{

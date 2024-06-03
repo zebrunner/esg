@@ -87,7 +87,7 @@ func compareWithStoredTaskDefinition(env *environment.ExecutionEnvironment) (*db
 }
 
 func buildEnvsFromImage(image images.Image) ([]*environment.ExecutionEnvironment, error) {
-	l := log.WithField("image", image.ToString())
+	l := log.WithField("image", image.String())
 
 	capsList, err := image.GetMockCapabilities()
 	if err != nil {

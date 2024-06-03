@@ -10,7 +10,7 @@ import (
 
 const (
 	// public zebrunner ECR docker registry
-	ZebrunnerEcrRegistryUri = "public.ecr.aws/zebrunner/"
+	ZebrunnerEcrRegistryUri = "public.ecr.aws/zebrunner"
 )
 
 var (

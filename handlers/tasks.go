@@ -73,7 +73,6 @@ func Create(c *gin.Context) {
 	log.Trace("Request capabilitites: ", reqCaps.ToMap())
 	log.Trace("Container configuration: ", configurationCaps.ToMap())
 
-	// env, err := environment.Build(configurationCaps)
 	env, routerUUID, err := environment.BuildEnvForTaskDefinitionOverride(workspace, configurationCaps)
 	if err != nil {
 		log.WithError(err).Error("Failed to build execution environment")

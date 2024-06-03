@@ -8,6 +8,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
+	envtype "github.com/zebrunner/esg/environment/envType"
 	"github.com/zebrunner/esg/environment/network"
 	"github.com/zebrunner/esg/images"
 )
@@ -115,6 +116,7 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 				"healthcheck": {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
 			},
 		},
+		Type:             envtype.WINDOWS,
 		CapacityProvider: config.Conf.AwsWinCapacityProvider,
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
 	}

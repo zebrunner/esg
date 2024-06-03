@@ -8,6 +8,7 @@ import (
 
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
+	envtype "github.com/zebrunner/esg/environment/envType"
 	"github.com/zebrunner/esg/environment/network"
 	"github.com/zebrunner/esg/images"
 
@@ -224,6 +225,7 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 				"driver": {ContainerPort: genericPort, HostPort: 0, Path: "/"},
 			},
 		},
+		Type:             envtype.GENERIC,
 		CapacityProvider: config.Conf.AwsLinuxCapacityProvider,
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
 	}

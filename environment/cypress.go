@@ -6,6 +6,7 @@ import (
 
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
+	envtype "github.com/zebrunner/esg/environment/envType"
 	"github.com/zebrunner/esg/environment/network"
 	"github.com/zebrunner/esg/images"
 
@@ -227,6 +228,7 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 				"vnc": {ContainerPort: vncPort, HostPort: 0, Path: "/"},
 			},
 		},
+		Type:             envtype.CYPRESS,
 		CapacityProvider: config.Conf.AwsLinuxCapacityProvider,
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
 	}

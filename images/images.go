@@ -33,12 +33,16 @@ type Image struct {
 	RegistryUri    string
 }
 
-func (i Image) ToString() string {
+func (i Image) String() string {
 	return fmt.Sprintf("%s:%s", i.RepositoryName, i.Tag)
 }
 
 func (i Image) GetUrl() string {
-	return fmt.Sprintf("%s/%s", i.RegistryUri, i.ToString())
+	if i.RegistryUri != "" {
+		return fmt.Sprintf("%s/%s", i.RegistryUri, i.String())
+	} else {
+		return i.String()
+	}
 }
 
 func (i Image) GetMockCapabilities() ([]*capabilities.Capabilities, error) {
@@ -68,10 +72,9 @@ func GetGenericImage(genericImg string) (*Image, error) {
 	}
 
 	return &Image{
-		RepositoryName: GENERIC.String(),
+		RepositoryName: imgArr[0],
 		BrowserName:    GENERIC.GetBrowserName(),
 		Platform:       envtype.GENERIC,
-		RegistryUri:    imgArr[0],
 		Tag:            imgArr[1],
 	}, nil
 }
@@ -337,7 +340,7 @@ out:
 		select {
 		case imgsToAppend := <-imgsCh:
 			for _, img := range imgsToAppend {
-				imgStr := img.ToString()
+				imgStr := img.String()
 				if excludeRules.isAcceptableImage(imgStr) {
 					images = append(images, img)
 				} else {

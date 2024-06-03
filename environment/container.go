@@ -91,7 +91,7 @@ func (c Container) getImageNameTag() string {
 		return c.Image
 	}
 
-	return c.image.ToString()
+	return c.image.String()
 }
 
 func (r Resources) Compare(res Resources) (cpuBool bool, memoryBool bool) {
