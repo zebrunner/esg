@@ -90,7 +90,7 @@ func getDefinitions() (map[string]int64, error) {
 	return definitionsMap, nil
 }
 
-// Every 'interval' minutes local 'definitionsMap' map is overwritten by data from redis definitions db
+// every `interval` in minutes we update local definitionsMap syncing it with redis cache to minimize redis calls at run-time
 func ActualizeDefinitionsMap(interval time.Duration) {
 	for {
 		defMap, err := getDefinitions()
