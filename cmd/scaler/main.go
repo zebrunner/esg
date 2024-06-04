@@ -363,6 +363,8 @@ func main() {
 	iterationDoneCh := make(chan interface{})
 	go ManageTasksAndSession(iterationDoneCh)
 
+	log.Info("Service started")
+
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit

@@ -23,28 +23,51 @@ const (
 	listen = ":5555"
 )
 
-func manageTaskDefinitions() {
-	definitionsCacheTtl := time.Hour * 13
-	for {
-		handlers.DefinitionRefreshDone = false
-
-		log.Info("Parsing images")
-		images, err := images.ListImages(config.Conf.ImageRepositories, config.Conf.ExcludeBrowsers)
-		if err != nil {
-			utils.ExitWithError(err, "failed to generate images", log.NewEntry(log.StandardLogger()))
-		}
-
-		log.Info("Refreshing task definitions")
-		err = definitions.RefreshTaskDefinitions(images, definitionsCacheTtl)
-		if err != nil {
-			utils.ExitWithError(err, "failed to refresh task definitions", log.NewEntry(log.StandardLogger()))
-		}
-
-
-		log.Info("Task definitions refresh finished")
-		handlers.DefinitionRefreshDone = true
-		time.Sleep(definitionsCacheTtl - time.Hour)
+func taskDefinitionsUpdate(cacheTtl time.Duration) error {
+	handlers.DefinitionRefreshDone = false
+	log.Info("Parsing images")
+	images, err := images.ListImages(config.Conf.ImageRepositories, config.Conf.ExcludeBrowsers)
+	if err != nil {
+		log.WithError(err).Error("failed to generate images")
+		return err
 	}
+
+	log.Info("Refreshing task definitions")
+	err = definitions.RefreshTaskDefinitions(images, cacheTtl)
+	if err != nil {
+		log.WithError(err).Error("failed to refresh task definitions")
+		return err
+	}
+
+	log.Info("Task definitions refresh finished")
+	handlers.DefinitionRefreshDone = true
+	return nil
+}
+
+func startTaskDefinitionsUpdate() error {
+	definitionsCacheTtl := time.Hour * 13
+	// utils.ExitWithError(err, "failed to generate images", log.NewEntry(log.StandardLogger()))
+	err := taskDefinitionsUpdate(definitionsCacheTtl)
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		time.Sleep(definitionsCacheTtl - time.Hour)
+
+		for {
+			err := taskDefinitionsUpdate(definitionsCacheTtl)
+			if err != nil {
+				retrySleep := time.Second * 15
+				log.WithError(err).Warnf("Failed to update task definitions. Retrying in %v seconds", retrySleep.Seconds())
+				time.Sleep(retrySleep)
+			} else {
+				time.Sleep(definitionsCacheTtl)
+			}
+		}
+	}()
+
+	return nil
 }
 
 func CreateRouter() *gin.Engine {
@@ -100,7 +123,10 @@ func main() {
 		}
 	}()
 
-	go manageTaskDefinitions()
+	err = startTaskDefinitionsUpdate()
+	if err != nil {
+		utils.ExitWithError(err, "Failed to refresh task definitions", log.NewEntry(log.StandardLogger()))
+	}
 
 	log.Info("Service started")
 
