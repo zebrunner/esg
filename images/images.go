@@ -274,7 +274,7 @@ func buildImagesFromPrivate(wg *sync.WaitGroup, registryId string, repositories 
 						BrowserName:    repository.GetBrowserName(),
 						Platform:       repository.GetPlatform(),
 						Tag:            *imgTag,
-						RegistryUri:    fmt.Sprintf("arn:aws:ecr:%s:%s:repository", config.Conf.AwsRegion, registryId),
+						RegistryUri:    fmt.Sprintf("%s.dkr.ecr.%s.amazonaws.com", registryId, config.Conf.AwsRegion),
 					})
 				}
 			}

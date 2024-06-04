@@ -142,7 +142,7 @@ func CreateRouter() *gin.Engine {
 		httpHub.GET("/logs/:session", handlers.Logs)
 		httpHub.GET("/video/:session", handlers.Video)
 		httpHub.GET("/tasks/:task/log", handlers.TaskLog)
-		httpHub.GET("/tasks/:task/status", handlers.LowLvlAuthentication, handlers.TaskDescribe)
+		httpHub.GET("/tasks/:task/status", handlers.TaskDescribe)
 	}
 
 	return r

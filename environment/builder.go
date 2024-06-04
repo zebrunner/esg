@@ -129,7 +129,7 @@ func buildImageFromCaps(caps *capabilities.Capabilities) (*images.Image, error) 
 
 		return images.ImageFromString(repository, tag)
 	case envtype.ANDROID.String():
-		return images.ImageFromString(caps.DeviceName.ToPrimitive(), caps.PlatformName.ToPrimitive())
+		return images.ImageFromString(caps.DeviceName.ToPrimitive(), caps.PlatformVersion.ToPrimitive())
 	default:
 		return nil, fmt.Errorf("platform '%s' is not supported", caps.PlatformName.ToPrimitive())
 	}
