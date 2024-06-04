@@ -14,7 +14,7 @@ type redisDB int
 
 const (
 	REDIS_MAPPER_CLIENT redisDB = iota
-	REDIS_DEFINITION_CLIENT
+	REDIS_DEFINITIONS_CLIENT
 	// for tasks that are in register queue
 	// Such tasks cannot get into the provisioning pool, but still need to be calculated by scaler
 	REDIS_RESOURCES_CLIENT
@@ -42,7 +42,6 @@ func (db redisDB) InitConnection() error {
 	_, err := client.Ping(context.Background()).Result()
 	if err != nil {
 		log.WithError(err).Errorf("Failed to ping redis %d connection", db)
-		//todo should we close connection if Ping was not successful
 		client.Close()
 	} else {
 		connections[db] = client
