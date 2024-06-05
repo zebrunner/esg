@@ -9,7 +9,7 @@ import (
 	"github.com/zebrunner/esg/cachemaps"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
-	"github.com/zebrunner/esg/environment"
+	"github.com/zebrunner/esg/environment/network"
 )
 
 type Status int
@@ -37,7 +37,7 @@ const (
 type Mapper struct {
 	RouterUUID   string
 	Capabilities *capabilities.Capabilities
-	Network      environment.NetworkConfiguration
+	Network      network.NetworkConfiguration
 	IdleTimeout  float64
 	Status       Status
 	UsageTracked bool
@@ -58,18 +58,18 @@ func (m Mapper) IsIdle() bool {
 	return idleTime > m.IdleTimeout
 }
 
-func CreateEntity(env *environment.ExecutionEnvironment, expiration time.Duration) (*Mapper, error) {
+func CreateEntity(workspace string, routerUUID string, caps *capabilities.Capabilities, netConf *network.NetworkConfiguration, expiration time.Duration) (*Mapper, error) {
 	creationTime := time.Now()
 	m := &Mapper{
-		RouterUUID:   env.RouterUUID,
-		Capabilities: env.Capabilities,
-		Network:      *env.Network,
-		IdleTimeout:  float64(env.Capabilities.IdleTimeout),
+		RouterUUID:   routerUUID,
+		Capabilities: caps,
+		Network:      *netConf,
+		IdleTimeout:  float64(caps.IdleTimeout),
 		Status:       Queued,
 		UsageTracked: false,
 		HealthAt:     &creationTime,
 		AccessedAt:   &creationTime,
-		Workspace:    env.Workspace,
+		Workspace:    workspace,
 	}
 
 	err := WritedByWorker(m, nil, nil, expiration)

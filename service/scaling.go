@@ -524,7 +524,7 @@ func (s *scaler) ScaleDown(session *awsSession.Session, asg *autoscaling.Group, 
 		return
 	}
 
-	ciPages := paginate(containerInstanceToDelete, 10)
+	ciPages := utils.Paginate(containerInstanceToDelete, 10)
 	for _, ciArr := range ciPages {
 		stateUpdateInput := ecs.UpdateContainerInstancesStateInput{
 			Cluster:            &config.Conf.AwsCluster,
@@ -540,7 +540,7 @@ func (s *scaler) ScaleDown(session *awsSession.Session, asg *autoscaling.Group, 
 		}
 	}
 
-	instancesPages := paginate(instancesToDelete, 50)
+	instancesPages := utils.Paginate(instancesToDelete, 50)
 	for _, instances := range instancesPages {
 		scaleInDisableInput := autoscaling.SetInstanceProtectionInput{
 			AutoScalingGroupName: &s.autoscalingGroupName,

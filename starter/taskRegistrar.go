@@ -1,4 +1,4 @@
-package service
+package starter
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	"github.com/zebrunner/esg/cachemaps/resourcesToAllocate"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
+	"github.com/zebrunner/esg/service"
 )
 
 type registerWaitRequest struct {
@@ -21,8 +22,8 @@ type registerWaitRequest struct {
 	ResponseCh        chan string
 }
 
-func registerTask(ctx context.Context, env environment.ExecutionEnvironment, waitRequest registerWaitRequest) {
-	svc := ecs.New(AwsSess)
+func registerTask(ctx context.Context, env *environment.ExecutionEnvironment, routerUUID string, waitRequest registerWaitRequest) {
+	svc := ecs.New(service.AwsSess)
 
 	family, err := env.GetFamilyRevision()
 	if err != nil {
@@ -51,7 +52,6 @@ func registerTask(ctx context.Context, env environment.ExecutionEnvironment, wai
 	l.WithField("runTaskInput", runTaskInput).Trace("Res runTaskInput")
 
 	// TODO: explicitly minimize errors range to wait only by well-known reasons aka RESOURCE:CPU etc
-	// TODO: convert existing hard-coded 25 retries into the queue or provisioning timeout: https://github.com/zebrunner/esg/issues/72
 	// [VD] "i" retry should be ~15 if instances can be started in 1 min and 25 if ~2 min
 	var essentialError error
 	var resourceAllocationEntity *resourcesToAllocate.ResourcesToAllocate
@@ -112,7 +112,7 @@ out:
 
 		if resourceAllocationEntity == nil {
 			go func() {
-				resourceAllocationEntity = env.GetAllocationResources()
+				resourceAllocationEntity = env.GetAllocationResources(routerUUID)
 				err := resourcesToAllocate.AddEntity(resourceAllocationEntity)
 				if err != nil {
 					log.WithError(err).Error("Failed to add allocation resource to cache")
@@ -138,14 +138,14 @@ out:
 	}
 }
 
-func WaitForTaskRegister(ctx context.Context, env environment.ExecutionEnvironment) *registerWaitRequest {
+func WaitForTaskRegister(ctx context.Context, env *environment.ExecutionEnvironment, routerUUID string) *registerWaitRequest {
 	waitReq := registerWaitRequest{
 		NonEssentialErrCh: make(chan error),
 		EssentialErrCh:    make(chan error),
 		ResponseCh:        make(chan string),
 	}
 
-	go registerTask(ctx, env, waitReq)
+	go registerTask(ctx, env, routerUUID, waitReq)
 
 	return &waitReq
 }
