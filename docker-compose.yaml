@@ -3,7 +3,7 @@ name: backend
 services:
   e3s-definitions:
     container_name: e3s-definitions
-    image: public.ecr.aws/zebrunner/e3s-definitions:2.9.3
+    image: public.ecr.aws/zebrunner/e3s-definitions:3.0
     env_file:
       - ./properties/config.env
       - ./properties/e3s-definitions.env
@@ -15,7 +15,7 @@ services:
 #      - "${HOME}/.aws:/root/.aws"
   scaler:
     container_name: scaler
-    image: public.ecr.aws/zebrunner/scaler:2.9.3
+    image: public.ecr.aws/zebrunner/scaler:3.0
     env_file:
       - ./properties/config.env
       - ./properties/scaler.env
@@ -27,7 +27,7 @@ services:
 #      - "${HOME}/.aws:/root/.aws"
   router_1:
     container_name: router_1
-    image: public.ecr.aws/zebrunner/router:2.9.3
+    image: public.ecr.aws/zebrunner/router:3.0
     environment:
       - EXTERNAL_PORT=$ROUTER_PORT_1
     env_file:
@@ -46,7 +46,7 @@ services:
     #      - "${HOME}/.aws:/root/.aws"
   router_2:
     container_name: router_2
-    image: public.ecr.aws/zebrunner/router:2.9.3
+    image: public.ecr.aws/zebrunner/router:3.0
     environment:
       - EXTERNAL_PORT=$ROUTER_PORT_2
     env_file:
