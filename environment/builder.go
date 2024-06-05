@@ -26,19 +26,17 @@ const (
 )
 
 const (
+	genericPort      int64 = 22
 	seleniumPort     int64 = 4444
 	vncPort          int64 = 5900
 	devtoolsPort     int64 = 7070
 	fileserverPort   int64 = 8080
 	clipboardPort    int64 = 9090
 	proxyHandlerPort int64 = 8060
+	recorderdPort    int64 = 9080
 
-	recorderCpu    int64 = 320
-	recorderMemory int64 = 1024
-
-	genericPort int64 = 22
-	minCpu      int64 = 128
-	minMemory   int64 = 256
+	cloneContainerMinCpu    int64 = 128
+	cloneContainerMinMemory int64 = 512 //increased memory to fix OOM for huge repositories (3K+ branches)
 )
 
 func BuildEnvForTaskDefinitionGeneration(image images.Image, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
