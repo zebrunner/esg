@@ -19,4 +19,4 @@ services:
     build:
       context: ../
       dockerfile: build/Dockerfile.e3s-definitions
-    image: public.ecr.aws/zebrunner/e3s-definitions:latest
+    image: public.ecr.aws/zebrunner/e3s-definitions:$ROUTER_VERSION
