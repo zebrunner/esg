@@ -110,7 +110,7 @@ func init() {
 	flag.Float64Var(&Conf.ReserveInstancesPercent, "reserve-instances-percent", 0.25, "Reserved cluster capacity quota during scale up and down operations")
 	flag.Int64Var(&Conf.ReserveMaxCapacity, "reserve-max-capacity", 5, "Reservation instance limit")
 
-	flag.StringVar(&Conf.ImageRepositories, "image-repositories", "Zebrunner:chrome", "Pattern of supported browsers images")
+	flag.StringVar(&Conf.ImageRepositories, "image-repositories", "Zebrunner:chrome", "Pattern of supported browser images")
 	flag.StringVar(&Conf.ExcludeBrowsers, "exclude-browsers", "", "Pattern for excluding browsers from available images")
 
 	flag.BoolVar(&Conf.SingleTenant, "single-tenant", false, "Single tenant mode")
