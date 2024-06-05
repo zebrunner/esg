@@ -251,7 +251,21 @@ networkName="e3s-network"
   }
 
   build() {
-    docker compose -f "$BASEDIR/build/docker-compose.yaml" build
+    case "$1" in
+      "")
+        docker compose -f "$BASEDIR/build/docker-compose.yaml" build
+        ;;
+
+      "service")
+        service_name=$2
+        docker compose -f "$BASEDIR/build/docker-compose.yaml" build "$service_name"
+        ;;
+
+      *)
+        echo_warning "Wrong input"
+        exit 1
+        ;;
+    esac
   }
 
   status() {
@@ -325,7 +339,7 @@ networkName="e3s-network"
       	  down      [data|service] <name>         Stop and remove containers for selected layers
       	  shutdown  [data|service] <name>         Stop, remove containers, clear volumes for selected layers
       	  restart   [data|service] <name>         Down and start containers for selected layers
-      	  build                                   Build images
+      	  build     [service]      <name>         Build all/selected images
       	  status                                  Show all containers statuses
           tasks     [list|stop]                   List all tasks or stop them
       	  describe  [cluster|instance|task]       Describe selected items
@@ -378,7 +392,7 @@ case "$1" in
       fi
       ;;
     build)
-      build
+      build "$2" "$3"
       ;;
     status)
       status
