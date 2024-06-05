@@ -76,10 +76,14 @@ func getEnvironmentBuilder(caps *capabilities.Capabilities) (envBuilder, error) 
 	platform := strings.ToLower(caps.PlatformName.ToPrimitive())
 
 	switch platform {
-	case envtype.GENERIC.String():
-		return buildGeneric, nil
+	case "":
+		fallthrough
+	case envtype.ANY.String():
+		fallthrough
 	case envtype.LINUX.String():
 		return buildBrowser, nil
+	case envtype.GENERIC.String():
+		return buildGeneric, nil
 	case envtype.WINDOWS.String():
 		return buildWindowsBrowser, nil
 	case envtype.CYPRESS.String():
@@ -89,8 +93,6 @@ func getEnvironmentBuilder(caps *capabilities.Capabilities) (envBuilder, error) 
 			return buildAppiumRedroid, nil
 		}
 		return nil, fmt.Errorf("device is not supported. deviceName=%s", caps.DeviceName.ToPrimitive())
-	case envtype.ANY.String():
-		return buildBrowser, nil
 	default:
 		return nil, fmt.Errorf("platform is not supported. platformName=%s", caps.PlatformName.ToPrimitive())
 	}
@@ -98,12 +100,16 @@ func getEnvironmentBuilder(caps *capabilities.Capabilities) (envBuilder, error) 
 
 func buildImageFromCaps(caps *capabilities.Capabilities) (*images.Image, error) {
 	switch caps.PlatformName.ToPrimitive() {
+	case "":
+		fallthrough
+	case envtype.ANY.String():
+		fallthrough
+	case envtype.LINUX.String():
+		return images.ImageFromString(remapName(caps.BrowserName.ToPrimitive()), remapVersion(caps.BrowserVersion.ToPrimitive()))
 	case envtype.GENERIC.String():
 		return images.GetGenericImage(caps.Image.ToPrimitive())
-	case envtype.LINUX.String():
-		return images.ImageFromString(caps.BrowserName.ToPrimitive(), caps.BrowserVersion.ToPrimitive())
 	case envtype.WINDOWS.String():
-		return images.ImageFromString(fmt.Sprintf("windows-%s", caps.BrowserName.ToPrimitive()), caps.BrowserVersion.ToPrimitive())
+		return images.ImageFromString(fmt.Sprintf("windows-%s", remapName(caps.BrowserName.ToPrimitive())), remapVersion(caps.BrowserVersion.ToPrimitive()))
 	case envtype.CYPRESS.String():
 		// TODO: cyserver should make selenium alike session creation requests
 		// delete caps.Image parsing
@@ -129,7 +135,7 @@ func buildImageFromCaps(caps *capabilities.Capabilities) (*images.Image, error) 
 
 		return images.ImageFromString(repository, tag)
 	case envtype.ANDROID.String():
-		return images.ImageFromString(caps.DeviceName.ToPrimitive(), caps.PlatformVersion.ToPrimitive())
+		return images.ImageFromString(remapName(caps.DeviceName.ToPrimitive()), remapVersion(caps.PlatformVersion.ToPrimitive()))
 	default:
 		return nil, fmt.Errorf("platform '%s' is not supported", caps.PlatformName.ToPrimitive())
 	}
@@ -143,7 +149,7 @@ func buildTaskDefinitionFamily(caps *capabilities.Capabilities) string {
 	}
 
 	platformName := strings.ToLower(caps.PlatformName.ToPrimitive())
-	if caps.PlatformName == "" || platformName == envtype.ANY.String() {
+	if platformName == "" || platformName == envtype.ANY.String() {
 		platformName = envtype.LINUX.String()
 	}
 	familyParts = append(familyParts, platformName)
@@ -151,11 +157,13 @@ func buildTaskDefinitionFamily(caps *capabilities.Capabilities) string {
 	if deviceName := strings.ToLower(caps.DeviceName.ToPrimitive()); deviceName != "" {
 		deviceName := strings.ToLower(deviceName)
 		platformVersion := remapVersion(caps.PlatformVersion.ToPrimitive())
+		platformVersion = strings.Replace(platformVersion, ".", "-", -1)
 
 		familyParts = append(familyParts, deviceName, platformVersion)
 	} else if browserName := caps.BrowserName.ToPrimitive(); browserName != "" {
 		browserName = remapName(browserName)
 		browserVersion := remapVersion(caps.BrowserVersion.ToPrimitive())
+		browserVersion = strings.Replace(browserVersion, ".", "-", -1)
 
 		familyParts = append(familyParts, browserName, browserVersion)
 	}
@@ -187,8 +195,6 @@ func remapVersion(version string) string {
 	if newVersion, ok := remapVersion[version]; ok {
 		return newVersion
 	}
-
-	version = strings.Replace(version, ".", "-", -1)
 
 	return version
 }
