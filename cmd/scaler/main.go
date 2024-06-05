@@ -25,28 +25,6 @@ import (
 	"github.com/zebrunner/esg/zebrunner"
 )
 
-func manageTasksAndSession(ctx context.Context, wg *sync.WaitGroup) {
-	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
-	if err != nil {
-		utils.ExitWithError(err, "Failed to create AWS session", log.NewEntry(log.StandardLogger()))
-	}
-
-	svc := ecs.New(session)
-
-	wg.Add(1)
-	go stopIdleTasks(ctx, wg)
-
-	// added after refactoring:
-	wg.Add(1)
-	go stopLostTasks(ctx, svc, wg)
-
-	wg.Add(1)
-	go stopUnhealthyTasks(ctx, svc, wg)
-
-	wg.Add(1)
-	go trackResourceUsage(ctx, svc, wg)
-}
-
 func stopLostTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 	defer wg.Done()
 
@@ -54,17 +32,17 @@ func stopLostTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(1 * time.Minute):
+		case <-time.After(config.Conf.ServiceStartupTimeout + 5*time.Minute):
 			routerUuids, err := mapper.GetKeys(mapper.TASK)
 			if err != nil {
 				log.WithError(err).Warn("Failed to get list of taskmap keys!")
-				return
+				continue
 			}
 
 			mapperEntities, err := mapper.FindAll(routerUuids)
 			if err != nil {
 				log.WithError(err).Warn("Failed to get cached mapper enties")
-				return
+				continue
 			}
 
 			taskIds := make([]string, 0)
@@ -77,6 +55,7 @@ func stopLostTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 			taskArns, err := service.GetClusterTasksArn(svc)
 			if err != nil {
 				log.WithError(err).Error("Error on ecs list-tasks operation")
+				continue
 			}
 
 			tasksToDescribe := make([]string, 0)
@@ -98,15 +77,13 @@ func stopLostTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 
 			if len(tasksToDescribe) == 0 {
 				// no need to print any log message because it should happen in 99.99% cases.
-				wg.Done()
-				return
+				continue
 			}
 
 			tasks, err := service.DescribeTasks(tasksToDescribe)
 			if err != nil {
 				log.WithError(err).Warn("StopLostTasks(): failed to describe lost tasks")
-				wg.Done()
-				return
+				continue
 			}
 
 			for _, task := range tasks {
@@ -124,7 +101,6 @@ func stopLostTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 					}
 				}
 			}
-
 		}
 	}
 }
@@ -136,7 +112,7 @@ func stopUnhealthyTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(1 * time.Minute):
+		case <-time.After(10 * time.Minute):
 			routerUuids, err := mapper.GetKeys(mapper.TASK)
 			if err != nil {
 				log.WithError(err).Warn("Failed to get list of taskmap keys!")
@@ -173,16 +149,13 @@ func stopUnhealthyTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 				}
 			}
 
-			//todo refactor
-			cachedTasksMap := taskIdMapperMap
-
 			for _, task := range tasks {
 				taskId := strings.Split(*task.TaskArn, "/")[2]
 				l := log.WithField(config.TaskIdKey, taskId)
 				// stop zombie and UNHEALTHY tasks that are not pending for stop.
 				// resource usage register and taskId mark for removal is performed only for stopped tasks
 				if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
-					mapperEntity, ok := cachedTasksMap[taskId]
+					mapperEntity, ok := taskIdMapperMap[taskId]
 					if !ok {
 						l.Warn("Failed to find task in cache")
 						continue
@@ -264,9 +237,6 @@ func trackResourceUsage(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 				}
 			}
 
-			//todo refactor
-			cachedTasksMap := taskIdMapperMap
-
 			// analyze tasks response
 			tasksCacheToUpdate := make([]mapper.Mapper, 0)
 			tasksToTrack := make(map[*mapper.Mapper]*ecs.Task)
@@ -280,7 +250,7 @@ func trackResourceUsage(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 				}
 
 				// for tracking task should be cached
-				cachedTask, ok := cachedTasksMap[taskId]
+				cachedTask, ok := taskIdMapperMap[taskId]
 				if !ok {
 					l.Debug("Can't find non tracked stopped task in cache")
 					continue
@@ -341,7 +311,7 @@ func stopIdleTasks(ctx context.Context, wg *sync.WaitGroup) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(1 * time.Minute):
+		case <-time.After(10 * time.Minute):
 			routerUuids, err := mapper.GetKeys(mapper.SESSION)
 			if err != nil {
 				log.WithError(err).Error("Failed to list uuid keys from sessions set!")
@@ -395,8 +365,7 @@ func stopIdleTasks(ctx context.Context, wg *sync.WaitGroup) {
 	}
 }
 
-func refreshIMDSV2Token(ctx context.Context, wg *sync.WaitGroup) {
-	defer wg.Done()
+func refreshIMDSV2Token(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -405,8 +374,9 @@ func refreshIMDSV2Token(ctx context.Context, wg *sync.WaitGroup) {
 			err := utils.RefreshIMDSV2Token()
 			if err != nil {
 				utils.ExitWithError(err, "Failed to generate IMDSV2 token", log.NewEntry(log.StandardLogger()))
+			} else {
+				log.Debug("Successfully generated IMDSV2 token")
 			}
-			log.Debug("Successfully generated IMDSV2 token")
 		}
 	}
 }
@@ -449,12 +419,28 @@ func main() {
 		cancel()
 	}()
 
+	go refreshIMDSV2Token(ctx)
+
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-	go refreshIMDSV2Token(ctx, &wg)
+	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
+	if err != nil {
+		utils.ExitWithError(err, "Failed to create AWS session", log.NewEntry(log.StandardLogger()))
+	} else {
+		svc := ecs.New(session)
 
-	manageTasksAndSession(ctx, &wg)
+		wg.Add(1)
+		go stopIdleTasks(ctx, &wg)
+
+		wg.Add(1)
+		go stopLostTasks(ctx, svc, &wg)
+
+		wg.Add(1)
+		go stopUnhealthyTasks(ctx, svc, &wg)
+
+		wg.Add(1)
+		go trackResourceUsage(ctx, svc, &wg)
+	}
 
 	wg.Wait()
 	log.Info("Scaler exited")
