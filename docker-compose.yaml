@@ -1,12 +1,25 @@
 version: "3.8"
 name: backend
 services:
+  e3s-definitions:
+    container_name: e3s-definitions
+    image: public.ecr.aws/zebrunner/e3s-definitions:3.0
+    env_file:
+      - ./properties/config.env
+      - ./properties/e3s-definitions.env
+      - ./properties/data.env
+    networks:
+      - service-network
+    restart: always
+#    volumes:
+#      - "${HOME}/.aws:/root/.aws"
   scaler:
     container_name: scaler
     image: public.ecr.aws/zebrunner/scaler:3.0
     env_file:
-      - scaler.env
-      - data.env
+      - ./properties/config.env
+      - ./properties/scaler.env
+      - ./properties/data.env
     networks:
       - service-network
     restart: always
@@ -18,8 +31,9 @@ services:
     environment:
       - EXTERNAL_PORT=$ROUTER_PORT_1
     env_file:
-      - router.env
-      - data.env
+      - ./properties/config.env
+      - ./properties/router.env
+      - ./properties/data.env
     ports:
       - "$ROUTER_PORT_1:4444"
     logging:
@@ -36,8 +50,9 @@ services:
     environment:
       - EXTERNAL_PORT=$ROUTER_PORT_2
     env_file:
-      - router.env
-      - data.env
+      - ./properties/config.env
+      - ./properties/router.env
+      - ./properties/data.env
     ports:
         - "$ROUTER_PORT_2:4444"
     logging:

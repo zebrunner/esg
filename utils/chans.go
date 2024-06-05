@@ -1,5 +1,7 @@
 package utils
 
+import "sync"
+
 func SendToChanIfNotBlocked[T interface{}](ch chan<- T, entity T) (sent bool) {
 	select {
 	case ch <- entity:
@@ -9,4 +11,9 @@ func SendToChanIfNotBlocked[T interface{}](ch chan<- T, entity T) (sent bool) {
 	}
 
 	return sent
+}
+
+func WaitForAllThreads(wg *sync.WaitGroup, donceCh chan<- interface{}) {
+	wg.Wait()
+	donceCh <- "done"
 }

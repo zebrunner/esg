@@ -1,23 +1,22 @@
 package environment
 
 import (
-	"os"
-
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
 
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
+	envtype "github.com/zebrunner/esg/environment/envType"
+	"github.com/zebrunner/esg/environment/network"
+	"github.com/zebrunner/esg/images"
 
 	"fmt"
 	"strings"
 
 	b64 "encoding/base64"
-
-	log "github.com/sirupsen/logrus"
 )
 
-func buildCypress(workspace string, routerUUID string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
+func buildCypress(workspace string, routerUUID string, image images.Image, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
 	conf := &config.Conf
 
 	workDir := "/tmp/zebrunner"
@@ -40,11 +39,6 @@ func buildCypress(workspace string, routerUUID string, caps *capabilities.Capabi
 	branchArg := ""
 	if caps.Branch != "" {
 		branchArg = "--branch=" + caps.Branch.ToPrimitive()
-	}
-
-	browserImage, err := buildImage(caps)
-	if err != nil {
-		return nil, err
 	}
 
 	cloneCommand := "CHANGE_ME"
@@ -105,11 +99,11 @@ func buildCypress(workspace string, routerUUID string, caps *capabilities.Capabi
 
 	cypressContainer := Container{
 		Name:       "browser",
-		Image:      browserImage,
+		image:      &image,
 		Privileged: false,
 		Essential:  true,
 		Ports: map[string]portMapping{
-			"vnc": {vncPort, 0},
+			"vnc": {ContainerPort: vncPort, HostPort: 0},
 		},
 		Env: map[string]string{
 			"COMMAND":           launchCommand,
@@ -200,7 +194,7 @@ func buildCypress(workspace string, routerUUID string, caps *capabilities.Capabi
 		Name:  "uploader",
 		Image: uploaderImage,
 		Res: Resources{
-			Cpu:    64,  // with 32  uploading is aborted
+			Cpu:    32,
 			Memory: 256, // 64 works for single thread. for backgroud copying it is not enough
 		},
 		Privileged: false,
@@ -215,19 +209,9 @@ func buildCypress(workspace string, routerUUID string, caps *capabilities.Capabi
 		HealthCheck: nil,
 	}
 
-	// convert image "public.ecr.aws/zebrunner/cypress-chrome:107.0" to task definition failiy: "cypress-cypress-chrome-107-0"
-	familyDefinition := strings.Replace(browserImage, imageRepo, "", -1)
-	familyDefinition = strings.Replace(familyDefinition, ":", "-", -1)
-	familyDefinition = strings.Replace(familyDefinition, ".", "-", -1)
-	zbrEnv := os.Getenv("ZEBRUNNER_ENV")
-	if zbrEnv != "" {
-		familyDefinition = zbrEnv + "-" + familyDefinition
-	}
-	log.Trace("Overidden TaskDefinitionFamily for cypress: " + familyDefinition)
-
 	containers := []*Container{&cloneContainer, &entrypointContainer, &cypressContainer, &recorderContainer, &uploaderContainer}
-	environment := ExecutionEnvironment{
-		TaskDefinitionFamily: familyDefinition,
+	env := ExecutionEnvironment{
+		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
 		Schema:               buildSchema(containers),
 		Containers:           containers,
 		Capabilities:         caps,
@@ -238,20 +222,19 @@ func buildCypress(workspace string, routerUUID string, caps *capabilities.Capabi
 			entrypointVolume: {Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false},
 			shmVolume:        {ContainerPath: shmDir, HostPath: shmDir, ReadOnly: false}, // no way to reuse local task volume due to the reset of permissions on browser container start
 		},
-		Network: &NetworkConfiguration{
+		Network: &network.NetworkConfiguration{
 			IP: "",
-			Endpoints: map[string]*Endpoint{
+			Endpoints: map[string]*network.Endpoint{
 				"vnc": {ContainerPort: vncPort, HostPort: 0, Path: "/"},
 			},
 		},
-		Workspace:        workspace,
-		RouterUUID:       routerUUID,
+		Type:             envtype.CYPRESS,
 		CapacityProvider: config.Conf.AwsLinuxCapacityProvider,
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
 	}
 
-	err = calculateResources(&environment,
-		&resourceCalculatorHelper{
+	err := calculateResources(&env,
+		&resourceCalculationHelper{
 			MinimumRes: Resources{Cpu: 1024, Memory: 2048},
 			Container:  &cypressContainer,
 			Memory:     &caps.Memory,
@@ -262,5 +245,5 @@ func buildCypress(workspace string, routerUUID string, caps *capabilities.Capabi
 		return nil, err
 	}
 
-	return &environment, nil
+	return &env, nil
 }

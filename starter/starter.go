@@ -1,6 +1,7 @@
-package service
+package starter
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"
@@ -13,9 +14,12 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps/mapper"
 	"github.com/zebrunner/esg/cachemaps/utilsmap"
+	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
+	envtype "github.com/zebrunner/esg/environment/envType"
 	"github.com/zebrunner/esg/selenium"
+	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
 	"github.com/zebrunner/esg/zebrunner"
 )
@@ -53,16 +57,17 @@ type ServiceStarter interface {
 }
 
 type startBasis struct {
-	ServiceStart time.Time
-	Log          *log.Entry
-	GinCtx       *gin.Context
-	Request      *http.Request
-	Env          *environment.ExecutionEnvironment
-	Phases       []phase
-	Task         *ecs.Task
-	TaskId       *string
-	MapperEntity *mapper.Mapper
-	Reply        map[string]interface{}
+	ServiceStart  time.Time
+	Log           *log.Entry
+	GinCtx        *gin.Context
+	Request       *http.Request
+	DriverReqCaps *capabilities.RequestCaps
+	Env           *environment.ExecutionEnvironment
+	Phases        []phase
+	Task          *ecs.Task
+	TaskId        *string
+	MapperEntity  *mapper.Mapper
+	Reply         map[string]interface{}
 }
 
 // essential error -> stop service, non essential error -> retry service start
@@ -75,7 +80,7 @@ func (s *startBasis) appendPhase(p phase) *startBasis {
 
 func (s *startBasis) registerTaskPhase(ctx context.Context) (essential *utils.SeleniumError, nonEssential error) {
 	s.Log.Debug("task registering")
-	waitRequest := WaitForTaskRegister(ctx, *s.Env)
+	waitRequest := WaitForTaskRegister(ctx, s.Env, s.MapperEntity.RouterUUID)
 	select {
 	case <-ctx.Done():
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("Task register timed out")
@@ -89,7 +94,7 @@ func (s *startBasis) registerTaskPhase(ctx context.Context) (essential *utils.Se
 			case taskArn := <-waitRequest.ResponseCh:
 				taskId := strings.Split(taskArn, "/")[2]
 				log.WithField(config.TaskIdKey, taskId).Warn("Task registered after context is done")
-				StopTaskForcibly(taskId, mapper.TaskStartupFailure)
+				service.StopTaskForcibly(taskId, mapper.TaskStartupFailure)
 				return
 			}
 		}()
@@ -108,7 +113,7 @@ func (s *startBasis) registerTaskPhase(ctx context.Context) (essential *utils.Se
 		s.MapperEntity.TaskId = taskId
 
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Debug("task registered")
-		s.Reply = map[string]interface{}{"taskId": s.Env.RouterUUID}
+		s.Reply = map[string]interface{}{"taskId": s.MapperEntity.RouterUUID}
 		return nil, nil
 	}
 }
@@ -134,7 +139,7 @@ func (s *startBasis) startTaskPhase(ctx context.Context) (essential *utils.Selen
 		s.MapperEntity.AccessedAt = &healthyTime
 
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("task started")
-		s.Reply = map[string]interface{}{"taskId": s.Env.RouterUUID}
+		s.Reply = map[string]interface{}{"taskId": s.MapperEntity.RouterUUID}
 		return nil, nil
 	}
 }
@@ -170,7 +175,7 @@ func (s *startBasis) setNetworkPhase(ctx context.Context) (essential *utils.Sele
 		s.MapperEntity.Network = *s.Env.Network
 
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("network environment set")
-		s.Reply = map[string]interface{}{"taskId": s.Env.RouterUUID}
+		s.Reply = map[string]interface{}{"taskId": s.MapperEntity.RouterUUID}
 		return nil, nil
 	}
 }
@@ -194,7 +199,7 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (essential *utils.Sel
 	case s.Reply = <-waitRequest.ResponseCh:
 		var sessionId string
 		// replace sessionId from driver response with router uuid
-		sessionId, nonEssential = replaceSessionId(s.Reply, s.Env.RouterUUID)
+		sessionId, nonEssential = replaceSessionId(s.Reply, s.MapperEntity.RouterUUID)
 		if sessionId == "" {
 			if nonEssential == nil {
 				nonEssential = fmt.Errorf("session id in driver response is empty")
@@ -241,16 +246,16 @@ type genericStarter struct {
 func (starter genericStarter) StartService(startupTime context.Context) (map[string]interface{}, *utils.SeleniumError) {
 	genericCtx, genericCtxCancel := context.WithCancel(context.Background())
 	// add to genericCtxMap
-	GenericCtxWorker.append(starter.basis.Env.RouterUUID, genericCtx)
+	GenericCtxWorker.append(starter.basis.MapperEntity.RouterUUID, genericCtx)
 	// override request context, as after response is sent, request context is canceled
 	starter.basis.Request = starter.basis.Request.WithContext(genericCtx)
 	go func() {
 		// create new task definition for generic task
-		taskDefinition, err := CreateTaskDefinition(starter.basis.Env)
+		taskDefinition, err := service.CreateTaskDefinition(starter.basis.Env.ContainerDefinitions(), starter.basis.Env.Volume(), starter.basis.Env.TaskDefinitionFamily, starter.basis.Env.TaskRoleArn)
 		// abort launch if failed to create new task definition
 		if err != nil {
 			log.WithError(err).Error("Failed to create task definition")
-			zebrunner.AbortLaunch(starter.basis.Env.RouterUUID, starter.basis.Env.Workspace,
+			zebrunner.AbortLaunch(starter.basis.MapperEntity.RouterUUID, starter.basis.MapperEntity.Workspace,
 				starter.basis.Env.Capabilities.LaunchUUID.ToPrimitive(), fmt.Sprintf("failed to create task defenition for generic: %v", err.Error()))
 
 			genericCtxCancel()
@@ -263,14 +268,14 @@ func (starter genericStarter) StartService(startupTime context.Context) (map[str
 
 		// abort launch if service startup returned error
 		if startErr != nil {
-			zebrunner.AbortLaunch(starter.basis.Env.RouterUUID, starter.basis.Env.Workspace,
+			zebrunner.AbortLaunch(starter.basis.MapperEntity.RouterUUID, starter.basis.MapperEntity.Workspace,
 				starter.basis.Env.Capabilities.LaunchUUID.ToPrimitive(), startErr.Error())
 		}
 		// stop generic context
 		genericCtxCancel()
 	}()
 
-	return gin.H{"taskId": starter.basis.Env.RouterUUID}, nil
+	return gin.H{"taskId": starter.basis.MapperEntity.RouterUUID}, nil
 }
 
 type basicStarter struct {
@@ -318,7 +323,7 @@ func (starter basicStarter) StartService(startupTime context.Context) (map[strin
 
 			if nonEssential != nil {
 				// flush data, next retry
-				StopTaskForcibly(starter.basis.MapperEntity.TaskId, mapper.TaskStartupFailure)
+				service.StopTaskForcibly(starter.basis.MapperEntity.TaskId, mapper.TaskStartupFailure)
 				starter.basis.Log = &logCopy
 				starter.basis.MapperEntity = &mapperEntityCopy
 				starter.basis.Task = nil
@@ -350,7 +355,7 @@ func (starter basicStarter) finalizeOnFailure() {
 		}
 
 	} else {
-		err := StopTaskForcibly(starter.basis.MapperEntity.TaskId, starter.basis.MapperEntity.StopReason)
+		err := service.StopTaskForcibly(starter.basis.MapperEntity.TaskId, starter.basis.MapperEntity.StopReason)
 		if err != nil {
 			starter.basis.Log.WithError(err).Error("Failed to stop task on failure")
 		}
@@ -362,25 +367,26 @@ func (starter basicStarter) finalizeOnFailure() {
 	}
 }
 
-func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l *log.Entry) ServiceStarter {
+func GetServiceStarter(env *environment.ExecutionEnvironment, workspace string, routerUUID string, reqCaps *capabilities.RequestCaps, c *gin.Context, l *log.Entry) ServiceStarter {
 	basis := &startBasis{
-		Log:     l,
-		GinCtx:  c,
-		Request: c.Request,
-		Env:     env,
-		Phases:  make([]phase, 0),
-		Reply:   make(map[string]interface{}, 0),
+		Log:           l,
+		GinCtx:        c,
+		Request:       c.Request,
+		Env:           env,
+		Phases:        make([]phase, 0),
+		Reply:         make(map[string]interface{}, 0),
+		DriverReqCaps: reqCaps,
 	}
 
 	var err error
-	basis.MapperEntity, err = mapper.CreateEntity(env, 15*time.Minute)
+	basis.MapperEntity, err = mapper.CreateEntity(workspace, routerUUID, env.Capabilities, env.Network, 15*time.Minute)
 	if err != nil {
 		basis.Log.WithError(err).Error("Failed to create mapper entity")
 	}
 	basis.GinCtx.Set(config.RouterUUID, basis.MapperEntity)
 
 	var starter ServiceStarter
-	if strings.Contains(env.TaskDefinitionFamily, "generic") {
+	if env.Type == envtype.GENERIC {
 		basis.appendPhase(basis.registerTaskPhase).appendPhase(basis.startTaskPhase)
 
 		starter = genericStarter{
@@ -404,7 +410,7 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l 
 					s.MapperEntity.StopReason = actuallMapperEntity.StopReason
 					s.MapperEntity.Status = mapper.Stopped
 
-					err := StopTaskForcibly(s.MapperEntity.TaskId, actuallMapperEntity.StopReason)
+					err := service.StopTaskForcibly(s.MapperEntity.TaskId, actuallMapperEntity.StopReason)
 					if err != nil {
 						s.Log.WithError(err).Error("Failed to stop generic task on finalize!")
 					}
@@ -421,7 +427,7 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l 
 				}
 			},
 		}
-	} else if strings.Contains(env.TaskDefinitionFamily, "cypress") {
+	} else if env.Type == envtype.CYPRESS {
 		basis.appendPhase(basis.registerTaskPhase).appendPhase(basis.startTaskPhase).appendPhase(basis.setNetworkPhase)
 
 		starter = basicStarter{
@@ -433,7 +439,7 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, c *gin.Context, l 
 
 				err := mapper.WritedByWorker(s.MapperEntity, []mapper.SetType{mapper.TASK}, nil, 0)
 				if err != nil {
-					basis.Log.WithError(err).Error("Failed to recache mapper on finalize!")
+					basis.Log.WithError(err).Error("Failed to recache task on finalize!")
 				}
 			},
 		}

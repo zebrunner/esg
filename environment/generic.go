@@ -8,12 +8,15 @@ import (
 
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
+	envtype "github.com/zebrunner/esg/environment/envType"
+	"github.com/zebrunner/esg/environment/network"
+	"github.com/zebrunner/esg/images"
 
 	b64 "encoding/base64"
 	"fmt"
 )
 
-func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
+func buildGeneric(workspace string, routerUUID string, image images.Image, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
 	conf := &config.Conf
 
 	caps.EnableVNC = false
@@ -41,13 +44,6 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 	if caps.RepositoryUrl == "" {
 		return nil, fmt.Errorf("executor repository is not specified! RepositoryUrl='%s'", caps.RepositoryUrl)
 	}
-
-	//executorImage := "maven:3.8-openjdk-11"
-	if caps.Image == "" {
-		return nil, fmt.Errorf("executor container image is not specified! Image='%s'", caps.Image)
-	}
-	executorImage := caps.Image
-	//fmt.Printf("executorImage: %s\n", executorImage)
 
 	cloneCommand := fmt.Sprintf("git clone --progress --depth=1 --single-branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
 	//fmt.Printf("cloneCommand: %s\n", cloneCommand)
@@ -127,7 +123,7 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 	})
 	executorContainer := Container{
 		Name:       "executor",
-		Image:      executorImage.ToPrimitive(),
+		image:      &image,
 		Privileged: false,
 		Essential:  true,
 		Env: map[string]string{
@@ -200,7 +196,7 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 		Name:  "uploader",
 		Image: uploaderImage,
 		Res: Resources{
-			Cpu:    64,
+			Cpu:    32,
 			Memory: 64,
 		},
 		Privileged: false,
@@ -226,28 +222,27 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 		volumes[mavenVolume] = volume{Driver: "local", Scope: "task", ContainerPath: mavenDir, ReadOnly: false}
 	}
 
-	environment := ExecutionEnvironment{
+	env := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
 		Schema:               buildSchema(containers),
 		Containers:           containers,
 		Capabilities:         caps,
 		Volumes:              volumes,
-		Network: &NetworkConfiguration{
+		Network: &network.NetworkConfiguration{
 			IP: "",
-			Endpoints: map[string]*Endpoint{
+			Endpoints: map[string]*network.Endpoint{
 				"driver":        {ContainerPort: genericPort, HostPort: 0, Path: "/"},
 				"recorderStart": {ContainerPort: recorderdPort, HostPort: 0, Path: "/start"},
 				"recorderStop":  {ContainerPort: recorderdPort, HostPort: 0, Path: "/stop"},
 			},
 		},
-		Workspace:        workspace,
-		RouterUUID:       routerUUID,
+		Type:             envtype.GENERIC,
 		CapacityProvider: config.Conf.AwsLinuxCapacityProvider,
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
 	}
 
-	err := calculateResources(&environment,
-		&resourceCalculatorHelper{
+	err := calculateResources(&env,
+		&resourceCalculationHelper{
 			MinimumRes: Resources{Cpu: 1024, Memory: 1024},
 			Container:  &executorContainer,
 			Memory:     &caps.Memory,
@@ -258,5 +253,5 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 		return nil, err
 	}
 
-	return &environment, nil
+	return &env, nil
 }

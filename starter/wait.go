@@ -1,4 +1,4 @@
-package service
+package starter
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
+	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
 )
 
@@ -36,7 +37,7 @@ type waitWorker struct {
 }
 
 func (w *waitWorker) start() {
-	svc := ecs.New(AwsSess)
+	svc := ecs.New(service.AwsSess)
 
 	for {
 		time.Sleep(5 * time.Second)
@@ -61,7 +62,7 @@ func (w *waitWorker) start() {
 			taskIdsPtrs = append(taskIdsPtrs, &taskId)
 		}
 
-		pages := paginate(taskIdsPtrs, 100)
+		pages :=utils.Paginate(taskIdsPtrs, 100)
 
 		// Send DescribeTasks requests and process errors
 		var tasks []*ecs.Task

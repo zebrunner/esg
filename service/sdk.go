@@ -1,7 +1,6 @@
 package service
 
 import (
-	"math"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -82,7 +81,7 @@ func GetTasksByTaskIds(taskIds []string, svc *ecs.ECS) []*ecs.Task {
 	tasks := make([]*ecs.Task, 0)
 
 	// Construct pages of *string with 100 or fewer elements for requests. 100 is an AWS limitation for Describe* requests
-	pages := paginate(aws.StringSlice(taskIds), 100)
+	pages := utils.Paginate(aws.StringSlice(taskIds), 100)
 
 	// Send DescribeTasks requests and save response tasks into array
 	for _, tasksPage := range pages {
@@ -128,7 +127,7 @@ func ListContainerInstances(svc *ecs.ECS) ([]*string, error) {
 }
 
 func DescribeContainerInstances(containerInstanceIdPtrs []*string, svc *ecs.ECS) ([]*ecs.ContainerInstance, error) {
-	pages := paginate(containerInstanceIdPtrs, 100)
+	pages := utils.Paginate(containerInstanceIdPtrs, 100)
 	containerInstances := make([]*ecs.ContainerInstance, 0)
 
 	for _, page := range pages {
@@ -301,19 +300,4 @@ func TerminateInstancesInASG(ec2InstanceIdPtrs []*string, decrementDesiredCapaci
 	}
 
 	return nil
-}
-
-func paginate[T interface{}](l []T, size int) [][]T {
-	numPages := int(math.Ceil(float64(len(l)) / float64(size)))
-	pages := make([][]T, numPages)
-	for i := 0; i < numPages; i++ {
-		left := i * size
-		right := (i + 1) * size
-		if right > len(l) {
-			right = len(l)
-		}
-		pages[i] = l[left:right]
-	}
-
-	return pages
 }

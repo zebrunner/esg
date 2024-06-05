@@ -3,15 +3,30 @@ package environment
 import (
 	"fmt"
 	"math"
+	"sort"
+	"strings"
 
 	"github.com/aws/aws-sdk-go/service/ecs"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/capabilities"
+	"github.com/zebrunner/esg/images"
 )
 
 var (
 	capacityProviderResourcesLimit = make(map[string]smallestInstanceResources)
 )
+
+type smallestInstanceResources struct {
+	res             Resources
+	memoryDeviation int64
+}
+
+func AddSmallestInstanceResources(cpu int64, memory int64, capacityProvider string) {
+	capacityProviderResourcesLimit[capacityProvider] = smallestInstanceResources{
+		res:             Resources{Cpu: cpu, Memory: memory},
+		memoryDeviation: getMemoryDeviation(memory),
+	}
+}
 
 type envVariables = map[string]string
 
@@ -33,21 +48,10 @@ type Resources struct {
 	Memory int64
 }
 
-type smallestInstanceResources struct {
-	res             Resources
-	memoryDeviation int64
-}
-
-func AddSmallestInstanceResources(cpu int64, memory int64, capacityProvider string) {
-	capacityProviderResourcesLimit[capacityProvider] = smallestInstanceResources{
-		res:             Resources{Cpu: cpu, Memory: memory},
-		memoryDeviation: getMemoryDeviation(memory),
-	}
-}
-
 type Container struct {
 	Name  string
 	Image string
+	image *images.Image
 
 	Res Resources
 
@@ -72,6 +76,22 @@ func (c *Container) Cpu() int64 {
 
 func (c *Container) Memory() int64 {
 	return c.Res.Memory
+}
+
+func (c Container) getImageUrl() string {
+	if c.image == nil {
+		return c.Image
+	}
+
+	return c.image.GetUrl()
+}
+
+func (c Container) getImageNameTag() string {
+	if c.image == nil {
+		return c.Image
+	}
+
+	return c.image.String()
 }
 
 func (r Resources) Compare(res Resources) (cpuBool bool, memoryBool bool) {
@@ -103,7 +123,7 @@ func SumResources(containers []*Container) Resources {
 	return resources
 }
 
-type resourceCalculatorHelper struct {
+type resourceCalculationHelper struct {
 	MinimumRes Resources
 	Container  *Container
 	Memory     capabilities.Wrapper[int64]
@@ -111,7 +131,7 @@ type resourceCalculatorHelper struct {
 	wantedRes  Resources
 }
 
-func calculateResources(env *ExecutionEnvironment, resourcesArr ...*resourceCalculatorHelper) error {
+func calculateResources(env *ExecutionEnvironment, resourcesArr ...*resourceCalculationHelper) error {
 	for _, r := range resourcesArr {
 		// Clear current container resources setting as it will be configured later
 		r.Container.Res = Resources{0, 0}
@@ -141,7 +161,7 @@ func calculateResources(env *ExecutionEnvironment, resourcesArr ...*resourceCalc
 
 		wantedCpu := r.Cpu.ToPrimitive() - r.MinimumRes.Cpu
 		if wantedCpu < 0 {
- 			log.WithFields(log.Fields{"wantedCpu": r.Cpu.ToPrimitive(), "minimumCpu": r.MinimumRes.Cpu, "container": r.Container.Name}).Trace("Increased requested cpu to min values")
+			log.WithFields(log.Fields{"wantedCpu": r.Cpu.ToPrimitive(), "minimumCpu": r.MinimumRes.Cpu, "container": r.Container.Name}).Trace("Increased requested cpu to min values")
 			r.Cpu.From(r.MinimumRes.Cpu)
 			wantedCpu = 0
 		}
@@ -224,4 +244,14 @@ func getMemoryDeviation(memory int64) int64 {
 	// deviationPercent is closer to basePercent with more memory on instance
 	deviationPercent := (basePercent + float64(decreaseIndex)/(float64(memory)/float64(mbInGb)))
 	return int64(math.Ceil(deviationPercent / 100 * float64(memory)))
+}
+
+func buildSchema(containers []*Container) string {
+	namesArr := make([]string, 0)
+	for _, container := range containers {
+		namesArr = append(namesArr, container.Name)
+	}
+	sort.Strings(namesArr)
+
+	return strings.Join(namesArr, "-")
 }

@@ -8,19 +8,12 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const (
+	// public zebrunner ECR docker registry
+	ZebrunnerEcrRegistryUri = "public.ecr.aws/zebrunner"
+)
+
 var (
-	SupportedRepositories = []string{
-		"chrome",
-		"firefox",
-		"edge",
-		"redroid",
-		"cypress-chrome",
-		"cypress-chromium",
-		"cypress-edge",
-		"cypress-firefox",
-		"windows-chrome",
-		"windows-edge",
-	}
 	VendorPrefix = "zebrunner"
 	Conf         = Config{}
 	RouterUUID   = "_uuid"
@@ -45,7 +38,6 @@ type Config struct {
 	// Timeouts
 	MaxIdleTimeout               time.Duration
 	IdleTimeout                  time.Duration
-	CypressIdleTimeout           time.Duration
 	SessionDeleteTimeout         time.Duration
 	ServiceStartupTimeout        time.Duration
 	InstanceCooldownTimeout      time.Duration
@@ -53,8 +45,10 @@ type Config struct {
 	MaxTimeout                   time.Duration
 
 	// External connections
-	DbConnectionString           string
-	RedisConnectionString        string
+	DbConnectionString          string
+	RedisConnectionString       string
+	DefinitionsConnectionString string
+
 	ZebrunnerHost                string
 	ZebrunnerIntegrationUser     string
 	ZebrunnerIntegrationPassword string
@@ -70,7 +64,8 @@ type Config struct {
 	ReserveInstancesPercent float64
 	ReserveMaxCapacity      int64
 
-	ExcludeBrowsers string
+	ImageRepositories string
+	ExcludeBrowsers   string
 
 	ProductionEnv bool
 	SingleTenant  bool
@@ -92,15 +87,16 @@ func init() {
 
 	flag.DurationVar(&Conf.MaxIdleTimeout, "max-idle-timeout", 20*time.Minute, "Maximum session idle timeout time that could be set by user's capabilities")
 	flag.DurationVar(&Conf.IdleTimeout, "idle-timeout", 60*time.Second, "Session idle timeout in time.Duration format")
-	flag.DurationVar(&Conf.CypressIdleTimeout, "cypress-idle-timeout", 30*time.Second, "Cypress task idle timeout in time.Duration format") // cyserver get task's status every 5 seconds
 	flag.DurationVar(&Conf.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
 	flag.DurationVar(&Conf.ServiceStartupTimeout, "service-startup-timeout", 10*time.Minute, "Service startup timeout in time.Duration format")
 	flag.DurationVar(&Conf.InstanceCooldownTimeout, "instance-cooldown-timeout", 4*time.Minute, "Time after instance start when shutdown is prohibited on scale down in time.Duration format")
 	flag.DurationVar(&Conf.ContainerInstanceInitTimeout, "container-instance-init-timeout", 10*time.Minute, "Time for ec2 instance after launch to initialize container-instance for asg in time.Duration format")
 	flag.DurationVar(&Conf.MaxTimeout, "max-timeout", 24*time.Hour, "Maximum valid task/session timeout in time.Duration format")
 
-	flag.StringVar(&Conf.DbConnectionString, "db-connection", "", "Connection string for database")
+	flag.StringVar(&Conf.DbConnectionString, "db-connection", "localhost:5432", "Connection string for database")
 	flag.StringVar(&Conf.RedisConnectionString, "aws-elastic-cache", "localhost:6379", "Connection string for Session cache")
+	flag.StringVar(&Conf.DefinitionsConnectionString, "definitions-connection", "localhost:5555", "Connection string for e3s-definitions service")
+
 	flag.StringVar(&Conf.ZebrunnerHost, "zebrunner-host", "", "Host for zebrunner integration for this environment")
 	flag.StringVar(&Conf.ZebrunnerIntegrationUser, "zebrunner-integration-user", "", "User for zebrunner for current env")
 	flag.StringVar(&Conf.ZebrunnerIntegrationPassword, "zebrunner-integration-password", "", "Password for zebrunner for current env")
@@ -115,6 +111,7 @@ func init() {
 	flag.Float64Var(&Conf.ReserveInstancesPercent, "reserve-instances-percent", 0.25, "Reserved cluster capacity quota during scale up and down operations")
 	flag.Int64Var(&Conf.ReserveMaxCapacity, "reserve-max-capacity", 5, "Reservation instance limit")
 
+	flag.StringVar(&Conf.ImageRepositories, "image-repositories", "Zebrunner:chrome", "Pattern of supported browser images")
 	flag.StringVar(&Conf.ExcludeBrowsers, "exclude-browsers", "", "Pattern for excluding browsers from available images")
 
 	flag.BoolVar(&Conf.SingleTenant, "single-tenant", false, "Single tenant mode")
@@ -145,8 +142,4 @@ func (c *Config) ParseLogLevel() logrus.Level {
 	default:
 		return logrus.DebugLevel
 	}
-}
-
-func (c *Config) ZebrunnerIsIntegrated() bool {
-	return c.ZebrunnerHost != "" && c.ZebrunnerIntegrationUser != "" && c.ZebrunnerIntegrationPassword != ""
 }
