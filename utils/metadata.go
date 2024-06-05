@@ -2,7 +2,7 @@ package utils
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 )
 
@@ -42,7 +42,7 @@ func GetMetadata(item metadataItem) (string, error) {
 	}
 
 	defer response.Body.Close()
-	body, err := ioutil.ReadAll(response.Body)
+	body, err := io.ReadAll(response.Body)
 	return string(body), err
 }
 
@@ -76,7 +76,7 @@ func getToken(ttlSeconds string) ([]byte, error) {
 	}
 
 	defer tokenResp.Body.Close()
-	body, err := ioutil.ReadAll(tokenResp.Body)
+	body, err := io.ReadAll(tokenResp.Body)
 	if err != nil {
 		return nil, err
 	}
