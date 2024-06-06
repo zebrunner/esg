@@ -218,7 +218,7 @@ networkName="e3s-network"
 
   graceful_restart() {
     # get all service names and put them into array
-    serviceNames=`cat $BASEDIR/docker-compose.yaml | grep -m 3 "container_name" | sed 's/^[   ]*//;s/[    ]*$//' |cut -d " " -f 2`
+    serviceNames=`cat $BASEDIR/docker-compose.yaml | grep -m 4 "container_name" | sed 's/^[   ]*//;s/[    ]*$//' |cut -d " " -f 2`
     readarray -t namesArray <<< "$serviceNames"
     for serviceName in "${namesArray[@]}"
     do
