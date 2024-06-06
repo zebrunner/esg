@@ -28,11 +28,13 @@ import (
 func stopLostTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 	defer wg.Done()
 
+	timer := utils.CreateTimer(config.Conf.ServiceStartupTimeout/2 + 1*time.Minute)
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(config.Conf.ServiceStartupTimeout + 5*time.Minute):
+		case <-timer():
 			routerUuids, err := mapper.GetKeys(mapper.TASK)
 			if err != nil {
 				log.WithError(err).Warn("Failed to get list of taskmap keys!")
@@ -108,11 +110,13 @@ func stopLostTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 func stopUnhealthyTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 	defer wg.Done()
 
+	timer := utils.CreateTimer(10 * time.Minute)
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(10 * time.Minute):
+		case <-timer():
 			routerUuids, err := mapper.GetKeys(mapper.TASK)
 			if err != nil {
 				log.WithError(err).Warn("Failed to get list of taskmap keys!")
@@ -194,12 +198,14 @@ func stopUnhealthyTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 func trackResourceUsage(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 	defer wg.Done()
 
+	timer := utils.CreateTimer(1 * time.Minute)
+
 	for {
 		select {
 
 		case <-ctx.Done():
 			return
-		case <-time.After(1 * time.Minute):
+		case <-timer():
 
 			routerUuids, err := mapper.GetKeys(mapper.TASK)
 			if err != nil {
@@ -304,14 +310,16 @@ func trackResourceUsage(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 	}
 }
 
-func stopIdleTasks(ctx context.Context, wg *sync.WaitGroup) {
+func stopIdleSessions(ctx context.Context, wg *sync.WaitGroup) {
 	defer wg.Done()
+
+	timer := utils.CreateTimer(config.Conf.IdleTimeout)
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(10 * time.Minute):
+		case <-timer():
 			routerUuids, err := mapper.GetKeys(mapper.SESSION)
 			if err != nil {
 				log.WithError(err).Error("Failed to list uuid keys from sessions set!")
@@ -324,6 +332,7 @@ func stopIdleTasks(ctx context.Context, wg *sync.WaitGroup) {
 				continue
 			}
 
+			var sessionsWg sync.WaitGroup
 			for _, mapperEntity := range mapperEntities {
 				idle := mapperEntity.IsIdle()
 
@@ -348,7 +357,7 @@ func stopIdleTasks(ctx context.Context, wg *sync.WaitGroup) {
 					continue
 				}
 
-				wg.Add(1)
+				sessionsWg.Add(1)
 				go func(m *mapper.Mapper, l *log.Entry, wg *sync.WaitGroup) {
 					defer wg.Done()
 
@@ -359,25 +368,23 @@ func stopIdleTasks(ctx context.Context, wg *sync.WaitGroup) {
 					} else {
 						l.Warn("task aborted due to the session idle timeout")
 					}
-				}(mapperEntity, l, wg)
+				}(mapperEntity, l, &sessionsWg)
 			}
+			sessionsWg.Wait()
+
 		}
 	}
 }
 
-func refreshIMDSV2Token(ctx context.Context) {
+func refreshIMDSV2Token() {
 	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(2*time.Hour + 30*time.Minute):
-			err := utils.RefreshIMDSV2Token()
-			if err != nil {
-				utils.ExitWithError(err, "Failed to generate IMDSV2 token", log.NewEntry(log.StandardLogger()))
-			} else {
-				log.Debug("Successfully generated IMDSV2 token")
-			}
+		err := utils.RefreshIMDSV2Token()
+		if err != nil {
+			utils.ExitWithError(err, "Failed to generate IMDSV2 token", log.NewEntry(log.StandardLogger()))
 		}
+
+		log.Debug("Successfully generated IMDSV2 token")
+		time.Sleep(2*time.Hour + 30*time.Minute)
 	}
 }
 
@@ -419,18 +426,18 @@ func main() {
 		cancel()
 	}()
 
-	go refreshIMDSV2Token(ctx)
+	go refreshIMDSV2Token()
 
 	var wg sync.WaitGroup
 
 	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
 	if err != nil {
-		utils.ExitWithError(err, "Failed to create AWS session", log.NewEntry(log.StandardLogger()))
+		log.NewEntry(log.StandardLogger()).WithError(err).Error("Failed to create AWS session")
 	} else {
 		svc := ecs.New(session)
 
 		wg.Add(1)
-		go stopIdleTasks(ctx, &wg)
+		go stopIdleSessions(ctx, &wg)
 
 		wg.Add(1)
 		go stopLostTasks(ctx, svc, &wg)
