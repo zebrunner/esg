@@ -260,6 +260,11 @@ func main() {
 		utils.ExitWithError(err, "Failed to init redis connection", log.NewEntry(log.StandardLogger()))
 	}
 
+	err = config.REDIS_DEFINITIONS_CLIENT.InitConnection()
+	if err != nil {
+		utils.ExitWithError(err, "Failed to init redis connection", log.NewEntry(log.StandardLogger()))
+	}
+
 	err = config.REDIS_UTILITY_CLIENT.InitConnection()
 	if err != nil {
 		utils.ExitWithError(err, "Failed to init redis connection", log.NewEntry(log.StandardLogger()))
