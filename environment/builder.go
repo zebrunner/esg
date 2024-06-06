@@ -99,7 +99,9 @@ func getEnvironmentBuilder(caps *capabilities.Capabilities) (envBuilder, error) 
 }
 
 func buildImageFromCaps(caps *capabilities.Capabilities) (*images.Image, error) {
-	switch caps.PlatformName.ToPrimitive() {
+	platform := strings.ToLower(caps.PlatformName.ToPrimitive())
+
+	switch platform {
 	case "":
 		fallthrough
 	case envtype.ANY.String():
