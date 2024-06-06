@@ -90,19 +90,17 @@ func getDefinitions() (map[string]int64, error) {
 	return definitionsMap, nil
 }
 
-// Launches new thread, in which every 10 minutes definitionsMap is updated by definitions from redis
-func SaveAndUpdateDefinitions() {
-	go func() {
-		for {
-			defMap, err := getDefinitions()
-			if err != nil {
-				log.Warn("Failed to get all definitions")
-				continue
-			} else {
-				definitionsMap = defMap
-			}
-
-			time.Sleep(10 * time.Minute)
+// every `interval` in minutes we update local definitionsMap syncing it with redis cache to minimize redis calls at run-time
+func ActualizeDefinitionsMap(interval time.Duration) {
+	for {
+		defMap, err := getDefinitions()
+		if err != nil {
+			log.Warn("Failed to get all definitions")
+			continue
+		} else {
+			definitionsMap = defMap
 		}
-	}()
+
+		time.Sleep(interval)
+	}
 }

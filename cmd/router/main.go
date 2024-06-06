@@ -20,11 +20,12 @@ import (
 	"github.com/zebrunner/esg/cachemaps/definitionmap"
 	"github.com/zebrunner/esg/cachemaps/mapper"
 	"github.com/zebrunner/esg/cachemaps/resourcesToAllocate"
-	"github.com/zebrunner/esg/cachemaps/utilsmap"
 	"github.com/zebrunner/esg/config"
+	"github.com/zebrunner/esg/definitions"
 	"github.com/zebrunner/esg/environment"
 	"github.com/zebrunner/esg/handlers"
 	"github.com/zebrunner/esg/service"
+	"github.com/zebrunner/esg/starter"
 	"github.com/zebrunner/esg/utils"
 )
 
@@ -141,7 +142,7 @@ func CreateRouter() *gin.Engine {
 		httpHub.GET("/logs/:session", handlers.Logs)
 		httpHub.GET("/video/:session", handlers.Video)
 		httpHub.GET("/tasks/:task/log", handlers.TaskLog)
-		httpHub.GET("/tasks/:task/status", handlers.LowLvlAuthentication, handlers.TaskDescribe)
+		httpHub.GET("/tasks/:task/status", handlers.TaskDescribe)
 	}
 
 	return r
@@ -212,6 +213,23 @@ func InitClusterInfo() (*elbv2.TargetGroup, error) {
 
 	config.Conf.AwsEsgUrl = fmt.Sprintf("%s://%s", *listener.Protocol, *loadBalancer.DNSName)
 
+	// wait until task definitions are updated
+	retryCount := 2
+	for {
+		if ok, err := definitions.IsTaskDefinitionRefreshDone(); err != nil {
+			retryCount--
+			if retryCount <= 0 {
+				log.WithError(err).Error("Failed to get expected response from e3s definitions service")
+				return nil, err
+			}
+		} else if ok {
+			go definitionmap.ActualizeDefinitionsMap(time.Minute * 15)
+			break
+		}
+
+		time.Sleep(5 * time.Second)
+	}
+
 	return targetGroup, nil
 }
 
@@ -256,7 +274,6 @@ func main() {
 	if err != nil {
 		utils.ExitWithError(err, "Failed to init redis connection", log.NewEntry(log.StandardLogger()))
 	}
-
 	mapper.InitMapperWorkers()
 	resourcesToAllocate.InitResourceWorker()
 
@@ -272,18 +289,9 @@ func main() {
 }
 
 func startRouter(targetGroup *elbv2.TargetGroup) {
-	// wait until task definitions are updated
-	for {
-		if utilsmap.IsTaskDefenitionRefreshDone() {
-			definitionmap.SaveAndUpdateDefinitions()
-			break
-		}
-		time.Sleep(5 * time.Second)
-	}
-
-	// init all service workers
-	service.InitInstanceWorker()
-	service.InitWaitWorker()
+	// init all starter workers
+	starter.InitInstanceWorker()
+	starter.InitWaitWorker()
 
 	// create sigterm listener chan
 	quit := make(chan os.Signal, 1)
@@ -336,7 +344,7 @@ func startRouter(targetGroup *elbv2.TargetGroup) {
 	}
 
 	var wg sync.WaitGroup
-	for routerUUID, ctx := range service.GenericCtxWorker.CtxMap {
+	for routerUUID, ctx := range starter.GenericCtxWorker.CtxMap {
 		wg.Add(1)
 		go func(routerUUID string, ctx context.Context) {
 			log.WithField(config.RouterUUID, routerUUID).Info("Waiting for task to start")

@@ -15,3 +15,8 @@ services:
       context: ../
       dockerfile: build/Dockerfile.e3s-migration
     image: public.ecr.aws/zebrunner/e3s-migration:latest
+  e3s-definitions:
+    build:
+      context: ../
+      dockerfile: build/Dockerfile.e3s-definitions
+    image: public.ecr.aws/zebrunner/e3s-definitions:$ROUTER_VERSION

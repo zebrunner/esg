@@ -9,7 +9,6 @@ import (
 )
 
 const (
-	TaskDefenititonRefreshDone = "done"
 	ScalerVersion              = "scalerVersion"
 )
 
@@ -27,11 +26,6 @@ func ReleaseLock(key string) error {
 	return config.REDIS_UTILITY_CLIENT.GetConnection().Del(context.Background(), key).Err()
 }
 
-// Adds to redis taskDefenititonRefreshDone record,
-// which means that TaskDefenition refresh was successfully performed and all supported task definition revisions are placed in redis db
-func SetTaskDefenitionRefreshDone() error {
-	return config.REDIS_UTILITY_CLIENT.GetConnection().Set(context.Background(), TaskDefenititonRefreshDone, TaskDefenititonRefreshDone, 0).Err()
-}
 
 func SetScalerVersion() error {
 	return config.REDIS_UTILITY_CLIENT.GetConnection().Set(context.Background(), ScalerVersion, config.Version, 0).Err()
@@ -39,18 +33,4 @@ func SetScalerVersion() error {
 
 func GetScalerVersion() (string, error) {
 	return config.REDIS_UTILITY_CLIENT.GetConnection().Get(context.Background(), ScalerVersion).Result()
-}
-
-func UnsetTaskDefenitionRefreshDone() error {
-	return config.REDIS_UTILITY_CLIENT.GetConnection().Del(context.Background(), TaskDefenititonRefreshDone).Err()
-}
-
-// Checks for presense of TaskDefenititonRefreshDone key in redis db
-func IsTaskDefenitionRefreshDone() bool {
-	exists, err := config.REDIS_UTILITY_CLIENT.GetConnection().Exists(context.Background(), TaskDefenititonRefreshDone).Result()
-	if err != nil {
-		return false
-	}
-
-	return exists != 0
 }
