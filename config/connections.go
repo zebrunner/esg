@@ -46,6 +46,7 @@ func (db redisDB) InitConnection() error {
 	_, err := client.Ping(context.Background()).Result()
 	if err != nil {
 		log.WithError(err).Errorf("Failed to ping redis %d connection", db)
+		client.Close()
 	} else {
 		db.setConnection(client)
 	}
