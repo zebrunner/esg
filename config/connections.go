@@ -23,12 +23,16 @@ const (
 )
 
 var (
-	connections  = make(map[redisDB]*redis.Client)
-	DbConnection *sqlx.DB
+	redisMapperClient      *redis.Client
+	redisDefinitionsClient *redis.Client
+	redisResourcesClient   *redis.Client
+	redisUtilityClient     *redis.Client
+	DbConnection           *sqlx.DB
 )
 
 func (db redisDB) InitConnection() error {
-	if connections[db] != nil {
+
+	if db.GetConnection() != nil {
 		return fmt.Errorf("'%d' redis connection already initialized", db)
 	}
 	//default PoolTimeout - 4 seconds
@@ -44,13 +48,36 @@ func (db redisDB) InitConnection() error {
 		log.WithError(err).Errorf("Failed to ping redis %d connection", db)
 		client.Close()
 	} else {
-		connections[db] = client
+		db.setConnection(client)
 	}
 	return err
 }
 
+func (db redisDB) setConnection(client *redis.Client) {
+	switch db {
+	case REDIS_MAPPER_CLIENT:
+		redisMapperClient = client
+	case REDIS_DEFINITIONS_CLIENT:
+		redisDefinitionsClient = client
+	case REDIS_RESOURCES_CLIENT:
+		redisResourcesClient = client
+	case REDIS_UTILITY_CLIENT:
+		redisUtilityClient = client
+	}
+}
+
 func (db redisDB) GetConnection() *redis.Client {
-	return connections[db]
+	switch db {
+	case REDIS_MAPPER_CLIENT:
+		return redisMapperClient
+	case REDIS_DEFINITIONS_CLIENT:
+		return redisDefinitionsClient
+	case REDIS_RESOURCES_CLIENT:
+		return redisResourcesClient
+	case REDIS_UTILITY_CLIENT:
+		return redisUtilityClient
+	}
+	return nil
 }
 
 func InitDBConnection(connectionString string) error {
