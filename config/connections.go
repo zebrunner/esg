@@ -46,7 +46,6 @@ func (db redisDB) InitConnection() error {
 	_, err := client.Ping(context.Background()).Result()
 	if err != nil {
 		log.WithError(err).Errorf("Failed to ping redis %d connection", db)
-		client.Close()
 	} else {
 		db.setConnection(client)
 	}
@@ -99,10 +98,17 @@ func InitDBConnection(connectionString string) error {
 * Close all Redis and Database connections.
  */
 func CloseConnections() {
-	for k, v := range connections {
-		log.Infof("Closing '%d' redis connection.", k)
-		v.Close()
-
+	if redisMapperClient != nil {
+		redisMapperClient.Close()
+	}
+	if redisDefinitionsClient != nil {
+		redisDefinitionsClient.Close()
+	}
+	if redisResourcesClient != nil {
+		redisResourcesClient.Close()
+	}
+	if redisUtilityClient != nil {
+		redisUtilityClient.Close()
 	}
 	if DbConnection != nil {
 		log.Info("Closing database connection.")
