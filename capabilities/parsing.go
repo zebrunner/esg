@@ -99,6 +99,16 @@ func init() {
 				return true
 			},
 		},
+		"appium:platformVersion": {
+			DeleteCapabilityProcessor: func(value interface{}) bool {
+				if version, ok := value.(string); ok {
+					version = strings.ToLower(version)
+					return version == "latest" || version == "null" || version == ""
+				}
+
+				return true
+			},
+		},
 		"browserName": {
 			ValueProcessor: func(value interface{}) interface{} {
 				if name, ok := value.(string); ok {

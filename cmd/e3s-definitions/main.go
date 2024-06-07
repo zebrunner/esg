@@ -82,6 +82,10 @@ func CreateRouter() *gin.Engine {
 }
 
 func main() {
+	defer func() {
+		config.CloseConnections()
+	}()
+
 	flag.Parse()
 
 	log.SetLevel(config.Conf.ParseLogLevel())
@@ -95,16 +99,11 @@ func main() {
 	if err != nil {
 		utils.ExitWithError(err, "Failed to init DB client", log.NewEntry(log.StandardLogger()))
 	}
-	defer config.DbConnection.Close()
 
-	err = config.InitCache()
+	err = config.REDIS_DEFINITIONS_CLIENT.InitConnection()
 	if err != nil {
-		utils.ExitWithError(err, "Failed to init Redis client", log.NewEntry(log.StandardLogger()))
+		utils.ExitWithError(err, "Failed to init redis connection", log.NewEntry(log.StandardLogger()))
 	}
-	defer config.RedisMapperClient.Close()
-	defer config.RedisDefinitionClient.Close()
-	defer config.RedisResourcesClient.Close()
-	defer config.RedisUtilityClient.Close()
 
 	// create sigterm listener chan
 	quit := make(chan os.Signal, 1)
