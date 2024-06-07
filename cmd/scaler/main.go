@@ -389,6 +389,10 @@ func refreshIMDSV2Token() {
 }
 
 func main() {
+	defer func() {
+		config.CloseConnections()
+	}()
+
 	flag.Parse()
 
 	log.SetLevel(config.Conf.ParseLogLevel())
@@ -399,14 +403,21 @@ func main() {
 	}
 	service.AwsSess = awsSess
 
-	err = config.InitCache()
+	err = config.REDIS_MAPPER_CLIENT.InitConnection()
 	if err != nil {
 		utils.ExitWithError(err, "Failed to init redis connection", log.NewEntry(log.StandardLogger()))
 	}
-	defer config.RedisMapperClient.Close()
-	defer config.RedisDefinitionClient.Close()
-	defer config.RedisResourcesClient.Close()
-	defer config.RedisUtilityClient.Close()
+
+	err = config.REDIS_UTILITY_CLIENT.InitConnection()
+	if err != nil {
+		utils.ExitWithError(err, "Failed to init redis connection", log.NewEntry(log.StandardLogger()))
+	}
+
+	err = config.REDIS_RESOURCES_CLIENT.InitConnection()
+	if err != nil {
+		utils.ExitWithError(err, "Failed to init redis connection", log.NewEntry(log.StandardLogger()))
+	}
+
 	mapper.InitMapperWorkers()
 	utilsmap.SetScalerVersion()
 

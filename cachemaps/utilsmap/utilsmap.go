@@ -13,7 +13,7 @@ const (
 )
 
 func AcquireLock(key string, expiration time.Duration) bool {
-	ok, err := config.RedisUtilityClient.SetNX(context.Background(), key, "lock", expiration).Result()
+	ok, err := config.REDIS_UTILITY_CLIENT.GetConnection().SetNX(context.Background(), key, "lock", expiration).Result()
 	if err != nil {
 		logrus.WithError(err).Error("Failed to obtain lock")
 		return false
@@ -23,14 +23,14 @@ func AcquireLock(key string, expiration time.Duration) bool {
 }
 
 func ReleaseLock(key string) error {
-	return config.RedisUtilityClient.Del(context.Background(), key).Err()
+	return config.REDIS_UTILITY_CLIENT.GetConnection().Del(context.Background(), key).Err()
 }
 
 
 func SetScalerVersion() error {
-	return config.RedisUtilityClient.Set(context.Background(), ScalerVersion, config.Version, 0).Err()
+	return config.REDIS_UTILITY_CLIENT.GetConnection().Set(context.Background(), ScalerVersion, config.Version, 0).Err()
 }
 
 func GetScalerVersion() (string, error) {
-	return config.RedisUtilityClient.Get(context.Background(), ScalerVersion).Result()
+	return config.REDIS_UTILITY_CLIENT.GetConnection().Get(context.Background(), ScalerVersion).Result()
 }
