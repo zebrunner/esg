@@ -443,7 +443,7 @@ func main() {
 
 	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
 	if err != nil {
-		log.NewEntry(log.StandardLogger()).WithError(err).Error("Failed to create AWS session")
+		utils.ExitWithError(err, "Failed to create AWS session", log.NewEntry(log.StandardLogger()))
 	} else {
 		svc := ecs.New(session)
 
@@ -458,6 +458,8 @@ func main() {
 
 		wg.Add(1)
 		go trackResourceUsage(ctx, svc, &wg)
+
+		log.Info("Service started")
 	}
 
 	wg.Wait()
