@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/environment/network"
 )
 
@@ -21,7 +20,6 @@ func startRecording(network *network.NetworkConfiguration) error {
 
 	req.Host = "localhost"
 
-	log.WithField("Url", req.URL.String()).Info("recorder req url")
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
@@ -48,7 +46,6 @@ func stopRecording(network *network.NetworkConfiguration) error {
 
 	req.Host = "localhost"
 
-	log.WithField("Url", req.URL.String()).Info("recorder req url")
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err

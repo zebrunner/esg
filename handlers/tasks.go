@@ -172,10 +172,6 @@ func CloseSession(c *gin.Context) {
 
 	selenium.CloseSession(mapperEntity)
 
-	l.Warn("pause started...")
-	time.Sleep(5 * time.Second)
-	l.Warn("pause finished...")
-
 	err := service.StopTask(*mapperEntity, mapper.TaskFinished)
 	if err != nil {
 		l.WithError(err).Warn("Failed to stop task")
