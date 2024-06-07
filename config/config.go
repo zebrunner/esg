@@ -60,6 +60,7 @@ type Config struct {
 	S3AwsSecretAccessKey string
 
 	LogLevel                string
+	RecorderLogLvl          string
 	ReserveInstancesPercent float64
 	ReserveMaxCapacity      int64
 
@@ -121,6 +122,7 @@ func init() {
 }
 
 func (c *Config) ParseLogLevel() logrus.Level {
+	c.RecorderLogLvl = "debug"
 	switch c.LogLevel {
 	case "panic":
 		return logrus.PanicLevel
@@ -131,6 +133,7 @@ func (c *Config) ParseLogLevel() logrus.Level {
 	case "warning":
 		return logrus.WarnLevel
 	case "info":
+		c.RecorderLogLvl = "info"
 		return logrus.InfoLevel
 	case "debug":
 		return logrus.DebugLevel

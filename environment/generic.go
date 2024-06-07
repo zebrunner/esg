@@ -54,8 +54,8 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 		Name:  "clone",
 		Image: cloneImage,
 		Res: Resources{
-			Cpu:    minCpu,
-			Memory: 512, //increased memory to fix OOM for huge repositories (3K+ branches)
+			Cpu:    cloneContainerMinCpu,
+			Memory: cloneContainerMinMemory,
 		},
 		Privileged: false,
 		Essential:  false,
@@ -99,7 +99,7 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 	launchCommand := caps.LaunchCommand
 
 	//basic auth header for executor-logs service
-	basicAuthHeader := "Authorization: Basic " + b64.StdEncoding.EncodeToString([]byte(conf.ZebrunnerIntegrationUser+":"+conf.ZebrunnerIntegrationPassword))
+	basicAuthHeader := "Basic " + b64.StdEncoding.EncodeToString([]byte(conf.ZebrunnerIntegrationUser+":"+conf.ZebrunnerIntegrationPassword))
 
 	mounts := []string{entrypointVolume, taskVolume, logVolume}
 	if includeMaven {
@@ -159,22 +159,31 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 		Name:  "recorder",
 		Image: recorderImage,
 		Res: Resources{
-			Cpu:    32,
-			Memory: 256, // with 128 failed for cyserver "OutOfMemoryError: Container killed due to memory usage"
+			Cpu:    16, // was 32
+			Memory: 64, // was 256 // with 128 failed for cyserver "OutOfMemoryError: Container killed due to memory usage"
 		},
 		Privileged: false,
 		Essential:  false,
+		Ports: map[string]portMapping{
+			"recorder": {recorderdPort, 0},
+		},
 		Env: map[string]string{
 			"ROUTER_UUID":          routerUUID,
 			"ENABLE_VIDEO":         "false",
 			"ENABLE_REALTIME_LOGS": "true",
+			"LOG_LEVEL":            config.Conf.RecorderLogLvl,
 			"BASIC_AUTH":           basicAuthHeader,
 			"LOG_FILE":             "console.log",
 		},
-		Mounts:      []string{logVolume},
-		Command:     []string{"-c", "/entrypoint.sh"}, // + taskLogRedirect}, //TODO: restore redirect
-		EntryPoint:  []string{"/bin/sh"},
-		HealthCheck: nil,
+		Mounts: []string{logVolume},
+		HealthCheck: &ecs.HealthCheck{
+			// check if recorder's binary process is running, no curl is downloaded inside of container
+			Command:     []*string{aws.String("CMD-SHELL"), aws.String("pgrep recorder")},
+			Interval:    aws.Int64(5),
+			Retries:     aws.Int64(4),
+			Timeout:     aws.Int64(5),
+			StartPeriod: aws.Int64(2),
+		},
 	}
 	if caps.EnvVariables != nil {
 		for v, k := range caps.EnvVariables {
@@ -222,7 +231,9 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 		Network: &network.NetworkConfiguration{
 			IP: "",
 			Endpoints: map[string]*network.Endpoint{
-				"driver": {ContainerPort: genericPort, HostPort: 0, Path: "/"},
+				"driver":        {ContainerPort: genericPort, HostPort: 0, Path: "/"},
+				"recorderStart": {ContainerPort: recorderdPort, HostPort: 0, Path: "/start"},
+				"recorderStop":  {ContainerPort: recorderdPort, HostPort: 0, Path: "/stop"},
 			},
 		},
 		Type:             envtype.GENERIC,

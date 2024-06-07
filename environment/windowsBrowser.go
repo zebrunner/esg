@@ -19,7 +19,7 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 	caps.EnableVNC = false
 	caps.EnableVideo = false
 
-	logDir := "C:\\Users\\ContainerAdministrator\\Downloads"
+	logDir := "C:/Users/ContainerAdministrator/Downloads"
 	logVolume := "log"
 
 	log.Trace("caps: ", caps)
@@ -56,14 +56,24 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 		},
 		Privileged: false,
 		Essential:  false,
+		Ports: map[string]portMapping{
+			"recorder": {recorderdPort, 0},
+		},
 		Env: map[string]string{
 			"ROUTER_UUID": routerUUID,
 			"LOG_DIR":     logDir,
-			"TASK_LOG":    "task.log",
+			"TASK_LOG":    logDir + "/" + "task.log",
+			"LOG_LEVEL":   config.Conf.RecorderLogLvl,
 			"LOG_FILE":    "session.log",
 		},
-		Mounts:      []string{logVolume},
-		HealthCheck: nil,
+		Mounts: []string{logVolume},
+		HealthCheck: &ecs.HealthCheck{
+			Command:     []*string{aws.String("CMD-SHELL"), aws.String(fmt.Sprintf("curl -f localhost:%v/ || exit 1", recorderdPort))},
+			Interval:    aws.Int64(5),
+			Retries:     aws.Int64(4),
+			Timeout:     aws.Int64(5),
+			StartPeriod: aws.Int64(2),
+		},
 		DependsOn: []*ecs.ContainerDependency{
 			{
 				Condition:     aws.String("START"),
@@ -112,8 +122,10 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 		Network: &network.NetworkConfiguration{
 			IP: "",
 			Endpoints: map[string]*network.Endpoint{
-				"driver":      {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
-				"healthcheck": {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
+				"driver":        {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
+				"healthcheck":   {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
+				"recorderStart": {ContainerPort: recorderdPort, HostPort: 0, Path: "/start"},
+				"recorderStop":  {ContainerPort: recorderdPort, HostPort: 0, Path: "/stop"},
 			},
 		},
 		Type:             envtype.WINDOWS,

@@ -15,30 +15,28 @@ import (
 const (
 	uploaderImage        = config.ZebrunnerEcrRegistryUri + "/" + "uploader:3.6"
 	mitmImage            = config.ZebrunnerEcrRegistryUri + "/" + "mitmproxy:2.1"
-	recorderImage        = config.ZebrunnerEcrRegistryUri + "/" + "recorder:1.5"
+	recorderImage        = config.ZebrunnerEcrRegistryUri + "/" + "recorder:2.0"
 	cypressRecorderImage = config.ZebrunnerEcrRegistryUri + "/" + "cypress-recorder:1.3"
 	appiumImage          = config.ZebrunnerEcrRegistryUri + "/" + "appium:2.0.15"
 	cloneImage           = config.ZebrunnerEcrRegistryUri + "/" + "git:2.36.2"
 	entrypointImage      = config.ZebrunnerEcrRegistryUri + "/" + "entrypoint:2.5.2"
 	mavenImage           = config.ZebrunnerEcrRegistryUri + "/" + "m2-repo-carina:1.5"
 	winUploaderImage     = config.ZebrunnerEcrRegistryUri + "/" + "uploader:1.1-win"
-	winRecorderImage     = config.ZebrunnerEcrRegistryUri + "/" + "recorder:1.1-win"
+	winRecorderImage     = config.ZebrunnerEcrRegistryUri + "/" + "recorder:2.0-win"
 )
 
 const (
+	genericPort      int64 = 22
 	seleniumPort     int64 = 4444
 	vncPort          int64 = 5900
 	devtoolsPort     int64 = 7070
 	fileserverPort   int64 = 8080
 	clipboardPort    int64 = 9090
 	proxyHandlerPort int64 = 8060
+	recorderdPort    int64 = 9080
 
-	recorderCpu    int64 = 320
-	recorderMemory int64 = 1024
-
-	genericPort int64 = 22
-	minCpu      int64 = 128
-	minMemory   int64 = 256
+	cloneContainerMinCpu    int64 = 128
+	cloneContainerMinMemory int64 = 512 //increased memory to fix OOM for huge repositories (3K+ branches)
 )
 
 func BuildEnvForTaskDefinitionGeneration(image images.Image, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {

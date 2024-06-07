@@ -5,10 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps/mapper"
+	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
+	"github.com/zebrunner/esg/environment/network"
+	"github.com/zebrunner/esg/utils"
 )
 
 var (
@@ -25,17 +29,34 @@ type startSessRequest struct {
 	ResponseCh        chan map[string]interface{}
 }
 
-func startSession(ctx context.Context, req *http.Request, sessReq startSessRequest) {
+func startSession(ctx context.Context, net *network.NetworkConfiguration, driverCaps *capabilities.RequestCaps, sessReq startSessRequest) {
+	reqUrl, ok := net.GetUrl("driver")
+	if !ok {
+		utils.SendToChanIfNotBlocked(sessReq.NonEssentialErrCh, fmt.Errorf("failed to get driver network"))
+		return
+	}
+
+	reqUrl.Path = path.Join(reqUrl.Path, "/session")
+
+	body, err := driverCaps.ToRequestBody()
+	if err != nil {
+		utils.SendToChanIfNotBlocked(sessReq.EssentialErrCh, err)
+		return
+	}
+
+	req, err := http.NewRequest(http.MethodPost, reqUrl.String(), body)
+	if err != nil {
+		utils.SendToChanIfNotBlocked(sessReq.EssentialErrCh, err)
+		return
+	}
+
 	req.Method = http.MethodPost
 	req.Host = "localhost"
 	req = req.WithContext(ctx)
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		select {
-		case sessReq.EssentialErrCh <- err:
-		default:
-		}
+		utils.SendToChanIfNotBlocked(sessReq.EssentialErrCh, err)
 		return
 	}
 
@@ -44,42 +65,37 @@ func startSession(ctx context.Context, req *http.Request, sessReq startSessReque
 
 	err = json.NewDecoder(resp.Body).Decode(&reply)
 	if err != nil {
-		select {
-		case sessReq.EssentialErrCh <- err:
-		default:
-		}
+		utils.SendToChanIfNotBlocked(sessReq.EssentialErrCh, err)
 		return
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusBadRequest {
-			select {
-			case sessReq.EssentialErrCh <- fmt.Errorf("%v", reply):
-			default:
-			}
+			utils.SendToChanIfNotBlocked(sessReq.EssentialErrCh, err)
 		} else {
-			select {
-			case sessReq.NonEssentialErrCh <- fmt.Errorf("%v", reply):
-			default:
-			}
+			utils.SendToChanIfNotBlocked(sessReq.NonEssentialErrCh, fmt.Errorf("%v", reply))
 		}
 		return
 	}
 
-	select {
-	case sessReq.ResponseCh <- reply:
-	default:
-	}
+	go func() {
+		err := startRecording(net)
+		if err != nil {
+			log.WithError(err).Error("Failed to start recording")
+		}
+	}()
+
+	utils.SendToChanIfNotBlocked(sessReq.ResponseCh, reply)
 }
 
-func WaitForSessionStart(ctx context.Context, request *http.Request) *startSessRequest {
+func WaitForSessionStart(ctx context.Context, net *network.NetworkConfiguration, driverCaps *capabilities.RequestCaps) *startSessRequest {
 	sessReq := startSessRequest{
 		EssentialErrCh:    make(chan error),
 		NonEssentialErrCh: make(chan error),
 		ResponseCh:        make(chan map[string]interface{}),
 	}
 
-	go startSession(ctx, request, sessReq)
+	go startSession(ctx, net, driverCaps, sessReq)
 
 	return &sessReq
 }
@@ -91,7 +107,14 @@ func CloseSession(mapperEntity *mapper.Mapper) {
 	}
 
 	conf := &config.Conf
-	client := http.Client{}
+
+	go func() {
+		err := stopRecording(&mapperEntity.Network)
+		if err != nil {
+			log.WithError(err).Error("Failed to start recording")
+		}
+	}()
+
 	sessionUrl, ok := mapperEntity.Network.GetUrl("driver")
 	if ok {
 		sessionUrl.Path = sessionUrl.Path + fmt.Sprintf("session/%s", mapperEntity.SessionID)
@@ -105,7 +128,7 @@ func CloseSession(mapperEntity *mapper.Mapper) {
 		req.Host = "localhost"
 
 		l.WithFields(log.Fields{"method": req.Method, "url": req.URL}).Debug("closing driver")
-		resp, err := client.Do(req)
+		resp, err := httpClient.Do(req)
 		if err != nil {
 			l.WithError(err).Error("Failed to close driver")
 			return

@@ -51,8 +51,8 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 		Name:  "clone",
 		Image: cloneImage,
 		Res: Resources{
-			Cpu:    minCpu,
-			Memory: 512, //increased memory to fix OOM for huge repositories (3K+ branches)
+			Cpu:    cloneContainerMinCpu,
+			Memory: cloneContainerMinMemory,
 		},
 		Privileged: false,
 		Essential:  false,
@@ -150,7 +150,7 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 		Name:  "recorder",
 		Image: cypressRecorderImage,
 		Res: Resources{
-			Cpu:    recorderCpu,
+			Cpu:    320,
 			Memory: 2048,
 		},
 		Privileged: false,

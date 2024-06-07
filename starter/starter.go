@@ -1,12 +1,9 @@
 package starter
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"net/http"
-	"net/url"
-	"path"
 	"strings"
 	"sync"
 	"time"
@@ -185,39 +182,7 @@ func (s *startBasis) setNetworkPhase(ctx context.Context) (essential *utils.Sele
 func (s *startBasis) startDriverPhase(ctx context.Context) (essential *utils.SeleniumError, nonEssential error) {
 	s.Log.Info("driver starting")
 
-	u, ok := s.Env.Network.GetUrl("driver")
-	if !ok {
-		nonEssential = fmt.Errorf("failed to get driver network")
-		s.Log.WithError(nonEssential).Warn("Failed to start driver, restarting...")
-		return
-	}
-
-	var requestBody *bytes.Reader
-	if s.DriverReqCaps != nil {
-		var err error
-		requestBody, err = s.DriverReqCaps.ToRequestBody()
-		if err != nil {
-			essential = utils.CreationErr(fmt.Errorf("failed to get request body for driver start"), err.Error())
-			s.Log.WithError(essential).Warn("Failed to start driver, stopping service...")
-			return
-		}
-	}
-
-	reqUrl := &url.URL{}
-	reqUrl.Host, reqUrl.Path = u.Host, path.Join(u.Path, s.Request.URL.Path)
-	reqUrl.Scheme = "http"
-	s.Log = s.Log.WithField("driver url", reqUrl)
-
-	startSessionRequest, err := http.NewRequest(http.MethodPost, reqUrl.String(), requestBody)
-	if err != nil {
-		essential = utils.CreationErr(fmt.Errorf("failed to create start driver request"), err.Error())
-		s.Log.WithError(essential).Warn("Failed to start driver, stopping service...")
-		return
-	}
-
-	startSessionRequest.Header = s.Request.Header
-
-	waitRequest := selenium.WaitForSessionStart(ctx, startSessionRequest)
+	waitRequest := selenium.WaitForSessionStart(ctx, s.Env.Network, s.DriverReqCaps)
 	select {
 	case <-ctx.Done():
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("driver startup timed out")
@@ -238,7 +203,7 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (essential *utils.Sel
 			if nonEssential == nil {
 				nonEssential = fmt.Errorf("session id in driver response is empty")
 			}
-			s.Log.WithError(err).Error("Failed to get sessionId")
+			s.Log.WithError(nonEssential).Error("Failed to get sessionId")
 			return
 		}
 
