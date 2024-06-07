@@ -1,7 +1,6 @@
 package starter
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"net/http"
@@ -183,7 +182,7 @@ func (s *startBasis) setNetworkPhase(ctx context.Context) (essential *utils.Sele
 func (s *startBasis) startDriverPhase(ctx context.Context) (essential *utils.SeleniumError, nonEssential error) {
 	s.Log.Info("driver starting")
 
-	waitRequest := selenium.WaitForSessionStart(ctx, s.Env)
+	waitRequest := selenium.WaitForSessionStart(ctx, s.Env.Network, s.DriverReqCaps)
 	select {
 	case <-ctx.Done():
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("driver startup timed out")

@@ -9,8 +9,9 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps/mapper"
+	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
-	"github.com/zebrunner/esg/environment"
+	"github.com/zebrunner/esg/environment/network"
 	"github.com/zebrunner/esg/utils"
 )
 
@@ -28,8 +29,8 @@ type startSessRequest struct {
 	ResponseCh        chan map[string]interface{}
 }
 
-func startSession(ctx context.Context, env *environment.ExecutionEnvironment, sessReq startSessRequest) {
-	reqUrl, ok := env.Network.GetUrl("driver")
+func startSession(ctx context.Context, net *network.NetworkConfiguration, driverCaps *capabilities.RequestCaps, sessReq startSessRequest) {
+	reqUrl, ok := net.GetUrl("driver")
 	if !ok {
 		utils.SendToChanIfNotBlocked(sessReq.NonEssentialErrCh, fmt.Errorf("failed to get driver network"))
 		return
@@ -37,7 +38,7 @@ func startSession(ctx context.Context, env *environment.ExecutionEnvironment, se
 
 	reqUrl.Path = path.Join(reqUrl.Path, "/session")
 
-	body, err := env.ReqCapabilities.ToRequestBody()
+	body, err := driverCaps.ToRequestBody()
 	if err != nil {
 		utils.SendToChanIfNotBlocked(sessReq.EssentialErrCh, err)
 		return
@@ -78,7 +79,7 @@ func startSession(ctx context.Context, env *environment.ExecutionEnvironment, se
 	}
 
 	go func() {
-		err := startRecording(env.Network)
+		err := startRecording(net)
 		if err != nil {
 			log.WithError(err).Error("Failed to start recording")
 		}
@@ -87,14 +88,14 @@ func startSession(ctx context.Context, env *environment.ExecutionEnvironment, se
 	utils.SendToChanIfNotBlocked(sessReq.ResponseCh, reply)
 }
 
-func WaitForSessionStart(ctx context.Context, env *environment.ExecutionEnvironment) *startSessRequest {
+func WaitForSessionStart(ctx context.Context, net *network.NetworkConfiguration, driverCaps *capabilities.RequestCaps) *startSessRequest {
 	sessReq := startSessRequest{
 		EssentialErrCh:    make(chan error),
 		NonEssentialErrCh: make(chan error),
 		ResponseCh:        make(chan map[string]interface{}),
 	}
 
-	go startSession(ctx, env, sessReq)
+	go startSession(ctx, net, driverCaps, sessReq)
 
 	return &sessReq
 }

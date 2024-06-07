@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"net/http"
 
-	log "github.com/sirupsen/logrus"	
-	"github.com/zebrunner/esg/environment"
+	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/environment/network"
 )
 
-func startRecording(network *environment.NetworkConfiguration) error {
+func startRecording(network *network.NetworkConfiguration) error {
 	url, ok := network.GetUrl("recorderStart")
 	if !ok {
 		return fmt.Errorf("failed to get url of recorder")
@@ -35,7 +35,7 @@ func startRecording(network *environment.NetworkConfiguration) error {
 	return nil
 }
 
-func stopRecording(network *environment.NetworkConfiguration) error {
+func stopRecording(network *network.NetworkConfiguration) error {
 	url, ok := network.GetUrl("recorderStop")
 	if !ok {
 		return fmt.Errorf("failed to get url of recorder")
