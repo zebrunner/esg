@@ -86,7 +86,7 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 		Image: recorderImage,
 		Res: Resources{
 			Cpu:    160, // was 320
-			Memory: 512, // was 1024
+			Memory: 1024,
 		},
 		Privileged: false,
 		Essential:  false,
