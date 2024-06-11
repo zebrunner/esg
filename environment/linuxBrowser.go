@@ -143,7 +143,7 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 		Name:  "uploader",
 		Image: uploaderImage,
 		Res: Resources{
-			Cpu:    32,
+			Cpu:    64, // with 32 uploading is aborted
 			Memory: 256, // 64 works for single thread. for backgroud copying it is not enough
 		},
 		Privileged: false,
