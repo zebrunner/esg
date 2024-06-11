@@ -58,7 +58,7 @@ fi
 
 echo "CMD_ARGS: $CMD_ARGS"
 
-./e3s-definitions $CMD_ARGS &
+./task-definitions $CMD_ARGS &
 PID=$!
 
 trap 'finish $PID' TERM INT

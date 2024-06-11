@@ -10,13 +10,13 @@ services:
       context: ../
       dockerfile: build/Dockerfile.scaler
     image: public.ecr.aws/zebrunner/scaler:$SCALER_VERSION
-  e3s-migration:
+  migration:
     build:
       context: ../
-      dockerfile: build/Dockerfile.e3s-migration
-    image: public.ecr.aws/zebrunner/e3s-migration:latest
-  e3s-definitions:
+      dockerfile: build/Dockerfile.migration
+    image: public.ecr.aws/zebrunner/migration:latest
+  task-definitions:
     build:
       context: ../
-      dockerfile: build/Dockerfile.e3s-definitions
-    image: public.ecr.aws/zebrunner/e3s-definitions:$ROUTER_VERSION
+      dockerfile: build/Dockerfile.task-definitions
+    image: public.ecr.aws/zebrunner/task-definitions:$ROUTER_VERSION
