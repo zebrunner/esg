@@ -196,7 +196,7 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 		Name:  "uploader",
 		Image: uploaderImage,
 		Res: Resources{
-			Cpu:    32,
+			Cpu:    64,
 			Memory: 64,
 		},
 		Privileged: false,
