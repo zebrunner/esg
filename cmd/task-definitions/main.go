@@ -118,7 +118,7 @@ func main() {
 	go func() {
 		log.Infof("Listening on %s", listen)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.WithError(err).Fatal("Failed to start e3s-definition server")
+			log.WithError(err).Fatal("Failed to start task-definitions server")
 		}
 	}()
 
@@ -131,7 +131,7 @@ func main() {
 
 	<-quit
 
-	log.Info("Shutdown e3s-definition ...")
+	log.Info("Shutdown task-definitions ...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
@@ -140,5 +140,5 @@ func main() {
 		log.WithError(err).Error("Failed to shutdown correctly")
 	}
 
-	log.Info("e3s-definition exited")
+	log.Info("task-definitions exited")
 }

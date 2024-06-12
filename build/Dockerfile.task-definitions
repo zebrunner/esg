@@ -12,7 +12,7 @@ RUN go mod download
 # Build esg
 COPY . /esg
 
-RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./cmd/e3s-definitions
+RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./cmd/task-definitions
 
 FROM alpine:latest
 
@@ -31,8 +31,8 @@ ENV DATABASE=
 ENV IMAGE_REPOSITORIES=
 ENV EXCLUDE_BROWSERS=
 
-COPY --from=0 /esg/e3s-definitions /e3s-definitions
+COPY --from=0 /esg/task-definitions /task-definitions
 
-COPY ./build/entrypoint.e3s-definitions /entrypoint.sh
+COPY ./build/entrypoint.task-definitions /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]

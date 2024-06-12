@@ -54,10 +54,10 @@ func ListDrivers(c *gin.Context) {
 	resBody, err := definitions.ListImages()
 	if err != nil {
 		c.Status(http.StatusInternalServerError)
-		log.WithError(err).Error("Failed to list images from e3s-definitions server")
+		log.WithError(err).Error("Failed to list images from task-definitions server")
 		return
 	}
-	
+
 	_, err = c.Writer.Write(resBody)
 	if err != nil {
 		c.Status(http.StatusInternalServerError)
