@@ -1,7 +1,7 @@
 #!/bin/sh
 
 . version
-export VERSION=$E3S-VERSION
+export VERSION=$E3S_VERSION
 export BUILD_TIME=$(date -Iseconds)
 
 finish() {
