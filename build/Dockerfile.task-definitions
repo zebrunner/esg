@@ -1,0 +1,38 @@
+FROM golang:1.22-alpine
+
+RUN apk add -U tzdata && rm -Rf /var/cache/apk/*
+
+WORKDIR /esg
+
+# Download dependencies
+COPY ./go.mod .
+COPY ./go.sum .
+RUN go mod download
+
+# Build esg
+COPY . /esg
+
+RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./cmd/task-definitions
+
+FROM alpine:latest
+
+ENV LOG_LEVEL=
+
+ENV AWS_REGION=
+ENV AWS_RETRY=
+ENV AWS_CLUSTER=
+ENV AWS_ACESS_KEY_ID=
+ENV AWS_SECRET_ACCESS_KEY=
+ENV AWS_TASK_ROLE=
+
+ENV AWS_ELASTIC_CACHE=
+ENV DATABASE=
+
+ENV IMAGE_REPOSITORIES=
+ENV EXCLUDE_BROWSERS=
+
+COPY --from=0 /esg/task-definitions /task-definitions
+
+COPY ./build/entrypoint.task-definitions /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]

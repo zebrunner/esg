@@ -10,8 +10,7 @@ import (
 )
 
 type CreateUserModel struct {
-	Username string  `json:"username" binding:"required"`
-	Password *string `json:"password"`
+	Username string `json:"username" binding:"required"`
 }
 
 type RefreshTokenModel struct {
@@ -30,7 +29,7 @@ func CreateUser(c *gin.Context) {
 		return
 	}
 
-	password, apiErr := db.CreateUser(body.Username, body.Password)
+	password, apiErr := db.CreateUser(body.Username)
 	if apiErr != nil {
 		_ = c.Error(apiErr).SetType(gin.ErrorTypePublic)
 		return

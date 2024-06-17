@@ -8,6 +8,6 @@ RUN apk add -U ca-certificates tzdata curl && rm -Rf /var/cache/apk/* \
 ENV DATABASE=postgres://postgres:postgres@db/postgres?sslmode=disable
 
 COPY ./migrations/ /migrations/
-COPY ./build/entrypoint.e3s-migration /entrypoint.sh
+COPY ./build/entrypoint.migration /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]

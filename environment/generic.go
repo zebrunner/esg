@@ -8,12 +8,15 @@ import (
 
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
+	envtype "github.com/zebrunner/esg/environment/envType"
+	"github.com/zebrunner/esg/environment/network"
+	"github.com/zebrunner/esg/images"
 
 	b64 "encoding/base64"
 	"fmt"
 )
 
-func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
+func buildGeneric(workspace string, routerUUID string, image images.Image, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
 	conf := &config.Conf
 
 	caps.EnableVNC = false
@@ -42,13 +45,6 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 		return nil, fmt.Errorf("executor repository is not specified! RepositoryUrl='%s'", caps.RepositoryUrl)
 	}
 
-	//executorImage := "maven:3.8-openjdk-11"
-	if caps.Image == "" {
-		return nil, fmt.Errorf("executor container image is not specified! Image='%s'", caps.Image)
-	}
-	executorImage := caps.Image
-	//fmt.Printf("executorImage: %s\n", executorImage)
-
 	cloneCommand := fmt.Sprintf("git clone --progress --depth=1 --single-branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
 	//fmt.Printf("cloneCommand: %s\n", cloneCommand)
 
@@ -58,8 +54,8 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 		Name:  "clone",
 		Image: cloneImage,
 		Res: Resources{
-			Cpu:    minCpu,
-			Memory: 512, //increased memory to fix OOM for huge repositories (3K+ branches)
+			Cpu:    cloneContainerMinCpu,
+			Memory: cloneContainerMinMemory,
 		},
 		Privileged: false,
 		Essential:  false,
@@ -103,7 +99,7 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 	launchCommand := caps.LaunchCommand
 
 	//basic auth header for executor-logs service
-	basicAuthHeader := "Authorization: Basic " + b64.StdEncoding.EncodeToString([]byte(conf.ZebrunnerIntegrationUser+":"+conf.ZebrunnerIntegrationPassword))
+	basicAuthHeader := "Basic " + b64.StdEncoding.EncodeToString([]byte(conf.ZebrunnerIntegrationUser+":"+conf.ZebrunnerIntegrationPassword))
 
 	mounts := []string{entrypointVolume, taskVolume, logVolume}
 	if includeMaven {
@@ -127,7 +123,7 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 	})
 	executorContainer := Container{
 		Name:       "executor",
-		Image:      executorImage.ToPrimitive(),
+		image:      &image,
 		Privileged: false,
 		Essential:  true,
 		Env: map[string]string{
@@ -163,22 +159,31 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 		Name:  "recorder",
 		Image: recorderImage,
 		Res: Resources{
-			Cpu:    32,
-			Memory: 256, // with 128 failed for cyserver "OutOfMemoryError: Container killed due to memory usage"
+			Cpu:    16, // was 32
+			Memory: 64, // was 256 // with 128 failed for cyserver "OutOfMemoryError: Container killed due to memory usage"
 		},
 		Privileged: false,
 		Essential:  false,
+		Ports: map[string]portMapping{
+			"recorder": {recorderdPort, 0},
+		},
 		Env: map[string]string{
 			"ROUTER_UUID":          routerUUID,
 			"ENABLE_VIDEO":         "false",
 			"ENABLE_REALTIME_LOGS": "true",
+			"LOG_LEVEL":            config.Conf.RecorderLogLvl,
 			"BASIC_AUTH":           basicAuthHeader,
 			"LOG_FILE":             "console.log",
 		},
-		Mounts:      []string{logVolume},
-		Command:     []string{"-c", "/entrypoint.sh"}, // + taskLogRedirect}, //TODO: restore redirect
-		EntryPoint:  []string{"/bin/sh"},
-		HealthCheck: nil,
+		Mounts: []string{logVolume},
+		HealthCheck: &ecs.HealthCheck{
+			// check if recorder's binary process is running, no curl is downloaded inside of container
+			Command:     []*string{aws.String("CMD-SHELL"), aws.String("pgrep recorder")},
+			Interval:    aws.Int64(5),
+			Retries:     aws.Int64(4),
+			Timeout:     aws.Int64(5),
+			StartPeriod: aws.Int64(2),
+		},
 	}
 	if caps.EnvVariables != nil {
 		for v, k := range caps.EnvVariables {
@@ -217,26 +222,27 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 		volumes[mavenVolume] = volume{Driver: "local", Scope: "task", ContainerPath: mavenDir, ReadOnly: false}
 	}
 
-	environment := ExecutionEnvironment{
+	env := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
 		Schema:               buildSchema(containers),
 		Containers:           containers,
 		Capabilities:         caps,
 		Volumes:              volumes,
-		Network: &NetworkConfiguration{
+		Network: &network.NetworkConfiguration{
 			IP: "",
-			Endpoints: map[string]*Endpoint{
-				"driver": {ContainerPort: genericPort, HostPort: 0, Path: "/"},
+			Endpoints: map[string]*network.Endpoint{
+				"driver":        {ContainerPort: genericPort, HostPort: 0, Path: "/"},
+				"recorderStart": {ContainerPort: recorderdPort, HostPort: 0, Path: "/start"},
+				"recorderStop":  {ContainerPort: recorderdPort, HostPort: 0, Path: "/stop"},
 			},
 		},
-		Workspace:        workspace,
-		RouterUUID:       routerUUID,
+		Type:             envtype.GENERIC,
 		CapacityProvider: config.Conf.AwsLinuxCapacityProvider,
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
 	}
 
-	err := calculateResources(&environment,
-		&resourceCalculatorHelper{
+	err := calculateResources(&env,
+		&resourceCalculationHelper{
 			MinimumRes: Resources{Cpu: 1024, Memory: 1024},
 			Container:  &executorContainer,
 			Memory:     &caps.Memory,
@@ -247,5 +253,5 @@ func buildGeneric(workspace string, routerUUID string, caps *capabilities.Capabi
 		return nil, err
 	}
 
-	return &environment, nil
+	return &env, nil
 }

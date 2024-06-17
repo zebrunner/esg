@@ -1,7 +1,7 @@
 package main
 
 import (
-	"database/sql"
+	"context"
 	"flag"
 	"os"
 	"os/signal"
@@ -12,12 +12,8 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
-	"github.com/zebrunner/esg/cachemaps/definitionmap"
 	"github.com/zebrunner/esg/cachemaps/mapper"
 	"github.com/zebrunner/esg/cachemaps/utilsmap"
-	"github.com/zebrunner/esg/capabilities"
-	"github.com/zebrunner/esg/db"
-	"github.com/zebrunner/esg/environment"
 	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
@@ -29,423 +25,354 @@ import (
 	"github.com/zebrunner/esg/zebrunner"
 )
 
-func ManageTasksAndSession(iterationCh chan<- interface{}) {
-	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
-	if err != nil {
-		utils.ExitWithError(err, "Failed to create AWS session", log.NewEntry(log.StandardLogger()))
-	}
+func stopLostTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
+	defer wg.Done()
 
-	svc := ecs.New(session)
-	var wg sync.WaitGroup
+	timer := utils.CreateTimer(config.Conf.ServiceStartupTimeout/2 + 1*time.Minute)
 
 	for {
-		time.Sleep(1 * time.Minute)
-
-		wg.Add(1)
-		go StopIdleTasks(&wg)
-
-		LaunchTasksProcessors(svc, &wg)
-
-		wg.Wait()
 		select {
-		case iterationCh <- "done":
-		default:
-		}
-	}
-}
-
-func LaunchTasksProcessors(svc *ecs.ECS, wg *sync.WaitGroup) {
-	routerUuids, err := mapper.GetKeys(mapper.TASK)
-	if err != nil {
-		log.WithError(err).Warn("Failed to get list of taskmap keys!")
-		return
-	}
-
-	mapperEntities, err := mapper.FindAll(routerUuids)
-	if err != nil {
-		log.WithError(err).Warn("Failed to get cached mapper enties")
-		return
-	}
-
-	taskIds := make([]string, 0)
-	for _, mapperEntity := range mapperEntities {
-		if mapperEntity.TaskId != "" {
-			taskIds = append(taskIds, mapperEntity.TaskId)
-		}
-	}
-
-	wg.Add(1)
-	go StopLostTasks(taskIds, svc, wg)
-
-	if len(taskIds) <= 0 {
-		return
-	}
-
-	tasks := service.GetTasksByTaskIds(taskIds, svc)
-
-	if len(tasks) <= 0 {
-		return
-	}
-
-	taskIdMapperMap := make(map[string]mapper.Mapper)
-	for _, mapperEntity := range mapperEntities {
-		if mapperEntity.TaskId != "" {
-			taskIdMapperMap[mapperEntity.TaskId] = mapperEntity
-		}
-	}
-
-	wg.Add(1)
-	go StopUnhealthyTasks(tasks, taskIdMapperMap, wg)
-
-	wg.Add(1)
-	go TrackResourceUsage(tasks, taskIdMapperMap, wg)
-}
-
-func StopUnhealthyTasks(tasks []*ecs.Task, cachedTasksMap map[string]mapper.Mapper, wg *sync.WaitGroup) {
-	for _, task := range tasks {
-		taskId := strings.Split(*task.TaskArn, "/")[2]
-		l := log.WithField(config.TaskIdKey, taskId)
-		// stop zombie and UNHEALTHY tasks that are not pending for stop.
-		// resource usage register and taskId mark for removal is performed only for stopped tasks
-		if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
-			mapperEntity, ok := cachedTasksMap[taskId]
-			if !ok {
-				l.Warn("Failed to find task in cache")
+		case <-ctx.Done():
+			return
+		case <-timer():
+			routerUuids, err := mapper.GetKeys(mapper.TASK)
+			if err != nil {
+				log.WithError(err).Warn("Failed to get list of taskmap keys!")
 				continue
 			}
 
-			if mapperEntity.Status == mapper.Queued {
+			mapperEntities, err := mapper.FindAll(routerUuids)
+			if err != nil {
+				log.WithError(err).Warn("Failed to get cached mapper enties")
 				continue
 			}
 
-			if *task.HealthStatus == "UNHEALTHY" {
-				l.Warn("Aborting task due to UNHEALTHY HealthStatus")
-				err := service.StopTask(mapperEntity, mapper.TaskUnhealthy)
-				if err != nil {
-					l.WithError(err).Error("Failed to stop the task")
+			taskIds := make([]string, 0)
+			for _, mapperEntity := range mapperEntities {
+				if mapperEntity.TaskId != "" {
+					taskIds = append(taskIds, mapperEntity.TaskId)
 				}
-			} else {
-				maxTimeout := time.Duration(mapperEntity.Capabilities.MaxTimeout) * time.Second
-				if task.CreatedAt != nil && time.Since(*task.CreatedAt) > maxTimeout {
-					l.WithField("maxTimeout", maxTimeout).Warn("Aborting task due to the max timeout")
-					err := service.StopTask(mapperEntity, mapper.TaskMaxTimeout)
+			}
+
+			taskArns, err := service.GetClusterTasksArn(svc)
+			if err != nil {
+				log.WithError(err).Error("Error on ecs list-tasks operation")
+				continue
+			}
+
+			tasksToDescribe := make([]string, 0)
+
+			for _, taskArn := range taskArns {
+				isFound := false
+				for _, key := range taskIds {
+					taskId := strings.Split(*taskArn, "/")[2]
+					if key == taskId {
+						isFound = true
+						break
+					}
+				}
+
+				if !isFound {
+					tasksToDescribe = append(tasksToDescribe, *taskArn)
+				}
+			}
+
+			if len(tasksToDescribe) == 0 {
+				// no need to print any log message because it should happen in 99.99% cases.
+				continue
+			}
+
+			tasks, err := service.DescribeTasks(tasksToDescribe)
+			if err != nil {
+				log.WithError(err).Warn("StopLostTasks(): failed to describe lost tasks")
+				continue
+			}
+
+			for _, task := range tasks {
+				if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
+					if time.Since(*task.StartedAt) <= config.Conf.ServiceStartupTimeout {
+						continue
+					}
+					taskId := strings.Split(*task.TaskArn, "/")[2]
+					l := log.WithField(config.TaskIdKey, taskId)
+					l.Warn("Unrecognized task detected! Aborting")
+
+					err := service.StopTaskForcibly(taskId, mapper.TaskLost)
 					if err != nil {
-						l.WithError(err).Error("Failed to stop task. Trying to stop forcibly")
-						err := service.StopTaskForcibly(mapperEntity.TaskId, mapper.TaskMaxTimeout)
+						l.WithError(err).Error("Failed to stop the task")
+					}
+				}
+			}
+		}
+	}
+}
+
+func stopUnhealthyTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	timer := utils.CreateTimer(10 * time.Minute)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer():
+			routerUuids, err := mapper.GetKeys(mapper.TASK)
+			if err != nil {
+				log.WithError(err).Warn("Failed to get list of taskmap keys!")
+				continue
+			}
+
+			mapperEntities, err := mapper.FindAll(routerUuids)
+			if err != nil {
+				log.WithError(err).Warn("Failed to get cached mapper enties")
+				continue
+			}
+
+			taskIds := make([]string, 0)
+			for _, mapperEntity := range mapperEntities {
+				if mapperEntity.TaskId != "" {
+					taskIds = append(taskIds, mapperEntity.TaskId)
+				}
+			}
+
+			if len(taskIds) <= 0 {
+				continue
+			}
+
+			tasks := service.GetTasksByTaskIds(taskIds, svc)
+
+			if len(tasks) <= 0 {
+				continue
+			}
+
+			taskIdMapperMap := make(map[string]mapper.Mapper)
+			for _, mapperEntity := range mapperEntities {
+				if mapperEntity.TaskId != "" {
+					taskIdMapperMap[mapperEntity.TaskId] = mapperEntity
+				}
+			}
+
+			for _, task := range tasks {
+				taskId := strings.Split(*task.TaskArn, "/")[2]
+				l := log.WithField(config.TaskIdKey, taskId)
+				// stop zombie and UNHEALTHY tasks that are not pending for stop.
+				// resource usage register and taskId mark for removal is performed only for stopped tasks
+				if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
+					mapperEntity, ok := taskIdMapperMap[taskId]
+					if !ok {
+						l.Warn("Failed to find task in cache")
+						continue
+					}
+
+					if mapperEntity.Status == mapper.Queued {
+						continue
+					}
+
+					if *task.HealthStatus == "UNHEALTHY" {
+						l.Warn("Aborting task due to UNHEALTHY HealthStatus")
+						err := service.StopTask(mapperEntity, mapper.TaskUnhealthy)
 						if err != nil {
-							l.WithError(err).Error("Failed to stop task forcibly")
+							l.WithError(err).Error("Failed to stop the task")
+						}
+					} else {
+						maxTimeout := time.Duration(mapperEntity.Capabilities.MaxTimeout) * time.Second
+						if task.CreatedAt != nil && time.Since(*task.CreatedAt) > maxTimeout {
+							l.WithField("maxTimeout", maxTimeout).Warn("Aborting task due to the max timeout")
+							err := service.StopTask(mapperEntity, mapper.TaskMaxTimeout)
+							if err != nil {
+								l.WithError(err).Error("Failed to stop task. Trying to stop forcibly")
+								err := service.StopTaskForcibly(mapperEntity.TaskId, mapper.TaskMaxTimeout)
+								if err != nil {
+									l.WithError(err).Error("Failed to stop task forcibly")
+								}
+							}
 						}
 					}
 				}
 			}
 		}
 	}
-
-	wg.Done()
 }
 
-func StopLostTasks(keys []string, svc *ecs.ECS, wg *sync.WaitGroup) {
-	taskArns, err := service.GetClusterTasksArn(svc)
-	if err != nil {
-		log.WithError(err).Error("Error on ecs list-tasks operation")
-	}
+func trackResourceUsage(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
+	defer wg.Done()
 
-	tasksToDescribe := make([]string, 0)
-
-	for _, taskArn := range taskArns {
-		isFound := false
-		for _, key := range keys {
-			taskId := strings.Split(*taskArn, "/")[2]
-			if key == taskId {
-				isFound = true
-				break
-			}
-		}
-
-		if !isFound {
-			tasksToDescribe = append(tasksToDescribe, *taskArn)
-		}
-	}
-
-	if len(tasksToDescribe) == 0 {
-		// no need to print any log message because it should happen in 99.99% cases.
-		wg.Done()
-		return
-	}
-
-	tasks, err := service.DescribeTasks(tasksToDescribe)
-	if err != nil {
-		log.WithError(err).Warn("StopLostTasks(): failed to describe lost tasks")
-		wg.Done()
-		return
-	}
-
-	for _, task := range tasks {
-		if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
-			if time.Since(*task.StartedAt) <= config.Conf.ServiceStartupTimeout {
-				continue
-			}
-			taskId := strings.Split(*task.TaskArn, "/")[2]
-			l := log.WithField(config.TaskIdKey, taskId)
-			l.Warn("Unrecognized task detected! Aborting")
-
-			err := service.StopTaskForcibly(taskId, mapper.TaskLost)
-			if err != nil {
-				l.WithError(err).Error("Failed to stop the task")
-			}
-		}
-	}
-
-	wg.Done()
-}
-
-func TrackResourceUsage(tasks []*ecs.Task, cachedTasksMap map[string]mapper.Mapper, wg *sync.WaitGroup) {
-	// analyze tasks response
-	tasksCacheToUpdate := make([]mapper.Mapper, 0)
-	tasksToTrack := make(map[*mapper.Mapper]*ecs.Task)
-	for _, task := range tasks {
-		taskId := strings.Split(*task.TaskArn, "/")[2]
-		l := log.WithField(config.TaskIdKey, taskId)
-
-		// tracking task only when execution is stopped
-		if *task.LastStatus != "STOPPED" {
-			continue
-		}
-
-		// for tracking task should be cached
-		cachedTask, ok := cachedTasksMap[taskId]
-		if !ok {
-			l.Debug("Can't find non tracked stopped task in cache")
-			continue
-		}
-
-		// already tracked
-		if cachedTask.UsageTracked {
-			continue
-		}
-
-		if cachedTask.Status != mapper.Stopped {
-			// cypress is not marked as stopped in cache after finish
-			if cachedTask.Status == mapper.Cypress {
-				cachedTask.Status = mapper.Stopped
-				cachedTask.StopReason = mapper.TaskFinished
-			} else {
-				continue
-			}
-		}
-
-		// track resources usage for STOPPED tasks
-		cachedTask.UsageTracked = true
-		tasksCacheToUpdate = append(tasksCacheToUpdate, cachedTask)
-
-		l = l.WithField(config.RouterUUID, cachedTask.RouterUUID)
-		if !config.Conf.SingleTenant {
-			l = l.WithField("workspace", cachedTask.Workspace)
-		}
-
-		// Don't track Unhealthy/StartupFailure/Lost tasks
-		if cachedTask.StopReason == mapper.TaskStartupFailure ||
-			cachedTask.StopReason == mapper.TaskUnhealthy ||
-			cachedTask.StopReason == mapper.TaskLost {
-			l.Info("Not tracking task with stop reason:", cachedTask.StopReason)
-			continue
-		}
-
-		tasksToTrack[&cachedTask] = task
-	}
-
-	// Set tracked status and expiration time 5 minutes to be able to return taskId and stop reason for task
-	err := mapper.WriteShapedEntities(tasksCacheToUpdate, 5*time.Minute)
-	if err != nil {
-		log.WithError(err).Error("Failed to update tracked tasks!")
-	} else {
-		for cachedTask, task := range tasksToTrack {
-			zebrunner.TrackResourcesUsage(cachedTask, task)
-		}
-	}
-
-	wg.Done()
-}
-
-func StopIdleTasks(wg *sync.WaitGroup) {
-	routerUuids, err := mapper.GetKeys(mapper.SESSION)
-	if err != nil {
-		log.WithError(err).Error("Failed to list uuid keys from sessions set!")
-		wg.Done()
-		return
-	}
-
-	mapperEntities, err := mapper.FindAll(routerUuids)
-	if err != nil {
-		log.WithError(err).Error("Failed to get mapper entities!")
-		wg.Done()
-		return
-	}
-
-	for _, mapperEntity := range mapperEntities {
-		idle := mapperEntity.IsIdle()
-
-		if !idle {
-			continue
-		}
-
-		l := log.WithFields(log.Fields{config.TaskIdKey: mapperEntity.TaskId, config.SessionIdKey: mapperEntity.SessionID, config.RouterUUID: mapperEntity.RouterUUID})
-		if !config.Conf.SingleTenant {
-			l = l.WithField("workspace", mapperEntity.Workspace)
-		}
-
-		// get actual record of the session and validate idle timeout one more time
-		mapperEntity, err := mapper.Find(mapperEntity.RouterUUID)
-		if err != nil {
-			l.WithError(err).Error("Failed to get mapperEntity!")
-			continue
-		}
-
-		idle = mapperEntity.IsIdle()
-		if !idle {
-			continue
-		}
-
-		wg.Add(1)
-		go func(m *mapper.Mapper, l *log.Entry, wg *sync.WaitGroup) {
-			selenium.CloseSession(m)
-
-			err = service.StopTask(*m, mapper.SessionIdleTimeout)
-			if err != nil {
-				l.WithError(err).Error("Failed to stop idle driver task!")
-			} else {
-				l.Warn("task aborted due to the session idle timeout")
-			}
-			wg.Done()
-		}(mapperEntity, l, wg)
-	}
-
-	wg.Done()
-}
-
-func refreshTaskDefinition(env *environment.ExecutionEnvironment) (*db.TaskDefinition, error) {
-	l := log.WithField("schema", env.Schema).WithField("family", env.TaskDefinitionFamily)
-
-	newDbDefinititon := db.CreateTaskDefinitionEntity(env)
-	savedDbDefinition, err := db.GetDefinition(env.TaskDefinitionFamily, env.Schema)
-	if err != nil {
-		if err != sql.ErrNoRows {
-			return nil, err
-		}
-
-		l.Info("Creating new record")
-		taskDef, err := service.CreateTaskDefinition(env)
-		if err != nil {
-			return nil, err
-		}
-		// pause after aws call
-		time.Sleep(1 * time.Second)
-		newDbDefinititon.RevisionTag = *taskDef.Revision
-
-		err = db.InsertDefinition(newDbDefinititon)
-		if err != nil {
-			return nil, err
-		}
-	} else if newDbDefinititon.RegisterDefinitionHash != savedDbDefinition.RegisterDefinitionHash {
-		l.Info("Updating definition record")
-		taskDef, err := service.CreateTaskDefinition(env)
-		if err != nil {
-			return nil, err
-		}
-		// pause after aws call
-		time.Sleep(1 * time.Second)
-		newDbDefinititon.RevisionTag = *taskDef.Revision
-
-		err = db.RefreshTag(savedDbDefinition.RegisterDefinitionHash, newDbDefinititon)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		l.Trace("Definition record is up-to-date")
-		newDbDefinititon.RevisionTag = savedDbDefinition.RevisionTag
-	}
-
-	return newDbDefinititon, nil
-}
-
-func buildEnvsFromImages(images []string) ([]*environment.ExecutionEnvironment, error) {
-	envsList := make([]*environment.ExecutionEnvironment, 0)
-	for _, image := range images {
-		l := log.WithField("image", image)
-
-		capsList, err := capabilities.FromImage(image)
-		if err != nil {
-			l.WithError(err).Error("Failed to build capabilitites from image!")
-			return nil, err
-		}
-
-		for _, caps := range capsList {
-			env, err := environment.BuildFromCaps(caps)
-			if err != nil {
-				l.WithError(err).Error("Failed to build execution environment from capabilities!")
-				return nil, err
-			}
-
-			envsList = append(envsList, env)
-		}
-	}
-
-	return envsList, nil
-}
-
-func refreshTaskDefinitions(taskDefinitionCacheTtl time.Duration) error {
-	images, err := utils.ListImages()
-	if err != nil {
-		log.WithError(err).Error("Failed to get images list")
-		return err
-	}
-
-	envsList, err := buildEnvsFromImages(images)
-	if err != nil {
-		log.WithError(err).Error("Failed to build execution environments from images list")
-		return err
-	}
-
-	hashRevisionMap := make(map[string]int64)
-	for _, env := range envsList {
-		dbTaskDefinition, err := refreshTaskDefinition(env)
-		if err != nil {
-			log.WithError(err).WithField("family", env.TaskDefinitionFamily).Error("Couldn't create task defenition")
-			return err
-		}
-
-		hashRevisionMap[dbTaskDefinition.OverrideDefinitionHash] = dbTaskDefinition.RevisionTag
-	}
-
-	err = definitionmap.WriteAll(hashRevisionMap, taskDefinitionCacheTtl)
-	if err != nil {
-		log.WithError(err).Error("Failed to add hashRevision map to redis")
-		return err
-	}
-
-	return nil
-}
-
-func ManageTaskDefinitions() {
-	refreshInterval := time.Hour * 12
-	err := refreshTaskDefinitions(refreshInterval + time.Hour)
-	if err != nil {
-		utils.ExitWithError(err, "Failed to refresh task definitions", log.NewEntry(log.StandardLogger()))
-	}
-
-	utilsmap.SetTaskDefenitionRefreshDone()
-	log.Info("Service started")
+	timer := utils.CreateTimer(1 * time.Minute)
 
 	for {
-		time.Sleep(refreshInterval)
-		log.Info("Starting task definitions update")
+		select {
 
-		err := refreshTaskDefinitions(refreshInterval + time.Hour)
-		if err != nil {
-			utils.ExitWithError(err, "Failed to update task definitions", log.NewEntry(log.StandardLogger()))
+		case <-ctx.Done():
+			return
+		case <-timer():
+
+			routerUuids, err := mapper.GetKeys(mapper.TASK)
+			if err != nil {
+				log.WithError(err).Warn("Failed to get list of taskmap keys!")
+				continue
+			}
+
+			mapperEntities, err := mapper.FindAll(routerUuids)
+			if err != nil {
+				log.WithError(err).Warn("Failed to get cached mapper enties")
+				continue
+			}
+
+			taskIds := make([]string, 0)
+			for _, mapperEntity := range mapperEntities {
+				if mapperEntity.TaskId != "" {
+					taskIds = append(taskIds, mapperEntity.TaskId)
+				}
+			}
+
+			if len(taskIds) <= 0 {
+				continue
+			}
+
+			tasks := service.GetTasksByTaskIds(taskIds, svc)
+
+			if len(tasks) <= 0 {
+				continue
+			}
+
+			taskIdMapperMap := make(map[string]mapper.Mapper)
+			for _, mapperEntity := range mapperEntities {
+				if mapperEntity.TaskId != "" {
+					taskIdMapperMap[mapperEntity.TaskId] = mapperEntity
+				}
+			}
+
+			// analyze tasks response
+			tasksCacheToUpdate := make([]mapper.Mapper, 0)
+			tasksToTrack := make(map[*mapper.Mapper]*ecs.Task)
+			for _, task := range tasks {
+				taskId := strings.Split(*task.TaskArn, "/")[2]
+				l := log.WithField(config.TaskIdKey, taskId)
+
+				// tracking task only when execution is stopped
+				if *task.LastStatus != "STOPPED" {
+					continue
+				}
+
+				// for tracking task should be cached
+				cachedTask, ok := taskIdMapperMap[taskId]
+				if !ok {
+					l.Debug("Can't find non tracked stopped task in cache")
+					continue
+				}
+
+				// already tracked
+				if cachedTask.UsageTracked {
+					continue
+				}
+
+				if cachedTask.Status != mapper.Stopped {
+					// cypress is not marked as stopped in cache after finish
+					if cachedTask.Status == mapper.Cypress {
+						cachedTask.Status = mapper.Stopped
+						cachedTask.StopReason = mapper.TaskFinished
+					} else {
+						continue
+					}
+				}
+
+				// track resources usage for STOPPED tasks
+				cachedTask.UsageTracked = true
+				tasksCacheToUpdate = append(tasksCacheToUpdate, cachedTask)
+
+				l = l.WithField(config.RouterUUID, cachedTask.RouterUUID)
+				if !config.Conf.SingleTenant {
+					l = l.WithField("workspace", cachedTask.Workspace)
+				}
+
+				// Don't track Unhealthy/StartupFailure/Lost tasks
+				if cachedTask.StopReason == mapper.TaskStartupFailure ||
+					cachedTask.StopReason == mapper.TaskUnhealthy ||
+					cachedTask.StopReason == mapper.TaskLost {
+					l.Info("Not tracking task with stop reason:", cachedTask.StopReason)
+					continue
+				}
+
+				tasksToTrack[&cachedTask] = task
+			}
+
+			// Set tracked status and expiration time 5 minutes to be able to return taskId and stop reason for task
+			err = mapper.WriteShapedEntities(tasksCacheToUpdate, 5*time.Minute)
+			if err != nil {
+				log.WithError(err).Error("Failed to update tracked tasks!")
+			} else {
+				for cachedTask, task := range tasksToTrack {
+					zebrunner.TrackResourcesUsage(cachedTask, task)
+				}
+			}
 		}
+	}
+}
 
-		log.Info("Task definitions update finished")
+func stopIdleSessions(ctx context.Context, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	timer := utils.CreateTimer(config.Conf.IdleTimeout)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer():
+			routerUuids, err := mapper.GetKeys(mapper.SESSION)
+			if err != nil {
+				log.WithError(err).Error("Failed to list uuid keys from sessions set!")
+				continue
+			}
+
+			mapperEntities, err := mapper.FindAll(routerUuids)
+			if err != nil {
+				log.WithError(err).Error("Failed to get mapper entities!")
+				continue
+			}
+
+			var sessionsWg sync.WaitGroup
+			for _, mapperEntity := range mapperEntities {
+				idle := mapperEntity.IsIdle()
+
+				if !idle {
+					continue
+				}
+
+				l := log.WithFields(log.Fields{config.TaskIdKey: mapperEntity.TaskId, config.SessionIdKey: mapperEntity.SessionID, config.RouterUUID: mapperEntity.RouterUUID})
+				if !config.Conf.SingleTenant {
+					l = l.WithField("workspace", mapperEntity.Workspace)
+				}
+
+				// get actual record of the session and validate idle timeout one more time
+				mapperEntity, err := mapper.Find(mapperEntity.RouterUUID)
+				if err != nil {
+					l.WithError(err).Error("Failed to get mapperEntity!")
+					continue
+				}
+
+				idle = mapperEntity.IsIdle()
+				if !idle {
+					continue
+				}
+
+				sessionsWg.Add(1)
+				go func(m *mapper.Mapper, l *log.Entry, wg *sync.WaitGroup) {
+					defer wg.Done()
+
+					selenium.CloseSession(m)
+					err = service.StopTask(*m, mapper.SessionIdleTimeout)
+					if err != nil {
+						l.WithError(err).Error("Failed to stop idle driver task!")
+					} else {
+						l.Warn("task aborted due to the session idle timeout")
+					}
+				}(mapperEntity, l, &sessionsWg)
+			}
+			sessionsWg.Wait()
+
+		}
 	}
 }
 
@@ -462,6 +389,10 @@ func refreshIMDSV2Token() {
 }
 
 func main() {
+	defer func() {
+		config.CloseConnections()
+	}()
+
 	flag.Parse()
 
 	log.SetLevel(config.Conf.ParseLogLevel())
@@ -472,20 +403,21 @@ func main() {
 	}
 	service.AwsSess = awsSess
 
-	err = config.InitDBConnection(config.Conf.DbConnectionString)
-	if err != nil {
-		utils.ExitWithError(err, "Failed to init DB client", log.NewEntry(log.StandardLogger()))
-	}
-	defer config.DbConnection.Close()
-
-	err = config.InitCache()
+	err = config.REDIS_MAPPER_CLIENT.InitConnection()
 	if err != nil {
 		utils.ExitWithError(err, "Failed to init redis connection", log.NewEntry(log.StandardLogger()))
 	}
-	defer config.RedisMapperClient.Close()
-	defer config.RedisDefinitionClient.Close()
-	defer config.RedisResourcesClient.Close()
-	defer config.RedisUtilityClient.Close()
+
+	err = config.REDIS_UTILITY_CLIENT.InitConnection()
+	if err != nil {
+		utils.ExitWithError(err, "Failed to init redis connection", log.NewEntry(log.StandardLogger()))
+	}
+
+	err = config.REDIS_RESOURCES_CLIENT.InitConnection()
+	if err != nil {
+		utils.ExitWithError(err, "Failed to init redis connection", log.NewEntry(log.StandardLogger()))
+	}
+
 	mapper.InitMapperWorkers()
 	utilsmap.SetScalerVersion()
 
@@ -495,32 +427,41 @@ func main() {
 	}
 	service.StartScalers(scalersMap)
 
-	for capacityProvider, scaler := range scalersMap {
-		environment.AddSmallestInstanceResources(scaler.InstanceResources.CPU, scaler.InstanceResources.Memory, capacityProvider)
-	}
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		exit := make(chan os.Signal, 1)
+		signal.Notify(exit, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+		<-exit
+		log.Info("Shutdown scaler ...")
+		cancel()
+	}()
 
 	go refreshIMDSV2Token()
 
-	go ManageTaskDefinitions()
+	var wg sync.WaitGroup
 
-	iterationDoneCh := make(chan interface{})
-	go ManageTasksAndSession(iterationDoneCh)
-
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-
-	// on shutdown actions
-	log.Info("Shutdown scaler ...")
-	err = utilsmap.UnsetTaskDefenitionRefreshDone()
+	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
 	if err != nil {
-		log.WithError(err).Error("Failed to mark task definition refresh as undone")
+		utils.ExitWithError(err, "Failed to create AWS session", log.NewEntry(log.StandardLogger()))
+	} else {
+		svc := ecs.New(session)
+
+		wg.Add(1)
+		go stopIdleSessions(ctx, &wg)
+
+		wg.Add(1)
+		go stopLostTasks(ctx, svc, &wg)
+
+		wg.Add(1)
+		go stopUnhealthyTasks(ctx, svc, &wg)
+
+		wg.Add(1)
+		go trackResourceUsage(ctx, svc, &wg)
+
+		log.Info("Service started")
 	}
 
-	// wait for the end of a resources shaping
-	log.Info("Waiting for sessions and tasks processors iteration to finish...")
-	<-iterationDoneCh
-	log.Info("Sessions and tasks processors iteration finished")
-
+	wg.Wait()
 	log.Info("Scaler exited")
 }

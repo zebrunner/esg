@@ -9,7 +9,7 @@ import (
 	"github.com/zebrunner/esg/cachemaps"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
-	"github.com/zebrunner/esg/environment"
+	"github.com/zebrunner/esg/environment/network"
 )
 
 type Status int
@@ -37,7 +37,7 @@ const (
 type Mapper struct {
 	RouterUUID   string
 	Capabilities *capabilities.Capabilities
-	Network      environment.NetworkConfiguration
+	Network      network.NetworkConfiguration
 	IdleTimeout  float64
 	Status       Status
 	UsageTracked bool
@@ -58,18 +58,18 @@ func (m Mapper) IsIdle() bool {
 	return idleTime > m.IdleTimeout
 }
 
-func CreateEntity(env *environment.ExecutionEnvironment, expiration time.Duration) (*Mapper, error) {
+func CreateEntity(workspace string, routerUUID string, caps *capabilities.Capabilities, netConf *network.NetworkConfiguration, expiration time.Duration) (*Mapper, error) {
 	creationTime := time.Now()
 	m := &Mapper{
-		RouterUUID:   env.RouterUUID,
-		Capabilities: env.Capabilities,
-		Network:      *env.Network,
-		IdleTimeout:  float64(env.Capabilities.IdleTimeout),
+		RouterUUID:   routerUUID,
+		Capabilities: caps,
+		Network:      *netConf,
+		IdleTimeout:  float64(caps.IdleTimeout),
 		Status:       Queued,
 		UsageTracked: false,
 		HealthAt:     &creationTime,
 		AccessedAt:   &creationTime,
-		Workspace:    env.Workspace,
+		Workspace:    workspace,
 	}
 
 	err := WritedByWorker(m, nil, nil, expiration)
@@ -87,7 +87,7 @@ func Write(mapper *Mapper, expiration time.Duration) error {
 		return err
 	}
 
-	err = config.RedisMapperClient.Set(context.Background(), mapper.RouterUUID, data, expiration).Err()
+	err = config.REDIS_MAPPER_CLIENT.GetConnection().Set(context.Background(), mapper.RouterUUID, data, expiration).Err()
 	if err != nil {
 		return err
 	}
@@ -96,7 +96,7 @@ func Write(mapper *Mapper, expiration time.Duration) error {
 }
 
 func Find(uuid string) (*Mapper, error) {
-	data, err := config.RedisMapperClient.Get(context.Background(), uuid).Result()
+	data, err := config.REDIS_MAPPER_CLIENT.GetConnection().Get(context.Background(), uuid).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +111,7 @@ func Find(uuid string) (*Mapper, error) {
 }
 
 func WriteShapedEntities(mappers []Mapper, expiration time.Duration) error {
-	rdbPipe := config.RedisMapperClient.Pipeline()
+	rdbPipe := config.REDIS_MAPPER_CLIENT.GetConnection().Pipeline()
 
 	for _, mapperEntity := range mappers {
 		data, err := json.Marshal(mapperEntity)
@@ -128,5 +128,5 @@ func WriteShapedEntities(mappers []Mapper, expiration time.Duration) error {
 }
 
 func FindAll(uuids []string) ([]Mapper, error) {
-	return cachemaps.FindAll[Mapper](config.RedisMapperClient.Pipeline(), uuids)
+	return cachemaps.FindAll[Mapper](config.REDIS_MAPPER_CLIENT.GetConnection().Pipeline(), uuids)
 }

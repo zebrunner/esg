@@ -1,4 +1,4 @@
-package service
+package starter
 
 import (
 	"context"
@@ -10,6 +10,8 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/service"
+	"github.com/zebrunner/esg/utils"
 )
 
 var instanceWorker *instanceWatchWorker
@@ -36,9 +38,9 @@ type instanceWatchWorker struct {
 }
 
 func (w *instanceWatchWorker) start() {
-	svc := ecs.New(AwsSess)
-	ec2Svc := ec2.New(AwsSess)
-	autoScalingSvc := autoscaling.New(AwsSess)
+	svc := ecs.New(service.AwsSess)
+	ec2Svc := ec2.New(service.AwsSess)
+	autoScalingSvc := autoscaling.New(service.AwsSess)
 
 	for {
 		time.Sleep(5 * time.Second)
@@ -70,7 +72,7 @@ func (w *instanceWatchWorker) start() {
 			ciArnTaskArnsMap[*req.containerInstanceArn] = append(ciArnTaskArnsMap[*req.containerInstanceArn], taskArn)
 		}
 
-		containerInstances, err := DescribeContainerInstances(ciArnPtrs, svc)
+		containerInstances, err := service.DescribeContainerInstances(ciArnPtrs, svc)
 		if err != nil {
 			log.WithError(err).Error("instanceWatchWorker: failed to describe container instances.")
 			continue
@@ -98,7 +100,7 @@ func (w *instanceWatchWorker) start() {
 			continue
 		}
 
-		healthyInstanceIdPtrs, unhealthyInstanceIdPtrs, err := DescribeInstancesStatus(ec2IdPtrs, ec2Svc)
+		healthyInstanceIdPtrs, unhealthyInstanceIdPtrs, err := service.DescribeInstancesStatus(ec2IdPtrs, ec2Svc)
 		if err != nil {
 			log.WithError(err).Error("instanceWatchWorker: failed to describe instances status.")
 			if len(healthyInstanceIdPtrs) == 0 && len(unhealthyInstanceIdPtrs) == 0 {
@@ -109,7 +111,7 @@ func (w *instanceWatchWorker) start() {
 
 		if len(unhealthyInstanceIdPtrs) != 0 {
 			// stop unhealthy instances
-			err := TerminateInstancesInASG(unhealthyInstanceIdPtrs, false, autoScalingSvc)
+			err := service.TerminateInstancesInASG(unhealthyInstanceIdPtrs, false, autoScalingSvc)
 			if err != nil {
 				log.WithError(err).Error("instanceWatchWorker: failed to terminate unhealthy instances.")
 				continue
@@ -125,10 +127,7 @@ func (w *instanceWatchWorker) start() {
 						log.WithField("taskArn", taskArn).WithError(err).Trace("instanceWatchWorker: error sent back to request")
 
 						req := w.requests[taskArn]
-						select {
-						case req.NonEssentialErrCh <- err:
-						default:
-						}
+						utils.SendToChanIfNotBlocked(req.NonEssentialErrCh, err)
 						delete(w.requests, taskArn)
 					}
 				}
@@ -141,7 +140,7 @@ func (w *instanceWatchWorker) start() {
 		}
 
 		// describing only healthy instances...
-		ec2Instances, err := DescribeInstances(healthyInstanceIdPtrs, ec2Svc)
+		ec2Instances, err := service.DescribeInstances(healthyInstanceIdPtrs, ec2Svc)
 		if err != nil {
 			log.Error("instanceWatchWorker: failed to describe ec2 instances")
 			continue
@@ -154,10 +153,7 @@ func (w *instanceWatchWorker) start() {
 				for _, taskArn := range taskArns {
 					log.WithField("taskArn", taskArn).WithError(err).Trace("instanceWatchWorker: described instance is sent back to request")
 					req := w.requests[taskArn]
-					select {
-					case req.ResponseCh <- ec2Instance:
-					default:
-					}
+					utils.SendToChanIfNotBlocked(req.ResponseCh, ec2Instance)
 					delete(w.requests, taskArn)
 				}
 			}

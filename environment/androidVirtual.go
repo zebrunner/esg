@@ -7,6 +7,9 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
+	envtype "github.com/zebrunner/esg/environment/envType"
+	"github.com/zebrunner/esg/environment/network"
+	"github.com/zebrunner/esg/images"
 )
 
 const (
@@ -16,7 +19,7 @@ const (
 	appiumMemory = 1024
 )
 
-func buildAppiumRedroid(workspace string, routerUUID string, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
+func buildAppiumRedroid(workspace string, routerUUID string, image images.Image, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
 	browserVolume := "browser"
 
 	logDir := "/tmp/log"
@@ -26,14 +29,9 @@ func buildAppiumRedroid(workspace string, routerUUID string, caps *capabilities.
 
 	conf := &config.Conf
 
-	deviceImage, err := buildImage(caps)
-	if err != nil {
-		return nil, err
-	}
-
 	deviceContainer := Container{
 		Name:       "device",
-		Image:      deviceImage,
+		image:      &image,
 		Privileged: true,
 		Essential:  true,
 		Env: map[string]string{
@@ -51,7 +49,7 @@ func buildAppiumRedroid(workspace string, routerUUID string, caps *capabilities.
 		Privileged: false,
 		Essential:  true,
 		Ports: map[string]portMapping{
-			"driver": {appiumPort, 0},
+			"driver": {ContainerPort: appiumPort, HostPort: 0},
 		},
 		Env: map[string]string{
 			"ROUTER_UUID":    routerUUID,
@@ -75,7 +73,7 @@ func buildAppiumRedroid(workspace string, routerUUID string, caps *capabilities.
 		Name:  "uploader",
 		Image: uploaderImage,
 		Res: Resources{
-			Cpu:    64,  // with 32  uploading is aborted
+			Cpu:    64,  // with 32 uploading is aborted
 			Memory: 256, // 64 works for single thread. for background copying it is not enough
 		},
 		Privileged: false,
@@ -92,7 +90,7 @@ func buildAppiumRedroid(workspace string, routerUUID string, caps *capabilities.
 	}
 
 	containers := []*Container{&deviceContainer, &appiumContainer, &uploaderContainer}
-	environment := ExecutionEnvironment{
+	env := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
 		Schema:               buildSchema(containers),
 		Containers:           containers,
@@ -101,21 +99,20 @@ func buildAppiumRedroid(workspace string, routerUUID string, caps *capabilities.
 			logVolume:     {ContainerPath: logDir, Driver: "local", Scope: "task", ReadOnly: false},
 			browserVolume: {ContainerPath: "/tmp/zebrunner/chrome", HostPath: "/opt/zebrunner/chrome", ReadOnly: false}, //TODO: think about path unification on host and inside container
 		},
-		Network: &NetworkConfiguration{
+		Network: &network.NetworkConfiguration{
 			IP: "",
-			Endpoints: map[string]*Endpoint{
+			Endpoints: map[string]*network.Endpoint{
 				"driver":      {ContainerPort: appiumPort, HostPort: 0, Path: "/wd/hub"},
 				"healthcheck": {ContainerPort: appiumPort, HostPort: 0, Path: "/wd/hub/status-adb"},
 			},
 		},
-		Workspace:        workspace,
-		RouterUUID:       routerUUID,
+		Type:             envtype.ANDROID,
 		CapacityProvider: config.Conf.AwsLinuxCapacityProvider,
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
 	}
 
-	err = calculateResources(&environment,
-		&resourceCalculatorHelper{
+	err := calculateResources(&env,
+		&resourceCalculationHelper{
 			MinimumRes: Resources{Cpu: 2048, Memory: 2048},
 			Container:  &deviceContainer,
 			Memory:     &caps.Memory,
@@ -126,5 +123,5 @@ func buildAppiumRedroid(workspace string, routerUUID string, caps *capabilities.
 		return nil, err
 	}
 
-	return &environment, nil
+	return &env, nil
 }

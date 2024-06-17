@@ -3,7 +3,7 @@
 
 # get base directory and cluster
 BASEDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-. "$BASEDIR/../router.env"
+. "$BASEDIR/../properties/config.env"
 
 # add region to command if present
 listInstances="aws ecs list-container-instances --cluster $AWS_CLUSTER"

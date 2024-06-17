@@ -1,4 +1,4 @@
-package service
+package starter
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
+	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
 )
 
@@ -36,7 +37,7 @@ type waitWorker struct {
 }
 
 func (w *waitWorker) start() {
-	svc := ecs.New(AwsSess)
+	svc := ecs.New(service.AwsSess)
 
 	for {
 		time.Sleep(5 * time.Second)
@@ -61,7 +62,7 @@ func (w *waitWorker) start() {
 			taskIdsPtrs = append(taskIdsPtrs, &taskId)
 		}
 
-		pages := paginate(taskIdsPtrs, 100)
+		pages :=utils.Paginate(taskIdsPtrs, 100)
 
 		// Send DescribeTasks requests and process errors
 		var tasks []*ecs.Task
@@ -104,31 +105,19 @@ func (w *waitWorker) start() {
 				if strings.Contains(*task.TaskDefinitionArn, "generic") {
 					if ok, container := utils.IsTaskFinishedSuccessfully(task); ok {
 						l.Info("task already finished")
-						select {
-						case req.ResponseCh <- task:
-						default:
-						}
+						utils.SendToChanIfNotBlocked(req.ResponseCh, task)
 					} else {
 						l.Error("Generic task stopped: ", *task)
 
 						if container.Reason != nil && strings.Contains(*container.Reason, "CannotPullContainerError") {
-							select {
-							case req.EssentialErrCh <- fmt.Errorf(utils.GetContainerExitReason(container)):
-							default:
-							}
+							utils.SendToChanIfNotBlocked(req.EssentialErrCh, fmt.Errorf(utils.GetContainerExitReason(container)))
 						} else {
-							select {
-							case req.NonEssentialErrCh <- fmt.Errorf(utils.GetContainerExitReason(container)):
-							default:
-							}
+							utils.SendToChanIfNotBlocked(req.NonEssentialErrCh, fmt.Errorf(utils.GetContainerExitReason(container)))
 						}
 					}
 				} else {
 					l.Error("Task stopped: ", *task)
-					select {
-					case req.NonEssentialErrCh <- fmt.Errorf("task stopped with reason: %s", *task.StoppedReason):
-					default:
-					}
+					utils.SendToChanIfNotBlocked(req.NonEssentialErrCh, fmt.Errorf("task stopped with reason: %s", *task.StoppedReason))
 				}
 
 				delete(w.requests, taskId)
@@ -156,23 +145,14 @@ func (w *waitWorker) start() {
 				}
 
 				if essential != nil {
-					select {
-					case req.EssentialErrCh <- essential:
-					default:
-					}
+					utils.SendToChanIfNotBlocked(req.EssentialErrCh, essential)
 				} else {
-					select {
-					case req.NonEssentialErrCh <- fmt.Errorf("task unhealthy"):
-					default:
-					}
+					utils.SendToChanIfNotBlocked(req.NonEssentialErrCh, fmt.Errorf("task unhealthy"))
 				}
 
 				delete(w.requests, taskId)
 			case "HEALTHY":
-				select {
-				case req.ResponseCh <- task:
-				default:
-				}
+				utils.SendToChanIfNotBlocked(req.ResponseCh, task)
 
 				delete(w.requests, taskId)
 			}

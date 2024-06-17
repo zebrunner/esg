@@ -1,0 +1,66 @@
+#!/bin/sh
+
+finish() {
+  ppid=$1
+  if [ -n "$ppid" ]; then
+    kill -s TERM $ppid
+  fi
+
+  # wait until $ppid finished normally to provide more time for termination process
+  while [ true ]; do
+    ps -ef | grep $ppid | grep -v grep > /dev/null 2>&1
+    if [ $? -eq 1 ]; then
+      echo "process finished"
+      break
+    fi
+    sleep 2
+  done
+  return 0
+}
+
+CMD_ARGS=
+if [ ! -z ${LOG_LEVEL} ]; then
+  CMD_ARGS="${CMD_ARGS} -log-level ${LOG_LEVEL}"
+fi
+
+if [ ! -z ${AWS_REGION} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-region ${AWS_REGION}"
+fi
+if [ ! -z ${AWS_RETRY} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-retry ${AWS_RETRY}"
+fi
+if [ ! -z ${AWS_CLUSTER} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-cluster ${AWS_CLUSTER}"
+fi
+if [ ! -z ${AWS_ACESS_KEY_ID} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-access-key-id ${AWS_ACESS_KEY_ID}"
+fi
+if [ ! -z ${AWS_SECRET_ACCESS_KEY} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-secret-access-key ${AWS_SECRET_ACCESS_KEY}"
+fi
+if [ ! -z ${AWS_TASK_ROLE} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-task-role-arn ${AWS_TASK_ROLE}"
+fi
+
+if [ ! -z ${AWS_ELASTIC_CACHE} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-elastic-cache ${AWS_ELASTIC_CACHE}"
+fi
+if [ ! -z ${DATABASE} ]; then
+  CMD_ARGS="${CMD_ARGS} -db-connection ${DATABASE}"
+fi
+
+if [ ! -z ${IMAGE_REPOSITORIES} ]; then
+  CMD_ARGS="${CMD_ARGS} -image-repositories ${IMAGE_REPOSITORIES}"
+fi
+if [ ! -z ${EXCLUDE_BROWSERS} ]; then
+  CMD_ARGS="${CMD_ARGS} -exclude-browsers ${EXCLUDE_BROWSERS}"
+fi
+
+echo "CMD_ARGS: $CMD_ARGS"
+
+./task-definitions $CMD_ARGS &
+PID=$!
+
+trap 'finish $PID' TERM INT
+
+wait $PID

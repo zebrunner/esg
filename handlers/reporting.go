@@ -5,15 +5,14 @@ import (
 	"net/http"
 	"os"
 	"runtime"
-	"strings"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps/utilsmap"
 	"github.com/zebrunner/esg/config"
-	"github.com/zebrunner/esg/utils"
+	"github.com/zebrunner/esg/definitions"
 
 	"github.com/gin-gonic/gin"
-	log "github.com/sirupsen/logrus"
 )
 
 var (
@@ -52,72 +51,19 @@ func ClusterStatus(c *gin.Context) {
 }
 
 func ListDrivers(c *gin.Context) {
-	// TODO: Refactor code: code must be split in few different functions
-	images, err := utils.ListImages()
+	resBody, err := definitions.ListImages()
 	if err != nil {
-		log.WithError(err).Warn("Failed to get browser list")
-		c.Error(utils.NotFoundApiErr("failed to get browser list")).SetType(gin.ErrorTypePublic)
+		c.Status(http.StatusInternalServerError)
+		log.WithError(err).Error("Failed to list images from task-definitions server")
 		return
 	}
 
-	var browsersResponse []map[string]interface{}
-
-	imagesPlatforms := map[string]string{
-		"redroid": "android",
+	_, err = c.Writer.Write(resBody)
+	if err != nil {
+		c.Status(http.StatusInternalServerError)
+		log.WithError(err).Error("Failed to write body server")
+		return
 	}
-	cypressPlatforms := map[string]string{
-		"cypress-chrome":   "cypress",
-		"cypress-chromium": "cypress",
-		"cypress-edge":     "cypress",
-		"cypress-firefox":  "cypress",
-	}
-
-	windowsPlatforms := map[string]string{
-		"windows-chrome": "windows",
-		"windows-edge":   "windows",
-	}
-
-	for _, image := range images {
-		name := strings.Split(image, ":")[0]
-		version := strings.Split(image, ":")[1]
-
-		if version == "debug" {
-			continue
-		}
-
-		if name == "edge" {
-			name = "MicrosoftEdge"
-		}
-
-		browserData := map[string]interface{}{
-			"name":     name,
-			"version":  version,
-			"platform": "linux",
-		}
-
-		if _, ok := imagesPlatforms[name]; ok {
-			// hardcoded browser name and verion for ReDroid emulator
-			if browserData["version"] == "latest" {
-				continue
-			}
-			browserData["platform"] = imagesPlatforms[name]
-			browserData["browserName"] = "chrome"
-			browserData["browserVersion"] = "107.0"
-		}
-
-		if _, ok := cypressPlatforms[name]; ok {
-			browserData["image"] = "public.ecr.aws/zebrunner/" + image
-			browserData["platform"] = cypressPlatforms[name]
-		}
-
-		if platform, ok := windowsPlatforms[name]; ok {
-			browserData["name"] = strings.TrimPrefix(name, "windows-")
-			browserData["platform"] = platform
-		}
-
-		browsersResponse = append(browsersResponse, browserData)
-	}
-	c.JSON(http.StatusOK, browsersResponse)
 }
 
 func Welcome(c *gin.Context) {
