@@ -4,10 +4,6 @@ RUN apk add -U tzdata && rm -Rf /var/cache/apk/*
 
 WORKDIR /esg
 
-# create file, that contains build tag
-COPY ./build/.env version
-RUN . version && echo "VERSION=$ROUTER_VERSION" > version
-
 # Download dependencies
 COPY ./go.mod .
 COPY ./go.sum .
@@ -64,10 +60,9 @@ ENV OLD_ABORT_API=
 
 RUN apk add -U tzdata
 
-COPY --from=0 /esg/version /version
+COPY ./build/.env version
+COPY ./build/entrypoint.router /entrypoint.sh
 
 COPY --from=0 /esg/router /router
-
-COPY ./build/entrypoint.router /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
