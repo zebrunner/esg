@@ -1,15 +1,14 @@
-
 services:
   router:
     build:
       context: ../
       dockerfile: build/Dockerfile.router
-    image: public.ecr.aws/zebrunner/router:$ROUTER_VERSION
+    image: public.ecr.aws/zebrunner/router:$E3S_VERSION
   scaler:
     build:
       context: ../
       dockerfile: build/Dockerfile.scaler
-    image: public.ecr.aws/zebrunner/scaler:$SCALER_VERSION
+    image: public.ecr.aws/zebrunner/scaler:$E3S_VERSION
   migration:
     build:
       context: ../
@@ -19,4 +18,4 @@ services:
     build:
       context: ../
       dockerfile: build/Dockerfile.task-definitions
-    image: public.ecr.aws/zebrunner/task-definitions:$ROUTER_VERSION
+    image: public.ecr.aws/zebrunner/task-definitions:$E3S_VERSION
