@@ -1,0 +1,82 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "WithoutConstraints",
+            "Effect": "Allow",
+            "Action": [
+                "ecs:RegisterTaskDefinition",
+                "ecs:ListTasks",
+                "ec2:DescribeInstances",
+                "ec2:DescribeInstanceStatus",
+                "ec2:DescribeInstanceTypes",
+                "elasticloadbalancing:DescribeTargetGroups",
+                "elasticloadbalancing:DescribeLoadBalancers",
+                "elasticloadbalancing:DescribeListeners",
+                "autoscaling:DescribeAutoScalingGroups",
+                "autoscaling:DescribeAutoScalingInstances"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "ECS",
+            "Effect": "Allow",
+            "Action": [
+                "ecs:DescribeContainerInstances",
+                "ecs:DescribeTasks",
+                "ecs:StopTask",
+                "ecs:DescribeClusters",
+                "ecs:ListContainerInstances",
+                "ecs:RunTask",
+                "ecs:DescribeCapacityProviders",
+                "ecs:UpdateContainerInstancesState"
+            ],
+            "Resource": [
+                "arn:aws:ecs:${region}:${account}:container-instance/e3s-${env}/*",
+                "arn:aws:ecs:${region}:${account}:task/e3s-${env}/*",
+                "arn:aws:ecs:${region}:${account}:cluster/e3s-${env}",
+                "arn:aws:ecs:${region}:${account}:task-definition/${env}-*",
+                "arn:aws:ecs:${region}:${account}:capacity-provider/e3s-${env}-*"
+            ]
+        },
+        {
+            "Sid": "Autoscaling",
+            "Effect": "Allow",
+            "Action": [
+                "autoscaling:TerminateInstanceInAutoScalingGroup",
+                "autoscaling:SetInstanceProtection",
+                "autoscaling:SetDesiredCapacity"
+            ],
+            "Resource": "arn:aws:autoscaling:${region}:${account}:autoScalingGroup:*:autoScalingGroupName/e3s-${env}-*"
+        },
+        {
+            "Sid": "ELB",
+            "Effect": "Allow",
+            "Action": [
+                "elasticloadbalancing:RegisterTargets",
+                "elasticloadbalancing:DeregisterTargets"
+            ],
+            "Resource": "arn:aws:elasticloadbalancing:${region}:${account}:targetgroup/e3s-${env}-*"
+        },
+        {
+            "Sid": "S3",
+            "Effect": "Allow",
+            "Action": [
+                "s3:ListBucket",
+                "s3:GetObject"
+            ],
+            "Resource": [
+                "arn:aws:s3:::${bucket_name}",
+                "arn:aws:s3:::${bucket_name}/*"
+            ]
+        },
+        {
+            "Sid": "IAM",
+            "Effect": "Allow",
+            "Action": [
+                "iam:passRole"
+            ],
+            "Resource": "arn:aws:iam::${account}:role/e3s-${env}-task-role"
+        }
+    ]
+}

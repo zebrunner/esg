@@ -1,0 +1,35 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "WithoutConstraints",
+            "Effect": "Allow",
+            "Action": [
+                "ecs:DiscoverPollEndpoint",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents",
+                "ecr:GetAuthorizationToken",
+                "ecr:BatchCheckLayerAvailability",
+                "ecr:GetDownloadUrlForLayer",
+                "ecr:BatchGetImage"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "ECS",
+            "Effect": "Allow",
+            "Action": [
+                "ecs:DeregisterContainerInstance",
+                "ecs:RegisterContainerInstance",
+                "ecs:Submit*",
+                "ecs:StartTelemetrySession",
+                "ecs:UpdateContainerInstancesState",
+                "ecs:Poll"
+            ],
+            "Resource": [
+                "arn:aws:ecs:${region}:${accout}:cluster/e3s-${env}",
+                "arn:aws:ecs:${region}:${accout}:container-instance/e3s-${env}/*"
+            ]
+        }
+    ]
+}
