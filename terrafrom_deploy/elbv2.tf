@@ -38,7 +38,7 @@ resource "aws_lb_listener" "main" {
   ssl_policy        = "ELBSecurityPolicy-2016-08"
 
   # TODO: create certificate? or parametrize? or both?
-  certificate_arn = ""
+  certificate_arn = var.cert
 
   default_action {
     type  = "forward"

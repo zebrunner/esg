@@ -67,7 +67,7 @@ data "cloudinit_config" "cloudinit-example" {
   part {
     filename     = "init.cfg"
     content_type = "text/cloud-config"
-    content      = templatefile("./ec2_data/init.cfg")
+    content      = templatefile("./ec2_data/init.cfg", {})
   }
 
   part {
@@ -75,7 +75,7 @@ data "cloudinit_config" "cloudinit-example" {
     content = templatefile("./ec2_data/e3s_user_data.sh", {
       region                   = var.region
       cluster_name             = aws_ecs_cluster.e3s.name
-      task_role                = aws_iam_role.e3s_task
+      task_role                = aws_iam_role.e3s_task.name
       zbr_host                 = var.zbr_host
       zbr_user                 = var.zbr_user
       zbr_pass                 = var.zbr_pass

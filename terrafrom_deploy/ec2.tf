@@ -1,7 +1,7 @@
 resource "aws_launch_template" "e3s_linux" {
   name = local.e3s_linux_launch_template_name
   # TODO: Parametrize ami id recieve by region
-  image_id               = ""
+  image_id               = var.linux_ami
   vpc_security_group_ids = [aws_security_group.e3s_agent.id]
   ebs_optimized          = true
 
@@ -41,12 +41,12 @@ resource "aws_launch_template" "e3s_linux" {
 
   disable_api_termination = false
 
-  user_data = base64encode(templatefile("./template_data/linux_user_data.sh", { cluster_name = local.e3s_cluster_name }))
+  user_data = base64encode(templatefile("./ec2_data/linux_user_data.sh", { cluster_name = local.e3s_cluster_name }))
 }
 
 resource "aws_launch_template" "e3s_windows" {
   name                   = local.e3s_windows_launch_template_name
-  image_id               = ""
+  image_id               = var.windows_ami
   vpc_security_group_ids = [aws_security_group.e3s_agent.id]
   # TODO: should we create/append key?
   # key_name = 
@@ -82,5 +82,5 @@ resource "aws_launch_template" "e3s_windows" {
     arn = aws_iam_instance_profile.e3s_agent.arn
   }
 
-  user_data = base64encode(templatefile("./template_data/windows_user_data.ps1", { cluster_name = local.e3s_cluster_name, cidr_block = aws_vpc.main.cidr_block }))
+  user_data = base64encode(templatefile("./ec2_data/windows_user_data.ps1", { cluster_name = local.e3s_cluster_name, cidr_block = aws_vpc.main.cidr_block }))
 }
