@@ -119,13 +119,13 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 					// check that 'Cypress: Config Manager' process started (looks like it appears only when cypress tests completely started)
 					" ps aux | awk '/Cypress: Config Manager/ && !/awk/ { print $2 }' | grep ''  &&"+
 					// check that browser returns something via debug port
-					" wget --tries=1 --no-verbose --output-document=/dev/null  http://localhost:%v/json"+
+					" curl -f http://localhost:%v/json"+
 					"; } || exit 1", cypressDebugPort))},
-
-			Interval:    aws.Int64(10),
-			Retries:     aws.Int64(7),
-			Timeout:     aws.Int64(5),
-			StartPeriod: aws.Int64(0),
+			Interval: aws.Int64(5),
+			Retries:  aws.Int64(7),
+			Timeout:  aws.Int64(5),
+			// todo think about optimizing cypress process startup so we can change startPeriod to 0
+			StartPeriod: aws.Int64(40),
 		},
 		DependsOn: []*ecs.ContainerDependency{
 			{
