@@ -22,6 +22,37 @@ variable "bucket_name" {
   nullable = false
 }
 
+variable "zbr_host" {
+  type     = string
+  default  = ""
+}
+
+variable "zbr_pass" {
+  type     = string
+  default  = ""
+}
+
+variable "zbr_user" {
+  type     = string
+  default  = ""
+}
+
+# TODO: to delete
+variable "linux_ami" {
+  type     = string
+  default  = ""
+}
+
+variable "windows_ami" {
+  type     = string
+  default  = ""
+}
+
+variable "cert" {
+  type     = string
+  default  = ""
+}
+
 locals {
   e3s_server_instance_name = join("-", [var.service_name, var.environment])
 

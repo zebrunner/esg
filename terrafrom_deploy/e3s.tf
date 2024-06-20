@@ -60,3 +60,32 @@ resource "aws_instance" "e3s_server" {
   }
 }
 
+data "cloudinit_config" "cloudinit-example" {
+  gzip          = false
+  base64_encode = false
+
+  part {
+    filename     = "init.cfg"
+    content_type = "text/cloud-config"
+    content      = templatefile("./ec2_data/init.cfg")
+  }
+
+  part {
+    content_type = "text/x-shellscript"
+    content = templatefile("./ec2_data/e3s_user_data.sh", {
+      region                   = var.region
+      cluster_name             = aws_ecs_cluster.e3s.name
+      task_role                = aws_iam_role.e3s_task
+      zbr_host                 = var.zbr_host
+      zbr_user                 = var.zbr_user
+      zbr_pass                 = var.zbr_pass
+      env                      = var.environment
+      linux_capacityprovider   = aws_ecs_capacity_provider.e3s_linux.name
+      windows_capacityprovider = aws_ecs_capacity_provider.e3s_windows.name
+      target_group             = aws_lb_target_group.main.name
+      bucket_name              = aws_s3_bucket.main.bucket
+    })
+  }
+}
+
+
