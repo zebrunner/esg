@@ -23,34 +23,39 @@ variable "bucket_name" {
 }
 
 variable "zbr_host" {
-  type     = string
-  default  = ""
+  type    = string
+  default = ""
 }
 
 variable "zbr_pass" {
-  type     = string
-  default  = ""
+  type    = string
+  default = ""
 }
 
 variable "zbr_user" {
-  type     = string
-  default  = ""
+  type    = string
+  default = ""
+}
+
+variable "key_name" {
+  type    = string
+  default = ""
 }
 
 # TODO: to delete
 variable "linux_ami" {
-  type     = string
-  default  = ""
+  type    = string
+  default = ""
 }
 
 variable "windows_ami" {
-  type     = string
-  default  = ""
+  type    = string
+  default = ""
 }
 
 variable "cert" {
-  type     = string
-  default  = ""
+  type    = string
+  default = ""
 }
 
 locals {

@@ -1,11 +1,34 @@
 #!/bin/bash
 
-mkdir tools & cd ./tools
+user="ubuntu"
+e3s-path="/home/${user}/tools/e3s"
 
-git clone https://github.com/zebrunner/esg.git & cd ./e3s
+sudo apt-get update && sudo apt-get upgrade
+
+sudo mkdir -p ${e3s-path}
+
+sudo git clone https://github.com/zebrunner/e3s.git ${e3s-path}
+
+# Add Docker's official GPG key:
+sudo apt-get -y install ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+# Add the repository to Apt sources:
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+
+sudo apt-get -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+# Add user to docker group
+sudo usermod -a -G docker ${user}
 
 # TODO: implement vars replacement instead of *.env files flushing
-
+cd ${e3s-path}
 # config.env
 > ./properties/config.env
 echo AWS_REGION=${region} >> ./properties/config.env
@@ -29,5 +52,5 @@ echo S3_REGION=${region} >> ./properties/router.env
 
 # data.env
 
-
+# start server
 ./zebrunner.sh start
