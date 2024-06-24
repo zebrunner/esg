@@ -42,6 +42,16 @@ variable "key_name" {
   default = ""
 }
 
+variable "linux_spot_price" {
+  type    = string
+  default = ""
+}
+
+variable "windows_spot_price" {
+  type    = string
+  default = ""
+}
+
 # TODO: to delete
 variable "linux_ami" {
   type    = string

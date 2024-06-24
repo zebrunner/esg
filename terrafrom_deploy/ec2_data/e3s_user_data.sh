@@ -1,13 +1,13 @@
 #!/bin/bash
 
 user="ubuntu"
-e3s-path="/home/${user}/tools/e3s"
+e3s_path="/home/$user/tools/e3s"
 
 sudo apt-get update && sudo apt-get upgrade
 
-sudo mkdir -p ${e3s-path}
+sudo mkdir -p "$e3s_path"
 
-sudo git clone https://github.com/zebrunner/e3s.git ${e3s-path}
+sudo git clone https://github.com/zebrunner/e3s.git "$e3s_path"
 
 # Add Docker's official GPG key:
 sudo apt-get -y install ca-certificates curl
@@ -25,10 +25,11 @@ sudo apt-get update
 sudo apt-get -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
 # Add user to docker group
-sudo usermod -a -G docker ${user}
+sudo usermod -a -G docker "$user"
+echo "added user to docker group"
 
 # TODO: implement vars replacement instead of *.env files flushing
-cd ${e3s-path}
+cd "$e3s_path"
 # config.env
 > ./properties/config.env
 echo AWS_REGION=${region} >> ./properties/config.env

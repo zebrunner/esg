@@ -4,6 +4,8 @@ resource "aws_launch_template" "e3s_linux" {
   image_id               = var.linux_ami
   vpc_security_group_ids = [aws_security_group.e3s_agent.id]
   ebs_optimized          = true
+  # TODO: Parametrize by agent_ssh var. If agent_ssh == true, create new key and place it on e3s server instance
+  key_name = var.key_name
 
   instance_initiated_shutdown_behavior = "terminate"
 
@@ -22,7 +24,7 @@ resource "aws_launch_template" "e3s_linux" {
   }
 
   iam_instance_profile {
-    arn = aws_iam_instance_profile.e3s_agent.arn
+    name = aws_iam_instance_profile.e3s_agent.name
   }
 
   hibernation_options {
@@ -41,15 +43,18 @@ resource "aws_launch_template" "e3s_linux" {
 
   disable_api_termination = false
 
-  user_data = base64encode(templatefile("./ec2_data/linux_user_data.sh", { cluster_name = local.e3s_cluster_name }))
+  user_data = base64encode(templatefile("./ec2_data/linux_user_data.sh", { cluster_name = local.e3s_cluster_name, cidr_block = aws_vpc.main.cidr_block }))
+
+  depends_on = [aws_iam_instance_profile.e3s_agent]
 }
 
 resource "aws_launch_template" "e3s_windows" {
   name                   = local.e3s_windows_launch_template_name
   image_id               = var.windows_ami
   vpc_security_group_ids = [aws_security_group.e3s_agent.id]
-  # TODO: should we create/append key?
-  # key_name = 
+  # TODO: Parametrize by agent_ssh var. If agent_ssh == true, create new key and place it on e3s server instance
+  key_name = var.key_name
+
   ebs_optimized = true
   block_device_mappings {
     device_name = "/dev/sda1"
@@ -79,8 +84,10 @@ resource "aws_launch_template" "e3s_windows" {
   }
 
   iam_instance_profile {
-    arn = aws_iam_instance_profile.e3s_agent.arn
+    name = aws_iam_instance_profile.e3s_agent.name
   }
 
   user_data = base64encode(templatefile("./ec2_data/windows_user_data.ps1", { cluster_name = local.e3s_cluster_name, cidr_block = aws_vpc.main.cidr_block }))
+
+  depends_on = [aws_iam_instance_profile.e3s_agent]
 }

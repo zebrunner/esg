@@ -23,7 +23,7 @@ resource "aws_lb_target_group" "main" {
 
 resource "aws_lb" "main" {
   name               = local.e3s_alb_name
-  subnets            = [for s in aws_subnet.per_zones : s.id]
+  subnets            = [for subnet in aws_subnet.public_per_zone : subnet.id]
   security_groups    = [aws_security_group.e3s_server.id]
   load_balancer_type = "application"
   ip_address_type    = "ipv4"

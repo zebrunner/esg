@@ -1,3 +1,21 @@
+locals {
+  zone_subnet_map = { for subnet in aws_subnet.public_per_zone : subnet.availability_zone => subnet.id }
+}
+
+resource "random_shuffle" "e3s_subnet_location" {
+  input        = [for location in data.aws_ec2_instance_type_offerings.supported_server_zones.locations : location]
+  result_count = 1
+}
+
+data "aws_ec2_instance_type_offerings" "supported_server_zones" {
+  filter {
+    name = "instance-type"
+    values = ["m5n.large"]
+  }
+
+  location_type = "availability-zone"
+}
+
 data "aws_ami" "ubuntu_22_04" {
   most_recent = true
 
@@ -31,10 +49,12 @@ data "aws_ami" "ubuntu_22_04" {
 }
 
 resource "aws_instance" "e3s_server" {
-  ami                         = data.aws_ami.ubuntu_22_04.id
-  instance_type               = "m5n.large"
-  subnet_id                   = aws_subnet.per_zones[0].id
-  associate_public_ip_address = true
+  ami           = data.aws_ami.ubuntu_22_04.id
+  instance_type = "m5n.large"
+
+  subnet_id = local.zone_subnet_map[random_shuffle.e3s_subnet_location.result[0]]
+
+  depends_on = [aws_ecs_cluster.e3s, aws_lb_listener.main]
 
   # TODO: add key generation for ssh connection
   key_name = var.key_name

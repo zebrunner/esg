@@ -1,4 +1,3 @@
-
 resource "aws_autoscaling_group" "linux" {
   name = local.e3s_linux_autoscaling_name
   mixed_instances_policy {
@@ -21,10 +20,12 @@ resource "aws_autoscaling_group" "linux" {
     }
 
     instances_distribution {
-      // TODO: shold be availiable two variants:
-      // only on-spot or only on-demand
+      // as of now, there is no support of usual if/else blocks
+      // if var.linux_linux_spot_price == 0 use only on-demand instances, else will be used only on-spot
+      on_demand_percentage_above_base_capacity = var.linux_spot_price == "" ? 100 : 0
+      spot_max_price                           = var.linux_spot_price
+      spot_allocation_strategy                 = "capacity-optimized-prioritized"
       on_demand_allocation_strategy            = "prioritized"
-      on_demand_percentage_above_base_capacity = 100
     }
   }
 
@@ -37,7 +38,7 @@ resource "aws_autoscaling_group" "linux" {
   health_check_type         = "EC2"
   health_check_grace_period = 10
 
-  vpc_zone_identifier = [for s in aws_subnet.per_zones : s.id]
+  vpc_zone_identifier = [for s in aws_subnet.private_per_zone : s.id]
 
   termination_policies  = ["AllocationStrategy"]
   protect_from_scale_in = true
@@ -66,8 +67,12 @@ resource "aws_autoscaling_group" "windows" {
     }
 
     instances_distribution {
+      // as of now, there is no support of usual if/else blocks
+      // if var.windows_spot_price == 0 use only on-demand instances, else will be used only on-spot
+      on_demand_percentage_above_base_capacity = var.windows_spot_price == "" ? 100 : 0
+      spot_max_price                           = var.windows_spot_price
+      spot_allocation_strategy                 = "capacity-optimized-prioritized"
       on_demand_allocation_strategy            = "prioritized"
-      on_demand_percentage_above_base_capacity = 100
     }
   }
 
@@ -80,7 +85,7 @@ resource "aws_autoscaling_group" "windows" {
   health_check_type         = "EC2"
   health_check_grace_period = 10
 
-  vpc_zone_identifier = [for s in aws_subnet.per_zones : s.id]
+  vpc_zone_identifier = [for s in aws_subnet.private_per_zone : s.id]
 
   termination_policies  = ["AllocationStrategy"]
   protect_from_scale_in = true
