@@ -68,7 +68,7 @@ resource "aws_instance" "e3s_server" {
 
   depends_on = [aws_ecs_cluster.e3s, aws_lb_listener.main]
 
-  key_name = var.key_name
+  key_name = var.e3s_key_name
 
   vpc_security_group_ids = [aws_security_group.e3s_server.id]
 

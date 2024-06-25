@@ -64,7 +64,6 @@ resource "aws_vpc_security_group_ingress_rule" "e3s_agent_inbound_trafic" {
   to_port           = 64536
 }
 
-# TODO: delete
 resource "aws_vpc_security_group_ingress_rule" "e3s_agent_ssh_ipv4" {
   count             = var.agent_ssh ? 1 : 0
   security_group_id = aws_security_group.e3s_agent.id
@@ -83,6 +82,35 @@ resource "aws_vpc_security_group_egress_rule" "e3s_agent_outbound_trafic_ipv4" {
 
 resource "aws_vpc_security_group_egress_rule" "e3s_agent_outbound_trafic_ipv6" {
   security_group_id = aws_security_group.e3s_agent.id
+  ip_protocol       = "-1"
+  cidr_ipv6         = "::/0"
+}
+
+resource "aws_security_group" "windows_rdp" {
+  count  = var.agent_ssh ? 1 : 0
+  vpc_id = aws_vpc.main.id
+  name   = local.e3s_rdp_sg_name
+}
+
+resource "aws_vpc_security_group_ingress_rule" "e3s_rdp_ipv4" {
+  count             = length(aws_security_group.windows_rdp)
+  security_group_id = aws_security_group.windows_rdp[count.index].id
+  ip_protocol       = "tcp"
+  cidr_ipv4         = "${aws_instance.e3s_server.private_ip}/32"
+  from_port         = 3389
+  to_port           = 3389
+}
+
+resource "aws_vpc_security_group_egress_rule" "e3s_rdp_outbound_trafic_ipv4" {
+  count             = length(aws_security_group.windows_rdp)
+  security_group_id = aws_security_group.windows_rdp[count.index].id
+  ip_protocol       = "-1"
+  cidr_ipv4         = "0.0.0.0/0"
+}
+
+resource "aws_vpc_security_group_egress_rule" "e3s_rdp_outbound_trafic_ipv6" {
+  count             = length(aws_security_group.windows_rdp)
+  security_group_id = aws_security_group.windows_rdp[count.index].id
   ip_protocol       = "-1"
   cidr_ipv6         = "::/0"
 }

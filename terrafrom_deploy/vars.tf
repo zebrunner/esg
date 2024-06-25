@@ -22,7 +22,7 @@ variable "bucket_name" {
   nullable = false
 }
 
-variable "key_name" {
+variable "e3s_key_name" {
   type     = string
   nullable = false
 }
@@ -89,6 +89,7 @@ locals {
 
   e3s_server_sg_name = join("-", [var.service_name, var.environment, "sg"])
   e3s_agent_sg_name  = join("-", [var.service_name, var.environment, "agent", "sg"])
+  e3s_rdp_sg_name    = join("-", [var.service_name, var.environment, "rdp", "sg"])
 
   e3s_cluster_name                 = join("-", [var.service_name, var.environment])
   e3s_linux_launch_template_name   = join("-", [var.service_name, var.environment, "linux", "launch", "template"])

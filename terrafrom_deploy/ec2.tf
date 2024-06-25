@@ -50,7 +50,7 @@ resource "aws_launch_template" "e3s_linux" {
 resource "aws_launch_template" "e3s_windows" {
   name                   = local.e3s_windows_launch_template_name
   image_id               = var.windows_ami
-  vpc_security_group_ids = [aws_security_group.e3s_agent.id]
+  vpc_security_group_ids = var.agent_ssh ? [aws_security_group.e3s_agent.id, aws_security_group.windows_rdp[0].id] : [aws_security_group.e3s_agent.id]
   key_name               = var.agent_ssh ? aws_key_pair.agent[0].key_name : ""
 
   ebs_optimized = true
