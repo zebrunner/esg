@@ -4,8 +4,7 @@ resource "aws_launch_template" "e3s_linux" {
   image_id               = var.linux_ami
   vpc_security_group_ids = [aws_security_group.e3s_agent.id]
   ebs_optimized          = true
-  # TODO: Parametrize by agent_ssh var. If agent_ssh == true, create new key and place it on e3s server instance
-  key_name = var.key_name
+  key_name               = var.agent_ssh ? aws_key_pair.agent[0].key_name : ""
 
   instance_initiated_shutdown_behavior = "terminate"
 
@@ -52,8 +51,7 @@ resource "aws_launch_template" "e3s_windows" {
   name                   = local.e3s_windows_launch_template_name
   image_id               = var.windows_ami
   vpc_security_group_ids = [aws_security_group.e3s_agent.id]
-  # TODO: Parametrize by agent_ssh var. If agent_ssh == true, create new key and place it on e3s server instance
-  key_name = var.key_name
+  key_name               = var.agent_ssh ? aws_key_pair.agent[0].key_name : ""
 
   ebs_optimized = true
   block_device_mappings {

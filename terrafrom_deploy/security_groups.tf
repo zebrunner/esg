@@ -66,9 +66,10 @@ resource "aws_vpc_security_group_ingress_rule" "e3s_agent_inbound_trafic" {
 
 # TODO: delete
 resource "aws_vpc_security_group_ingress_rule" "e3s_agent_ssh_ipv4" {
+  count             = var.agent_ssh ? 1 : 0
   security_group_id = aws_security_group.e3s_agent.id
   ip_protocol       = "tcp"
-  cidr_ipv4         = "0.0.0.0/0"
+  cidr_ipv4         = "${aws_instance.e3s_server.private_ip}/32"
   from_port         = 22
   to_port           = 22
   description       = "ssh"

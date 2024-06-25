@@ -22,6 +22,16 @@ variable "bucket_name" {
   nullable = false
 }
 
+variable "key_name" {
+  type     = string
+  nullable = false
+}
+
+variable "agent_ssh" {
+  type    = bool
+  default = false
+}
+
 variable "zbr_host" {
   type    = string
   default = ""
@@ -33,11 +43,6 @@ variable "zbr_pass" {
 }
 
 variable "zbr_user" {
-  type    = string
-  default = ""
-}
-
-variable "key_name" {
   type    = string
   default = ""
 }
@@ -70,6 +75,8 @@ variable "cert" {
 
 locals {
   e3s_server_instance_name = join("-", [var.service_name, var.environment])
+
+  e3s_agent_key_name = join("-", [var.service_name, var.environment, "agent"])
 
   e3s_policy_name       = join("-", [var.service_name, var.environment, "policy"])
   e3s_role_name         = join("-", [var.service_name, var.environment, "role"])

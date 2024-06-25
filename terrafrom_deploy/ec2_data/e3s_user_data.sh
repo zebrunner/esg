@@ -9,6 +9,11 @@ sudo mkdir -p "$e3s_path"
 
 sudo git clone https://github.com/zebrunner/e3s.git "$e3s_path"
 
+if [ -n "${agent_key}" ]; then
+  sudo echo "${agent_key}" > "$e3s_path"/${agent_key_name}.pem
+  sudo chmod 400 "$e3s_path"/${agent_key_name}.pem
+fi
+
 # Add Docker's official GPG key:
 sudo apt-get -y install ca-certificates curl
 sudo install -m 0755 -d /etc/apt/keyrings
@@ -26,7 +31,6 @@ sudo apt-get -y install docker-ce docker-ce-cli containerd.io docker-buildx-plug
 
 # Add user to docker group
 sudo usermod -a -G docker "$user"
-echo "added user to docker group"
 
 # TODO: implement vars replacement instead of *.env files flushing
 cd "$e3s_path"

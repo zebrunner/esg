@@ -9,11 +9,23 @@ resource "random_shuffle" "e3s_subnet_location" {
 
 data "aws_ec2_instance_type_offerings" "supported_server_zones" {
   filter {
-    name = "instance-type"
+    name   = "instance-type"
     values = ["m5n.large"]
   }
 
   location_type = "availability-zone"
+}
+
+resource "tls_private_key" "pri_key" {
+  count     = var.agent_ssh ? 1 : 0
+  algorithm = "RSA"
+  rsa_bits  = 4096
+}
+
+resource "aws_key_pair" "agent" {
+  count      = var.agent_ssh ? 1 : 0
+  key_name   = local.e3s_agent_key_name
+  public_key = tls_private_key.pri_key[0].public_key_openssh
 }
 
 data "aws_ami" "ubuntu_22_04" {
@@ -56,7 +68,6 @@ resource "aws_instance" "e3s_server" {
 
   depends_on = [aws_ecs_cluster.e3s, aws_lb_listener.main]
 
-  # TODO: add key generation for ssh connection
   key_name = var.key_name
 
   vpc_security_group_ids = [aws_security_group.e3s_server.id]
@@ -89,6 +100,8 @@ resource "aws_instance" "e3s_server" {
     windows_capacityprovider = aws_ecs_capacity_provider.e3s_windows.name
     target_group             = aws_lb_target_group.main.name
     bucket_name              = aws_s3_bucket.main.bucket
+    agent_key                = length(tls_private_key.pri_key) > 0 ? tls_private_key.pri_key[0].private_key_pem : ""
+    agent_key_name           = local.e3s_agent_key_name
   })
 
   user_data_replace_on_change = true
