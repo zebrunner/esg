@@ -25,7 +25,7 @@ provider "aws" {
   default_tags {
     tags = {
       Environment = var.environment
-      Name        = var.service_name
+      Name        = local.service_name
     }
   }
 }

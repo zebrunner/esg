@@ -43,6 +43,7 @@ resource "aws_autoscaling_group" "linux" {
   termination_policies  = ["AllocationStrategy"]
   protect_from_scale_in = true
 
+  force_delete            = true
   service_linked_role_arn = format("arn:aws:iam::%s:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling", data.aws_caller_identity.current.account_id)
 }
 
@@ -90,6 +91,7 @@ resource "aws_autoscaling_group" "windows" {
   termination_policies  = ["AllocationStrategy"]
   protect_from_scale_in = true
 
+  force_delete = true
   service_linked_role_arn = format("arn:aws:iam::%s:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling", data.aws_caller_identity.current.account_id)
 }
 
