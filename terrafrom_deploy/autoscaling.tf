@@ -91,8 +91,95 @@ resource "aws_autoscaling_group" "windows" {
   termination_policies  = ["AllocationStrategy"]
   protect_from_scale_in = true
 
-  force_delete = true
+  force_delete            = true
   service_linked_role_arn = format("arn:aws:iam::%s:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling", data.aws_caller_identity.current.account_id)
 }
 
-# TODO: implement forecast enabling
+resource "aws_autoscaling_policy" "linux_forecast" {
+  autoscaling_group_name = aws_autoscaling_group.linux.name
+  name                   = "predictive"
+  policy_type            = "PredictiveScaling"
+  predictive_scaling_configuration {
+    metric_specification {
+      target_value = 100
+      predefined_metric_pair_specification {
+        predefined_metric_type = "ASGCPUUtilization"
+      }
+    }
+    mode                         = "ForecastAndScale"
+    scheduling_buffer_time       = "120"
+    max_capacity_breach_behavior = "HonorMaxCapacity"
+  }
+}
+
+resource "aws_autoscaling_policy" "windows_forecast" {
+  autoscaling_group_name = aws_autoscaling_group.windows.name
+  name                   = "predictive"
+  policy_type            = "PredictiveScaling"
+  predictive_scaling_configuration {
+    metric_specification {
+      target_value = 100
+      predefined_metric_pair_specification {
+        predefined_metric_type = "ASGCPUUtilization"
+      }
+    }
+    mode                         = "ForecastAndScale"
+    scheduling_buffer_time       = "300"
+    max_capacity_breach_behavior = "HonorMaxCapacity"
+  }
+}
+
+
+resource "aws_autoscaling_policy" "linux_cp_reservation" {
+  autoscaling_group_name = aws_autoscaling_group.linux.name
+  name                   = format("%s-%s", "ECSManagedAutoScalingPolicy", random_uuid.linux_policy.result)
+  policy_type            = "TargetTrackingScaling"
+  target_tracking_configuration {
+    customized_metric_specification {
+      metric_name = "CapacityProviderReservation"
+      namespace   = "AWS/ECS/ManagedScaling"
+      metric_dimension {
+        name  = "CapacityProviderName"
+        value = aws_ecs_capacity_provider.e3s_linux.name
+      }
+      metric_dimension {
+        name  = "ClusterName"
+        value = aws_ecs_cluster.e3s.name
+      }
+      statistic = "Average"
+    }
+    target_value     = 100
+    disable_scale_in = false
+  }
+  enabled = false
+}
+
+resource "aws_autoscaling_policy" "windows_cp_reservation" {
+  autoscaling_group_name = aws_autoscaling_group.windows.name
+  name                   = format("%s-%s", "ECSManagedAutoScalingPolicy", random_uuid.windows_policy.result)
+  policy_type            = "TargetTrackingScaling"
+  target_tracking_configuration {
+    customized_metric_specification {
+      metric_name = "CapacityProviderReservation"
+      namespace   = "AWS/ECS/ManagedScaling"
+      metric_dimension {
+        name  = "CapacityProviderName"
+        value = aws_ecs_capacity_provider.e3s_windows.name
+      }
+      metric_dimension {
+        name  = "ClusterName"
+        value = aws_ecs_cluster.e3s.name
+      }
+      statistic = "Average"
+    }
+    target_value     = 100
+    disable_scale_in = false
+  }
+  enabled = false
+}
+
+resource "random_uuid" "linux_policy" {
+}
+
+resource "random_uuid" "windows_policy" {
+}
