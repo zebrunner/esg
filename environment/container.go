@@ -66,6 +66,8 @@ type Container struct {
 	EntryPoint       []string
 	WorkingDirectory string
 
+	DockerLabels map[string]string
+
 	HealthCheck *ecs.HealthCheck
 	DependsOn   []*ecs.ContainerDependency
 }

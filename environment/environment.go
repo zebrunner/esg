@@ -167,6 +167,13 @@ func (env *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefiniti
 		}
 		definition.PortMappings = portMappings
 
+		if c.DockerLabels != nil {
+			labels := make(map[string]*string, 0)
+			for k, v := range c.DockerLabels {
+				labels[k] = &v
+			}
+			definition.SetDockerLabels(labels)
+		}
 		definitions = append(definitions, &definition)
 	}
 

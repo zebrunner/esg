@@ -9,6 +9,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps/mapper"
+	"github.com/zebrunner/esg/cachemaps/prometheus"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment/network"
@@ -85,6 +86,13 @@ func startSession(ctx context.Context, net *network.NetworkConfiguration, driver
 		}
 	}()
 
+	go func() {
+		err := prometheus.SetExporter(net)
+		if err != nil {
+			log.WithError(err).Error("Failed to add exporter to the prometheus.")
+		}
+	}()
+
 	utils.SendToChanIfNotBlocked(sessReq.ResponseCh, reply)
 }
 
@@ -112,6 +120,13 @@ func CloseSession(mapperEntity *mapper.Mapper) {
 		err := stopRecording(&mapperEntity.Network)
 		if err != nil {
 			log.WithError(err).Error("Failed to start recording")
+		}
+	}()
+
+	go func() {
+		err := prometheus.DeleteExporter(&mapperEntity.Network)
+		if err != nil {
+			log.WithError(err).Error("Failed to delete exporter from the prometheus.")
 		}
 	}()
 

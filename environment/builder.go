@@ -23,6 +23,8 @@ const (
 	mavenImage           = config.ZebrunnerEcrRegistryUri + "/" + "m2-repo-carina:1.5"
 	winUploaderImage     = config.ZebrunnerEcrRegistryUri + "/" + "uploader:1.1-win"
 	winRecorderImage     = config.ZebrunnerEcrRegistryUri + "/" + "recorder:2.0-win"
+	// https://console.cloud.google.com/gcr/images/cadvisor/GLOBAL/cadvisor
+	cAdvisorImage = "gcr.io/cadvisor" + "/" + "cadvisor:v0.49.1"
 )
 
 const (
@@ -36,6 +38,8 @@ const (
 	recorderdPort    int64 = 9080
 
 	cypressDebugPort int64 = 9222
+
+	cadvisorPort int64 = 9092
 
 	cloneContainerMinCpu    int64 = 128
 	cloneContainerMinMemory int64 = 512 //increased memory to fix OOM for huge repositories (3K+ branches)

@@ -39,6 +39,8 @@ services:
     logging:
      options:
       max-size: "512m"
+    volumes:
+      - "./properties/prometheus-targets.yml:/etc/prometheus/prometheus-targets.yml"
     networks:
       - service-network
     restart: always
@@ -58,12 +60,52 @@ services:
     logging:
      options:
       max-size: "512m"
+    volumes:
+      - "./properties/prometheus-targets.yml:/etc/prometheus/prometheus-targets.yml"
     networks:
       - service-network
     restart: always
     #    volumes:
     #      - "${HOME}/.aws:/root/.aws"
+  prometheus:
+    container_name: prometheus
+    image: prom/prometheus:v2.53.0
+    ports:
+      - "9090:9090"
+    networks:
+      - service-network
+    volumes:
+      - "./properties/prometheus.yml:/etc/prometheus/prometheus.yml"
+      - "./properties/prometheus-targets.yml:/etc/prometheus/prometheus-targets.yml"
+      - "prometheus-data:/prometheus prom/prometheus"
+  # prometheus_node_exporter:
+  #   privileged: true
+  #   container_name: prometheus_node_exporter
+  #   image: prom/node-exporter:v1.8.1
+  #   restart: always
+  #   ports:
+  #     - "9100:9100"
+  #   networks:
+  #     - service-network
+  #   volumes:
+  #     - /proc:/host/proc:ro
+  #     - /sys:/host/sys:ro
+  #     - /:/rootfs:ro
+  #   command:
+  #     - "--path.procfs=/host/proc"
+  #     - "--path.sysfs=/host/sys"
+  #     - "--collector.filesystem.ignored-mount-points"
+  #     - "^/(rootfs/)?(dev|etc|host|proc|run|sys|volume1)($$|/)"
+  # grafana:
+  #   container_name: grafana
+  #   image: grafana/grafana:10.4.4-ubuntu
+  #   ports: 
+  #     - "3000:3000"
+  #   networks:
+  #     - service-network
 networks:
   service-network:
     external: true
     name: e3s-network
+volumes:
+  prometheus-data:

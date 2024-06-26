@@ -28,6 +28,18 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 	shmDir := "/dev/shm"
 	shmVolume := "shm"
 
+	rootDir := "/rootfs"
+	rootVolume := "root"
+
+	varRunDir := "/var/run"
+	varRunVolume := "var_run"
+
+	sysDir := "/sys"
+	sysVolume := "sys"
+
+	varLibDockerDir := "/var/lib/docker"
+	varLibDockerVolume := "var_lib_docker"
+
 	tz, err := caps.GetTimeZone()
 	// Video recorder & artifacts uploader logic
 	if err != nil {
@@ -143,7 +155,7 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 		Name:  "uploader",
 		Image: uploaderImage,
 		Res: Resources{
-			Cpu:    64, // with 32 uploading is aborted
+			Cpu:    64,  // with 32 uploading is aborted
 			Memory: 256, // 64 works for single thread. for backgroud copying it is not enough
 		},
 		Privileged: false,
@@ -159,7 +171,28 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 		HealthCheck: nil,
 	}
 
-	containers := []*Container{&browserContainer, &recorderContainer, &uploaderContainer}
+	cadvisorContainer := Container{
+		Name:  "cadvisor",
+		Image: cAdvisorImage,
+		Res: Resources{
+			Cpu:    64,
+			Memory: 256,
+		},
+		Privileged: false,
+		Essential:  true,
+		Command:    []string{fmt.Sprintf("-port=%d", cadvisorPort)},
+		Ports: map[string]portMapping{
+			"cadvisor": {cadvisorPort, 0},
+		},
+		// DockerLabels: map[string]string{
+		// 	//todo think another another approach
+		// 	"PROMETHEUS_EXPORTER_PORT":     strconv.Itoa(int(cadvisorPort)),
+		// 	"PROMETHEUS_EXPORTER_JOB_NAME": "prometheus-ecs-discovery",
+		// },
+		Mounts: []string{rootVolume, varRunVolume, sysVolume, varLibDockerVolume},
+	}
+
+	containers := []*Container{&browserContainer, &recorderContainer, &uploaderContainer, &cadvisorContainer}
 
 	var mitmContainer Container
 	if caps.Mitm {
@@ -195,8 +228,12 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 		Containers:           containers,
 		Capabilities:         caps,
 		Volumes: map[string]volume{
-			logVolume: {ContainerPath: logDir, Driver: "local", Scope: "task", ReadOnly: false},
-			shmVolume: {ContainerPath: shmDir, HostPath: shmDir, ReadOnly: false}, // no way to reuse local task volume due to the reset of permissions on browser container start
+			logVolume:          {ContainerPath: logDir, Driver: "local", Scope: "task", ReadOnly: false},
+			shmVolume:          {ContainerPath: shmDir, HostPath: shmDir, ReadOnly: false}, // no way to reuse local task volume due to the reset of permissions on browser container start
+			rootVolume:         {ContainerPath: rootDir, ReadOnly: true},
+			varRunVolume:       {ContainerPath: varRunDir, ReadOnly: false},
+			sysVolume:          {ContainerPath: sysDir, ReadOnly: true},
+			varLibDockerVolume: {ContainerPath: varLibDockerDir, ReadOnly: true},
 		},
 		Network: &network.NetworkConfiguration{
 			IP: "",
@@ -209,6 +246,7 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 				"healthcheck":   {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
 				"recorderStart": {ContainerPort: recorderdPort, HostPort: 0, Path: "/start"},
 				"recorderStop":  {ContainerPort: recorderdPort, HostPort: 0, Path: "/stop"},
+				"cadvisor":      {ContainerPort: cadvisorPort, HostPort: 0, Path: "/"},
 			},
 		},
 		Type:             envtype.LINUX,
