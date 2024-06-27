@@ -3,7 +3,7 @@ data "aws_caller_identity" "current" {}
 resource "aws_iam_policy" "e3s" {
   name = local.e3s_policy_name
   policy = templatefile("./iam_data/e3s-policy.json", {
-    bucket_name = var.bucket_name
+    bucket_name = var.bucket.name
     env         = var.environment
     account     = data.aws_caller_identity.current.account_id
     region      = var.region
@@ -23,7 +23,7 @@ resource "aws_iam_policy" "e3s_agent" {
 resource "aws_iam_policy" "e3s_task" {
   name = local.e3s_task_policy_name
   policy = templatefile("./iam_data/e3s-task-policy.json", {
-    bucket_name = var.bucket_name
+    bucket_name = var.bucket.name
   })
 }
 

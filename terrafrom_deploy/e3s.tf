@@ -97,7 +97,8 @@ resource "aws_instance" "e3s_server" {
     linux_capacityprovider   = local.e3s_linux_capacityprovider
     windows_capacityprovider = local.e3s_windows_capacityprovider
     target_group             = local.e3s_tg_name
-    bucket_name              = var.bucket_name
+    bucket_name              = var.bucket.name
+    bucket_region            = length(aws_s3_bucket.main) > 0 ? var.region : var.bucket.region
     agent_key                = length(tls_private_key.pri_key) > 0 ? tls_private_key.pri_key[0].private_key_pem : ""
     agent_key_name           = local.e3s_agent_key_name
   })

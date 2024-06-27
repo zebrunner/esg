@@ -1,7 +1,34 @@
+data "aws_ami" "zbr_linux" {
+  most_recent = true
+  owners      = ["aws-marketplace"]
+  filter {
+    name   = "name"
+    values = ["Zebrunner ESG Agent *"]
+  }
+
+   filter {
+    name   = "block-device-mapping.device-name"
+    values = ["/dev/xvda"]
+  }
+}
+
+data "aws_ami" "zbr_windows" {
+  most_recent = true
+  owners      = ["aws-marketplace"]
+  filter {
+    name   = "name"
+    values = ["Zebrunner ESG Agent *"]
+  }
+
+  filter {
+    name   = "platform"
+    values = ["windows"]
+  }
+}
+
 resource "aws_launch_template" "e3s_linux" {
   name = local.e3s_linux_launch_template_name
-  # TODO: Parametrize ami id recieve by region
-  image_id               = var.linux_ami
+  image_id               = data.aws_ami.zbr_linux.id
   vpc_security_group_ids = [aws_security_group.e3s_agent.id]
   ebs_optimized          = true
   key_name               = var.agent_ssh ? aws_key_pair.agent[0].key_name : ""
@@ -9,7 +36,7 @@ resource "aws_launch_template" "e3s_linux" {
   instance_initiated_shutdown_behavior = "terminate"
 
   block_device_mappings {
-    device_name = "/dev/xvdcz"
+    device_name = "/dev/xvda"
     ebs {
       volume_size           = 70
       volume_type           = "gp3"
@@ -49,7 +76,7 @@ resource "aws_launch_template" "e3s_linux" {
 
 resource "aws_launch_template" "e3s_windows" {
   name                   = local.e3s_windows_launch_template_name
-  image_id               = var.windows_ami
+  image_id               = data.aws_ami.zbr_windows.id
   vpc_security_group_ids = var.agent_ssh ? [aws_security_group.e3s_agent.id, aws_security_group.windows_rdp[0].id] : [aws_security_group.e3s_agent.id]
   key_name               = var.agent_ssh ? aws_key_pair.agent[0].key_name : ""
 

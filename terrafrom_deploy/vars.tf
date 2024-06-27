@@ -10,13 +10,12 @@ variable "region" {
   nullable = false
 }
 
-variable "bucket_exists" {
-  type     = bool
-  nullable = false
-}
-
-variable "bucket_name" {
-  type     = string
+variable "bucket" {
+  type = object({
+    exists = bool
+    name   = string
+    region = string
+  })
   nullable = false
 }
 
@@ -68,17 +67,6 @@ variable "linux_spot_price" {
 }
 
 variable "windows_spot_price" {
-  type    = string
-  default = ""
-}
-
-# TODO: to delete
-variable "linux_ami" {
-  type    = string
-  default = ""
-}
-
-variable "windows_ami" {
   type    = string
   default = ""
 }

@@ -56,7 +56,7 @@ replace "AWS_WIN_CAPACITY_PROVIDER" ${windows_capacityprovider} "./properties/ro
 replace "AWS_TARGET_GROUP" ${target_group} "./properties/router.env"
 echo ""  >> "./properties/router.env"
 replace "S3_BUCKET" ${bucket_name} "./properties/router.env"
-replace "S3_REGION" ${region} "./properties/router.env"
+replace "S3_REGION" ${bucket_region} "./properties/router.env"
 
 # scaler.env
 
