@@ -7,15 +7,12 @@ resource "aws_autoscaling_group" "linux" {
         version            = aws_launch_template.e3s_linux.latest_version
       }
 
-      // TODO: parametrize as map and implement for each
-      override {
-        weighted_capacity = 1
-        instance_type     = "c5a.2xlarge"
-      }
-
-      override {
-        weighted_capacity = 2
-        instance_type     = "c5a.4xlarge"
+      dynamic "override" {
+        for_each = var.instance_types
+        content {
+          weighted_capacity = override.value.weight
+          instance_type     = override.value.instance_type
+        }
       }
     }
 
@@ -56,14 +53,12 @@ resource "aws_autoscaling_group" "windows" {
         version            = aws_launch_template.e3s_windows.latest_version
       }
 
-      override {
-        weighted_capacity = 1
-        instance_type     = "c5a.2xlarge"
-      }
-
-      override {
-        weighted_capacity = 2
-        instance_type     = "c5a.4xlarge"
+      dynamic "override" {
+        for_each = var.instance_types
+        content {
+          weighted_capacity = override.value.weight
+          instance_type     = override.value.instance_type
+        }
       }
     }
 

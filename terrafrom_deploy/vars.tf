@@ -1,3 +1,4 @@
+# TODO: add custom condition for vars
 variable "environment" {
   type     = string
   default  = "prod"
@@ -27,6 +28,23 @@ variable "e3s_key_name" {
 variable "agent_ssh" {
   type    = bool
   default = false
+}
+
+variable "instance_types" {
+  type = list(object({
+    weight        = number
+    instance_type = string
+  }))
+  default = [
+    {
+      weight        = 1
+      instance_type = "c5a.4xlarge"
+    },
+    {
+      weight        = 2
+      instance_type = "c5a.8xlarge"
+    }
+  ]
 }
 
 variable "zbr_host" {
