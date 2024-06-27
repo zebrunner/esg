@@ -1,1 +1,0 @@
-# TODO: specify important outposts

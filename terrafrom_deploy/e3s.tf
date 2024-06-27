@@ -3,7 +3,7 @@ locals {
 }
 
 resource "random_shuffle" "e3s_subnet_location" {
-  input        = [for location in data.aws_ec2_instance_type_offerings.supported_server_zones.locations : location]
+  input        = sort([for location in data.aws_ec2_instance_type_offerings.supported_server_zones.locations : location])
   result_count = 1
 }
 
@@ -66,8 +66,6 @@ resource "aws_instance" "e3s_server" {
 
   subnet_id = local.zone_subnet_map[random_shuffle.e3s_subnet_location.result[0]]
 
-  depends_on = [aws_ecs_cluster.e3s, aws_lb_listener.main]
-
   key_name = var.e3s_key_name
 
   vpc_security_group_ids = [aws_security_group.e3s_server.id]
@@ -90,19 +88,21 @@ resource "aws_instance" "e3s_server" {
   }
   user_data = templatefile("./ec2_data/e3s_user_data.sh", {
     region                   = var.region
-    cluster_name             = aws_ecs_cluster.e3s.name
-    task_role                = aws_iam_role.e3s_task.name
+    cluster_name             = local.e3s_cluster_name
+    task_role                = local.e3s_task_role_name
     zbr_host                 = var.zbr_host
     zbr_user                 = var.zbr_user
     zbr_pass                 = var.zbr_pass
     env                      = var.environment
-    linux_capacityprovider   = aws_ecs_capacity_provider.e3s_linux.name
-    windows_capacityprovider = aws_ecs_capacity_provider.e3s_windows.name
-    target_group             = aws_lb_target_group.main.name
+    linux_capacityprovider   = local.e3s_linux_capacityprovider
+    windows_capacityprovider = local.e3s_windows_capacityprovider
+    target_group             = local.e3s_tg_name
     bucket_name              = var.bucket_name
     agent_key                = length(tls_private_key.pri_key) > 0 ? tls_private_key.pri_key[0].private_key_pem : ""
     agent_key_name           = local.e3s_agent_key_name
   })
 
   user_data_replace_on_change = true
+
+  depends_on = [aws_ecs_cluster.e3s, aws_lb_listener.main]
 }
