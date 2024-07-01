@@ -10,15 +10,6 @@ variable "region" {
   nullable = false
 }
 
-variable "bucket" {
-  type = object({
-    exists = bool
-    name   = string
-    region = string
-  })
-  nullable = false
-}
-
 variable "e3s_key_name" {
   type     = string
   nullable = false
@@ -27,6 +18,15 @@ variable "e3s_key_name" {
 variable "agent_ssh" {
   type    = bool
   default = false
+}
+
+variable "bucket" {
+  type = object({
+    exists = bool
+    name   = string
+    region = string
+  })
+  nullable = false
 }
 
 variable "instance_types" {
@@ -46,34 +46,44 @@ variable "instance_types" {
   ]
 }
 
-variable "zbr_host" {
-  type    = string
-  default = ""
+variable "zebrunner" {
+  type = object({
+    host = string
+    user = string
+    pass = string
+  })
+  default = {
+    host = ""
+    user = ""
+    pass = ""
+  }
 }
 
-variable "zbr_pass" {
-  type    = string
-  default = ""
-}
-
-variable "zbr_user" {
-  type    = string
-  default = ""
-}
-
-variable "linux_spot_price" {
-  type    = string
-  default = ""
-}
-
-variable "windows_spot_price" {
-  type    = string
-  default = ""
+variable "spot_price" {
+  type = object({
+    linux   = string
+    windows = string
+  })
+  default = {
+    linux   = ""
+    windows = ""
+  }
 }
 
 variable "cert" {
   type    = string
   default = ""
+}
+
+variable "db" {
+  type = object({
+    username = string
+    pass     = string
+  })
+  default = {
+    username = "postgres"
+    pass     = "postgres"
+  }
 }
 
 # consts
@@ -94,6 +104,8 @@ locals {
   e3s_server_sg_name = join("-", [local.service_name, var.environment, "sg"])
   e3s_agent_sg_name  = join("-", [local.service_name, var.environment, "agent", "sg"])
   e3s_rdp_sg_name    = join("-", [local.service_name, var.environment, "rdp", "sg"])
+  e3s_rds_sg_name    = join("-", [local.service_name, var.environment, "rds", "sg"])
+  e3s_cache_sg_name  = join("-", [local.service_name, var.environment, "cache", "sg"])
 
   e3s_cluster_name                 = join("-", [local.service_name, var.environment])
   e3s_linux_launch_template_name   = join("-", [local.service_name, var.environment, "linux", "launch", "template"])
@@ -105,4 +117,8 @@ locals {
   e3s_tg_name                      = join("-", [local.service_name, var.environment, "tg"])
   e3s_alb_name                     = join("-", [local.service_name, var.environment, "alb"])
   e3s_listener_name                = join("-", [local.service_name, var.environment, "listener"])
+
+  e3s_aurora_subnet_name    = join("-", [local.service_name, var.environment, "aurora", "subnet"])
+  e3s_aurora_rds_name       = join("-", [local.service_name, var.environment, "aurora", "rds"])
+  e3s_serverless_cache_name = join("-", [local.service_name, var.environment, "redis"])
 }

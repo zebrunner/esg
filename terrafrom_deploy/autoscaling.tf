@@ -19,8 +19,8 @@ resource "aws_autoscaling_group" "linux" {
     instances_distribution {
       // as of now, there is no support of usual if/else blocks
       // if var.linux_linux_spot_price == 0 use only on-demand instances, else will be used only on-spot
-      on_demand_percentage_above_base_capacity = var.linux_spot_price == "" ? 100 : 0
-      spot_max_price                           = var.linux_spot_price
+      on_demand_percentage_above_base_capacity = var.spot_price.linux == "" ? 100 : 0
+      spot_max_price                           = var.spot_price.linux
       spot_allocation_strategy                 = "capacity-optimized-prioritized"
       on_demand_allocation_strategy            = "prioritized"
     }
@@ -65,8 +65,8 @@ resource "aws_autoscaling_group" "windows" {
     instances_distribution {
       // as of now, there is no support of usual if/else blocks
       // if var.windows_spot_price == 0 use only on-demand instances, else will be used only on-spot
-      on_demand_percentage_above_base_capacity = var.windows_spot_price == "" ? 100 : 0
-      spot_max_price                           = var.windows_spot_price
+      on_demand_percentage_above_base_capacity = var.spot_price.windows == "" ? 100 : 0
+      spot_max_price                           = var.spot_price.windows
       spot_allocation_strategy                 = "capacity-optimized-prioritized"
       on_demand_allocation_strategy            = "prioritized"
     }

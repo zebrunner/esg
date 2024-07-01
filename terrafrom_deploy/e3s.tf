@@ -90,9 +90,9 @@ resource "aws_instance" "e3s_server" {
     region                   = var.region
     cluster_name             = local.e3s_cluster_name
     task_role                = local.e3s_task_role_name
-    zbr_host                 = var.zbr_host
-    zbr_user                 = var.zbr_user
-    zbr_pass                 = var.zbr_pass
+    zbr_host                 = var.zebrunner.host
+    zbr_user                 = var.zebrunner.user
+    zbr_pass                 = var.zebrunner.pass
     env                      = var.environment
     linux_capacityprovider   = local.e3s_linux_capacityprovider
     windows_capacityprovider = local.e3s_windows_capacityprovider
@@ -101,9 +101,14 @@ resource "aws_instance" "e3s_server" {
     bucket_region            = length(aws_s3_bucket.main) > 0 ? var.region : var.bucket.region
     agent_key                = length(tls_private_key.pri_key) > 0 ? tls_private_key.pri_key[0].private_key_pem : ""
     agent_key_name           = local.e3s_agent_key_name
+    db_name                  = var.db.username
+    db_pass                  = var.db.pass
+    db_dns                   = aws_rds_cluster.aurora.endpoint
+    cache_address            = aws_elasticache_serverless_cache.redis.endpoint[0].address
+    cache_port               = aws_elasticache_serverless_cache.redis.endpoint[0].port
   })
 
   user_data_replace_on_change = true
 
-  depends_on = [aws_ecs_cluster.e3s, aws_lb_listener.main]
+  depends_on = [aws_ecs_cluster.e3s, aws_lb_listener.main, aws_rds_cluster_instance.aurora_instance, aws_elasticache_serverless_cache.redis]
 }

@@ -114,3 +114,53 @@ resource "aws_vpc_security_group_egress_rule" "e3s_rdp_outbound_trafic_ipv6" {
   ip_protocol       = "-1"
   cidr_ipv6         = "::/0"
 }
+
+resource "aws_security_group" "rds" {
+  vpc_id = aws_vpc.main.id
+  name   = local.e3s_rds_sg_name
+}
+
+resource "aws_vpc_security_group_egress_rule" "e3s_rds_outbound_trafic_ipv4" {
+  security_group_id = aws_security_group.rds.id
+  ip_protocol       = "-1"
+  cidr_ipv4         = "0.0.0.0/0"
+}
+
+resource "aws_vpc_security_group_egress_rule" "e3s_rds_outbound_trafic_ipv6" {
+  security_group_id = aws_security_group.rds.id
+  ip_protocol       = "-1"
+  cidr_ipv6         = "::/0"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "e3s_rds_ipv4" {
+  security_group_id = aws_security_group.rds.id
+  ip_protocol       = "tcp"
+  cidr_ipv4         = "${aws_instance.e3s_server.private_ip}/32"
+  from_port         = 5432
+  to_port           = 5432
+}
+
+resource "aws_security_group" "redis" {
+  vpc_id = aws_vpc.main.id
+  name   = local.e3s_cache_sg_name
+}
+
+resource "aws_vpc_security_group_egress_rule" "e3s_redis_outbound_trafic_ipv4" {
+  security_group_id = aws_security_group.redis.id
+  ip_protocol       = "-1"
+  cidr_ipv4         = "0.0.0.0/0"
+}
+
+resource "aws_vpc_security_group_egress_rule" "e3s_redis_outbound_trafic_ipv6" {
+  security_group_id = aws_security_group.redis.id
+  ip_protocol       = "-1"
+  cidr_ipv6         = "::/0"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "e3s_redis_ipv4" {
+  security_group_id = aws_security_group.redis.id
+  ip_protocol       = "tcp"
+  cidr_ipv4         = "${aws_instance.e3s_server.private_ip}/32"
+  from_port         = 6379
+  to_port           = 6380
+}

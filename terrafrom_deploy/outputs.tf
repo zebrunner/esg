@@ -17,3 +17,13 @@ output "vpc_id" {
   description = "new vpc"
   value       = aws_vpc.main.id
 }
+
+output "db_dns" {
+  description = "aurora dns"
+  value       = aws_rds_cluster.aurora.endpoint
+}
+
+output "cache_address" {
+  description = "redis read/write host:port"
+  value       = format("%s:%s", aws_elasticache_serverless_cache.redis.endpoint[0].address, aws_elasticache_serverless_cache.redis.endpoint[0].port)
+}

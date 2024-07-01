@@ -3,16 +3,16 @@
 user="ubuntu"
 e3s_path="/home/$user/tools/e3s"
 
+replace() {
+  param=$1
+  value=$2
+  file=$3
+
+  grep -v "$param" "$file" > temp && echo "$param"="$value" >> temp && mv temp "$file"
+}
+
 sudo apt-get update && sudo apt-get upgrade
 
-sudo mkdir -p "$e3s_path"
-
-sudo git clone https://github.com/zebrunner/e3s.git "$e3s_path"
-
-if [ -n "${agent_key}" ]; then
-  echo "${agent_key}" > "$e3s_path"/${agent_key_name}.pem
-  chmod 400 "$e3s_path"/${agent_key_name}.pem
-fi
 
 # Add Docker's official GPG key:
 sudo apt-get -y install ca-certificates curl
@@ -26,18 +26,28 @@ echo \
   sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 sudo apt-get update
 sudo apt-get -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
 # Add user to docker group
-sudo usermod -a -G docker "$user"
+sudo usermod -aG docker "$user"
+# Grant admin rights
+sudo usermod -aG sudo "$user"
+# Swith from root user
+if [ $UID -eq 0 ]; then
+  exec su "$user" "$0" -- "$@"
+fi
 
-replace() {
-  param=$1
-  value=$2
-  file=$3
+mkdir -p "$e3s_path"
+git clone https://github.com/zebrunner/e3s.git "$e3s_path"
 
-  grep -v "$param" "$file" > temp && echo "$param"="$value" >> temp && mv temp "$file"
-}
+if [ -n "${agent_key}" ]; then
+  echo "${agent_key}" > "$e3s_path"/${agent_key_name}.pem
+  chmod 400 "$e3s_path"/${agent_key_name}.pem
+fi
 
 cd "$e3s_path"
+# TODO: Delete or parametrize like `if ['use_remote_data']; then`...
+git checkout "terraform"
+
 # config.env
 echo ""  >> "./properties/config.env"
 replace "AWS_REGION" ${region} "./properties/config.env"
@@ -61,8 +71,17 @@ replace "S3_REGION" ${bucket_region} "./properties/router.env"
 # scaler.env
 
 # data.env
+echo ""  >> "./properties/data.env"
+replace "POSTGRES_PASSWORD" ${db_pass} "./properties/data.env"
+replace "DATABASE" "postgres://${db_name}:${db_pass}@${db_dns}" "./properties/data.env"
+replace "AWS_ELASTIC_CACHE" "${cache_address}:${cache_port}" "./properties/data.env"
+
 
 # task-definitions.env
+# TODO: delete IMAGE_REPOSITORIES replace
+echo ""  >> "./properties/task-definitions.env"
+replace "IMAGE_REPOSITORIES" "Zebrunner:chrome,windows-chrome" "./properties/task-definitions.env"
+
 
 # start server
 ./zebrunner.sh start
