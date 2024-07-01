@@ -1,5 +1,25 @@
 locals {
-  subnets = sort([for subnet in aws_subnet.private_per_zone : subnet.id])
+  az_names = sort([for az_name in data.aws_availability_zones.available.names : az_name])
+}
+
+# restrict subnets to first 2 in lexicographical order regions (example: us-east-1a, us-east-1b) 
+data "aws_subnets" "redis" {
+  filter {
+    name   = "vpc-id"
+    values = [aws_vpc.main.id]
+  }
+
+  filter {
+    name   = "availability-zone"
+    values = [local.az_names[0], local.az_names[1]]
+  }
+
+  filter {
+    name   = "subnet-id"
+    values = [for subnet in aws_subnet.private_per_zone : subnet.id]
+  }
+
+  depends_on = [aws_subnet.private_per_zone]
 }
 
 resource "aws_elasticache_serverless_cache" "redis" {
@@ -17,7 +37,8 @@ resource "aws_elasticache_serverless_cache" "redis" {
     }
   }
 
-  subnet_ids         = [local.subnets[0],local.subnets[1]]
+  # subnet_ids         = [for subnet in data.aws_subnets.redis : subnet.id]
+  subnet_ids         = data.aws_subnets.redis.ids
   security_group_ids = [aws_security_group.redis.id]
 }
 
