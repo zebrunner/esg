@@ -13,7 +13,6 @@ replace() {
 
 sudo apt-get update && sudo apt-get upgrade
 
-
 # Add Docker's official GPG key:
 sudo apt-get -y install ca-certificates curl
 sudo install -m 0755 -d /etc/apt/keyrings
@@ -31,11 +30,10 @@ sudo apt-get -y install docker-ce docker-ce-cli containerd.io docker-buildx-plug
 sudo usermod -aG docker "$user"
 # Grant admin rights
 sudo usermod -aG sudo "$user"
-# Swith from root user
-if [ $UID -eq 0 ]; then
-  exec su "$user" "$0" -- "$@"
-fi
 
+git config --system --add safe.directory '*'
+
+sudo -i -u "$user" bash << EOF
 mkdir -p "$e3s_path"
 git clone https://github.com/zebrunner/e3s.git "$e3s_path"
 
@@ -43,6 +41,7 @@ if [ -n "${agent_key}" ]; then
   echo "${agent_key}" > "$e3s_path"/${agent_key_name}.pem
   chmod 400 "$e3s_path"/${agent_key_name}.pem
 fi
+EOF
 
 cd "$e3s_path"
 # TODO: Delete or parametrize like `if ['use_remote_data']; then`...
@@ -76,12 +75,10 @@ replace "POSTGRES_PASSWORD" ${db_pass} "./properties/data.env"
 replace "DATABASE" "postgres://${db_name}:${db_pass}@${db_dns}" "./properties/data.env"
 replace "AWS_ELASTIC_CACHE" "${cache_address}:${cache_port}" "./properties/data.env"
 
-
 # task-definitions.env
 # TODO: delete IMAGE_REPOSITORIES replace
 echo ""  >> "./properties/task-definitions.env"
 replace "IMAGE_REPOSITORIES" "Zebrunner:chrome,windows-chrome" "./properties/task-definitions.env"
-
 
 # start server
 ./zebrunner.sh start
