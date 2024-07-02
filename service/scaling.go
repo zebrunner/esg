@@ -473,8 +473,13 @@ func (s *scaler) ScaleDown(session *awsSession.Session, asg *autoscaling.Group, 
 
 		if *instance.PendingTasksCount == 0 && *instance.RunningTasksCount == 0 {
 			instanceUptime := time.Since(*instance.RegisteredAt)
-			if instanceUptime > config.Conf.InstanceCooldownTimeout {
-				weight, _ := strconv.ParseInt(*instancesDetailsMap[*instance.Ec2InstanceId].WeightedCapacity, 10, 64)
+			if instanceUptime > config.Conf.InstanceCooldownTimeout && instance.Ec2InstanceId != nil {
+				instanceDetails, ok := instancesDetailsMap[*instance.Ec2InstanceId]
+				if !ok || instanceDetails.WeightedCapacity == nil {
+					continue
+				}
+
+				weight, _ := strconv.ParseInt(*instanceDetails.WeightedCapacity, 10, 64)
 				capacityToDelete += int(weight)
 				allowedInstancesToDelete[instance] = weight
 				allowedCapacityForDeleting -= int(weight)
