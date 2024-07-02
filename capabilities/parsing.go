@@ -90,6 +90,13 @@ func init() {
 			ValueProcessor: addArg("remote-allow-origins", "--remote-allow-origins=*"),
 		},
 		"browserVersion": {
+			ValueProcessor: func(value interface{}) interface{} {
+				// debug browser images tags should be like 125.0-debug
+				if v, ok := value.(string); ok {
+					return strings.TrimSuffix(v, "-debug")
+				}
+				return value
+			},
 			DeleteCapabilityProcessor: func(value interface{}) bool {
 				if version, ok := value.(string); ok {
 					version = strings.ToLower(version)
