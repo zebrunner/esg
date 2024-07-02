@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps"
 	"github.com/zebrunner/esg/config"
@@ -23,12 +22,12 @@ type ResourceItem struct {
 // Inits worker and starts it in new thread (resource worker).
 // Resource Worker -> Reserves new instances if aws provisioning task pool is exceeded. RemoveEntity should be always performed after AddEntity.
 func InitResourceWorker() {
-	resourceWorker = cachemaps.CreateRedisWorker[ResourceItem](config.REDIS_RESOURCES_CLIENT.GetConnection(), writeRecords)
+	resourceWorker = cachemaps.CreateRedisWorker(writeRecords)
 	go resourceWorker.Start(4 * time.Second)
 }
 
-func writeRecords(rdsConn *redis.Conn, items map[string]ResourceItem) error {
-	rdbPipe := rdsConn.Pipeline()
+func writeRecords(items map[string]ResourceItem) error {
+	rdbPipe := config.RedisCluster.Pipeline()
 	for key, item := range items {
 		if item.resourceToAdd != nil {
 			data, err := json.Marshal(item.resourceToAdd)
@@ -36,9 +35,11 @@ func writeRecords(rdsConn *redis.Conn, items map[string]ResourceItem) error {
 				log.WithError(err).WithField(config.RouterUUID, item.resourceToAdd.RouterUUID).Warn("Failed to marshal resource")
 				continue
 			}
-			rdbPipe.Set(context.Background(), key, data, 10*time.Minute)
+			rdbPipe.Set(context.Background(), key, data, -1)
+			rdbPipe.SAdd(context.Background(), cachemaps.UNALLOCATED_RESOURCES.String(), key)
 		} else if item.resourceToDelete != nil {
 			rdbPipe.Expire(context.Background(), key, 10*time.Second)
+			rdbPipe.SRem(context.Background(), cachemaps.UNALLOCATED_RESOURCES.String(), key)
 		}
 	}
 

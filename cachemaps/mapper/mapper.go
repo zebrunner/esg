@@ -87,7 +87,7 @@ func Write(mapper *Mapper, expiration time.Duration) error {
 		return err
 	}
 
-	err = config.REDIS_MAPPER_CLIENT.GetConnection().Set(context.Background(), mapper.RouterUUID, data, expiration).Err()
+	err = config.RedisCluster.Set(context.Background(), mapper.RouterUUID, data, expiration).Err()
 	if err != nil {
 		return err
 	}
@@ -96,7 +96,7 @@ func Write(mapper *Mapper, expiration time.Duration) error {
 }
 
 func Find(uuid string) (*Mapper, error) {
-	data, err := config.REDIS_MAPPER_CLIENT.GetConnection().Get(context.Background(), uuid).Result()
+	data, err := config.RedisCluster.Get(context.Background(), uuid).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +111,7 @@ func Find(uuid string) (*Mapper, error) {
 }
 
 func WriteShapedEntities(mappers []Mapper, expiration time.Duration) error {
-	rdbPipe := config.REDIS_MAPPER_CLIENT.GetConnection().Pipeline()
+	rdbPipe := config.RedisCluster.Pipeline()
 
 	for _, mapperEntity := range mappers {
 		data, err := json.Marshal(mapperEntity)
@@ -120,7 +120,7 @@ func WriteShapedEntities(mappers []Mapper, expiration time.Duration) error {
 		}
 
 		rdbPipe.Set(context.Background(), mapperEntity.RouterUUID, data, expiration)
-		rdbPipe.SRem(context.Background(), string(TASK), mapperEntity.RouterUUID)
+		rdbPipe.SRem(context.Background(), cachemaps.TASK.String(), mapperEntity.RouterUUID)
 	}
 
 	_, err := rdbPipe.Exec(context.Background())
@@ -128,5 +128,5 @@ func WriteShapedEntities(mappers []Mapper, expiration time.Duration) error {
 }
 
 func FindAll(uuids []string) ([]Mapper, error) {
-	return cachemaps.FindAll[Mapper](config.REDIS_MAPPER_CLIENT.GetConnection().Pipeline(), uuids)
+	return cachemaps.FindAll[Mapper](config.RedisCluster.Pipeline(), uuids)
 }

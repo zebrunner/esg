@@ -23,7 +23,7 @@ const (
 	listen = ":5555"
 )
 
-func taskDefinitionsUpdate(cacheTtl time.Duration) error {
+func environmentRefresh() error {
 	handlers.DefinitionRefreshDone = false
 	log.Info("Parsing images")
 	images, err := images.ListImages(config.Conf.ImageRepositories, config.Conf.ExcludeBrowsers)
@@ -33,7 +33,7 @@ func taskDefinitionsUpdate(cacheTtl time.Duration) error {
 	}
 
 	log.Info("Refreshing task definitions")
-	err = definitions.RefreshTaskDefinitions(images, cacheTtl)
+	err = definitions.RefreshTaskDefinitions(images)
 	if err != nil {
 		log.WithError(err).Error("failed to refresh task definitions")
 		return err
@@ -41,28 +41,47 @@ func taskDefinitionsUpdate(cacheTtl time.Duration) error {
 
 	log.Info("Task definitions refresh finished")
 	handlers.DefinitionRefreshDone = true
+
 	return nil
 }
 
-func startTaskDefinitionsUpdate() error {
-	definitionsCacheTtl := time.Hour * 13
-	// utils.ExitWithError(err, "failed to generate images", log.NewEntry(log.StandardLogger()))
-	err := taskDefinitionsUpdate(definitionsCacheTtl)
+func environmentUpdate() error {
+	log.Info("Parsing images")
+	images, err := images.ListImages(config.Conf.ImageRepositories, config.Conf.ExcludeBrowsers)
+	if err != nil {
+		log.WithError(err).Error("failed to generate images")
+		return err
+	}
+
+	log.Info("Updating task definitions")
+	err = definitions.UpdateTaskDefinitions(images)
+	if err != nil {
+		log.WithError(err).Error("failed to refresh task definitions")
+		return err
+	}
+
+	log.Info("Task definitions update finished")
+
+	return nil
+}
+
+func startEnvironmentUpdate() error {
+	err := environmentRefresh()
 	if err != nil {
 		return err
 	}
 
+	envUpdateInterval := time.Hour * 12
 	go func() {
-		time.Sleep(definitionsCacheTtl - time.Hour)
+		time.Sleep(envUpdateInterval)
 
 		for {
-			err := taskDefinitionsUpdate(definitionsCacheTtl)
+			err := environmentUpdate()
 			if err != nil {
-				retrySleep := time.Second * 15
-				log.WithError(err).Warnf("Failed to update task definitions. Retrying in %v seconds", retrySleep.Seconds())
-				time.Sleep(retrySleep)
+				log.WithError(err).Warn("Failed to update task definitions. Retrying...")
+				time.Sleep(time.Second * 15)
 			} else {
-				time.Sleep(definitionsCacheTtl)
+				time.Sleep(envUpdateInterval)
 			}
 		}
 	}()
@@ -100,7 +119,7 @@ func main() {
 		utils.ExitWithError(err, "Failed to init DB client", log.NewEntry(log.StandardLogger()))
 	}
 
-	err = config.REDIS_DEFINITIONS_CLIENT.InitConnection()
+	err = config.InitRedisClusterConnection()
 	if err != nil {
 		utils.ExitWithError(err, "Failed to init redis connection", log.NewEntry(log.StandardLogger()))
 	}
@@ -122,7 +141,7 @@ func main() {
 		}
 	}()
 
-	err = startTaskDefinitionsUpdate()
+	err = startEnvironmentUpdate()
 	if err != nil {
 		utils.ExitWithError(err, "Failed to refresh task definitions", log.NewEntry(log.StandardLogger()))
 	}
