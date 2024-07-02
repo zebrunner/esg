@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -42,10 +41,6 @@ func GetImages(c *gin.Context) {
 
 	imagesDataResponse := make([]imageDataModel, 0, len(images))
 	for _, image := range images {
-		if strings.Contains(image.Tag, "-debug") {
-			continue
-		}
-
 		imgData := imageDataModel{
 			Name:     image.BrowserName,
 			Version:  image.Tag,

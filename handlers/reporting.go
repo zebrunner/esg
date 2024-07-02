@@ -1,10 +1,12 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -58,12 +60,21 @@ func ListDrivers(c *gin.Context) {
 		return
 	}
 
-	_, err = c.Writer.Write(resBody)
-	if err != nil {
-		c.Status(http.StatusInternalServerError)
-		log.WithError(err).Error("Failed to write body server")
+	originalImages := make([]imageDataModel, 0)
+	if err := json.Unmarshal(resBody, &originalImages); err != nil {
+		log.WithError(err).Error("Failed to unmarshal list of the images from task-definitions server")
 		return
 	}
+
+	filteredImages := make([]imageDataModel, 0)
+	for _, image := range originalImages {
+		// -debug images should not be added to the reporting, it should be available silently
+		if strings.Contains(image.Version, "-debug") {
+			continue
+		}
+		filteredImages = append(filteredImages, image)
+	}
+	c.JSON(http.StatusOK, filteredImages)
 }
 
 func Welcome(c *gin.Context) {
