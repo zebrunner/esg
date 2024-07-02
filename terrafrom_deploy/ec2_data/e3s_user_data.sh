@@ -73,7 +73,8 @@ replace "S3_REGION" ${bucket_region} "./properties/router.env"
 echo ""  >> "./properties/data.env"
 replace "POSTGRES_PASSWORD" ${db_pass} "./properties/data.env"
 replace "DATABASE" "postgres://${db_name}:${db_pass}@${db_dns}" "./properties/data.env"
-replace "AWS_ELASTIC_CACHE" "${cache_address}:${cache_port}" "./properties/data.env"
+replace "ELASTIC_CACHE" "${cache_address}:${cache_port}" "./properties/data.env"
+replace "CACHE_REMOTE" "true" "./properties/data.env"
 
 # task-definitions.env
 # TODO: delete IMAGE_REPOSITORIES replace
