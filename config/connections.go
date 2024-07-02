@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"crypto/tls"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -16,15 +17,20 @@ var (
 )
 
 func InitRedisClusterConnection() error {
-	RedisCluster = redis.NewClusterClient(&redis.ClusterOptions{
-		Addrs:       []string{Conf.RedisConnectionString},
+	options := &redis.ClusterOptions{
+		Addrs:       strings.Split(Conf.RedisConnectionString, ";"),
 		PoolTimeout: 10 * time.Second,
-		TLSConfig:   &tls.Config{MinVersion: tls.VersionTLS12},
-	})
+	}
 
-	res, err := RedisCluster.Ping(context.Background()).Result()
+	if Conf.RedisRemote {
+		options.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+	}
+
+	RedisCluster = redis.NewClusterClient(options)
+
+	_, err := RedisCluster.Ping(context.Background()).Result()
 	if err != nil {
-		log.WithField("response", res).WithError(err).Errorf("Failed to ping redis cluster connection")
+		log.WithError(err).Errorf("Failed to ping redis cluster connection")
 		return err
 	}
 

@@ -3,11 +3,11 @@ package cachemaps
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 )
 
@@ -59,8 +59,9 @@ func GetKeys(st SetType) ([]string, error) {
 		}
 
 		if err := iter.Err(); err != nil {
-			log.WithField("setType", st).WithError(err).Error("Failed to get keys")
-			return err
+			if !strings.Contains(err.Error(), "MOVED") {
+				return err
+			}
 		}
 
 		for key := range keysSet {

@@ -50,7 +50,7 @@ func ExpireAll(ttl time.Duration) error {
 func getDefinitions() (map[string]int64, error) {
 	keys, err := cachemaps.GetKeys(cachemaps.DEFINITION)
 	if err != nil {
-		log.WithError(err).Error("Failed to get alldefinition keys")
+		log.WithError(err).Error("Failed to get all definition keys")
 		return nil, err
 	}
 
