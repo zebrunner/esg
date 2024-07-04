@@ -37,7 +37,6 @@ resource "aws_elasticache_serverless_cache" "redis" {
     }
   }
 
-  # subnet_ids         = [for subnet in data.aws_subnets.redis : subnet.id]
   subnet_ids         = data.aws_subnets.redis.ids
   security_group_ids = [aws_security_group.redis.id]
 }
