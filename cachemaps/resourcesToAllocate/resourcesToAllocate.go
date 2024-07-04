@@ -29,5 +29,12 @@ func GetEntitiesOfCapacityProvider(capacityProvider string) ([]*ResourcesToAlloc
 		return nil, err
 	}
 
-	return resources, nil
+	resourcesOfCapacityProvider := make([]*ResourcesToAllocate, 0)
+	for _, resource := range resources {
+		if resource != nil && resource.CapacityProvider == capacityProvider {
+			resourcesOfCapacityProvider = append(resourcesOfCapacityProvider, resource)
+		}
+	}
+
+	return resourcesOfCapacityProvider, nil
 }

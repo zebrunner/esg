@@ -38,7 +38,7 @@ func writeRecords(items map[string]ResourceItem) error {
 			rdbPipe.Set(context.Background(), key, data, -1)
 			rdbPipe.SAdd(context.Background(), cachemaps.UNALLOCATED_RESOURCES.String(), key)
 		} else if item.resourceToDelete != nil {
-			rdbPipe.Expire(context.Background(), key, 10*time.Second)
+			rdbPipe.Del(context.Background(), key)
 			rdbPipe.SRem(context.Background(), cachemaps.UNALLOCATED_RESOURCES.String(), key)
 		}
 	}
