@@ -113,29 +113,7 @@ func buildImageFromCaps(caps *capabilities.Capabilities) (*images.Image, error) 
 	case envtype.WINDOWS.String():
 		return images.ImageFromString(fmt.Sprintf("windows-%s", remapName(caps.BrowserName.ToPrimitive())), remapVersion(caps.BrowserVersion.ToPrimitive()))
 	case envtype.CYPRESS.String():
-		// TODO: cyserver should make selenium alike session creation requests
-		// delete caps.Image parsing
-		// and leave only // return images.ImageFromString(fmt.Sprintf("cypress-%s", caps.BrowserName.ToPrimitive()), caps.BrowserVersion.ToPrimitive())
-		if caps.Image.ToPrimitive() == "" {
-			return nil, fmt.Errorf("empty image for cypress platform")
-		}
-
-		imgArr := strings.Split(caps.Image.ToPrimitive(), "/")
-		if len(imgArr) == 0 {
-			return nil, fmt.Errorf("invalid image for cypress platform: '%s'", caps.Image.ToPrimitive())
-		}
-
-		repositoryTag := imgArr[len(imgArr)-1]
-		repositoryTagArr := strings.Split(repositoryTag, ":")
-		if len(repositoryTagArr) != 2 || repositoryTagArr[0] == "" || repositoryTagArr[1] == "" {
-			return nil, fmt.Errorf("invalid image for cypress platform: '%s'", caps.Image.ToPrimitive())
-		}
-
-		repository, tag := repositoryTagArr[0], repositoryTagArr[1]
-		caps.BrowserName.From(strings.TrimPrefix(repository, "cypress-"))
-		caps.BrowserVersion.From(tag)
-
-		return images.ImageFromString(repository, tag)
+		return images.ImageFromString(fmt.Sprintf("cypress-%s", caps.BrowserName.ToPrimitive()), caps.BrowserVersion.ToPrimitive())
 	case envtype.ANDROID.String():
 		return images.ImageFromString(remapName(caps.DeviceName.ToPrimitive()), remapVersion(caps.PlatformVersion.ToPrimitive()))
 	default:

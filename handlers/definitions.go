@@ -22,8 +22,6 @@ type imageDataModel struct {
 	Platform       string `json:"platform"`
 	BrowserName    string `json:"browserName,omitempty"`
 	BrowserVersion string `json:"browserVersion,omitempty"`
-	// TODO: investigate possibility of 'ImageUrl' field removal
-	ImageUrl string `json:"image,omitempty"`
 }
 
 type refreshDefinitionsModel struct {
@@ -50,10 +48,6 @@ func GetImages(c *gin.Context) {
 		if image.Platform == envtype.ANDROID {
 			imgData.BrowserName = "chrome"
 			imgData.BrowserVersion = "107.0"
-		}
-
-		if image.Platform == envtype.CYPRESS {
-			imgData.ImageUrl = image.GetUrl()
 		}
 
 		imagesDataResponse = append(imagesDataResponse, imgData)
