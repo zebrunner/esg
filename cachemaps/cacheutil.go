@@ -133,6 +133,7 @@ func WriteWithExpire[R interface{}](rdbPipe redis.Pipeliner, st SetType, items m
 		if err != nil {
 			return err
 		}
+
 		rdbPipe.Set(context.Background(), key, data, expiration)
 		rdbPipe.SRem(context.Background(), st.String(), key)
 	}

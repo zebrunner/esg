@@ -110,21 +110,8 @@ func Find(uuid string) (*Mapper, error) {
 	return &entity, nil
 }
 
-func WriteShapedEntities(mappers []Mapper, expiration time.Duration) error {
-	rdbPipe := config.RedisCluster.Pipeline()
-
-	for _, mapperEntity := range mappers {
-		data, err := json.Marshal(mapperEntity)
-		if err != nil {
-			return err
-		}
-
-		rdbPipe.Set(context.Background(), mapperEntity.RouterUUID, data, expiration)
-		rdbPipe.SRem(context.Background(), cachemaps.TASK.String(), mapperEntity.RouterUUID)
-	}
-
-	_, err := rdbPipe.Exec(context.Background())
-	return err
+func WriteShapedEntities(mappers map[string]Mapper, expiration time.Duration) error {
+	return cachemaps.WriteWithExpire(config.RedisCluster.Pipeline(), cachemaps.TASK, mappers, expiration)
 }
 
 func FindAll(uuids []string) ([]Mapper, error) {

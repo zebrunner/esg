@@ -245,7 +245,7 @@ func trackResourceUsage(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 			}
 
 			// analyze tasks response
-			tasksCacheToUpdate := make([]mapper.Mapper, 0)
+			tasksCacheToUpdate := make(map[string]mapper.Mapper)
 			tasksToTrack := make(map[*mapper.Mapper]*ecs.Task)
 			for _, task := range tasks {
 				taskId := strings.Split(*task.TaskArn, "/")[2]
@@ -280,7 +280,7 @@ func trackResourceUsage(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 
 				// track resources usage for STOPPED tasks
 				cachedTask.UsageTracked = true
-				tasksCacheToUpdate = append(tasksCacheToUpdate, cachedTask)
+				tasksCacheToUpdate[cachedTask.RouterUUID] = cachedTask
 
 				l = l.WithField(config.RouterUUID, cachedTask.RouterUUID)
 				if !config.Conf.SingleTenant {
