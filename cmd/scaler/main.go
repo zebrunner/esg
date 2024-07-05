@@ -12,6 +12,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
+	"github.com/zebrunner/esg/cachemaps"
 	"github.com/zebrunner/esg/cachemaps/mapper"
 	"github.com/zebrunner/esg/cachemaps/utilsmap"
 	"github.com/zebrunner/esg/selenium"
@@ -35,7 +36,7 @@ func stopLostTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 		case <-ctx.Done():
 			return
 		case <-timer():
-			routerUuids, err := mapper.GetKeys(mapper.TASK)
+			routerUuids, err := cachemaps.GetKeys(cachemaps.TASK)
 			if err != nil {
 				log.WithError(err).Warn("Failed to get list of taskmap keys!")
 				continue
@@ -117,7 +118,7 @@ func stopUnhealthyTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 		case <-ctx.Done():
 			return
 		case <-timer():
-			routerUuids, err := mapper.GetKeys(mapper.TASK)
+			routerUuids, err := cachemaps.GetKeys(cachemaps.TASK)
 			if err != nil {
 				log.WithError(err).Warn("Failed to get list of taskmap keys!")
 				continue
@@ -207,7 +208,7 @@ func trackResourceUsage(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 			return
 		case <-timer():
 
-			routerUuids, err := mapper.GetKeys(mapper.TASK)
+			routerUuids, err := cachemaps.GetKeys(cachemaps.TASK)
 			if err != nil {
 				log.WithError(err).Warn("Failed to get list of taskmap keys!")
 				continue
@@ -244,7 +245,7 @@ func trackResourceUsage(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 			}
 
 			// analyze tasks response
-			tasksCacheToUpdate := make([]mapper.Mapper, 0)
+			tasksCacheToUpdate := make(map[string]mapper.Mapper)
 			tasksToTrack := make(map[*mapper.Mapper]*ecs.Task)
 			for _, task := range tasks {
 				taskId := strings.Split(*task.TaskArn, "/")[2]
@@ -279,7 +280,7 @@ func trackResourceUsage(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 
 				// track resources usage for STOPPED tasks
 				cachedTask.UsageTracked = true
-				tasksCacheToUpdate = append(tasksCacheToUpdate, cachedTask)
+				tasksCacheToUpdate[cachedTask.RouterUUID] = cachedTask
 
 				l = l.WithField(config.RouterUUID, cachedTask.RouterUUID)
 				if !config.Conf.SingleTenant {
@@ -320,7 +321,7 @@ func stopIdleSessions(ctx context.Context, wg *sync.WaitGroup) {
 		case <-ctx.Done():
 			return
 		case <-timer():
-			routerUuids, err := mapper.GetKeys(mapper.SESSION)
+			routerUuids, err := cachemaps.GetKeys(cachemaps.SESSION)
 			if err != nil {
 				log.WithError(err).Error("Failed to list uuid keys from sessions set!")
 				continue
@@ -403,17 +404,7 @@ func main() {
 	}
 	service.AwsSess = awsSess
 
-	err = config.REDIS_MAPPER_CLIENT.InitConnection()
-	if err != nil {
-		utils.ExitWithError(err, "Failed to init redis connection", log.NewEntry(log.StandardLogger()))
-	}
-
-	err = config.REDIS_UTILITY_CLIENT.InitConnection()
-	if err != nil {
-		utils.ExitWithError(err, "Failed to init redis connection", log.NewEntry(log.StandardLogger()))
-	}
-
-	err = config.REDIS_RESOURCES_CLIENT.InitConnection()
+	err = config.InitRedisClusterConnection()
 	if err != nil {
 		utils.ExitWithError(err, "Failed to init redis connection", log.NewEntry(log.StandardLogger()))
 	}

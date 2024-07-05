@@ -231,7 +231,7 @@ func LockGenericTaskCache(c *gin.Context) {
 	mapperEntity := c.MustGet(config.RouterUUID).(*mapper.Mapper)
 
 	for {
-		if ok := utilsmap.AcquireLock(mapperEntity.RouterUUID, 0); ok {
+		if ok := utilsmap.AcquireLock(mapperEntity.RouterUUID); ok {
 			break
 		}
 		time.Sleep(10 * time.Second)

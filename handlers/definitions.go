@@ -2,8 +2,6 @@ package handlers
 
 import (
 	"net/http"
-	"time"
-
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
@@ -104,11 +102,10 @@ func RefreshDefinitions(c *gin.Context) {
 	config.Conf.ExcludeBrowsers = excludeBrowsers
 	config.Conf.ImageRepositories = imageRepositories
 
-	definitionsCacheTtl := time.Hour * 13
-	log.Info("refreshing task definitions")
-	err = definitions.RefreshTaskDefinitions(images, definitionsCacheTtl)
+	log.Info("updating task definitions")
+	err = definitions.UpdateTaskDefinitions(images)
 	if err != nil {
-		log.WithError(err).Error("Failed to refresh task definitions")
+		log.WithError(err).Error("Failed to update task definitions")
 		c.Status(http.StatusInternalServerError)
 		return
 	}

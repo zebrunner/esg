@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/cachemaps"
 	"github.com/zebrunner/esg/cachemaps/mapper"
 	"github.com/zebrunner/esg/cachemaps/utilsmap"
 	"github.com/zebrunner/esg/capabilities"
@@ -359,7 +360,7 @@ func (starter basicStarter) finalizeOnFailure() {
 			starter.basis.Log.WithError(err).Error("Failed to stop task on failure")
 		}
 
-		err = mapper.WritedByWorker(starter.basis.MapperEntity, []mapper.SetType{mapper.TASK}, nil, 0)
+		err = mapper.WritedByWorker(starter.basis.MapperEntity, []cachemaps.SetType{cachemaps.TASK}, nil, 0)
 		if err != nil {
 			starter.basis.Log.WithError(err).Error("Failed to update task's cache!")
 		}
@@ -393,7 +394,7 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, workspace string, 
 			finalizeFunc: func(s *startBasis) {
 				// #1056: Small chance of double shaping on generic task abort
 				for {
-					if ok := utilsmap.AcquireLock(s.MapperEntity.RouterUUID, 0); ok {
+					if ok := utilsmap.AcquireLock(s.MapperEntity.RouterUUID); ok {
 						break
 					}
 					time.Sleep(10 * time.Second)
@@ -415,7 +416,7 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, workspace string, 
 					}
 				}
 
-				err := mapper.WritedByWorker(s.MapperEntity, []mapper.SetType{mapper.TASK}, nil, 0)
+				err := mapper.WritedByWorker(s.MapperEntity, []cachemaps.SetType{cachemaps.TASK}, nil, 0)
 				if err != nil {
 					basis.Log.WithError(err).Error("Failed to recache task on finalize!")
 				}
@@ -436,7 +437,7 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, workspace string, 
 				s.MapperEntity.AccessedAt = &accessedAt
 				s.MapperEntity.Status = mapper.Cypress
 
-				err := mapper.WritedByWorker(s.MapperEntity, []mapper.SetType{mapper.TASK}, nil, 0)
+				err := mapper.WritedByWorker(s.MapperEntity, []cachemaps.SetType{cachemaps.TASK}, nil, 0)
 				if err != nil {
 					basis.Log.WithError(err).Error("Failed to recache task on finalize!")
 				}
@@ -451,7 +452,7 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, workspace string, 
 				s.MapperEntity.AccessedAt = &accessedAt
 				s.MapperEntity.Status = mapper.Active
 
-				err := mapper.WritedByWorker(s.MapperEntity, []mapper.SetType{mapper.SESSION, mapper.TASK}, nil, 0)
+				err := mapper.WritedByWorker(s.MapperEntity, []cachemaps.SetType{cachemaps.SESSION, cachemaps.TASK}, nil, 0)
 				if err != nil {
 					basis.Log.WithError(err).Error("Failed to recache task on finalize!")
 				}
