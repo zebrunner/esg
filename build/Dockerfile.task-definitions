@@ -17,6 +17,7 @@ RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./cmd/task-definitions
 FROM alpine:latest
 
 ENV LOG_LEVEL=
+ENV AWS_LOGS_ENABLED=
 
 ENV AWS_REGION=
 ENV AWS_RETRY=

@@ -2,6 +2,7 @@ package environment
 
 import (
 	"fmt"
+	"os"
 
 	"strings"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/zebrunner/esg/cachemaps/definitionmap"
 	"github.com/zebrunner/esg/cachemaps/resourcesToAllocate"
 	"github.com/zebrunner/esg/capabilities"
+	"github.com/zebrunner/esg/config"
 	envtype "github.com/zebrunner/esg/environment/envType"
 	"github.com/zebrunner/esg/environment/network"
 	"github.com/zebrunner/esg/utils"
@@ -142,6 +144,17 @@ func (env *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefiniti
 			definition.WorkingDirectory = &c.WorkingDirectory
 		}
 
+		if config.Conf.AwsLogsEnabled {
+			definition.LogConfiguration = &ecs.LogConfiguration{
+				LogDriver: aws.String("awslogs"),
+				Options: map[string]*string{
+					"awslogs-group":        aws.String(fmt.Sprintf("e3s-%s-log-group", os.Getenv("ZEBRUNNER_ENV"))),
+					"awslogs-region":       aws.String(config.Conf.AwsRegion),
+					"awslogs-create-group": aws.String("true"),
+				},
+			}
+		}
+
 		volumes := []*ecs.MountPoint{}
 		for _, volumeName := range c.Mounts {
 			// local declarations required to append all values
@@ -237,6 +250,7 @@ func (env *ExecutionEnvironment) HashRegisterDefinition() string {
 			WorkingDirectory: container.WorkingDirectory,
 			HealthCheck:      healthCheck,
 			DependsOn:        dependsOn,
+			EnableAwsLogs:    config.Conf.AwsLogsEnabled,
 		}
 
 		containers = append(containers, c)
