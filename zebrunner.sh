@@ -216,6 +216,24 @@ networkName="e3s-network"
     esac
   }
 
+  logs(){
+    case "$1" in
+      "")
+        docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" logs -f &
+        docker compose -f "$BASEDIR/docker-compose.yaml" logs -f
+        ;;
+      data)
+        docker compose -f "$BASEDIR/data-layer/docker-compose.yaml" logs -f
+        ;;
+      service)
+        docker compose -f "$BASEDIR/docker-compose.yaml" logs -f
+        ;;
+      *)
+        docker logs -f "$1" 2>&1
+        ;;
+    esac
+  }
+
   graceful_restart() {
     # get all service names and put them into array
     serviceNames=`cat $BASEDIR/docker-compose.yaml | grep -m 4 "container_name" | sed 's/^[   ]*//;s/[    ]*$//' |cut -d " " -f 2`
@@ -340,7 +358,8 @@ networkName="e3s-network"
       	  shutdown  [data|service] <name>         Stop, remove containers, clear volumes for selected layers
       	  restart   [data|service] <name>         Down and start containers for selected layers
       	  build     [service]      <name>         Build all/selected images
-      	  status                                  Show all containers statuses
+          logs      [data|service|name]           Follow logs of certain layer/container
+          status                                  Show all containers statuses
           tasks     [list|stop]                   List all tasks or stop them
       	  describe  [cluster|instance|task]       Describe selected items
           instances [list]                        All cluster's container-instances list
@@ -391,6 +410,10 @@ case "$1" in
         start "$2" "$3"
       fi
       ;;
+
+    logs)
+      logs "$2"
+    ;;
     build)
       build "$2" "$3"
       ;;
