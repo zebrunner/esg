@@ -62,8 +62,11 @@ if [ ! -z ${USE_PUBLIC_IP} ]; then
   CMD_ARGS="${CMD_ARGS} -use-public-ip=${USE_PUBLIC_IP}"
 fi
 
-if [ ! -z ${AWS_ELASTIC_CACHE} ]; then
-  CMD_ARGS="${CMD_ARGS} -aws-elastic-cache ${AWS_ELASTIC_CACHE}"
+if [ ! -z ${ELASTIC_CACHE} ]; then
+  CMD_ARGS="${CMD_ARGS} -elastic-cache ${ELASTIC_CACHE}"
+fi
+if [ ! -z ${CACHE_REMOTE} ]; then
+  CMD_ARGS="${CMD_ARGS} -cache-remote=${CACHE_REMOTE}"
 fi
 if [ ! -z ${DATABASE} ]; then
   CMD_ARGS="${CMD_ARGS} -db-connection ${DATABASE}"

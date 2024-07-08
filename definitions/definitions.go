@@ -13,7 +13,7 @@ import (
 	"github.com/zebrunner/esg/service"
 )
 
-func RefreshTaskDefinitions(imagesArr []images.Image, taskDefinitionCacheTtl time.Duration) error {
+func RefreshTaskDefinitions(imagesArr []images.Image) error {
 	hashRevisionMap := make(map[string]int64)
 	for _, img := range imagesArr {
 		envsList, err := buildEnvsFromImage(img)
@@ -32,13 +32,23 @@ func RefreshTaskDefinitions(imagesArr []images.Image, taskDefinitionCacheTtl tim
 		}
 	}
 
-	err := definitionmap.WriteAll(hashRevisionMap, taskDefinitionCacheTtl)
+	err := definitionmap.WriteAll(hashRevisionMap)
 	if err != nil {
 		log.WithError(err).Error("Failed to add hashRevision map to redis")
 		return err
 	}
 
 	return nil
+}
+
+func UpdateTaskDefinitions(imagesArr []images.Image) error {
+	err := definitionmap.ExpireAll(time.Hour + 30*time.Minute)
+	if err != nil {
+		log.WithError(err).Error("Failed to add expire old task definitions")
+		return err
+	}
+
+	return RefreshTaskDefinitions(imagesArr)
 }
 
 func compareWithStoredTaskDefinition(env *environment.ExecutionEnvironment) (*db.TaskDefinition, error) {

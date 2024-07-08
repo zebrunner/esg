@@ -47,6 +47,7 @@ type Config struct {
 	// External connections
 	DbConnectionString          string
 	RedisConnectionString       string
+	RedisRemote                 bool
 	DefinitionsConnectionString string
 
 	ZebrunnerHost                string
@@ -96,7 +97,8 @@ func init() {
 	flag.DurationVar(&Conf.MaxTimeout, "max-timeout", 24*time.Hour, "Maximum valid task/session timeout in time.Duration format")
 
 	flag.StringVar(&Conf.DbConnectionString, "db-connection", "localhost:5432", "Connection string for database")
-	flag.StringVar(&Conf.RedisConnectionString, "aws-elastic-cache", "localhost:6379", "Connection string for Session cache")
+	flag.StringVar(&Conf.RedisConnectionString, "elastic-cache", "localhost:6379", "Connection string for Session cache")
+	flag.BoolVar(&Conf.RedisRemote, "cache-remote", false, "Is cache service deployed on remote instance")
 	flag.StringVar(&Conf.DefinitionsConnectionString, "definitions-connection", "localhost:5555", "Connection string for task-definitions service")
 
 	flag.StringVar(&Conf.ZebrunnerHost, "zebrunner-host", "", "Host for zebrunner integration for this environment")

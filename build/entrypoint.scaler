@@ -54,8 +54,11 @@ if [ ! -z ${AWS_SECRET_ACCESS_KEY} ]; then
   CMD_ARGS="${CMD_ARGS} -aws-secret-access-key ${AWS_SECRET_ACCESS_KEY}"
 fi
 
-if [ ! -z ${AWS_ELASTIC_CACHE} ]; then
-  CMD_ARGS="${CMD_ARGS} -aws-elastic-cache ${AWS_ELASTIC_CACHE}"
+if [ ! -z ${ELASTIC_CACHE} ]; then
+  CMD_ARGS="${CMD_ARGS} -elastic-cache ${ELASTIC_CACHE}"
+fi
+if [ ! -z ${CACHE_REMOTE} ]; then
+  CMD_ARGS="${CMD_ARGS} -cache-remote=${CACHE_REMOTE}"
 fi
 
 if [ ! -z ${MAX_IDLE_TIMEOUT} ]; then
