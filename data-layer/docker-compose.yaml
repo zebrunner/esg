@@ -21,6 +21,7 @@ services:
     container_name: migration
     env_file:
       - ../properties/data.env
+      - ../properties/migration.env
     depends_on:
       db:
         condition: service_healthy
