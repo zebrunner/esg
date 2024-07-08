@@ -1,4 +1,129 @@
 #!/bin/sh
 
-migrate -path migrations -database $DATABASE up
-# CMD migrate -path migrations -database $DATABASE down -all
+echo_warning() {
+    echo "
+    WARNING! $1"
+}
+
+goto() {
+    case "$1" in
+        "")
+        echo_warning "[goto] wrong input - empty. Please provide migration number."
+        exit 1
+        ;;
+        (*[!0-9]*)
+            echo_warning "[goto] wrong input - migration number should be number."
+            exit 1
+        ;;
+        *)
+        echo "[goto] database will be migrated to the version $1"
+        echo "command will be executed: migrate -path migrations -database ${DATABASE} goto $1"
+        yes | migrate -path migrations -database $DATABASE goto $1
+        exit_code=$?
+        exit $exit_code
+        ;;
+    esac
+}
+
+up() {
+  case "$1" in
+        "")
+            echo "[up] number of migrations was not provided - apply all migrations"
+            echo "command will be executed: migrate -path migrations -database ${DATABASE} up"
+            yes | migrate -path migrations -database $DATABASE up
+            exit_code=$?
+            exit $exit_code
+        ;;
+        (*[!0-9]*)
+            echo_warning "[up] wrong input - not a number"
+            exit 1
+        ;;
+        *)
+            echo "[up] apply $1 migrations"
+            echo "command will be executed: migrate -path migrations -database ${DATABASE} up $1"
+            yes | migrate -path migrations -database $DATABASE up $1
+            exit_code=$?
+            exit $exit_code
+        ;;
+    esac
+}
+
+down() {
+    case "$1" in
+        "")
+            echo "[down] number of migrations was not provided - apply all migrations"
+            echo "command will be executed: migrate -path migrations -database ${DATABASE} down"
+            yes | migrate -path migrations -database $DATABASE down
+            exit_code=$?
+            exit $exit_code
+        ;;
+        (*[!0-9]*)
+            echo_warning "[down] wrong input -  migration number should be number"
+            exit 1
+        ;;
+        *)
+            echo "[down] apply $1 migrations"
+            echo "command will be executed: migrate -path migrations -database ${DATABASE} down $1"
+            yes | migrate -path migrations -database $DATABASE down $1
+            exit_code=$?
+            exit $exit_code
+        ;;
+    esac
+}
+
+drop() {
+    echo "[drop] drop everything inside database"
+    echo "command will be executed: migrate -path migrations -database ${DATABASE} drop -f"
+    yes | migrate -path migrations -database $DATABASE drop -f
+    exit_code=$?
+    exit $exit_code
+}
+
+force() {
+    case "$1" in
+        "")
+        echo_warning "[force] wrong input - empty migration number"
+        exit 1
+        ;;
+        (*[!0-9]*)
+            echo_warning "[force] wrong input - migration number should be number"
+            exit 1
+        ;;
+        *)
+        echo "[force] will be set version $1 but don't run migration (ignores dirty state)"
+        echo "command will be executed: migrate -path migrations -database ${DATABASE} force $1"
+        yes | migrate -path migrations -database $DATABASE force $1
+        exit_code=$?
+        exit $exit_code
+        ;;
+    esac
+}
+
+main() {
+    case $1 in
+        "")
+        up
+        ;;
+        goto)
+        goto "$2"
+        ;;
+        up)
+        up  "$2"
+        ;;
+        down)
+        down "$2"
+        ;;
+        drop)
+        drop
+        ;;
+        force)
+        force "$2"
+        ;;
+        *)
+        echo_warning "Wrong input - unknown command $1"
+        exit 1
+        ;;
+    esac
+}
+
+main $MIGRATION
