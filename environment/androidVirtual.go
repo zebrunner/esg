@@ -109,6 +109,7 @@ func buildAppiumRedroid(workspace string, routerUUID string, image images.Image,
 		Type:             envtype.ANDROID,
 		CapacityProvider: config.Conf.AwsLinuxCapacityProvider,
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
+		AwsLogsGroup:     config.Conf.AwsLogsGroup,
 	}
 
 	err := calculateResources(&env,

@@ -26,6 +26,9 @@ CMD_ARGS=
 if [ ! -z ${LOG_LEVEL} ]; then
   CMD_ARGS="${CMD_ARGS} -log-level ${LOG_LEVEL}"
 fi
+if [ ! -z ${AWS_LOGS_GROUP} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-logs-group ${AWS_LOGS_GROUP}"
+fi
 
 if [ ! -z ${AWS_REGION} ]; then
   CMD_ARGS="${CMD_ARGS} -aws-region ${AWS_REGION}"

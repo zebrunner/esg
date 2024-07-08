@@ -131,6 +131,7 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 		Type:             envtype.WINDOWS,
 		CapacityProvider: config.Conf.AwsWinCapacityProvider,
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
+		AwsLogsGroup:     config.Conf.AwsLogsGroup,
 	}
 
 	err := calculateResources(&env,
