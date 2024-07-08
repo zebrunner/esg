@@ -65,7 +65,6 @@ type Container struct {
 	Env              envVariables
 	EntryPoint       []string
 	WorkingDirectory string
-	EnableAwsLogs    bool
 
 	HealthCheck *ecs.HealthCheck
 	DependsOn   []*ecs.ContainerDependency

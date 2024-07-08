@@ -2,7 +2,6 @@ package environment
 
 import (
 	"fmt"
-	"os"
 
 	"strings"
 
@@ -28,6 +27,7 @@ type ExecutionEnvironment struct {
 	Network              *network.NetworkConfiguration
 	Volumes              map[string]volume
 	Capabilities         *capabilities.Capabilities
+	AwsLogsGroup         string
 }
 
 func (env *ExecutionEnvironment) ContainerOverrides() []*ecs.ContainerOverride {
@@ -123,7 +123,7 @@ func (env *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefiniti
 		cpu := c.Cpu()
 		memory := c.Memory()
 		imageUrl := c.getImageUrl()
-		definition := ecs.ContainerDefinition{
+		containerDefinition := ecs.ContainerDefinition{
 			Name:        &c.Name,
 			Image:       &imageUrl,
 			Cpu:         &cpu,
@@ -136,21 +136,23 @@ func (env *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefiniti
 		}
 
 		if strings.ToLower(env.Capabilities.PlatformName.ToPrimitive()) != envtype.WINDOWS.String() {
-			definition.MemoryReservation = &memory
-			definition.Privileged = &c.Privileged
+			containerDefinition.MemoryReservation = &memory
+			containerDefinition.Privileged = &c.Privileged
 		}
 
 		if c.WorkingDirectory != "" {
-			definition.WorkingDirectory = &c.WorkingDirectory
+			containerDefinition.WorkingDirectory = &c.WorkingDirectory
 		}
 
-		if config.Conf.AwsLogsEnabled {
-			definition.LogConfiguration = &ecs.LogConfiguration{
+		if env.AwsLogsGroup != "" {
+			streamPrefix := env.Type.String()
+
+			containerDefinition.LogConfiguration = &ecs.LogConfiguration{
 				LogDriver: aws.String("awslogs"),
 				Options: map[string]*string{
-					"awslogs-group":        aws.String(fmt.Sprintf("e3s-%s-log-group", os.Getenv("ZEBRUNNER_ENV"))),
-					"awslogs-region":       aws.String(config.Conf.AwsRegion),
-					"awslogs-create-group": aws.String("true"),
+					"awslogs-group":         &env.AwsLogsGroup,
+					"awslogs-region":        &config.Conf.AwsRegion,
+					"awslogs-stream-prefix": &streamPrefix,
 				},
 			}
 		}
@@ -168,7 +170,7 @@ func (env *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefiniti
 				ReadOnly:      &readOnly,
 			})
 		}
-		definition.MountPoints = volumes
+		containerDefinition.MountPoints = volumes
 
 		portMappings := []*ecs.PortMapping{}
 		for _, mapping := range c.Ports {
@@ -178,9 +180,9 @@ func (env *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefiniti
 			}
 			portMappings = append(portMappings, &m)
 		}
-		definition.PortMappings = portMappings
+		containerDefinition.PortMappings = portMappings
 
-		definitions = append(definitions, &definition)
+		definitions = append(definitions, &containerDefinition)
 	}
 
 	return definitions
@@ -250,16 +252,16 @@ func (env *ExecutionEnvironment) HashRegisterDefinition() string {
 			WorkingDirectory: container.WorkingDirectory,
 			HealthCheck:      healthCheck,
 			DependsOn:        dependsOn,
-			EnableAwsLogs:    config.Conf.AwsLogsEnabled,
 		}
 
 		containers = append(containers, c)
 	}
 
 	registerDefinitionData := &ExecutionEnvironment{
-		Containers:  containers,
-		Volumes:     env.Volumes,
-		TaskRoleArn: env.TaskRoleArn,
+		Containers:   containers,
+		Volumes:      env.Volumes,
+		TaskRoleArn:  env.TaskRoleArn,
+		AwsLogsGroup: env.AwsLogsGroup,
 	}
 	registerDefinitionHash := utils.EncodeToHash(registerDefinitionData)
 

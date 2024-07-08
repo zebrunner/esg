@@ -238,6 +238,7 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 		Type:             envtype.CYPRESS,
 		CapacityProvider: config.Conf.AwsLinuxCapacityProvider,
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
+		AwsLogsGroup:     config.Conf.AwsLogsGroup,
 	}
 
 	err := calculateResources(&env,
