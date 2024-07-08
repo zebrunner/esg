@@ -101,6 +101,9 @@ force() {
 
 main() {
     case $1 in
+        "")
+        up
+        ;;
         goto)
         goto "$2"
         ;;
