@@ -18,12 +18,25 @@ output "vpc_id" {
   value       = aws_vpc.main.id
 }
 
+# output "db_dns" {
+#   description = "aurora dns"
+#   value       = aws_rds_cluster.aurora.endpoint
+# }
+
 output "db_dns" {
-  description = "aurora dns"
-  value       = aws_rds_cluster.aurora.endpoint
+  description = "postgres dns"
+  value       = aws_db_instance.postgres[0].endpoint
+  precondition {
+    condition     = length(aws_db_instance.postgres) != 0
+    error_message = "remote db is not created"
+  }
 }
 
 output "cache_address" {
   description = "redis read/write host:port"
-  value       = format("%s:%s", aws_elasticache_serverless_cache.redis.endpoint[0].address, aws_elasticache_serverless_cache.redis.endpoint[0].port)
+  value       = format("%s:%s", aws_elasticache_serverless_cache.redis[0].endpoint[0].address, aws_elasticache_serverless_cache.redis[0].endpoint[0].port)
+  precondition {
+    condition     = length(aws_db_instance.postgres) != 0
+    error_message = "remote redis is not created"
+  }
 }

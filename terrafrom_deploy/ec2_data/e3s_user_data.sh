@@ -13,6 +13,14 @@ replace() {
 
 sudo apt-get update && sudo apt-get upgrade
 
+# install jq
+sudo apt-get install jq
+
+# insall aws cli
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
+
 # Add Docker's official GPG key:
 sudo apt-get -y install ca-certificates curl
 sudo install -m 0755 -d /etc/apt/keyrings
@@ -44,8 +52,18 @@ fi
 EOF
 
 cd "$e3s_path"
-# TODO: Delete or parametrize like `if ['use_remote_data']; then`...
-git checkout "terraform"
+if [ ${remote_data} ]; then
+  git checkout "terraform-remote"
+
+  # data.env
+  echo ""  >> "./properties/data.env"
+  replace "POSTGRES_PASSWORD" ${db_pass} "./properties/data.env"
+  replace "DATABASE" "postgres://${db_name}:${db_pass}@${db_dns}" "./properties/data.env"
+  replace "ELASTIC_CACHE" "${cache_address}:${cache_port}" "./properties/data.env"
+  replace "CACHE_REMOTE" "true" "./properties/data.env"
+else
+  git checkout "terraform-local"
+fi
 
 # config.env
 echo ""  >> "./properties/config.env"
@@ -68,13 +86,6 @@ replace "S3_BUCKET" ${bucket_name} "./properties/router.env"
 replace "S3_REGION" ${bucket_region} "./properties/router.env"
 
 # scaler.env
-
-# data.env
-echo ""  >> "./properties/data.env"
-replace "POSTGRES_PASSWORD" ${db_pass} "./properties/data.env"
-replace "DATABASE" "postgres://${db_name}:${db_pass}@${db_dns}" "./properties/data.env"
-replace "ELASTIC_CACHE" "${cache_address}:${cache_port}" "./properties/data.env"
-replace "CACHE_REMOTE" "true" "./properties/data.env"
 
 # task-definitions.env
 # TODO: delete IMAGE_REPOSITORIES replace

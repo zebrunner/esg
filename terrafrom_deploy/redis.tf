@@ -4,6 +4,7 @@ locals {
 
 # restrict subnets to first 2 in lexicographical order regions (example: us-east-1a, us-east-1b) 
 data "aws_subnets" "redis" {
+  count = var.data_layer_remote ? 1 : 0
   filter {
     name   = "vpc-id"
     values = [aws_vpc.main.id]
@@ -23,6 +24,7 @@ data "aws_subnets" "redis" {
 }
 
 resource "aws_elasticache_serverless_cache" "redis" {
+  count                = var.data_layer_remote ? 1 : 0
   name                 = local.e3s_serverless_cache_name
   engine               = "redis"
   major_engine_version = "7"
@@ -37,7 +39,7 @@ resource "aws_elasticache_serverless_cache" "redis" {
     }
   }
 
-  subnet_ids         = data.aws_subnets.redis.ids
-  security_group_ids = [aws_security_group.redis.id]
+  subnet_ids         = data.aws_subnets.redis[0].ids
+  security_group_ids = [aws_security_group.redis[0].id]
 }
 

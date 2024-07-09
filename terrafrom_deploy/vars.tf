@@ -15,7 +15,7 @@ variable "e3s_key_name" {
   nullable = false
 }
 
-variable "agent_ssh" {
+variable "allow_agent_ssh" {
   type    = bool
   default = false
 }
@@ -75,7 +75,12 @@ variable "cert" {
   default = ""
 }
 
-variable "db" {
+variable "data_layer_remote" {
+  type    = bool
+  default = true
+}
+
+variable "remote_db" {
   type = object({
     username = string
     pass     = string
@@ -118,7 +123,7 @@ locals {
   e3s_alb_name                     = join("-", [local.service_name, var.environment, "alb"])
   e3s_listener_name                = join("-", [local.service_name, var.environment, "listener"])
 
-  e3s_aurora_subnet_name    = join("-", [local.service_name, var.environment, "aurora", "subnet"])
-  e3s_aurora_rds_name       = join("-", [local.service_name, var.environment, "aurora", "rds"])
+  e3s_rds_subnet_name       = join("-", [local.service_name, var.environment, "rds", "subnet"])
+  e3s_rds_name              = join("-", [local.service_name, var.environment, "rds"])
   e3s_serverless_cache_name = join("-", [local.service_name, var.environment, "redis"])
 }

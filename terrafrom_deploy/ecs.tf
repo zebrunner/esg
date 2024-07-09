@@ -47,7 +47,7 @@ aws autoscaling put-scaling-policy --region ${var.region} --auto-scaling-group-n
 EOF
   }
 
-  provisioner "local-exec" {    
+  provisioner "local-exec" {
     command = <<-EOF
 ecsPolicy2=`aws ecs describe-clusters --region ${var.region} --cluster ${aws_ecs_cluster.e3s.name} --include ATTACHMENTS --query 'clusters[0].attachments[].details[]' | grep "${aws_ecs_capacity_provider.e3s_linux.name}" -A 4 | grep "ECSManagedAutoScalingPolicy" | cut -d ':' -f 2 | cut -d '"' -f 2`
 aws autoscaling put-scaling-policy --region ${var.region} --auto-scaling-group-name ${aws_autoscaling_group.linux.name} --policy-name "$ecsPolicy2" --policy-type TargetTrackingScaling --target-tracking-configuration "{ \"CustomizedMetricSpecification\": { \"MetricName\": \"CapacityProviderReservation\", \"Namespace\": \"AWS/ECS/ManagedScaling\", \"Dimensions\": [{ \"Name\": \"CapacityProviderName\", \"Value\": \"${aws_ecs_capacity_provider.e3s_linux.name}\" }, { \"Name\": \"ClusterName\", \"Value\": \"${aws_ecs_cluster.e3s.name}\"}], \"Statistic\": \"Average\"}, \"TargetValue\": 100.0, \"DisableScaleIn\": false }" --no-enabled

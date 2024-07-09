@@ -6,7 +6,7 @@ data "aws_ami" "zbr_linux" {
     values = ["Zebrunner ESG Agent *"]
   }
 
-   filter {
+  filter {
     name   = "block-device-mapping.device-name"
     values = ["/dev/xvda"]
   }
@@ -27,11 +27,11 @@ data "aws_ami" "zbr_windows" {
 }
 
 resource "aws_launch_template" "e3s_linux" {
-  name = local.e3s_linux_launch_template_name
+  name                   = local.e3s_linux_launch_template_name
   image_id               = data.aws_ami.zbr_linux.id
   vpc_security_group_ids = [aws_security_group.e3s_agent.id]
   ebs_optimized          = true
-  key_name               = var.agent_ssh ? aws_key_pair.agent[0].key_name : ""
+  key_name               = var.allow_agent_ssh ? aws_key_pair.agent[0].key_name : ""
 
   instance_initiated_shutdown_behavior = "terminate"
 
@@ -77,8 +77,8 @@ resource "aws_launch_template" "e3s_linux" {
 resource "aws_launch_template" "e3s_windows" {
   name                   = local.e3s_windows_launch_template_name
   image_id               = data.aws_ami.zbr_windows.id
-  vpc_security_group_ids = var.agent_ssh ? [aws_security_group.e3s_agent.id, aws_security_group.windows_rdp[0].id] : [aws_security_group.e3s_agent.id]
-  key_name               = var.agent_ssh ? aws_key_pair.agent[0].key_name : ""
+  vpc_security_group_ids = var.allow_agent_ssh ? [aws_security_group.e3s_agent.id, aws_security_group.windows_rdp[0].id] : [aws_security_group.e3s_agent.id]
+  key_name               = var.allow_agent_ssh ? aws_key_pair.agent[0].key_name : ""
 
   ebs_optimized = true
   block_device_mappings {
