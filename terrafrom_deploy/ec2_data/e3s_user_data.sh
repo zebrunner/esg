@@ -14,7 +14,7 @@ replace() {
 sudo apt-get update && sudo apt-get upgrade
 
 # install jq
-sudo apt-get install jq
+sudo apt-get -y install jq unzip
 
 # insall aws cli
 curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
@@ -41,7 +41,6 @@ sudo usermod -aG sudo "$user"
 
 git config --system --add safe.directory '*'
 
-sudo -i -u "$user" bash << EOF
 mkdir -p "$e3s_path"
 git clone https://github.com/zebrunner/e3s.git "$e3s_path"
 
@@ -49,21 +48,26 @@ if [ -n "${agent_key}" ]; then
   echo "${agent_key}" > "$e3s_path"/${agent_key_name}.pem
   chmod 400 "$e3s_path"/${agent_key_name}.pem
 fi
-EOF
 
 cd "$e3s_path"
-if [ ${remote_data} ]; then
-  git checkout "terraform-remote"
+case ${remote_data} in 
+  (true) 
+    git checkout "terraform-remote"
 
-  # data.env
-  echo ""  >> "./properties/data.env"
-  replace "POSTGRES_PASSWORD" ${db_pass} "./properties/data.env"
-  replace "DATABASE" "postgres://${db_name}:${db_pass}@${db_dns}" "./properties/data.env"
-  replace "ELASTIC_CACHE" "${cache_address}:${cache_port}" "./properties/data.env"
-  replace "CACHE_REMOTE" "true" "./properties/data.env"
-else
-  git checkout "terraform-local"
-fi
+    # data.env
+    echo ""  >> "./properties/data.env"
+    replace "POSTGRES_PASSWORD" ${db_pass} "./properties/data.env"
+    replace "DATABASE" "postgres://${db_username}:${db_pass}@${db_dns}/${db_name}" "./properties/data.env"
+    replace "ELASTIC_CACHE" "${cache_address}:${cache_port}" "./properties/data.env"
+    replace "CACHE_REMOTE" "true" "./properties/data.env"
+  ;;
+  (false)
+    git checkout "terraform-local"
+  ;;
+  (*) 
+    echo "remote_data is not a bool value" 
+  ;;
+esac
 
 # config.env
 echo ""  >> "./properties/config.env"
@@ -94,3 +98,5 @@ replace "IMAGE_REPOSITORIES" "Zebrunner:chrome,windows-chrome" "./properties/tas
 
 # start server
 ./zebrunner.sh start
+
+sudo chown -R "$user" "$e3s_path"

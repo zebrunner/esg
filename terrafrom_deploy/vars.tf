@@ -124,6 +124,6 @@ locals {
   e3s_listener_name                = join("-", [local.service_name, var.environment, "listener"])
 
   e3s_rds_subnet_name       = join("-", [local.service_name, var.environment, "rds", "subnet"])
-  e3s_rds_name              = join("-", [local.service_name, var.environment, "rds"])
+  e3s_rds_db_name           = "postgres"
   e3s_serverless_cache_name = join("-", [local.service_name, var.environment, "redis"])
 }

@@ -7,7 +7,7 @@ resource "aws_db_subnet_group" "rds" {
 
 resource "aws_db_instance" "postgres" {
   count                      = var.data_layer_remote ? 1 : 0
-  db_name                    = local.e3s_rds_name
+  db_name                    = local.e3s_rds_db_name
   allocated_storage          = 10
   max_allocated_storage      = 30
   instance_class             = "db.t4g.small"

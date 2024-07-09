@@ -25,18 +25,10 @@ output "vpc_id" {
 
 output "db_dns" {
   description = "postgres dns"
-  value       = aws_db_instance.postgres[0].endpoint
-  precondition {
-    condition     = length(aws_db_instance.postgres) != 0
-    error_message = "remote db is not created"
-  }
+  value       = length(aws_db_instance.postgres) != 0 ? aws_db_instance.postgres[0].endpoint : "remote db is not created"
 }
 
 output "cache_address" {
   description = "redis read/write host:port"
-  value       = format("%s:%s", aws_elasticache_serverless_cache.redis[0].endpoint[0].address, aws_elasticache_serverless_cache.redis[0].endpoint[0].port)
-  precondition {
-    condition     = length(aws_db_instance.postgres) != 0
-    error_message = "remote redis is not created"
-  }
+  value       = length(aws_elasticache_serverless_cache.redis) != 0 ? format("%s:%s", aws_elasticache_serverless_cache.redis[0].endpoint[0].address, aws_elasticache_serverless_cache.redis[0].endpoint[0].port) : "remote redis is not created"
 }

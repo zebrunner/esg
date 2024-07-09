@@ -106,8 +106,9 @@ resource "aws_instance" "e3s_server" {
 
     # db_dns      = aws_rds_cluster.aurora.endpoint
     remote_data   = var.data_layer_remote
-    db_name       = var.remote_db.username
+    db_username   = var.remote_db.username
     db_pass       = var.remote_db.pass
+    db_name       = var.data_layer_remote ? aws_db_instance.postgres[0].db_name : ""
     db_dns        = var.data_layer_remote ? aws_db_instance.postgres[0].endpoint : ""
     cache_address = var.data_layer_remote ? aws_elasticache_serverless_cache.redis[0].endpoint[0].address : ""
     cache_port    = var.data_layer_remote ? aws_elasticache_serverless_cache.redis[0].endpoint[0].port : ""
