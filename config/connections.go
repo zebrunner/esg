@@ -55,7 +55,7 @@ func InitRedisClusterConnection() error {
 		}
 
 		log.WithError(err).Trace("Redis cluster init error, retrying...")
-		time.Sleep(time.Millisecond * 100)
+		time.Sleep(time.Second)
 	}
 
 	return nil
