@@ -39,19 +39,19 @@ func InitRedisClusterConnection() error {
 	clusterInitStartTime := time.Now()
 	for {
 		res, err := RedisCluster.ClusterInfo(context.Background()).Result()
-		if err != nil {
-			if time.Since(clusterInitStartTime) > clusterInitDuration {
-				log.WithError(err).Error("Failed to init redis cluster")
-				return err
-			}
-		} else {
-			if strings.Contains(res, "cluster_state:ok") {
-				time.Sleep(5 * time.Second)
-				log.Debug("Redis cluster connection initialized")
-				break
-			}
+		if strings.Contains(res, "cluster_state:ok") {
+			time.Sleep(5 * time.Second)
+			log.Debug("Redis cluster connection initialized")
+			break
+		}
 
+		if err == nil {
 			err = fmt.Errorf("cluster state is not ok")
+		}
+
+		if time.Since(clusterInitStartTime) > clusterInitDuration {
+			log.WithError(err).Error("Failed to init redis cluster")
+			return err
 		}
 
 		log.WithError(err).Trace("Redis cluster init error, retrying...")
