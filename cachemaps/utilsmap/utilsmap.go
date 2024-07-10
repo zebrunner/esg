@@ -9,8 +9,23 @@ import (
 )
 
 const (
-	ScalerVersion = "scalerVersion"
+	ScalerVersion          serviceVersionKey = "scalerVersion"
+	TaskDefinitionsVersion serviceVersionKey = "taskDefinitionsVersion"
 )
+
+type serviceVersionKey string
+
+func (svk serviceVersionKey) String() string {
+	return string(svk)
+}
+
+func (svk serviceVersionKey) Set(version string) error {
+	return config.RedisCluster.Set(context.Background(), svk.String(), config.Version, 0).Err()
+}
+
+func (svk serviceVersionKey) Get() (string, error) {
+	return config.RedisCluster.Get(context.Background(), svk.String()).Result()
+}
 
 func AcquireLock(key string) bool {
 	res, err := cachemaps.AppendToSet(cachemaps.UTILS, key)
@@ -25,12 +40,4 @@ func AcquireLock(key string) bool {
 
 func ReleaseLock(key string) error {
 	return cachemaps.RemoveFromSet(cachemaps.UTILS, key)
-}
-
-func SetScalerVersion() error {
-	return config.RedisCluster.Set(context.Background(), ScalerVersion, config.Version, 0).Err()
-}
-
-func GetScalerVersion() (string, error) {
-	return config.RedisCluster.Get(context.Background(), ScalerVersion).Result()
 }

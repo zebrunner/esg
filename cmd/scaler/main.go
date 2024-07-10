@@ -410,7 +410,10 @@ func main() {
 	}
 
 	mapper.InitMapperWorkers()
-	utilsmap.SetScalerVersion()
+	err = utilsmap.ScalerVersion.Set(config.Version)
+	if err != nil {
+		log.WithError(err).Error("Failed to set scaler version in cache")
+	}
 
 	scalersMap, err := service.InitScalingData()
 	if err != nil {

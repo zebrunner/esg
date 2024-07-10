@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"strings"
 	"time"
 
@@ -32,6 +33,29 @@ func InitRedisClusterConnection() error {
 	if err != nil {
 		log.WithError(err).Errorf("Failed to ping redis cluster connection")
 		return err
+	}
+
+	clusterInitDuration := time.Minute
+	clusterInitStartTime := time.Now()
+	for {
+		res, err := RedisCluster.ClusterInfo(context.Background()).Result()
+		if err != nil {
+			if time.Since(clusterInitStartTime) > clusterInitDuration {
+				log.WithError(err).Error("Failed to init redis cluster")
+				return err
+			}
+		} else {
+			if strings.Contains(res, "cluster_state:ok") {
+				time.Sleep(5 * time.Second)
+				log.Debug("Redis cluster connection initialized")
+				break
+			}
+
+			err = fmt.Errorf("cluster state is not ok")
+		}
+
+		log.WithError(err).Trace("Redis cluster init error, retrying...")
+		time.Sleep(time.Millisecond * 100)
 	}
 
 	return nil
