@@ -109,7 +109,7 @@ func WelcomeWithInstallationRef(c *gin.Context) {
 	}
 
 	htmlStr := fmt.Sprintf("<html><body>Welcome to Zebrunner Elastic Selenium Grid! AWS cluster is not configured correctly."+
-		"<br>router: %s"+
+		"<br>router: %[1]s"+
 		"<br>scaler: %s"+
 		"<br>task-definitions: %s"+
 		"<br><a href=https://github.com/zebrunner/e3s/blob/%[1]v/docs/installation.md>Documentation</a></body></html>",
