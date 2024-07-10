@@ -20,7 +20,7 @@ func (svk serviceVersionKey) String() string {
 }
 
 func (svk serviceVersionKey) Set(version string) error {
-	return config.RedisCluster.Set(context.Background(), svk.String(), config.Version, 0).Err()
+	return config.RedisCluster.Set(context.Background(), svk.String(), version, 0).Err()
 }
 
 func (svk serviceVersionKey) Get() (string, error) {
