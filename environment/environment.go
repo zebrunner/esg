@@ -11,6 +11,7 @@ import (
 	"github.com/zebrunner/esg/cachemaps/definitionmap"
 	"github.com/zebrunner/esg/cachemaps/resourcesToAllocate"
 	"github.com/zebrunner/esg/capabilities"
+	"github.com/zebrunner/esg/config"
 	envtype "github.com/zebrunner/esg/environment/envType"
 	"github.com/zebrunner/esg/environment/network"
 	"github.com/zebrunner/esg/utils"
@@ -26,6 +27,7 @@ type ExecutionEnvironment struct {
 	Network              *network.NetworkConfiguration
 	Volumes              map[string]volume
 	Capabilities         *capabilities.Capabilities
+	AwsLogsGroup         string
 }
 
 func (env *ExecutionEnvironment) ContainerOverrides() []*ecs.ContainerOverride {
@@ -121,7 +123,7 @@ func (env *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefiniti
 		cpu := c.Cpu()
 		memory := c.Memory()
 		imageUrl := c.getImageUrl()
-		definition := ecs.ContainerDefinition{
+		containerDefinition := ecs.ContainerDefinition{
 			Name:        &c.Name,
 			Image:       &imageUrl,
 			Cpu:         &cpu,
@@ -134,12 +136,25 @@ func (env *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefiniti
 		}
 
 		if strings.ToLower(env.Capabilities.PlatformName.ToPrimitive()) != envtype.WINDOWS.String() {
-			definition.MemoryReservation = &memory
-			definition.Privileged = &c.Privileged
+			containerDefinition.MemoryReservation = &memory
+			containerDefinition.Privileged = &c.Privileged
 		}
 
 		if c.WorkingDirectory != "" {
-			definition.WorkingDirectory = &c.WorkingDirectory
+			containerDefinition.WorkingDirectory = &c.WorkingDirectory
+		}
+
+		if env.AwsLogsGroup != "" {
+			streamPrefix := env.Type.String()
+
+			containerDefinition.LogConfiguration = &ecs.LogConfiguration{
+				LogDriver: aws.String("awslogs"),
+				Options: map[string]*string{
+					"awslogs-group":         &env.AwsLogsGroup,
+					"awslogs-region":        &config.Conf.AwsRegion,
+					"awslogs-stream-prefix": &streamPrefix,
+				},
+			}
 		}
 
 		volumes := []*ecs.MountPoint{}
@@ -155,7 +170,7 @@ func (env *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefiniti
 				ReadOnly:      &readOnly,
 			})
 		}
-		definition.MountPoints = volumes
+		containerDefinition.MountPoints = volumes
 
 		portMappings := []*ecs.PortMapping{}
 		for _, mapping := range c.Ports {
@@ -165,9 +180,9 @@ func (env *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefiniti
 			}
 			portMappings = append(portMappings, &m)
 		}
-		definition.PortMappings = portMappings
+		containerDefinition.PortMappings = portMappings
 
-		definitions = append(definitions, &definition)
+		definitions = append(definitions, &containerDefinition)
 	}
 
 	return definitions
@@ -243,9 +258,10 @@ func (env *ExecutionEnvironment) HashRegisterDefinition() string {
 	}
 
 	registerDefinitionData := &ExecutionEnvironment{
-		Containers:  containers,
-		Volumes:     env.Volumes,
-		TaskRoleArn: env.TaskRoleArn,
+		Containers:   containers,
+		Volumes:      env.Volumes,
+		TaskRoleArn:  env.TaskRoleArn,
+		AwsLogsGroup: env.AwsLogsGroup,
 	}
 	registerDefinitionHash := utils.EncodeToHash(registerDefinitionData)
 

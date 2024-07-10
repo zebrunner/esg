@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps"
 	"github.com/zebrunner/esg/config"
@@ -17,19 +16,19 @@ var (
 
 type mapperItem struct {
 	Enity         Mapper
-	SetsToAttach  []SetType
-	SetsToDettach []SetType
+	SetsToAttach  []cachemaps.SetType
+	SetsToDettach []cachemaps.SetType
 	Expiration    time.Duration
 }
 
 func InitMapperWorkers() {
-	writeWorker = cachemaps.CreateRedisWorker(config.REDIS_MAPPER_CLIENT.GetConnection(), writeRecords)
+	writeWorker = cachemaps.CreateRedisWorker(writeRecords)
 
 	go writeWorker.Start(1500 * time.Millisecond)
 }
 
-func writeRecords(rdsConn *redis.Conn, items map[string]mapperItem) error {
-	rdbPipeline := rdsConn.Pipeline()
+func writeRecords(items map[string]mapperItem) error {
+	rdbPipeline := config.RedisCluster.Pipeline()
 	for routerUUID, item := range items {
 		data, err := json.Marshal(&item.Enity)
 		if err != nil {
@@ -52,7 +51,7 @@ func writeRecords(rdsConn *redis.Conn, items map[string]mapperItem) error {
 	return err
 }
 
-func WritedByWorker(mapper *Mapper, setsToAttach []SetType, SetsToDettach []SetType, expiration time.Duration) error {
+func WritedByWorker(mapper *Mapper, setsToAttach []cachemaps.SetType, SetsToDettach []cachemaps.SetType, expiration time.Duration) error {
 	return writeWorker.AppendToWorker(mapper.RouterUUID,
 		mapperItem{
 			Enity:         *mapper,

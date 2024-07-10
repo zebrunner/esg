@@ -1,11 +1,13 @@
 FROM alpine:latest
 
 RUN apk add -U ca-certificates tzdata curl && rm -Rf /var/cache/apk/* \
-    && curl -L https://github.com/golang-migrate/migrate/releases/download/v4.14.1/migrate.linux-amd64.tar.gz | tar -xvz \
-    && cp migrate.linux-amd64 /usr/bin/migrate \
-    && rm -Rf migrate.linux-amd64
+    && curl -L https://github.com/golang-migrate/migrate/releases/download/v4.17.1/migrate.linux-amd64.tar.gz | tar -xvz \
+    && cp migrate /usr/bin/migrate \
+    && rm -Rf migrate
 
 ENV DATABASE=postgres://postgres:postgres@db/postgres?sslmode=disable
+
+ENV MIGRATION=
 
 COPY ./migrations/ /migrations/
 COPY ./build/entrypoint.migration /entrypoint.sh

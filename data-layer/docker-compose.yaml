@@ -17,19 +17,77 @@ services:
     networks:
       - data-network
   migration:
-    image: public.ecr.aws/zebrunner/migration:latest
+    image: public.ecr.aws/zebrunner/migration:2.0
     container_name: migration
     env_file:
       - ../properties/data.env
+      - ../properties/migration.env
     depends_on:
       db:
         condition: service_healthy
     networks:
       - data-network
-  redis:
-    image: redis:6.2.6
-    container_name: redis
-    restart: always
+  redis-node-1:
+    image: redis:7.2.5
+    container_name: redis-node-1
+    command: ["/tmp/redis.sh"]
+    volumes:
+      - ./redis.sh:/tmp/redis.sh
+    networks:
+      - data-network
+  redis-node-2:
+    image: redis:7.2.5
+    container_name: redis-node-2
+    command: ["/tmp/redis.sh"]
+    volumes:
+      - ./redis.sh:/tmp/redis.sh
+    networks:
+      - data-network
+  redis-node-3:
+    image: redis:7.2.5
+    container_name: redis-node-3
+    command: ["/tmp/redis.sh"]
+    volumes:
+      - ./redis.sh:/tmp/redis.sh
+    networks:
+      - data-network
+  redis-node-4:
+    image: redis:7.2.5
+    container_name: redis-node-4
+    command: ["/tmp/redis.sh"]
+    volumes:
+      - ./redis.sh:/tmp/redis.sh
+    networks:
+      - data-network
+  redis-node-5:
+    image: redis:7.2.5
+    container_name: redis-node-5
+    command: ["/tmp/redis.sh"]
+    volumes:
+      - ./redis.sh:/tmp/redis.sh
+    networks:
+      - data-network
+  redis-node-6:
+    image: redis:7.2.5
+    container_name: redis-node-6
+    command: ["/tmp/redis.sh"]
+    volumes:
+      - ./redis.sh:/tmp/redis.sh
+    networks:
+      - data-network
+  redis-cluster:
+    image: redis:7.2.5
+    container_name: redis-cluster
+    volumes:
+      - ./redis-cluster.sh:/tmp/redis-cluster.sh
+    command: ["/tmp/redis-cluster.sh"]
+    depends_on:
+      - redis-node-1
+      - redis-node-2
+      - redis-node-3
+      - redis-node-4
+      - redis-node-5
+      - redis-node-6
     networks:
       - data-network
 volumes:
