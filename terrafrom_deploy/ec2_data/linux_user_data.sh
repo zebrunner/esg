@@ -4,6 +4,7 @@
 echo ECS_CLUSTER=${cluster_name} >> /etc/ecs/ecs.config
 echo ECS_LOGLEVEL=info >> /etc/ecs/ecs.config
 echo ECS_LOGLEVEL_ON_INSTANCE=info >> /etc/ecs/ecs.config
+echo ECS_AVAILABLE_LOGGING_DRIVERS="[\"json-file\",\"awslogs\"]" >> /etc/ecs/ecs.config
 echo ECS_AWSVPC_ADDITIONAL_LOCAL_ROUTES=[\"${cidr_block}\"] >> /etc/ecs/ecs.config
 echo ECS_ENABLE_TASK_ENI=true >> /etc/ecs/ecs.config
 

@@ -34,6 +34,8 @@ resource "aws_lb" "main" {
 resource "aws_lb_listener" "main" {
   load_balancer_arn = aws_lb.main.arn
 
+  # Be aware of bug (terrafom is unable to flush ssl_policy field on http switch): 
+  # https://github.com/hashicorp/terraform-provider-aws/issues/1851
   port            = var.cert == "" ? 80 : 443
   protocol        = var.cert == "" ? "HTTP" : "HTTPS"
   ssl_policy      = var.cert == "" ? "" : "ELBSecurityPolicy-2016-08"

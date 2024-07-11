@@ -172,3 +172,30 @@ resource "aws_vpc_security_group_ingress_rule" "e3s_redis_ipv4" {
   from_port         = 6379
   to_port           = 6380
 }
+
+resource "aws_security_group" "cloudwatch" {
+  count  = var.enable_cloudwatch ? 1 : 0
+  vpc_id = aws_vpc.main.id
+  name   = local.e3s_cloudwatch_endpoint_sg_name
+}
+
+resource "aws_vpc_security_group_ingress_rule" "cloudwatch" {
+  count                        = var.enable_cloudwatch ? 1 : 0
+  security_group_id            = aws_security_group.cloudwatch[0].id
+  ip_protocol                  = "-1"
+  referenced_security_group_id = aws_security_group.e3s_agent.id
+}
+
+resource "aws_vpc_security_group_egress_rule" "cloudwatch_outbound_trafic_ipv4" {
+  count             = var.enable_cloudwatch ? 1 : 0
+  security_group_id = aws_security_group.cloudwatch[0].id
+  ip_protocol       = "-1"
+  cidr_ipv4         = "0.0.0.0/0"
+}
+
+resource "aws_vpc_security_group_egress_rule" "cloudwatch_outbound_trafic_ipv6" {
+  count             = var.enable_cloudwatch ? 1 : 0
+  security_group_id = aws_security_group.cloudwatch[0].id
+  ip_protocol       = "-1"
+  cidr_ipv6         = "::/0"
+}

@@ -8,7 +8,7 @@ replace() {
   value=$2
   file=$3
 
-  grep -v "$param" "$file" > temp && echo "$param"="$value" >> temp && mv temp "$file"
+  sed -i -e "s/$param.*/$param=$value/" "$file"
 }
 
 sudo apt-get update && sudo apt-get upgrade
@@ -55,7 +55,6 @@ case ${remote_data} in
     git checkout "terraform-remote"
 
     # data.env
-    echo ""  >> "./properties/data.env"
     replace "POSTGRES_PASSWORD" ${db_pass} "./properties/data.env"
     replace "DATABASE" "postgres://${db_username}:${db_pass}@${db_dns}/${db_name}" "./properties/data.env"
     replace "ELASTIC_CACHE" "${cache_address}:${cache_port}" "./properties/data.env"
@@ -70,22 +69,19 @@ case ${remote_data} in
 esac
 
 # config.env
-echo ""  >> "./properties/config.env"
 replace "AWS_REGION" ${region} "./properties/config.env"
 replace "AWS_CLUSTER" ${cluster_name} "./properties/config.env"
 replace "AWS_TASK_ROLE" ${task_role} "./properties/config.env"
-echo ""  >> "./properties/config.env"
+replace "AWS_LOGS_GROUP" ${log_group} "./properties/config.env"
 replace "ZEBRUNNER_HOST" ${zbr_host} "./properties/config.env"
 replace "ZEBRUNNER_INTEGRATION_USER" ${zbr_user} "./properties/config.env"
 replace "ZEBRUNNER_INTEGRATION_PASSWORD" ${zbr_pass} "./properties/config.env"
 replace "ZEBRUNNER_ENV" ${env} "./properties/config.env"
 
 # router.env
-echo ""  >> "./properties/router.env"
 replace "AWS_LINUX_CAPACITY_PROVIDER" ${linux_capacityprovider} "./properties/router.env"
 replace "AWS_WIN_CAPACITY_PROVIDER" ${windows_capacityprovider} "./properties/router.env"
 replace "AWS_TARGET_GROUP" ${target_group} "./properties/router.env"
-echo ""  >> "./properties/router.env"
 replace "S3_BUCKET" ${bucket_name} "./properties/router.env"
 replace "S3_REGION" ${bucket_region} "./properties/router.env"
 
@@ -93,7 +89,6 @@ replace "S3_REGION" ${bucket_region} "./properties/router.env"
 
 # task-definitions.env
 # TODO: delete IMAGE_REPOSITORIES replace
-echo ""  >> "./properties/task-definitions.env"
 replace "IMAGE_REPOSITORIES" "Zebrunner:chrome,windows-chrome" "./properties/task-definitions.env"
 
 # start server

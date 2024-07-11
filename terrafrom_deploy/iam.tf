@@ -17,7 +17,6 @@ resource "aws_iam_policy" "e3s_agent" {
     accout = data.aws_caller_identity.current.account_id
     region = var.region
   })
-
 }
 
 resource "aws_iam_policy" "e3s_task" {

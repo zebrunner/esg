@@ -86,6 +86,7 @@ resource "aws_instance" "e3s_server" {
   tags = {
     Name = local.e3s_server_instance_name
   }
+
   user_data = templatefile("./ec2_data/e3s_user_data.sh", {
     region                   = var.region
     cluster_name             = local.e3s_cluster_name
@@ -96,6 +97,7 @@ resource "aws_instance" "e3s_server" {
     target_group             = local.e3s_tg_name
     bucket_name              = var.bucket.name
     bucket_region            = length(aws_s3_bucket.main) > 0 ? var.region : var.bucket.region
+    log_group                = length(aws_cloudwatch_log_group.e3s_tasks) > 0 ? local.e3s_log_group_name : ""
 
     zbr_host = var.zebrunner.host
     zbr_user = var.zebrunner.user
@@ -114,8 +116,10 @@ resource "aws_instance" "e3s_server" {
     cache_port    = var.data_layer_remote ? aws_elasticache_serverless_cache.redis[0].endpoint[0].port : ""
   })
 
-  user_data_replace_on_change = true
-
   # depends_on = [aws_ecs_cluster.e3s, aws_lb_listener.main, aws_rds_cluster_instance.aurora_instance]
   depends_on = [aws_ecs_cluster.e3s, aws_lb_listener.main]
+
+  lifecycle {
+    ignore_changes = [user_data]
+  }
 }

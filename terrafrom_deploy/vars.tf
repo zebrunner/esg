@@ -91,6 +91,11 @@ variable "remote_db" {
   }
 }
 
+variable "enable_cloudwatch" {
+  type    = bool
+  default = false
+}
+
 # consts
 locals {
   service_name = "e3s"
@@ -106,11 +111,12 @@ locals {
   e3s_task_policy_name  = join("-", [local.service_name, var.environment, "task", "policy"])
   e3s_task_role_name    = join("-", [local.service_name, var.environment, "task", "role"])
 
-  e3s_server_sg_name = join("-", [local.service_name, var.environment, "sg"])
-  e3s_agent_sg_name  = join("-", [local.service_name, var.environment, "agent", "sg"])
-  e3s_rdp_sg_name    = join("-", [local.service_name, var.environment, "rdp", "sg"])
-  e3s_rds_sg_name    = join("-", [local.service_name, var.environment, "rds", "sg"])
-  e3s_cache_sg_name  = join("-", [local.service_name, var.environment, "cache", "sg"])
+  e3s_server_sg_name              = join("-", [local.service_name, var.environment, "sg"])
+  e3s_agent_sg_name               = join("-", [local.service_name, var.environment, "agent", "sg"])
+  e3s_rdp_sg_name                 = join("-", [local.service_name, var.environment, "rdp", "sg"])
+  e3s_rds_sg_name                 = join("-", [local.service_name, var.environment, "rds", "sg"])
+  e3s_cache_sg_name               = join("-", [local.service_name, var.environment, "cache", "sg"])
+  e3s_cloudwatch_endpoint_sg_name = join("-", [local.service_name, var.environment, "cloudwatch", "sg"])
 
   e3s_cluster_name                 = join("-", [local.service_name, var.environment])
   e3s_linux_launch_template_name   = join("-", [local.service_name, var.environment, "linux", "launch", "template"])
@@ -122,8 +128,9 @@ locals {
   e3s_tg_name                      = join("-", [local.service_name, var.environment, "tg"])
   e3s_alb_name                     = join("-", [local.service_name, var.environment, "alb"])
   e3s_listener_name                = join("-", [local.service_name, var.environment, "listener"])
+  e3s_log_group_name               = join("-", [local.service_name, var.environment, "log-group"])
 
   e3s_rds_subnet_name       = join("-", [local.service_name, var.environment, "rds", "subnet"])
-  e3s_rds_db_name           = "postgres"
+  e3s_rds_db_name           = join("_", [local.service_name, var.environment, "postgres"])
   e3s_serverless_cache_name = join("-", [local.service_name, var.environment, "redis"])
 }
