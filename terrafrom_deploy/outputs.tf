@@ -33,7 +33,7 @@ output "cache_address" {
   value       = length(aws_elasticache_serverless_cache.redis) != 0 ? format("%s:%s", aws_elasticache_serverless_cache.redis[0].endpoint[0].address, aws_elasticache_serverless_cache.redis[0].endpoint[0].port) : "remote redis is not created"
 }
 
-output "cloudwatch_vpc_endpoint" {
+output "cloudwatch_vpc_endpoint_id" {
   description = "vpc interface endpoint for cloudwatch logs upload"
   value       = length(aws_vpc_endpoint.cloudwatch) != 0 ? aws_vpc_endpoint.cloudwatch[0].id : "cloudwatch endpoint is not created"
 }
