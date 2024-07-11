@@ -44,7 +44,7 @@ resource "aws_autoscaling_group" "linux" {
   service_linked_role_arn = format("arn:aws:iam::%s:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling", data.aws_caller_identity.current.account_id)
 
   lifecycle {
-    ignore_changes = [desired_capacity, min_size, max_size]
+    ignore_changes = [desired_capacity, min_size, max_size, tag]
   }
 }
 
@@ -94,7 +94,7 @@ resource "aws_autoscaling_group" "windows" {
   service_linked_role_arn = format("arn:aws:iam::%s:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling", data.aws_caller_identity.current.account_id)
 
   lifecycle {
-    ignore_changes = [desired_capacity, min_size, max_size]
+    ignore_changes = [desired_capacity, min_size, max_size, tag]
   }
 }
 

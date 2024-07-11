@@ -8,7 +8,8 @@ replace() {
   value=$2
   file=$3
 
-  sed -i -e "s/$param.*/$param=$value/" "$file"
+
+  sed -i -e "s^$param.*^$param=$value^" "$file"
 }
 
 sudo apt-get update && sudo apt-get upgrade
