@@ -10,10 +10,9 @@ services:
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 30s
+      interval: 20s
       timeout: 5s
       retries: 3
-      start_period: 5s  
     networks:
       - data-network
   migration:

@@ -1,5 +1,8 @@
 #!/bin/sh
 
+. version
+export VERSION=$E3S_VERSION
+
 finish() {
   ppid=$1
   if [ -n "$ppid" ]; then
