@@ -8,7 +8,6 @@ replace() {
   value=$2
   file=$3
 
-
   sed -i -e "s^$param.*^$param=$value^" "$file"
 }
 
@@ -65,7 +64,7 @@ case ${remote_data} in
     git checkout "terraform-local"
   ;;
   (*) 
-    echo "remote_data is not a bool value" 
+    echo "remote_data is not a bool value"
   ;;
 esac
 
