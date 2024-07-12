@@ -13,6 +13,17 @@
                 "arn:aws:s3:::${bucket_name}",
                 "arn:aws:s3:::${bucket_name}/*"
             ]
+        },
+        {
+            "Sid": "yum's repo file stored at s3",
+            "Effect": "Allow",
+            "Principal": "*",
+            "Action": "*",
+            "Resource": [
+                "arn:aws:s3:::repo.${region}.amazonaws.com",
+                "arn:aws:s3:::repo.${region}.amazonaws.com/*",
+                "arn:aws:s3:::amazonlinux-2-repos-${region}/*"
+            ]
         }
     ]
 }

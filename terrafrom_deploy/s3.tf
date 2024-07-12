@@ -21,5 +21,6 @@ resource "aws_vpc_endpoint" "s3_gw" {
   vpc_endpoint_type = "Gateway"
   policy = templatefile("./iam_data/s3-endpoint-policy.json", {
     bucket_name = var.bucket.name
+    region      = var.region
   })
 }
