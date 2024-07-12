@@ -96,6 +96,11 @@ variable "enable_cloudwatch" {
   default = false
 }
 
+variable "e3s_server_instance_type" {
+  type     = string
+  default = "m5n.large"
+}
+
 # consts
 locals {
   service_name = "e3s"

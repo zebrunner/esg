@@ -10,7 +10,7 @@ resource "random_shuffle" "e3s_subnet_location" {
 data "aws_ec2_instance_type_offerings" "supported_server_zones" {
   filter {
     name   = "instance-type"
-    values = ["m5n.large"]
+    values = [var.e3s_server_instance_type]
   }
 
   location_type = "availability-zone"
@@ -62,7 +62,7 @@ data "aws_ami" "ubuntu_22_04" {
 
 resource "aws_instance" "e3s_server" {
   ami           = data.aws_ami.ubuntu_22_04.id
-  instance_type = "m5n.large"
+  instance_type = var.e3s_server_instance_type
 
   subnet_id = local.zone_subnet_map[random_shuffle.e3s_subnet_location.result[0]]
 

@@ -17,7 +17,7 @@ resource "aws_vpc_endpoint" "s3_gw" {
   vpc_id = aws_vpc.main.id
 
   route_table_ids   = [aws_route_table.internet-private.id]
-  service_name      = format("com.amazonaws.%s.s3", var.bucket.exists ? var.bucket.region : var.region)
+  service_name      = format("com.amazonaws.%s.s3", var.region)
   vpc_endpoint_type = "Gateway"
   policy = templatefile("./iam_data/s3-endpoint-policy.json", {
     bucket_name = var.bucket.name
