@@ -73,6 +73,8 @@ replace "AWS_REGION" ${region} "./properties/config.env"
 replace "AWS_CLUSTER" ${cluster_name} "./properties/config.env"
 replace "AWS_TASK_ROLE" ${task_role} "./properties/config.env"
 replace "AWS_LOGS_GROUP" ${log_group} "./properties/config.env"
+replace "S3_BUCKET" ${bucket_name} "./properties/config.env"
+replace "S3_REGION" ${bucket_region} "./properties/config.env"
 replace "ZEBRUNNER_HOST" ${zbr_host} "./properties/config.env"
 replace "ZEBRUNNER_INTEGRATION_USER" ${zbr_user} "./properties/config.env"
 replace "ZEBRUNNER_INTEGRATION_PASSWORD" ${zbr_pass} "./properties/config.env"
@@ -82,8 +84,6 @@ replace "ZEBRUNNER_ENV" ${env} "./properties/config.env"
 replace "AWS_LINUX_CAPACITY_PROVIDER" ${linux_capacityprovider} "./properties/router.env"
 replace "AWS_WIN_CAPACITY_PROVIDER" ${windows_capacityprovider} "./properties/router.env"
 replace "AWS_TARGET_GROUP" ${target_group} "./properties/router.env"
-replace "S3_BUCKET" ${bucket_name} "./properties/router.env"
-replace "S3_REGION" ${bucket_region} "./properties/router.env"
 
 # scaler.env
 
