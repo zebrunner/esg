@@ -48,6 +48,19 @@ if [ ! -z ${AWS_TASK_ROLE} ]; then
   CMD_ARGS="${CMD_ARGS} -aws-task-role-arn ${AWS_TASK_ROLE}"
 fi
 
+if [ ! -z ${S3_BUCKET} ]; then
+  CMD_ARGS="${CMD_ARGS} -s3-bucket ${S3_BUCKET}"
+fi
+if [ ! -z ${S3_REGION} ]; then
+  CMD_ARGS="${CMD_ARGS} -s3-region ${S3_REGION}"
+fi
+if [ ! -z ${S3_AWS_ACESS_KEY_ID} ]; then
+  CMD_ARGS="${CMD_ARGS} -s3-aws-access-key-id ${S3_AWS_ACESS_KEY_ID}"
+fi
+if [ ! -z ${S3_AWS_SECRET_ACCESS_KEY} ]; then
+  CMD_ARGS="${CMD_ARGS} -s3-aws-secret-access-key ${S3_AWS_SECRET_ACCESS_KEY}"
+fi
+
 if [ ! -z ${ELASTIC_CACHE} ]; then
   CMD_ARGS="${CMD_ARGS} -elastic-cache ${ELASTIC_CACHE}"
 fi
