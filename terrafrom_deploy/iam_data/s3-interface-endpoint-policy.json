@@ -1,0 +1,31 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Principal": "*",
+            "Action": [
+                "s3:PutObject",
+                "s3:GetObject",
+                "s3:ListBucket"
+            ],
+            "Resource": [
+                "arn:aws:s3::${account}:accesspoint/${s3_access_point_alias}",
+                "arn:aws:s3::${account}:accesspoint/${s3_access_point_alias}/*",
+                "arn:aws:s3:::${bucket_name}",
+                "arn:aws:s3:::${bucket_name}/*"
+            ]
+        },
+        {
+            "Sid": "yum's repo file stored at s3",
+            "Effect": "Allow",
+            "Principal": "*",
+            "Action": "*",
+            "Resource": [
+                "arn:aws:s3:::repo.${region}.amazonaws.com",
+                "arn:aws:s3:::repo.${region}.amazonaws.com/*",
+                "arn:aws:s3:::amazonlinux-2-repos-${region}/*"
+            ]
+        }
+    ]
+}

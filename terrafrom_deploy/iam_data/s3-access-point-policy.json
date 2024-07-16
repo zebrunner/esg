@@ -1,0 +1,20 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Principal": {
+                "AWS": "${account}"
+            },
+            "Action": [
+                "s3:PutObject",
+                "s3:ListBucket",
+                "s3:GetObject"
+            ],
+            "Resource": [
+                "arn:aws:s3::${account}:accesspoint/${s3_access_point_alias}",
+                "arn:aws:s3::${account}:accesspoint/${s3_access_point_alias}/object/*"
+            ]
+        }
+    ]
+}

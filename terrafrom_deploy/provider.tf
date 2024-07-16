@@ -29,3 +29,15 @@ provider "aws" {
     }
   }
 }
+
+provider "aws" {
+  region = var.bucket.region
+  alias = "dir_bucket"
+
+  default_tags {
+    tags = {
+      Environment = var.environment
+      Name        = local.service_name
+    }
+  }
+}

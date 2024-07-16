@@ -97,7 +97,7 @@ variable "enable_cloudwatch" {
 }
 
 variable "e3s_server_instance_type" {
-  type     = string
+  type    = string
   default = "m5n.large"
 }
 
@@ -134,6 +134,7 @@ locals {
   e3s_alb_name                     = join("-", [local.service_name, var.environment, "alb"])
   e3s_listener_name                = join("-", [local.service_name, var.environment, "listener"])
   e3s_log_group_name               = join("-", [local.service_name, var.environment, "log-group"])
+  e3s_s3_access_point_name         = join("-", [local.service_name, var.environment, "s3", "access", "point"])
 
   e3s_rds_subnet_name       = join("-", [local.service_name, var.environment, "rds", "subnet"])
   e3s_rds_db_name           = join("_", [local.service_name, var.environment, "postgres"])
