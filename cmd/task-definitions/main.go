@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/cachemaps/utilsmap"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/definitions"
 	"github.com/zebrunner/esg/handlers"
@@ -122,6 +123,11 @@ func main() {
 	err = config.InitRedisClusterConnection()
 	if err != nil {
 		utils.ExitWithError(err, "Failed to init redis connection", log.NewEntry(log.StandardLogger()))
+	}
+
+	err = utilsmap.TaskDefinitionsVersion.Set(config.Version)
+	if err != nil {
+		log.WithError(err).Error("Failed to set task-definitions version in cache")
 	}
 
 	// create sigterm listener chan

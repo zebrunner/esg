@@ -39,8 +39,9 @@ ENV DATABASE=
 ENV IMAGE_REPOSITORIES=
 ENV EXCLUDE_BROWSERS=
 
-COPY --from=0 /esg/task-definitions /task-definitions
-
+COPY ./build/.env version
 COPY ./build/entrypoint.task-definitions /entrypoint.sh
+
+COPY --from=0 /esg/task-definitions /task-definitions
 
 ENTRYPOINT ["/entrypoint.sh"]
