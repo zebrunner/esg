@@ -37,3 +37,8 @@ output "cloudwatch_vpc_endpoint_id" {
   description = "vpc interface endpoint for cloudwatch logs upload"
   value       = length(aws_vpc_endpoint.cloudwatch) != 0 ? aws_vpc_endpoint.cloudwatch[0].id : "cloudwatch endpoint is not created"
 }
+
+output "s3_vpc_gw_endpoint_id" {
+  description = "vpc gateway endpoint for s3 artifacts upload"
+  value       = aws_vpc_endpoint.s3_gw.id
+}

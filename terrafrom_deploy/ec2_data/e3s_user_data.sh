@@ -88,8 +88,6 @@ replace "AWS_TARGET_GROUP" ${target_group} "./properties/router.env"
 # scaler.env
 
 # task-definitions.env
-# TODO: delete IMAGE_REPOSITORIES replace
-replace "IMAGE_REPOSITORIES" "Zebrunner:chrome,windows-chrome" "./properties/task-definitions.env"
 
 # start server
 ./zebrunner.sh start

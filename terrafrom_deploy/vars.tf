@@ -1,7 +1,7 @@
-# TODO: add custom condition for vars
+# TODO: Add custom condition for vars
+# Mandatory
 variable "environment" {
   type     = string
-  default  = "prod"
   nullable = false
 }
 
@@ -15,11 +15,6 @@ variable "e3s_key_name" {
   nullable = false
 }
 
-variable "allow_agent_ssh" {
-  type    = bool
-  default = false
-}
-
 variable "bucket" {
   type = object({
     exists = bool
@@ -27,6 +22,44 @@ variable "bucket" {
     region = string
   })
   nullable = false
+}
+
+
+# Optional
+variable "allow_agent_ssh" {
+  type    = bool
+  default = false
+}
+
+variable "cert" {
+  type    = string
+  default = ""
+}
+
+variable "enable_cloudwatch" {
+  type    = bool
+  default = false
+}
+
+variable "e3s_server_instance_type" {
+  type    = string
+  default = "m5n.large"
+}
+
+variable "data_layer_remote" {
+  type    = bool
+  default = true
+}
+
+variable "remote_db" {
+  type = object({
+    username = string
+    pass     = string
+  })
+  default = {
+    username = "postgres"
+    pass     = "postgres"
+  }
 }
 
 variable "instance_types" {
@@ -46,19 +79,6 @@ variable "instance_types" {
   ]
 }
 
-variable "zebrunner" {
-  type = object({
-    host = string
-    user = string
-    pass = string
-  })
-  default = {
-    host = ""
-    user = ""
-    pass = ""
-  }
-}
-
 variable "spot_price" {
   type = object({
     linux   = string
@@ -70,35 +90,17 @@ variable "spot_price" {
   }
 }
 
-variable "cert" {
-  type    = string
-  default = ""
-}
-
-variable "data_layer_remote" {
-  type    = bool
-  default = true
-}
-
-variable "remote_db" {
+variable "zebrunner" {
   type = object({
-    username = string
-    pass     = string
+    host = string
+    user = string
+    pass = string
   })
   default = {
-    username = "postgres"
-    pass     = "postgres"
+    host = ""
+    user = ""
+    pass = ""
   }
-}
-
-variable "enable_cloudwatch" {
-  type    = bool
-  default = false
-}
-
-variable "e3s_server_instance_type" {
-  type     = string
-  default = "m5n.large"
 }
 
 # consts
