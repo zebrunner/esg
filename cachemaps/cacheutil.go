@@ -82,7 +82,7 @@ func FindAll[R interface{}](rdbPipe redis.Pipeliner, ids []string) ([]R, error) 
 	}
 
 	cmds, err := rdbPipe.Exec(context.Background())
-	if err != nil {
+	if err != nil && err != redis.Nil {
 		return nil, err
 	}
 
