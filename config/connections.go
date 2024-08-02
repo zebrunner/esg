@@ -2,7 +2,9 @@ package config
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -10,73 +12,52 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type redisDB int
-
-const (
-	REDIS_MAPPER_CLIENT redisDB = iota
-	REDIS_DEFINITIONS_CLIENT
-	// for tasks that are in register queue
-	// Such tasks cannot get into the provisioning pool, but still need to be calculated by scaler
-	REDIS_RESOURCES_CLIENT
-	// for utility records (key lockers, key markers, etc...)
-	REDIS_UTILITY_CLIENT
-)
-
 var (
-	redisMapperClient      *redis.Client
-	redisDefinitionsClient *redis.Client
-	redisResourcesClient   *redis.Client
-	redisUtilityClient     *redis.Client
-	DbConnection           *sqlx.DB
+	RedisCluster *redis.ClusterClient
+	DbConnection *sqlx.DB
 )
 
-func (db redisDB) InitConnection() error {
-
-	if db.GetConnection() != nil {
-		return fmt.Errorf("'%d' redis connection already initialized", db)
-	}
-	//default PoolTimeout - 4 seconds
-	client := redis.NewClient(&redis.Options{
-		Addr:        Conf.RedisConnectionString,
-		Password:    "",
-		DB:          int(db),
+func InitRedisClusterConnection() error {
+	options := &redis.ClusterOptions{
+		Addrs:       strings.Split(Conf.RedisConnectionString, ";"),
 		PoolTimeout: 10 * time.Second,
-	})
+	}
 
-	_, err := client.Ping(context.Background()).Result()
+	if Conf.RedisRemote {
+		options.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+	}
+
+	RedisCluster = redis.NewClusterClient(options)
+
+	_, err := RedisCluster.Ping(context.Background()).Result()
 	if err != nil {
-		log.WithError(err).Errorf("Failed to ping redis %d connection", db)
-		client.Close()
-	} else {
-		db.setConnection(client)
+		log.WithError(err).Errorf("Failed to ping redis cluster connection")
+		return err
 	}
-	return err
-}
 
-func (db redisDB) setConnection(client *redis.Client) {
-	switch db {
-	case REDIS_MAPPER_CLIENT:
-		redisMapperClient = client
-	case REDIS_DEFINITIONS_CLIENT:
-		redisDefinitionsClient = client
-	case REDIS_RESOURCES_CLIENT:
-		redisResourcesClient = client
-	case REDIS_UTILITY_CLIENT:
-		redisUtilityClient = client
-	}
-}
+	clusterInitDuration := time.Minute
+	clusterInitStartTime := time.Now()
+	for {
+		res, err := RedisCluster.ClusterInfo(context.Background()).Result()
+		if strings.Contains(res, "cluster_state:ok") {
+			time.Sleep(5 * time.Second)
+			log.Debug("Redis cluster connection initialized")
+			break
+		}
 
-func (db redisDB) GetConnection() *redis.Client {
-	switch db {
-	case REDIS_MAPPER_CLIENT:
-		return redisMapperClient
-	case REDIS_DEFINITIONS_CLIENT:
-		return redisDefinitionsClient
-	case REDIS_RESOURCES_CLIENT:
-		return redisResourcesClient
-	case REDIS_UTILITY_CLIENT:
-		return redisUtilityClient
+		if err == nil {
+			err = fmt.Errorf("cluster state is not ok")
+		}
+
+		if time.Since(clusterInitStartTime) > clusterInitDuration {
+			log.WithError(err).Error("Failed to init redis cluster")
+			return err
+		}
+
+		log.WithError(err).Trace("Redis cluster init error, retrying...")
+		time.Sleep(time.Second)
 	}
+
 	return nil
 }
 
@@ -99,17 +80,8 @@ func InitDBConnection(connectionString string) error {
 * Close all Redis and Database connections.
  */
 func CloseConnections() {
-	if redisMapperClient != nil {
-		redisMapperClient.Close()
-	}
-	if redisDefinitionsClient != nil {
-		redisDefinitionsClient.Close()
-	}
-	if redisResourcesClient != nil {
-		redisResourcesClient.Close()
-	}
-	if redisUtilityClient != nil {
-		redisUtilityClient.Close()
+	if RedisCluster != nil {
+		RedisCluster.Close()
 	}
 	if DbConnection != nil {
 		log.Info("Closing database connection.")

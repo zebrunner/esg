@@ -35,6 +35,8 @@ const (
 	proxyHandlerPort int64 = 8060
 	recorderdPort    int64 = 9080
 
+	cypressDebugPort int64 = 9222
+
 	cloneContainerMinCpu    int64 = 128
 	cloneContainerMinMemory int64 = 512 //increased memory to fix OOM for huge repositories (3K+ branches)
 )

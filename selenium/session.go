@@ -59,10 +59,9 @@ func startSession(ctx context.Context, net *network.NetworkConfiguration, driver
 		utils.SendToChanIfNotBlocked(sessReq.EssentialErrCh, err)
 		return
 	}
-
 	defer resp.Body.Close()
-	var reply map[string]interface{}
 
+	var reply map[string]interface{}
 	err = json.NewDecoder(resp.Body).Decode(&reply)
 	if err != nil {
 		utils.SendToChanIfNotBlocked(sessReq.EssentialErrCh, err)
@@ -71,7 +70,7 @@ func startSession(ctx context.Context, net *network.NetworkConfiguration, driver
 
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusBadRequest {
-			utils.SendToChanIfNotBlocked(sessReq.EssentialErrCh, err)
+			utils.SendToChanIfNotBlocked(sessReq.EssentialErrCh, fmt.Errorf("%v", reply))
 		} else {
 			utils.SendToChanIfNotBlocked(sessReq.NonEssentialErrCh, fmt.Errorf("%v", reply))
 		}

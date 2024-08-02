@@ -14,9 +14,11 @@ COPY . /esg
 
 RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./cmd/task-definitions
 
+
 FROM alpine:latest
 
 ENV LOG_LEVEL=
+ENV AWS_LOGS_GROUP=
 
 ENV AWS_REGION=
 ENV AWS_RETRY=
@@ -25,14 +27,21 @@ ENV AWS_ACESS_KEY_ID=
 ENV AWS_SECRET_ACCESS_KEY=
 ENV AWS_TASK_ROLE=
 
-ENV AWS_ELASTIC_CACHE=
+ENV S3_BUCKET=
+ENV S3_REGION=
+ENV S3_AWS_ACESS_KEY_ID=
+ENV S3_AWS_SECRET_ACCESS_KEY=
+
+ENV ELASTIC_CACHE=
+ENV CACHE_REMOTE=
 ENV DATABASE=
 
 ENV IMAGE_REPOSITORIES=
 ENV EXCLUDE_BROWSERS=
 
-COPY --from=0 /esg/task-definitions /task-definitions
-
+COPY ./build/.env version
 COPY ./build/entrypoint.task-definitions /entrypoint.sh
+
+COPY --from=0 /esg/task-definitions /task-definitions
 
 ENTRYPOINT ["/entrypoint.sh"]

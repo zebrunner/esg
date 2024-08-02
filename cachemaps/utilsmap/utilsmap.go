@@ -2,35 +2,42 @@ package utilsmap
 
 import (
 	"context"
-	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/cachemaps"
 	"github.com/zebrunner/esg/config"
 )
 
 const (
-	ScalerVersion              = "scalerVersion"
+	ScalerVersion          serviceVersionKey = "scalerVersion"
+	TaskDefinitionsVersion serviceVersionKey = "taskDefinitionsVersion"
 )
 
-func AcquireLock(key string, expiration time.Duration) bool {
-	ok, err := config.REDIS_UTILITY_CLIENT.GetConnection().SetNX(context.Background(), key, "lock", expiration).Result()
+type serviceVersionKey string
+
+func (svk serviceVersionKey) String() string {
+	return string(svk)
+}
+
+func (svk serviceVersionKey) Set(version string) error {
+	return config.RedisCluster.Set(context.Background(), svk.String(), version, 0).Err()
+}
+
+func (svk serviceVersionKey) Get() (string, error) {
+	return config.RedisCluster.Get(context.Background(), svk.String()).Result()
+}
+
+func AcquireLock(key string) bool {
+	res, err := cachemaps.AppendToSet(cachemaps.UTILS, key)
 	if err != nil {
 		logrus.WithError(err).Error("Failed to obtain lock")
 		return false
 	}
 
-	return ok
+	// 0 -> key already exists -> key is already busy
+	return res != 0
 }
 
 func ReleaseLock(key string) error {
-	return config.REDIS_UTILITY_CLIENT.GetConnection().Del(context.Background(), key).Err()
-}
-
-
-func SetScalerVersion() error {
-	return config.REDIS_UTILITY_CLIENT.GetConnection().Set(context.Background(), ScalerVersion, config.Version, 0).Err()
-}
-
-func GetScalerVersion() (string, error) {
-	return config.REDIS_UTILITY_CLIENT.GetConnection().Get(context.Background(), ScalerVersion).Result()
+	return cachemaps.RemoveFromSet(cachemaps.UTILS, key)
 }

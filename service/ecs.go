@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/aws/aws-sdk-go/service/s3"
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/cachemaps"
 	"github.com/zebrunner/esg/cachemaps/mapper"
 	"github.com/zebrunner/esg/config"
 
@@ -132,9 +133,9 @@ func StopTask(mapperEntity mapper.Mapper, stopReason mapper.StoppedReason) error
 
 	mapperEntity.Status = mapper.Stopped
 	mapperEntity.StopReason = stopReason
-	setsToDettach := []mapper.SetType{}
+	setsToDettach := []cachemaps.SetType{}
 	if mapperEntity.SessionID != "" {
-		setsToDettach = append(setsToDettach, mapper.SESSION)
+		setsToDettach = append(setsToDettach, cachemaps.SESSION)
 	}
 
 	err = mapper.WritedByWorker(&mapperEntity, nil, setsToDettach, 10*time.Minute)

@@ -1,10 +1,12 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -58,34 +60,60 @@ func ListDrivers(c *gin.Context) {
 		return
 	}
 
-	_, err = c.Writer.Write(resBody)
-	if err != nil {
-		c.Status(http.StatusInternalServerError)
-		log.WithError(err).Error("Failed to write body server")
+	originalImages := make([]imageDataModel, 0)
+	if err := json.Unmarshal(resBody, &originalImages); err != nil {
+		log.WithError(err).Error("Failed to unmarshal list of the images from task-definitions server")
 		return
 	}
+
+	filteredImages := make([]imageDataModel, 0)
+	for _, image := range originalImages {
+		// -debug images should not be added to the reporting, it should be available silently
+		if strings.Contains(image.Version, "-debug") {
+			continue
+		}
+		filteredImages = append(filteredImages, image)
+	}
+	c.JSON(http.StatusOK, filteredImages)
 }
 
 func Welcome(c *gin.Context) {
-	scalerVersion, err := utilsmap.GetScalerVersion()
+	scalerVersion, err := utilsmap.ScalerVersion.Get()
 	if err != nil {
+		log.WithError(err).Trace("Failed to get scaler's version")
 		scalerVersion = "undefined"
 	}
-	welcomeMsg := fmt.Sprintf("Welcome to Zebrunner Elastic Selenium Grid!\nrouter: %s\nscaler: %s", config.Version, scalerVersion)
+
+	taskDefVersion, err := utilsmap.TaskDefinitionsVersion.Get()
+	if err != nil {
+		log.WithError(err).Trace("Failed to get task-definition's version")
+		taskDefVersion = "undefined"
+	}
+
+	welcomeMsg := fmt.Sprintf("Welcome to Zebrunner Elastic Selenium Grid!\nrouter: %s\nscaler: %s\ntask-definitions: %s", config.Version, scalerVersion, taskDefVersion)
 
 	c.String(http.StatusOK, welcomeMsg)
 }
 
 func WelcomeWithInstallationRef(c *gin.Context) {
-	scalerVersion, err := utilsmap.GetScalerVersion()
+	scalerVersion, err := utilsmap.ScalerVersion.Get()
 	if err != nil {
+		log.WithError(err).Trace("Failed to get scaler's version")
 		scalerVersion = "undefined"
+	}
+
+	taskDefVersion, err := utilsmap.TaskDefinitionsVersion.Get()
+	if err != nil {
+		log.WithError(err).Trace("Failed to get task-definition's version")
+		taskDefVersion = "undefined"
 	}
 
 	htmlStr := fmt.Sprintf("<html><body>Welcome to Zebrunner Elastic Selenium Grid! AWS cluster is not configured correctly."+
 		"<br>router: %[1]s"+
 		"<br>scaler: %s"+
-		"<br><a href=https://github.com/zebrunner/e3s/blob/%[1]v/docs/installation.md>Documentation</a></body></html>", config.Version, scalerVersion)
+		"<br>task-definitions: %s"+
+		"<br><a href=https://github.com/zebrunner/e3s/blob/%[1]v/docs/installation.md>Documentation</a></body></html>",
+		config.Version, scalerVersion, taskDefVersion)
 
 	c.Writer.WriteHeader(http.StatusOK)
 	c.Writer.Write([]byte(htmlStr))

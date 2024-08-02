@@ -47,6 +47,7 @@ type Config struct {
 	// External connections
 	DbConnectionString          string
 	RedisConnectionString       string
+	RedisRemote                 bool
 	DefinitionsConnectionString string
 
 	ZebrunnerHost                string
@@ -59,8 +60,10 @@ type Config struct {
 	S3AwsAccessKeyID     string
 	S3AwsSecretAccessKey string
 
-	LogLevel                string
-	RecorderLogLvl          string
+	LogLevel       string
+	RecorderLogLvl string
+	AwsLogsGroup   string
+
 	ReserveInstancesPercent float64
 	ReserveMaxCapacity      int64
 
@@ -94,7 +97,8 @@ func init() {
 	flag.DurationVar(&Conf.MaxTimeout, "max-timeout", 24*time.Hour, "Maximum valid task/session timeout in time.Duration format")
 
 	flag.StringVar(&Conf.DbConnectionString, "db-connection", "localhost:5432", "Connection string for database")
-	flag.StringVar(&Conf.RedisConnectionString, "aws-elastic-cache", "localhost:6379", "Connection string for Session cache")
+	flag.StringVar(&Conf.RedisConnectionString, "elastic-cache", "localhost:6379", "Connection string for Session cache")
+	flag.BoolVar(&Conf.RedisRemote, "cache-remote", false, "Is cache service deployed on remote instance")
 	flag.StringVar(&Conf.DefinitionsConnectionString, "definitions-connection", "localhost:5555", "Connection string for task-definitions service")
 
 	flag.StringVar(&Conf.ZebrunnerHost, "zebrunner-host", "", "Host for zebrunner integration for this environment")
@@ -108,6 +112,8 @@ func init() {
 	flag.StringVar(&Conf.S3AwsSecretAccessKey, "s3-aws-secret-access-key", "", "Secret key for S3 bucket")
 
 	flag.StringVar(&Conf.LogLevel, "log-level", "debug", "Desired log level. Valid levels: `panic`, `fatal`, `error`, `warning`, `info`, `debug`, `trace`")
+	flag.StringVar(&Conf.AwsLogsGroup, "aws-logs-group", "", "Aws cloud watch logs group")
+
 	flag.Float64Var(&Conf.ReserveInstancesPercent, "reserve-instances-percent", 0.25, "Reserved cluster capacity quota during scale up and down operations")
 	flag.Int64Var(&Conf.ReserveMaxCapacity, "reserve-max-capacity", 5, "Reservation instance limit")
 

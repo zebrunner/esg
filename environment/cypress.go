@@ -114,12 +114,18 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 		Command:          []string{"-c", entrypointDir + "/entrypoint.sh" + taskLogRedirect},
 		EntryPoint:       []string{"/bin/sh"},
 		HealthCheck: &ecs.HealthCheck{
-			//TODO: think about smarter healthcheck
-			Command:     []*string{aws.String("CMD-SHELL"), aws.String("exit 0")}, // Healthy as only entrypoint started to init network endpoints ip correctly
-			Interval:    aws.Int64(5),
-			Retries:     aws.Int64(3),
-			Timeout:     aws.Int64(10),
-			StartPeriod: aws.Int64(0),
+			Command: []*string{aws.String("CMD-SHELL"),
+				aws.String(fmt.Sprintf("{"+
+					// check that 'Cypress: Config Manager' process started (looks like it appears only when cypress tests completely started)
+					" ps aux | awk '/Cypress: Config Manager/ && !/awk/ { print $2 }' | grep ''  &&"+
+					// check that browser returns something via debug port
+					" curl -f http://localhost:%v/json"+
+					"; } || exit 1", cypressDebugPort))},
+			Interval: aws.Int64(5),
+			Retries:  aws.Int64(7),
+			Timeout:  aws.Int64(5),
+			// todo think about optimizing cypress process startup so we can change startPeriod to 0
+			StartPeriod: aws.Int64(40),
 		},
 		DependsOn: []*ecs.ContainerDependency{
 			{
@@ -142,6 +148,7 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 	// declare hardcoded vars without ability to override:
 	cypressContainer.Env["CYPRESS"] = "true"
 	cypressContainer.Env["CYPRESS_VIDEO"] = "false"
+	cypressContainer.Env["CYPRESS_REMOTE_DEBUGGING_PORT"] = fmt.Sprint(cypressDebugPort)
 
 	//basic auth header for executor-logs service
 	basicAuthHeader := "Authorization: Basic " + b64.StdEncoding.EncodeToString([]byte(conf.ZebrunnerIntegrationUser+":"+conf.ZebrunnerIntegrationPassword))
@@ -231,6 +238,7 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 		Type:             envtype.CYPRESS,
 		CapacityProvider: config.Conf.AwsLinuxCapacityProvider,
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
+		AwsLogsGroup:     config.Conf.AwsLogsGroup,
 	}
 
 	err := calculateResources(&env,
