@@ -46,7 +46,7 @@ services:
     #      - "${HOME}/.aws:/root/.aws"
   router_2:
     container_name: router_2
-    image: public.ecr.aws/zebrunner/router:3.1-beta1
+    image: public.ecr.aws/zebrunner/router:3.1
     environment:
       - EXTERNAL_PORT=$ROUTER_PORT_2
     env_file:
@@ -66,4 +66,4 @@ services:
 networks:
   service-network:
     external: true
-    name: e3s-networkk
+    name: e3s-network
