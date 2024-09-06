@@ -148,70 +148,46 @@ func CreateRouter() *gin.Engine {
 	return r
 }
 
-func InitClusterInfo() (*elbv2.TargetGroup, error) {
+func InitClusterInfo() error {
 	aws, err := service.InitAws()
 	if err != nil {
 		log.WithError(err).Error("Failed to start aws session")
-		return nil, err
+		return err
 	}
 	service.AwsSess = aws
 
 	err = utils.RefreshIMDSV2Token()
 	if err != nil {
 		log.WithError(err).Error("Failed to generate IMDSV2 token")
-		return nil, err
-	} else {
-		go func() {
-			for {
-				time.Sleep(2*time.Hour + 30*time.Minute)
-				err := utils.RefreshIMDSV2Token()
-				if err != nil {
-					log.WithError(err).Error("Failed to generate IMDSV2 token")
-				} else {
-					log.Debug("Successfully generated IMDSV2 token")
-				}
-			}
-		}()
+		return err
 	}
+
+	go func() {
+		for {
+			time.Sleep(2*time.Hour + 30*time.Minute)
+			err := utils.RefreshIMDSV2Token()
+			if err != nil {
+				log.WithError(err).Error("Failed to generate IMDSV2 token")
+			} else {
+				log.Debug("Successfully generated IMDSV2 token")
+			}
+		}
+	}()
 
 	scalersMap, err := service.InitScalingData()
 	if err != nil {
 		log.WithError(err).Error("Failed to init scaling data")
-		return nil, err
+		return err
 	}
 
 	for capacityProvider, scaler := range scalersMap {
 		environment.AddSmallestInstanceResources(scaler.InstanceResources.CPU, scaler.InstanceResources.Memory, capacityProvider)
 	}
 
-	l := log.WithField("targetGroup", config.Conf.AwsTargetGroup)
-	targetGroup, err := service.DescribeTargetGroup(config.Conf.AwsTargetGroup)
+	config.Conf.E3SUrl, err = getE3SUrl()
 	if err != nil {
-		l.WithError(err).Error("Failed to describe target group")
-		return nil, err
-	} else if len(targetGroup.LoadBalancerArns) < 1 || targetGroup.LoadBalancerArns[0] == nil {
-		err = fmt.Errorf("target group is not attached to load balancer")
-		l.WithError(err).Error("Failed to describe target group")
-		return nil, err
+		return err
 	}
-
-	loadBalancer, err := service.DescribeLoadBalancer(*targetGroup.LoadBalancerArns[0])
-	if err != nil {
-		l.WithError(err).Error("Failed to describe load balancer")
-		return nil, err
-	} else if loadBalancer.DNSName == nil || *loadBalancer.DNSName == "" {
-		err = fmt.Errorf("load balancer without public dns")
-		l.WithError(err).Error("Failed to describe load balancer")
-		return nil, err
-	}
-
-	listener, err := service.DescribeListener(*loadBalancer.LoadBalancerArn)
-	if err != nil {
-		l.WithError(err).Error("Failed to describe load balancer")
-		return nil, err
-	}
-
-	config.Conf.AwsEsgUrl = fmt.Sprintf("%s://%s", *listener.Protocol, *loadBalancer.DNSName)
 
 	// wait until task definitions are updated
 	retryCount := 2
@@ -220,7 +196,7 @@ func InitClusterInfo() (*elbv2.TargetGroup, error) {
 			retryCount--
 			if retryCount <= 0 {
 				log.WithError(err).Error("Failed to get expected response from e3s definitions service")
-				return nil, err
+				return err
 			}
 		} else if ok {
 			go definitionmap.ActualizeDefinitionsMap(time.Minute * 15)
@@ -230,7 +206,42 @@ func InitClusterInfo() (*elbv2.TargetGroup, error) {
 		time.Sleep(5 * time.Second)
 	}
 
-	return targetGroup, nil
+	return nil
+}
+
+func getE3SUrl() (string, error) {
+	if config.Conf.E3SUrl != "" {
+		return config.Conf.E3SUrl, nil
+	}
+
+	l := log.WithField("targetGroup", config.Conf.AwsTargetGroup)
+	targetGroup, err := service.DescribeTargetGroup(config.Conf.AwsTargetGroup)
+	if err != nil {
+		l.WithError(err).Error("Failed to describe target group")
+		return "", err
+	} else if len(targetGroup.LoadBalancerArns) < 1 || targetGroup.LoadBalancerArns[0] == nil {
+		err = fmt.Errorf("target group is not attached to load balancer")
+		l.WithError(err).Error("Failed to describe target group")
+		return "", err
+	}
+
+	loadBalancer, err := service.DescribeLoadBalancer(*targetGroup.LoadBalancerArns[0])
+	if err != nil {
+		l.WithError(err).Error("Failed to describe load balancer")
+		return "", err
+	} else if loadBalancer.DNSName == nil || *loadBalancer.DNSName == "" {
+		err = fmt.Errorf("load balancer without public dns")
+		l.WithError(err).Error("Failed to describe load balancer")
+		return "", err
+	}
+
+	listener, err := service.DescribeListener(*loadBalancer.LoadBalancerArn)
+	if err != nil {
+		l.WithError(err).Error("Failed to describe load balancer")
+		return "", err
+	}
+
+	return fmt.Sprintf("%s://%s", *listener.Protocol, *loadBalancer.DNSName), nil
 }
 
 func main() {
@@ -262,18 +273,18 @@ func main() {
 	mapper.InitMapperWorkers()
 	resourcesToAllocate.InitResourceWorker()
 
-	targetGroup, err := InitClusterInfo()
+	err = InitClusterInfo()
 	if err != nil {
 		log.WithError(err).Error("Failed to init cluster info")
 		startMockRouter()
 	} else {
-		startRouter(targetGroup)
+		startRouter()
 	}
 
 	log.Info("Router exited")
 }
 
-func startRouter(targetGroup *elbv2.TargetGroup) {
+func startRouter() {
 	// init all starter workers
 	starter.InitInstanceWorker()
 	starter.InitWaitWorker()
@@ -295,16 +306,31 @@ func startRouter(targetGroup *elbv2.TargetGroup) {
 		}
 	}()
 
-	l := log.WithField("targetGroup", config.Conf.AwsTargetGroup)
-	err := service.RegisterTarget(targetGroup, config.Conf.ExternalPort)
-	if err != nil {
-		utils.ExitWithError(err, "Failed to append target to the elb target group", l)
-	} else {
+	var tg *elbv2.TargetGroup = nil
+	if config.Conf.AwsTargetGroup != "" {
+		var err error
+		l := log.WithField("targetGroup", config.Conf.AwsTargetGroup)
+
+		tg, err = service.DescribeTargetGroup(config.Conf.AwsTargetGroup)
+		if err != nil {
+			l.WithError(err).Error("Failed to describe target group")
+			utils.ExitWithError(err, "Failed to append target to the elb target group", l)
+		} else if len(tg.LoadBalancerArns) < 1 || tg.LoadBalancerArns[0] == nil {
+			err = fmt.Errorf("target group is not attached to load balancer")
+			utils.ExitWithError(err, "Failed to append target to the elb target group", l)
+		}
+
+		err = service.RegisterTarget(tg, config.Conf.ExternalPort)
+		if err != nil {
+			utils.ExitWithError(err, "Failed to append target to the elb target group", l)
+		}
+
 		// wait until alb actually starts distributing requests to that specific target
 		// average time is between 5 to 15 seconds
 		time.Sleep(25 * time.Second)
 		l.Info("Registered target in target group")
 	}
+
 	log.Info("Service started")
 
 	<-quit
@@ -313,10 +339,14 @@ func startRouter(targetGroup *elbv2.TargetGroup) {
 	ctx, cancel := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout+5*time.Second)
 	defer cancel()
 
-	err = service.DeregisterTarget(targetGroup, config.Conf.ExternalPort)
-	if err != nil {
-		l.WithError(err).Fatal("Failed to detach target from the elb target group")
-	} else {
+	if tg != nil {
+		l := log.WithField("targetGroup", config.Conf.AwsTargetGroup)
+
+		err := service.DeregisterTarget(tg, config.Conf.ExternalPort)
+		if err != nil {
+			l.WithError(err).Fatal("Failed to detach target from the elb target group")
+		}
+
 		// wait until alb actually stops distributing requests to that specific target
 		// average time is between 5 to 15 seconds
 		time.Sleep(25 * time.Second)
