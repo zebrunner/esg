@@ -153,7 +153,7 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 	}
 
 	executorContainer.Env["UUID"] = routerUUID
-	executorContainer.Env["E3S_URL"] = config.Conf.AwsEsgUrl
+	executorContainer.Env["E3S_URL"] = config.Conf.E3SUrl
 
 	recorderContainer := Container{
 		Name:  "recorder",
