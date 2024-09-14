@@ -2,6 +2,7 @@ package starter
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -20,6 +21,7 @@ import (
 	envtype "github.com/zebrunner/esg/environment/envType"
 	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/service"
+	"github.com/zebrunner/esg/task-definitions-service/definitions"
 	"github.com/zebrunner/esg/utils"
 	"github.com/zebrunner/esg/zebrunner"
 )
@@ -250,8 +252,17 @@ func (starter genericStarter) StartService(startupTime context.Context) (map[str
 	// override request context, as after response is sent, request context is canceled
 	starter.basis.Request = starter.basis.Request.WithContext(genericCtx)
 	go func() {
+		packedEnvironment, err := json.Marshal(starter.basis.Env)
+		if err != nil {
+			log.WithError(err).Error("Failed to create task definition: could not marshal environment")
+			zebrunner.AbortLaunch(starter.basis.MapperEntity.RouterUUID, starter.basis.MapperEntity.Workspace,
+				starter.basis.Env.Capabilities.LaunchUUID.ToPrimitive(), fmt.Sprintf("failed to create task defenition for generic: %v", err.Error()))
+
+			genericCtxCancel()
+			return
+		}
 		// create new task definition for generic task
-		taskDefinition, err := service.CreateTaskDefinition(starter.basis.Env.ContainerDefinitions(), starter.basis.Env.Volume(), starter.basis.Env.TaskDefinitionFamily, starter.basis.Env.TaskRoleArn)
+		taskDefinitionRevision, err := definitions.GetClient().GetTaskDefinitionId(context.Background(), &definitions.Configuration{Configuration: packedEnvironment})
 		// abort launch if failed to create new task definition
 		if err != nil {
 			log.WithError(err).Error("Failed to create task definition")
@@ -262,7 +273,7 @@ func (starter genericStarter) StartService(startupTime context.Context) (map[str
 			return
 		}
 		// set revision of newly created task definition
-		starter.basis.Env.TaskDefinitionFamily = fmt.Sprintf("%s:%v", starter.basis.Env.TaskDefinitionFamily, *taskDefinition.Revision)
+		starter.basis.Env.TaskDefinitionFamily = fmt.Sprintf("%s:%v", starter.basis.Env.TaskDefinitionFamily, taskDefinitionRevision.Revision)
 
 		_, startErr := basicStarter(starter).StartService(startupTime)
 
