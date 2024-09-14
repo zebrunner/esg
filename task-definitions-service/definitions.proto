@@ -1,0 +1,18 @@
+syntax = "proto3";
+package definitions;
+
+option go_package = "./definitions";
+
+service Service {
+    rpc getTaskDefinitionId(Configuration) returns (Definition);
+}
+
+message Configuration {
+    // configuration should be json-marshalled environment.Environment object
+    //todo think about another options how send no-proto message
+    bytes configuration = 1;
+}
+
+message Definition {
+    int64 revision = 1;
+}
