@@ -1,0 +1,1 @@
+independent service that provides methods for getting/generating definitions udid

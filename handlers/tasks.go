@@ -64,16 +64,16 @@ func Create(c *gin.Context) {
 	// l = l.WithField("workspace", workspace)
 	// }
 
-	reqCaps, configurationCaps, err := capabilities.ParseRequestCapabilities(c.Request.Body)
+	requestCapabilities, containerConfiguration, err := capabilities.ParseRequestCapabilities(c.Request.Body)
 	if err != nil {
 		l.WithError(err).Error("Failed to process capabilities")
 		c.Error(utils.InvalidArgErr(fmt.Errorf("failed to process capabilities"), err.Error())).SetType(gin.ErrorTypePublic)
 		return
 	}
-	log.Trace("Request capabilitites: ", reqCaps.ToMap())
-	log.Trace("Container configuration: ", configurationCaps.ToMap())
+	log.Trace("Request capabilitites: ", requestCapabilities.ToMap())
+	log.Trace("Container configuration: ", containerConfiguration.ToMap())
 
-	env, routerUUID, err := environment.BuildEnvForTaskDefinitionOverride(workspace, configurationCaps)
+	env, routerUUID, err := environment.BuildEnvForTaskDefinitionOverride(workspace, containerConfiguration)
 	if err != nil {
 		log.WithError(err).Error("Failed to build execution environment")
 		c.Error(utils.CreationErr(fmt.Errorf("failed to create executor"), err.Error())).SetType(gin.ErrorTypePublic)
@@ -87,7 +87,7 @@ func Create(c *gin.Context) {
 		env,
 		workspace,
 		routerUUID,
-		reqCaps,
+		requestCapabilities,
 		c,
 		l,
 	).StartService(startupTime)
