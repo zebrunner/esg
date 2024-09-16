@@ -1,6 +1,7 @@
 package environment
 
 import (
+	"context"
 	"fmt"
 
 	"strings"
@@ -8,12 +9,12 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
 
-	"github.com/zebrunner/esg/cachemaps/definitionmap"
 	"github.com/zebrunner/esg/cachemaps/resourcesToAllocate"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
 	envtype "github.com/zebrunner/esg/environment/envType"
 	"github.com/zebrunner/esg/environment/network"
+	"github.com/zebrunner/esg/task-definitions-service/definitions"
 	"github.com/zebrunner/esg/utils"
 )
 
@@ -285,10 +286,9 @@ func (env *ExecutionEnvironment) GetFamilyRevision() (string, error) {
 		return env.TaskDefinitionFamily, nil
 	}
 
-	revision, found := definitionmap.FindRevision(env.HashOvverideDefinition())
-	if !found {
+	revision, err := definitions.GetClient().GetTaskDefinitionRevisionByHash(context.Background(), &definitions.Hash{Value: env.HashOvverideDefinition()})
+	if err != nil {
 		return "", fmt.Errorf("revision not found for '%s'", env.TaskDefinitionFamily)
 	}
-
-	return fmt.Sprint(env.TaskDefinitionFamily, ":", revision), nil
+	return fmt.Sprint(env.TaskDefinitionFamily, ":", revision.Value), nil
 }

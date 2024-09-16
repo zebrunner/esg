@@ -262,7 +262,7 @@ func (starter genericStarter) StartService(startupTime context.Context) (map[str
 			return
 		}
 		// create new task definition for generic task
-		taskDefinitionRevision, err := definitions.GetClient().GetTaskDefinitionId(context.Background(), &definitions.Configuration{Configuration: packedEnvironment})
+		taskDefinitionRevision, err := definitions.GetClient().GetTaskDefinitionRevision(context.Background(), &definitions.Configuration{Configuration: packedEnvironment})
 		// abort launch if failed to create new task definition
 		if err != nil {
 			log.WithError(err).Error("Failed to create task definition")
@@ -273,7 +273,7 @@ func (starter genericStarter) StartService(startupTime context.Context) (map[str
 			return
 		}
 		// set revision of newly created task definition
-		starter.basis.Env.TaskDefinitionFamily = fmt.Sprintf("%s:%v", starter.basis.Env.TaskDefinitionFamily, taskDefinitionRevision.Revision)
+		starter.basis.Env.TaskDefinitionFamily = fmt.Sprintf("%s:%v", starter.basis.Env.TaskDefinitionFamily, taskDefinitionRevision.Value)
 
 		_, startErr := basicStarter(starter).StartService(startupTime)
 

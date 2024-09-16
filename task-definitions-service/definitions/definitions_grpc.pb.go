@@ -19,14 +19,19 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Service_GetTaskDefinitionId_FullMethodName = "/definitions.Service/getTaskDefinitionId"
+	Service_GetTaskDefinitionRevision_FullMethodName       = "/definitions.Service/getTaskDefinitionRevision"
+	Service_GetTaskDefinitionRevisionByHash_FullMethodName = "/definitions.Service/getTaskDefinitionRevisionByHash"
 )
 
 // ServiceClient is the client API for Service service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ServiceClient interface {
-	GetTaskDefinitionId(ctx context.Context, in *Configuration, opts ...grpc.CallOption) (*Definition, error)
+	// todo add cache support for this method
+	// create definition according to the  environment.Environment and return revision id
+	// for generic tasks
+	GetTaskDefinitionRevision(ctx context.Context, in *Configuration, opts ...grpc.CallOption) (*Revision, error)
+	GetTaskDefinitionRevisionByHash(ctx context.Context, in *Hash, opts ...grpc.CallOption) (*Revision, error)
 }
 
 type serviceClient struct {
@@ -37,10 +42,20 @@ func NewServiceClient(cc grpc.ClientConnInterface) ServiceClient {
 	return &serviceClient{cc}
 }
 
-func (c *serviceClient) GetTaskDefinitionId(ctx context.Context, in *Configuration, opts ...grpc.CallOption) (*Definition, error) {
+func (c *serviceClient) GetTaskDefinitionRevision(ctx context.Context, in *Configuration, opts ...grpc.CallOption) (*Revision, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Definition)
-	err := c.cc.Invoke(ctx, Service_GetTaskDefinitionId_FullMethodName, in, out, cOpts...)
+	out := new(Revision)
+	err := c.cc.Invoke(ctx, Service_GetTaskDefinitionRevision_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *serviceClient) GetTaskDefinitionRevisionByHash(ctx context.Context, in *Hash, opts ...grpc.CallOption) (*Revision, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Revision)
+	err := c.cc.Invoke(ctx, Service_GetTaskDefinitionRevisionByHash_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +66,11 @@ func (c *serviceClient) GetTaskDefinitionId(ctx context.Context, in *Configurati
 // All implementations must embed UnimplementedServiceServer
 // for forward compatibility.
 type ServiceServer interface {
-	GetTaskDefinitionId(context.Context, *Configuration) (*Definition, error)
+	// todo add cache support for this method
+	// create definition according to the  environment.Environment and return revision id
+	// for generic tasks
+	GetTaskDefinitionRevision(context.Context, *Configuration) (*Revision, error)
+	GetTaskDefinitionRevisionByHash(context.Context, *Hash) (*Revision, error)
 	mustEmbedUnimplementedServiceServer()
 }
 
@@ -62,8 +81,11 @@ type ServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedServiceServer struct{}
 
-func (UnimplementedServiceServer) GetTaskDefinitionId(context.Context, *Configuration) (*Definition, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetTaskDefinitionId not implemented")
+func (UnimplementedServiceServer) GetTaskDefinitionRevision(context.Context, *Configuration) (*Revision, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetTaskDefinitionRevision not implemented")
+}
+func (UnimplementedServiceServer) GetTaskDefinitionRevisionByHash(context.Context, *Hash) (*Revision, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetTaskDefinitionRevisionByHash not implemented")
 }
 func (UnimplementedServiceServer) mustEmbedUnimplementedServiceServer() {}
 func (UnimplementedServiceServer) testEmbeddedByValue()                 {}
@@ -86,20 +108,38 @@ func RegisterServiceServer(s grpc.ServiceRegistrar, srv ServiceServer) {
 	s.RegisterService(&Service_ServiceDesc, srv)
 }
 
-func _Service_GetTaskDefinitionId_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Service_GetTaskDefinitionRevision_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(Configuration)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ServiceServer).GetTaskDefinitionId(ctx, in)
+		return srv.(ServiceServer).GetTaskDefinitionRevision(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Service_GetTaskDefinitionId_FullMethodName,
+		FullMethod: Service_GetTaskDefinitionRevision_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ServiceServer).GetTaskDefinitionId(ctx, req.(*Configuration))
+		return srv.(ServiceServer).GetTaskDefinitionRevision(ctx, req.(*Configuration))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Service_GetTaskDefinitionRevisionByHash_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Hash)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ServiceServer).GetTaskDefinitionRevisionByHash(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Service_GetTaskDefinitionRevisionByHash_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ServiceServer).GetTaskDefinitionRevisionByHash(ctx, req.(*Hash))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -112,8 +152,12 @@ var Service_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*ServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "getTaskDefinitionId",
-			Handler:    _Service_GetTaskDefinitionId_Handler,
+			MethodName: "getTaskDefinitionRevision",
+			Handler:    _Service_GetTaskDefinitionRevision_Handler,
+		},
+		{
+			MethodName: "getTaskDefinitionRevisionByHash",
+			Handler:    _Service_GetTaskDefinitionRevisionByHash_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

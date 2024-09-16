@@ -4,7 +4,13 @@ package definitions;
 option go_package = "./definitions";
 
 service Service {
-    rpc getTaskDefinitionId(Configuration) returns (Definition);
+
+    // todo add cache support for this method
+    // create definition according to the  environment.Environment and return revision id
+    // for generic tasks
+    rpc getTaskDefinitionRevision(Configuration) returns (Revision);
+
+    rpc getTaskDefinitionRevisionByHash(Hash) returns (Revision);
 }
 
 message Configuration {
@@ -13,6 +19,10 @@ message Configuration {
     bytes configuration = 1;
 }
 
-message Definition {
-    int64 revision = 1;
+message Revision {
+    int64 value = 1;
+}
+
+message Hash {
+    string value = 1;
 }

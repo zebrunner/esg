@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"net"
 	"os"
 	"os/signal"
@@ -13,6 +14,7 @@ import (
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
 	"github.com/zebrunner/esg/service"
+	"github.com/zebrunner/esg/task-definitions-service/cache"
 	"github.com/zebrunner/esg/task-definitions-service/definitions"
 	"github.com/zebrunner/esg/utils"
 	"google.golang.org/grpc"
@@ -26,7 +28,7 @@ type ServiceServerImpl struct {
 	definitions.ServiceServer
 }
 
-func (ServiceServerImpl) GetTaskDefinitionId(_ context.Context, configuration *definitions.Configuration) (*definitions.Definition, error) {
+func (ServiceServerImpl) GetTaskDefinitionRevision(_ context.Context, configuration *definitions.Configuration) (*definitions.Revision, error) {
 	var env *environment.ExecutionEnvironment
 	err := json.Unmarshal(configuration.Configuration, env)
 	if err != nil {
@@ -44,7 +46,21 @@ func (ServiceServerImpl) GetTaskDefinitionId(_ context.Context, configuration *d
 		log.WithError(err).Error("Unable to create task definition")
 		return nil, err
 	}
-	return &definitions.Definition{Revision: *taskDefinition.Revision}, nil
+	return &definitions.Revision{Value: *taskDefinition.Revision}, nil
+}
+
+func (ServiceServerImpl) GetTaskDefinitionRevisionByHash(_ context.Context, hash *definitions.Hash) (*definitions.Revision, error) {
+	cache := cache.GetCache()
+	if cache.Cache == nil {
+		return nil, fmt.Errorf("cache is not initialized yet")
+	}
+	cache.RLock()
+	revision, ok := cache.Cache[hash.Value]
+	cache.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("there are no revision with such hash")
+	}
+	return &definitions.Revision{Value: revision}, nil
 }
 
 func main() {
