@@ -10,6 +10,7 @@ service Service {
     // for generic tasks
     rpc getTaskDefinitionRevision(Configuration) returns (Revision);
 
+    // get revision by hash (without explicit reference to redis)
     rpc getTaskDefinitionRevisionByHash(Hash) returns (Revision);
 }
 
