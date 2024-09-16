@@ -68,19 +68,6 @@ func getDefinitions() (map[string]int64, error) {
 	return hashRevisionMap, nil
 }
 
-// Find revision in definitionsMap (without redis usage).
-func FindRevision(hash string) (int64, bool) {
-	if definitionsMap == nil {
-		return -1, false
-	}
-
-	mutex.RLock()
-	revision, ok := definitionsMap[hash]
-	mutex.RUnlock()
-
-	return revision, ok
-}
-
 // every `interval` in minutes we update local definitionsMap syncing it with redis cache to minimize redis calls at run-time
 func ActualizeDefinitionsMap(interval time.Duration) {
 	for {
