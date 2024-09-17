@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/cachemaps/utilsmap"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
 	envtype "github.com/zebrunner/esg/environment/envType"
@@ -119,6 +120,10 @@ func main() {
 
 	if err = config.InitRedisClusterConnection(); err != nil {
 		utils.ExitWithError(err, "Failed to init redis connection", log.NewEntry(log.StandardLogger()))
+	}
+
+	if err = utilsmap.TaskDefinitionsVersion.Set(config.Version); err != nil {
+		log.WithError(err).Error("Failed to set task-definitions version in cache")
 	}
 
 	listener, err := net.Listen("tcp", listen)
