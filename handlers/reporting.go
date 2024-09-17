@@ -1,8 +1,9 @@
 package handlers
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"runtime"
@@ -12,7 +13,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps/utilsmap"
 	"github.com/zebrunner/esg/config"
-	"github.com/zebrunner/esg/definitions"
+	"github.com/zebrunner/esg/task-definitions-service/definitions"
 
 	"github.com/gin-gonic/gin"
 )
@@ -53,28 +54,32 @@ func ClusterStatus(c *gin.Context) {
 }
 
 func ListDrivers(c *gin.Context) {
-	resBody, err := definitions.ListImages()
+	stream, err := definitions.GetClient().GetImages(context.Background(), nil)
 	if err != nil {
 		c.Status(http.StatusInternalServerError)
 		log.WithError(err).Error("Failed to list images from task-definitions server")
 		return
 	}
 
-	originalImages := make([]imageDataModel, 0)
-	if err := json.Unmarshal(resBody, &originalImages); err != nil {
-		log.WithError(err).Error("Failed to unmarshal list of the images from task-definitions server")
-		return
-	}
-
-	filteredImages := make([]imageDataModel, 0)
-	for _, image := range originalImages {
+	images := make([]definitions.Image, 0, 0)
+CYCLE:
+	for true {
+		image, err := stream.Recv()
+		if err != nil {
+			if err == io.EOF {
+				break CYCLE
+			}
+			log.WithError(err).Error("Failed to receive image")
+			c.Status(http.StatusInternalServerError)
+			return
+		}
 		// -debug images should not be added to the reporting, it should be available silently
 		if strings.Contains(image.Version, "-debug") {
 			continue
 		}
-		filteredImages = append(filteredImages, image)
+		images = append(images, *image)
 	}
-	c.JSON(http.StatusOK, filteredImages)
+	c.JSON(http.StatusOK, images)
 }
 
 func Welcome(c *gin.Context) {
