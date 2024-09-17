@@ -31,31 +31,6 @@ type refreshDefinitionsModel struct {
 	ExcludeBrowsers   *string `json:"excludeBrowsers,omitempty"`
 }
 
-func GetImages(c *gin.Context) {
-	stream, err := definitions.GetClient().GetImages(context.Background(), nil)
-	if err != nil {
-		log.WithError(err).Error("Failed to list images")
-		c.Status(http.StatusInternalServerError)
-		return
-	}
-
-	imagesDataResponse := make([]definitions.Image, 0, 0)
-CYCLE:
-	for true {
-		image, err := stream.Recv()
-		if err != nil {
-			if err == io.EOF {
-				break CYCLE
-			}
-			log.WithError(err).Error("Failed to receive image")
-			c.Status(http.StatusInternalServerError)
-			return
-		}
-		imagesDataResponse = append(imagesDataResponse, *image)
-	}
-	c.JSON(http.StatusOK, imagesDataResponse)
-}
-
 func Ready(c *gin.Context) {
 	c.String(http.StatusOK, "ready to accept requests")
 }

@@ -95,7 +95,6 @@ func CreateRouter() *gin.Engine {
 
 	r.GET("/", handlers.Ready)
 	r.GET(definitions.IsReadyPath.String(), handlers.IsTaskDefinitionRefreshDone)
-	r.GET(definitions.GetImagesPath.String(), handlers.GetImages)
 	r.POST(definitions.RefreshDefinitionsPath.String(), handlers.RefreshDefinitions)
 
 	return r
