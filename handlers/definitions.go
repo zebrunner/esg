@@ -1,13 +1,15 @@
 package handlers
 
 import (
+	"context"
+	"io"
 	"net/http"
+
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
-	"github.com/zebrunner/esg/definitions"
-	envtype "github.com/zebrunner/esg/environment/envType"
 	"github.com/zebrunner/esg/images"
+	"github.com/zebrunner/esg/task-definitions-service/definitions"
 )
 
 var (
@@ -30,33 +32,27 @@ type refreshDefinitionsModel struct {
 }
 
 func GetImages(c *gin.Context) {
-	images, err := images.ListImages(config.Conf.ImageRepositories, config.Conf.ExcludeBrowsers)
+	stream, err := definitions.GetClient().GetImages(context.Background(), nil)
 	if err != nil {
 		log.WithError(err).Error("Failed to list images")
 		c.Status(http.StatusInternalServerError)
 		return
 	}
 
-	imagesDataResponse := make([]imageDataModel, 0, len(images))
-	for _, image := range images {
-		imgData := imageDataModel{
-			Name:     image.BrowserName,
-			Version:  image.Tag,
-			Platform: image.Platform.String(),
+	imagesDataResponse := make([]definitions.Image, 0, 0)
+CYCLE:
+	for true {
+		image, err := stream.Recv()
+		if err != nil {
+			if err == io.EOF {
+				break CYCLE
+			}
+			log.WithError(err).Error("Failed to receive image")
+			c.Status(http.StatusInternalServerError)
+			return
 		}
-
-		if image.Platform == envtype.ANDROID {
-			imgData.BrowserName = "chrome"
-			imgData.BrowserVersion = "107.0"
-		}
-
-		if image.Platform == envtype.CYPRESS {
-			imgData.ImageUrl = image.GetUrl()
-		}
-
-		imagesDataResponse = append(imagesDataResponse, imgData)
+		imagesDataResponse = append(imagesDataResponse, *image)
 	}
-
 	c.JSON(http.StatusOK, imagesDataResponse)
 }
 

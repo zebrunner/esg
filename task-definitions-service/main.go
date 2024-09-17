@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/signal"
@@ -13,11 +14,14 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
+	envtype "github.com/zebrunner/esg/environment/envType"
+	"github.com/zebrunner/esg/images"
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/task-definitions-service/cache"
 	"github.com/zebrunner/esg/task-definitions-service/definitions"
 	"github.com/zebrunner/esg/utils"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 const (
@@ -61,6 +65,35 @@ func (ServiceServerImpl) GetTaskDefinitionRevisionByHash(_ context.Context, hash
 		return nil, fmt.Errorf("there are no revision with such hash")
 	}
 	return &definitions.Revision{Value: revision}, nil
+}
+
+func (ServiceServerImpl) GetImages(_ *emptypb.Empty, stream grpc.ServerStreamingServer[definitions.Image]) error {
+	images, err := images.ListImages(config.Conf.ImageRepositories, config.Conf.ExcludeBrowsers)
+	if err != nil {
+		log.WithError(err).Error("Failed to list images")
+		return fmt.Errorf("failed to list images")
+	}
+
+	for _, image := range images {
+		imageData := &definitions.Image{
+			Name:     image.BrowserName,
+			Version:  image.Tag,
+			Platform: image.Platform.String(),
+		}
+		if image.Platform == envtype.ANDROID {
+			imageData.BrowserName = "chrome"
+			imageData.BrowserVersion = "107.0"
+		}
+		if image.Platform == envtype.CYPRESS {
+			imageData.ImageUrl = image.GetUrl()
+		}
+
+		err = stream.Send(imageData)
+		if err != nil {
+			return io.EOF
+		}
+	}
+	return io.EOF
 }
 
 func main() {

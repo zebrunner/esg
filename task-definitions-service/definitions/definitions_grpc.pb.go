@@ -11,6 +11,7 @@ import (
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -21,6 +22,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	Service_GetTaskDefinitionRevision_FullMethodName       = "/definitions.Service/getTaskDefinitionRevision"
 	Service_GetTaskDefinitionRevisionByHash_FullMethodName = "/definitions.Service/getTaskDefinitionRevisionByHash"
+	Service_GetImages_FullMethodName                       = "/definitions.Service/getImages"
 )
 
 // ServiceClient is the client API for Service service.
@@ -31,7 +33,10 @@ type ServiceClient interface {
 	// create definition according to the  environment.Environment and return revision id
 	// for generic tasks
 	GetTaskDefinitionRevision(ctx context.Context, in *Configuration, opts ...grpc.CallOption) (*Revision, error)
+	// get revision by hash (without explicit reference to redis)
 	GetTaskDefinitionRevisionByHash(ctx context.Context, in *Hash, opts ...grpc.CallOption) (*Revision, error)
+	// get images list from ecr (public and private)
+	GetImages(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Image], error)
 }
 
 type serviceClient struct {
@@ -62,6 +67,25 @@ func (c *serviceClient) GetTaskDefinitionRevisionByHash(ctx context.Context, in 
 	return out, nil
 }
 
+func (c *serviceClient) GetImages(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Image], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &Service_ServiceDesc.Streams[0], Service_GetImages_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[emptypb.Empty, Image]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Service_GetImagesClient = grpc.ServerStreamingClient[Image]
+
 // ServiceServer is the server API for Service service.
 // All implementations must embed UnimplementedServiceServer
 // for forward compatibility.
@@ -70,7 +94,10 @@ type ServiceServer interface {
 	// create definition according to the  environment.Environment and return revision id
 	// for generic tasks
 	GetTaskDefinitionRevision(context.Context, *Configuration) (*Revision, error)
+	// get revision by hash (without explicit reference to redis)
 	GetTaskDefinitionRevisionByHash(context.Context, *Hash) (*Revision, error)
+	// get images list from ecr (public and private)
+	GetImages(*emptypb.Empty, grpc.ServerStreamingServer[Image]) error
 	mustEmbedUnimplementedServiceServer()
 }
 
@@ -86,6 +113,9 @@ func (UnimplementedServiceServer) GetTaskDefinitionRevision(context.Context, *Co
 }
 func (UnimplementedServiceServer) GetTaskDefinitionRevisionByHash(context.Context, *Hash) (*Revision, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetTaskDefinitionRevisionByHash not implemented")
+}
+func (UnimplementedServiceServer) GetImages(*emptypb.Empty, grpc.ServerStreamingServer[Image]) error {
+	return status.Errorf(codes.Unimplemented, "method GetImages not implemented")
 }
 func (UnimplementedServiceServer) mustEmbedUnimplementedServiceServer() {}
 func (UnimplementedServiceServer) testEmbeddedByValue()                 {}
@@ -144,6 +174,17 @@ func _Service_GetTaskDefinitionRevisionByHash_Handler(srv interface{}, ctx conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Service_GetImages_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(emptypb.Empty)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ServiceServer).GetImages(m, &grpc.GenericServerStream[emptypb.Empty, Image]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Service_GetImagesServer = grpc.ServerStreamingServer[Image]
+
 // Service_ServiceDesc is the grpc.ServiceDesc for Service service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -160,6 +201,12 @@ var Service_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Service_GetTaskDefinitionRevisionByHash_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "getImages",
+			Handler:       _Service_GetImages_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "definitions.proto",
 }

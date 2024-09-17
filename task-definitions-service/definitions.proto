@@ -3,6 +3,8 @@ package definitions;
 
 option go_package = "./definitions";
 
+import "google/protobuf/empty.proto";
+
 service Service {
 
     // todo add cache support for this method
@@ -12,6 +14,9 @@ service Service {
 
     // get revision by hash (without explicit reference to redis)
     rpc getTaskDefinitionRevisionByHash(Hash) returns (Revision);
+
+    // get images list from ecr (public and private)
+    rpc getImages(google.protobuf.Empty) returns (stream Image);
 }
 
 message Configuration {
@@ -26,4 +31,14 @@ message Revision {
 
 message Hash {
     string value = 1;
+}
+
+message Image {
+	string name = 1;
+	string version = 2;
+	string platform =3;
+	string browserName = 4;
+	string browserVersion = 5;
+	// TODO: investigate possibility of 'ImageUrl' field removal
+	string imageUrl = 6 [json_name="image"];
 }
