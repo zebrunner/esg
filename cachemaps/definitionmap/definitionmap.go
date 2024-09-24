@@ -10,7 +10,6 @@ import (
 )
 
 var (
-	definitionsMap map[string]int64
 	mutex          = &sync.RWMutex{}
 )
 

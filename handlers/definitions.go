@@ -12,27 +12,9 @@ import (
 	"github.com/zebrunner/esg/task-definitions-service/definitions"
 )
 
-var (
-	DefinitionRefreshDone = false
-)
-
-type imageDataModel struct {
-	Name           string `json:"name"`
-	Version        string `json:"version"`
-	Platform       string `json:"platform"`
-	BrowserName    string `json:"browserName,omitempty"`
-	BrowserVersion string `json:"browserVersion,omitempty"`
-	// TODO: investigate possibility of 'ImageUrl' field removal
-	ImageUrl string `json:"image,omitempty"`
-}
-
 type refreshDefinitionsModel struct {
 	ImageRepositories *string `json:"imageRespositories,omitempty"`
 	ExcludeBrowsers   *string `json:"excludeBrowsers,omitempty"`
-}
-
-func Ready(c *gin.Context) {
-	c.String(http.StatusOK, "ready to accept requests")
 }
 
 func IsTaskDefinitionRefreshDone(c *gin.Context) {

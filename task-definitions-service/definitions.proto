@@ -17,6 +17,8 @@ service Service {
 
     // get images list from ecr (public and private)
     rpc getImages(google.protobuf.Empty) returns (stream Image);
+
+    r
 }
 
 message Configuration {

@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps/utilsmap"
@@ -122,6 +123,7 @@ func main() {
 		utils.ExitWithError(err, "Failed to init redis connection", log.NewEntry(log.StandardLogger()))
 	}
 
+	// todo move TaskDefinitionsVersions variable to the current service
 	if err = utilsmap.TaskDefinitionsVersion.Set(config.Version); err != nil {
 		log.WithError(err).Error("Failed to set task-definitions version in cache")
 	}
@@ -139,6 +141,32 @@ func main() {
 			log.WithError(err).Fatal("Failed to start task-definitions server")
 		}
 	}()
+
+	// update cache
+	go func() {
+		err := environmentRefresh()
+		if err != nil {
+			return err
+		}
+
+		envUpdateInterval := time.Hour * 12
+		go func() {
+			time.Sleep(envUpdateInterval)
+
+			for {
+				err := environmentUpdate()
+				if err != nil {
+					log.WithError(err).Warn("Failed to update task definitions. Retrying...")
+					time.Sleep(time.Second * 15)
+				} else {
+					time.Sleep(envUpdateInterval)
+				}
+			}
+		}()
+
+		return nil
+	}()
+
 	log.Info("Service started")
 	<-quit
 
