@@ -94,6 +94,11 @@ func stopLostTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 					if time.Since(*task.StartedAt) <= config.Conf.ServiceStartupTimeout {
 						continue
 					}
+
+					if task.Group != nil && *task.Group == "service:linux-exporter" {
+						continue
+					}
+
 					taskId := strings.Split(*task.TaskArn, "/")[2]
 					l := log.WithField(config.TaskIdKey, taskId)
 					l.Warn("Unrecognized task detected! Aborting")
