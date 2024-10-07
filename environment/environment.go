@@ -182,6 +182,19 @@ func (env *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefiniti
 		}
 		containerDefinition.PortMappings = portMappings
 
+		if env.Type == envtype.GENERIC {
+			env := []*ecs.KeyValuePair{}
+			for k, v := range c.Env {
+				// need to declare local variables to provide as pointer later
+				key := k
+				value := v
+				env = append(env, &ecs.KeyValuePair{Name: &key, Value: &value})
+			}
+
+			containerDefinition.Environment = env
+			containerDefinition.Command = aws.StringSlice(c.Command)
+		}
+
 		definitions = append(definitions, &containerDefinition)
 	}
 
