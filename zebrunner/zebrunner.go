@@ -17,13 +17,15 @@ import (
 
 	"github.com/zebrunner/esg/cachemaps/mapper"
 	"github.com/zebrunner/esg/config"
+	"github.com/zebrunner/esg/utils"
 )
 
 const (
-	USAGE_API_PATH     = "/api/engine-utilization/v1/engine-usages"
-	ABORT_API_PATH     = "/api/reporting/v1/launches/uuid"
+	USAGE_API_PATH = "/api/credits/v1/engine-usages"
+	ABORT_API_PATH = "/api/reporting/v1/launches/uuid"
 	// TODO: delete as only all on-prem tenants will be upgraded
 	OLD_ABORT_API_PATH = "/api/reporting/api/project-test-runs/abort"
+	RETRY_COUNT        = 3
 )
 
 func TrackResourcesUsage(cachedTask *mapper.Mapper, task *ecs.Task) {
@@ -139,7 +141,7 @@ func TrackResourcesUsage(cachedTask *mapper.Mapper, task *ecs.Task) {
 	req.Header.Add("Content-Type", "application/json")
 	l.Trace("req: ", req)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := utils.RetryOnSendFailure(http.DefaultClient, RETRY_COUNT, time.Millisecond*250)(req)
 	if err != nil {
 		l.WithError(err).Error("Failed to send request")
 		return
@@ -208,7 +210,7 @@ func AbortLaunch(routerUUID, workspace, launchUUID, reason string) {
 
 	l.Trace("req: ", req)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := utils.RetryOnSendFailure(http.DefaultClient, RETRY_COUNT, time.Millisecond*250)(req)
 	if err != nil {
 		l.WithError(err).Error("Failed to send request")
 		return
