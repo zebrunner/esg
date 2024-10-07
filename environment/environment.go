@@ -36,24 +36,26 @@ func (env *ExecutionEnvironment) ContainerOverrides() []*ecs.ContainerOverride {
 		cpu := container.Cpu()
 		memory := container.Memory()
 		override := ecs.ContainerOverride{
-			Name:    &container.Name,
-			Cpu:     &cpu,
-			Memory:  &memory,
-			Command: aws.StringSlice(container.Command),
+			Name:   &container.Name,
+			Cpu:    &cpu,
+			Memory: &memory,
 		}
 
 		if strings.ToLower(env.Capabilities.PlatformName.ToPrimitive()) != envtype.WINDOWS.String() {
 			override.MemoryReservation = &memory
 		}
 
-		env := []*ecs.KeyValuePair{}
-		for k, v := range container.Env {
-			// need to declare local variables to provide as pointer later
-			key := k
-			value := v
-			env = append(env, &ecs.KeyValuePair{Name: &key, Value: &value})
+		if env.Type != envtype.GENERIC {
+			override.Command = aws.StringSlice(container.Command)
+			env := []*ecs.KeyValuePair{}
+			for k, v := range container.Env {
+				// need to declare local variables to provide as pointer later
+				key := k
+				value := v
+				env = append(env, &ecs.KeyValuePair{Name: &key, Value: &value})
+			}
+			override.Environment = env
 		}
-		override.Environment = env
 
 		overrides = append(overrides, &override)
 	}

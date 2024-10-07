@@ -13,7 +13,6 @@ import (
 	"github.com/zebrunner/esg/cachemaps/resourcesToAllocate"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
-	envtype "github.com/zebrunner/esg/environment/envType"
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
 )
@@ -39,6 +38,7 @@ func registerTask(ctx context.Context, env *environment.ExecutionEnvironment, ro
 	runTaskInput := &ecs.RunTaskInput{
 		Cluster:        &config.Conf.AwsCluster,
 		TaskDefinition: &family,
+		Overrides:      &ecs.TaskOverride{ContainerOverrides: env.ContainerOverrides()},
 		PlacementStrategy: []*ecs.PlacementStrategy{
 			{
 				Field: aws.String("memory"),
@@ -46,10 +46,6 @@ func registerTask(ctx context.Context, env *environment.ExecutionEnvironment, ro
 			},
 		},
 		CapacityProviderStrategy: []*ecs.CapacityProviderStrategyItem{{CapacityProvider: &env.CapacityProvider}},
-	}
-
-	if env.Type != envtype.GENERIC {
-		runTaskInput.Overrides = &ecs.TaskOverride{ContainerOverrides: env.ContainerOverrides()}
 	}
 
 	l.WithField("runTaskInput", runTaskInput).Trace("Res runTaskInput")
