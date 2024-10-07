@@ -45,6 +45,12 @@ func (env *ExecutionEnvironment) ContainerOverrides() []*ecs.ContainerOverride {
 			override.MemoryReservation = &memory
 		}
 
+		// Env vars and command var are passed on task definition register phase for generic env due to:
+		// Task definition ovveride max symbols num constraint:
+		// InvalidParameterException: Container Overrides length must be at most 8192.
+		// When task definition register max symbols constraint is much higher:
+		// ClientException: Actual length: '117374'. Max allowed length is '65536' bytes.
+		// It is also possible because we always register new generic task definition before it starts
 		if env.Type != envtype.GENERIC {
 			override.Command = aws.StringSlice(container.Command)
 			env := []*ecs.KeyValuePair{}
@@ -184,6 +190,12 @@ func (env *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefiniti
 		}
 		containerDefinition.PortMappings = portMappings
 
+		// Env vars and command var are passed on task definition register phase for generic env due to:
+		// Task definition ovveride max symbols num constraint:
+		// InvalidParameterException: Container Overrides length must be at most 8192.
+		// When task definition register max symbols constraint is much higher:
+		// ClientException: Actual length: '117374'. Max allowed length is '65536' bytes.
+		// It is also possible because we always register new generic task definition before it starts
 		if env.Type == envtype.GENERIC {
 			env := []*ecs.KeyValuePair{}
 			for k, v := range c.Env {
