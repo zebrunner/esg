@@ -18,12 +18,17 @@ import (
 	"github.com/zebrunner/esg/utils"
 )
 
+const (
+	LINUX_SERVICE_EXPORTER = "linux-exporter"
+)
+
 type scaler struct {
 	InstanceResources    Resources
 	CapacityProviderName string
 	autoscalingGroupName string
 	resourcesPerWeight   Resources
 	instanceMinWeight    int64
+	exporterResources    *Resources
 	log                  *log.Entry
 }
 
@@ -127,11 +132,33 @@ func InitScalingData() (map[string]scaler, error) {
 
 		instanceInfo := instanceTypesResult.InstanceTypes[0]
 
+		var exporterResources *Resources
+		service, err := DescribeService(LINUX_SERVICE_EXPORTER)
+		if err != nil {
+			log.WithError(err).Warnf("Failed to describe %s service", LINUX_SERVICE_EXPORTER)
+		} else if service != nil && service.TaskDefinition != nil {
+			taskDef, err := DescribeTaskDefinition(*service.TaskDefinition)
+			if err != nil {
+				log.WithError(err).Warnf("Failed to describe %s task definition", *service.TaskDefinition)
+			} else {
+				exporterResources = &Resources{0, 0}
+
+				if taskDef.Cpu != nil {
+					exporterResources.CPU, _ = strconv.ParseInt(*taskDef.Cpu, 10, 64)
+				}
+
+				if taskDef.Memory != nil {
+					exporterResources.Memory, _ = strconv.ParseInt(*taskDef.Memory, 10, 64)
+				}
+			}
+		}
+
 		s := scaler{
 			CapacityProviderName: *capacityProvider.Name,
 			autoscalingGroupName: asgName,
 			resourcesPerWeight:   Resources{CPU: (*instanceInfo.VCpuInfo.DefaultVCpus * 1024) / minWeight, Memory: (*instanceInfo.MemoryInfo.SizeInMiB) / minWeight},
 			InstanceResources:    Resources{CPU: *instanceInfo.VCpuInfo.DefaultVCpus * 1024, Memory: *instanceInfo.MemoryInfo.SizeInMiB},
+			exporterResources:    exporterResources,
 			instanceMinWeight:    minWeight,
 			log:                  log.WithFields(log.Fields{"asg": asgName, "capacityProvider": *capacityProvider.Name}),
 		}
@@ -440,8 +467,15 @@ func (s *scaler) ScaleDown(session *awsSession.Session, asg *autoscaling.Group, 
 
 	allowedCapacityForDeleting := 0
 	for _, instance := range freeResources {
-		if instance.CPU >= s.resourcesPerWeight.CPU && instance.Memory >= s.resourcesPerWeight.Memory {
-			allowedCapacityForDeleting++
+		if s.exporterResources == nil {
+			if instance.CPU >= s.resourcesPerWeight.CPU && instance.Memory >= s.resourcesPerWeight.Memory {
+				allowedCapacityForDeleting++
+			}
+		} else {
+			if instance.CPU+s.exporterResources.CPU >= s.resourcesPerWeight.CPU &&
+				instance.Memory+s.exporterResources.Memory >= s.resourcesPerWeight.Memory {
+				allowedCapacityForDeleting++
+			}
 		}
 	}
 
@@ -471,7 +505,9 @@ func (s *scaler) ScaleDown(session *awsSession.Session, asg *autoscaling.Group, 
 			break
 		}
 
-		if *instance.PendingTasksCount == 0 && *instance.RunningTasksCount == 0 {
+		totalTasks := *instance.PendingTasksCount + *instance.RunningTasksCount
+		if (s.exporterResources == nil && totalTasks == 0) ||
+			(s.exporterResources != nil && totalTasks <= 1) {
 			instanceUptime := time.Since(*instance.RegisteredAt)
 			if instanceUptime > config.Conf.InstanceCooldownTimeout && instance.Ec2InstanceId != nil {
 				instanceDetails, ok := instancesDetailsMap[*instance.Ec2InstanceId]
