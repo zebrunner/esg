@@ -1,12 +1,9 @@
 package handlers
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httputil"
-	"strconv"
 
 	"strings"
 
@@ -33,9 +30,9 @@ func init() {
 		}
 	}
 
-	metricsAddressMap["alertmanager"] = &metric{address: fmt.Sprintf("%s:9093", ip), path: "/alertmanager"}
-	metricsAddressMap["prometheus"] = &metric{address: fmt.Sprintf("%s:9090", ip), path: "/prometheus"}
-	metricsAddressMap["grafana"] = &metric{address: fmt.Sprintf("%s:3000", ip), path: "/grafana"}
+	metricsAddressMap["alertmanager"] = &metric{address: fmt.Sprintf("%s:9093", ip), path: "/metrics/alertmanager"}
+	metricsAddressMap["prometheus"] = &metric{address: fmt.Sprintf("%s:9090", ip), path: "/metrics/prometheus"}
+	metricsAddressMap["grafana"] = &metric{address: fmt.Sprintf("%s:3000", ip), path: "/metrics/grafana"}
 }
 
 func ProxyMetrics(c *gin.Context) {
@@ -50,30 +47,16 @@ func ProxyMetrics(c *gin.Context) {
 		Director: func(r *http.Request) {
 			r.URL.Scheme = "http"
 			r.URL.Host = metric.address
-			r.URL.Path = getRemainingPath(c.Request.URL.Path, 2)
+			r.URL.Path = getRemainingPath(c.Request.URL.Path, 3)
 		},
 		ModifyResponse: func(r *http.Response) error {
-			b, err := io.ReadAll(r.Body)
-			if err != nil {
-				return err
+			if strings.Contains(metric.path, "prometheus") {
+				locationValue := r.Header.Get("Location")
+				if locationValue != "" {
+					locationValue = metric.path + locationValue
+					r.Header.Set("Location", locationValue)
+				}
 			}
-			defer r.Body.Close()
-
-			b = bytes.Replace(b,
-				[]byte("href=\"/"),
-				[]byte(fmt.Sprintf("href=\"%s/", metric.path)),
-				-1)
-
-			r.Body = io.NopCloser(bytes.NewReader(b))
-			r.ContentLength = int64(len(b))
-			r.Header.Set("Content-Length", strconv.Itoa(len(b)))
-
-			locationValue := r.Header.Get("Location")
-			if locationValue != "" {
-				locationValue = metric.path + locationValue
-				r.Header.Set("Location", locationValue)
-			}
-
 			return nil
 		},
 	}).ServeHTTP(c.Writer, c.Request)
@@ -81,11 +64,11 @@ func ProxyMetrics(c *gin.Context) {
 
 func getMetric(path string) (*metric, error) {
 	splittedPath := strings.Split(path, "/")
-	if len(splittedPath) < 2 {
+	if len(splittedPath) < 3 {
 		return nil, fmt.Errorf("metric tool for empty path is not found")
 	}
 
-	metric, ok := metricsAddressMap[splittedPath[1]]
+	metric, ok := metricsAddressMap[splittedPath[2]]
 	if !ok {
 		return nil, fmt.Errorf("metric for '%s' path is not found", splittedPath[1])
 	}

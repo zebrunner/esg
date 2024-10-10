@@ -70,12 +70,14 @@ func getRouterBasis() *gin.Engine {
 		lowLvlApi.GET("/tasks/:task/status", handlers.TaskDescribe)
 	}
 
-	r.Any("grafana", handlers.APIError, handlers.ProxyMetrics)
-	r.Any("grafana/*action", handlers.APIError, handlers.ProxyMetrics)
-	r.Any("prometheus", handlers.APIError, handlers.ProxyMetrics)
-	r.Any("prometheus/*action", handlers.APIError, handlers.ProxyMetrics)
-	r.Any("alertmanager", handlers.APIError, handlers.ProxyMetrics)
-	r.Any("alertmanager/*action", handlers.APIError, handlers.ProxyMetrics)
+	metrics := r.Group("/metrics", handlers.APIError, handlers.ProxyMetrics)
+	{
+		metrics.Any("grafana/*action")
+		if !config.Conf.ProductionEnv {
+			metrics.Any("prometheus/*action")
+			metrics.Any("alertmanager/*action")
+		}
+	}
 
 	return r
 }
