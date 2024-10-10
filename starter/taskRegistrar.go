@@ -47,6 +47,7 @@ func registerTask(ctx context.Context, env *environment.ExecutionEnvironment, ro
 		},
 		CapacityProviderStrategy: []*ecs.CapacityProviderStrategyItem{{CapacityProvider: &env.CapacityProvider}},
 	}
+
 	l.WithField("runTaskInput", runTaskInput).Trace("Res runTaskInput")
 
 	// TODO: explicitly minimize errors range to wait only by well-known reasons aka RESOURCE:CPU etc
