@@ -1,11 +1,13 @@
 package handlers
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httputil"
-	// "path"
+	"strconv"
+
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -13,8 +15,13 @@ import (
 	"github.com/zebrunner/esg/utils"
 )
 
+type metric struct {
+	path    string
+	address string
+}
+
 var (
-	metricsAddressMap = make(map[string]string)
+	metricsAddressMap = make(map[string]*metric)
 )
 
 func init() {
@@ -26,53 +33,62 @@ func init() {
 		}
 	}
 
-	metricsAddressMap["alertmanager"] = fmt.Sprintf("%s:9093", ip)
-	metricsAddressMap["prometheus"] = fmt.Sprintf("%s:9093", ip)
-	metricsAddressMap["grafana"] = fmt.Sprintf("%s:9093", ip)
+	metricsAddressMap["alertmanager"] = &metric{address: fmt.Sprintf("%s:9093", ip), path: "/alertmanager"}
+	metricsAddressMap["prometheus"] = &metric{address: fmt.Sprintf("%s:9090", ip), path: "/prometheus"}
+	metricsAddressMap["grafana"] = &metric{address: fmt.Sprintf("%s:3000", ip), path: "/grafana"}
 }
 
 func ProxyMetrics(c *gin.Context) {
-	log.Info("PROXY METRICS")
-	url, newPath, err := getMetricsUrl(c.Request.URL.Path)
+	metric, err := getMetric(c.Request.URL.Path)
 	if err != nil {
 		log.WithError(err).Error("failed to get metrics url from path")
 		c.Error(utils.UnknownApiErr(err.Error())).SetType(gin.ErrorTypePublic)
 		return
 	}
-	c.Request.URL.Path = newPath
 
 	(&httputil.ReverseProxy{
 		Director: func(r *http.Request) {
-			// r.URL.Host, r.URL.Path = url, path.Clean("/"+newPath)
-			r.URL.Host = url
 			r.URL.Scheme = "http"
-			log.Info("metrics url: ", r.URL)
+			r.URL.Host = metric.address
+			r.URL.Path = getRemainingPath(c.Request.URL.Path, 2)
 		},
 		ModifyResponse: func(r *http.Response) error {
-			b, _ := io.ReadAll(r.Body)
-			log.Info("metrics resp body: ", string(b))
+			b, err := io.ReadAll(r.Body)
+			if err != nil {
+				return err
+			}
+			defer r.Body.Close()
+
+			b = bytes.Replace(b,
+				[]byte("href=\"/"),
+				[]byte(fmt.Sprintf("href=\"%s/", metric.path)),
+				-1)
+
+			r.Body = io.NopCloser(bytes.NewReader(b))
+			r.ContentLength = int64(len(b))
+			r.Header.Set("Content-Length", strconv.Itoa(len(b)))
+
+			locationValue := r.Header.Get("Location")
+			if locationValue != "" {
+				locationValue = metric.path + locationValue
+				r.Header.Set("Location", locationValue)
+			}
 
 			return nil
 		},
 	}).ServeHTTP(c.Writer, c.Request)
 }
 
-func getMetricsUrl(path string) (string, string, error) {
+func getMetric(path string) (*metric, error) {
 	splittedPath := strings.Split(path, "/")
-	if len(splittedPath) < 3 {
-		return "", "", fmt.Errorf("metric tool for empty path is not found")
+	if len(splittedPath) < 2 {
+		return nil, fmt.Errorf("metric tool for empty path is not found")
 	}
 
-	url, ok := metricsAddressMap[splittedPath[2]]
+	metric, ok := metricsAddressMap[splittedPath[1]]
 	if !ok {
-		return "", "", fmt.Errorf("metric tool for path '%v' is not found", splittedPath[0])
+		return nil, fmt.Errorf("metric for '%s' path is not found", splittedPath[1])
 	}
 
-	newPath := ""
-	if len(splittedPath) > 3 {
-		newPath = strings.Join(splittedPath[3:], "/")
-	}
-
-	log.Infof("new path: %s, new url: %s", newPath, url)
-	return url, newPath, nil
+	return metric, nil
 }

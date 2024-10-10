@@ -68,15 +68,14 @@ func getRouterBasis() *gin.Engine {
 		lowLvlApi.GET("/video/:session", handlers.Video)
 		lowLvlApi.GET("/tasks/:task/log", handlers.TaskLog)
 		lowLvlApi.GET("/tasks/:task/status", handlers.TaskDescribe)
-
-		lowLvlApi.Any("alertmanager", handlers.ProxyMetrics)
-		lowLvlApi.Any("prometheus", handlers.ProxyMetrics)
-		lowLvlApi.Any("grafana", handlers.ProxyMetrics)
-
-		lowLvlApi.Any("alertmanager/*action", handlers.ProxyMetrics)
-		lowLvlApi.Any("prometheus/*action", handlers.ProxyMetrics)
-		lowLvlApi.Any("grafana/*action", handlers.ProxyMetrics)
 	}
+
+	r.Any("grafana", handlers.APIError, handlers.ProxyMetrics)
+	r.Any("grafana/*action", handlers.APIError, handlers.ProxyMetrics)
+	r.Any("prometheus", handlers.APIError, handlers.ProxyMetrics)
+	r.Any("prometheus/*action", handlers.APIError, handlers.ProxyMetrics)
+	r.Any("alertmanager", handlers.APIError, handlers.ProxyMetrics)
+	r.Any("alertmanager/*action", handlers.APIError, handlers.ProxyMetrics)
 
 	return r
 }
