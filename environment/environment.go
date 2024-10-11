@@ -36,24 +36,32 @@ func (env *ExecutionEnvironment) ContainerOverrides() []*ecs.ContainerOverride {
 		cpu := container.Cpu()
 		memory := container.Memory()
 		override := ecs.ContainerOverride{
-			Name:    &container.Name,
-			Cpu:     &cpu,
-			Memory:  &memory,
-			Command: aws.StringSlice(container.Command),
+			Name:   &container.Name,
+			Cpu:    &cpu,
+			Memory: &memory,
 		}
 
 		if strings.ToLower(env.Capabilities.PlatformName.ToPrimitive()) != envtype.WINDOWS.String() {
 			override.MemoryReservation = &memory
 		}
 
-		env := []*ecs.KeyValuePair{}
-		for k, v := range container.Env {
-			// need to declare local variables to provide as pointer later
-			key := k
-			value := v
-			env = append(env, &ecs.KeyValuePair{Name: &key, Value: &value})
+		// Env vars and command var are passed on task definition register phase for generic env due to:
+		// Task definition ovveride max symbols num constraint:
+		// InvalidParameterException: Container Overrides length must be at most 8192.
+		// When task definition register max symbols constraint is much higher:
+		// ClientException: Actual length: '117374'. Max allowed length is '65536' bytes.
+		// It is also possible because we always register new generic task definition before it starts
+		if env.Type != envtype.GENERIC {
+			override.Command = aws.StringSlice(container.Command)
+			env := []*ecs.KeyValuePair{}
+			for k, v := range container.Env {
+				// need to declare local variables to provide as pointer later
+				key := k
+				value := v
+				env = append(env, &ecs.KeyValuePair{Name: &key, Value: &value})
+			}
+			override.Environment = env
 		}
-		override.Environment = env
 
 		overrides = append(overrides, &override)
 	}
@@ -181,6 +189,25 @@ func (env *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefiniti
 			portMappings = append(portMappings, &m)
 		}
 		containerDefinition.PortMappings = portMappings
+
+		// Env vars and command var are passed on task definition register phase for generic env due to:
+		// Task definition ovveride max symbols num constraint:
+		// InvalidParameterException: Container Overrides length must be at most 8192.
+		// When task definition register max symbols constraint is much higher:
+		// ClientException: Actual length: '117374'. Max allowed length is '65536' bytes.
+		// It is also possible because we always register new generic task definition before it starts
+		if env.Type == envtype.GENERIC {
+			env := []*ecs.KeyValuePair{}
+			for k, v := range c.Env {
+				// need to declare local variables to provide as pointer later
+				key := k
+				value := v
+				env = append(env, &ecs.KeyValuePair{Name: &key, Value: &value})
+			}
+
+			containerDefinition.Environment = env
+			containerDefinition.Command = aws.StringSlice(c.Command)
+		}
 
 		definitions = append(definitions, &containerDefinition)
 	}

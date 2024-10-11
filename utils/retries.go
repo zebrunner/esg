@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"net/http"
 	"reflect"
 	"runtime"
 	"strings"
@@ -39,5 +40,26 @@ func RetryThrottling[T, R interface{}](executeFunc func(T) (R, error)) func(T) (
 			l.WithError(err).Debugf("RetryThrottling: performed %d retries", i)
 		}
 		return result, err
+	}
+}
+
+type Sender interface {
+	Do(*http.Request) (*http.Response, error)
+}
+
+func RetryOnSendFailure(sendFn Sender, retryCount int, retryDelay time.Duration) func(*http.Request) (*http.Response, error) {
+	return func(req *http.Request) (*http.Response, error) {
+		var err error
+		var res *http.Response
+		for i := 0; i < retryCount; i++ {
+			res, err = sendFn.Do(req)
+			if err == nil {
+				break
+			}
+
+			time.Sleep(retryDelay)
+		}
+
+		return res, err
 	}
 }
