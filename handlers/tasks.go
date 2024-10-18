@@ -160,7 +160,7 @@ func ProxyMitm(c *gin.Context) {
 			r.URL.Scheme = "http"
 			r.URL.Host = url.Host
 			r.Host = url.Host
-			r.URL.Path = getRemainingPath(r.URL.Path)
+			r.URL.Path = getRemainingPath(r.URL.Path, 3)
 		},
 	}).ServeHTTP(c.Writer, c.Request)
 }
@@ -393,7 +393,7 @@ func Downloads(c *gin.Context) {
 		req.URL.Scheme = "http"
 		req.URL.Host = url.Host
 		req.Host = url.Host
-		req.URL.Path = getRemainingPath(req.URL.Path)
+		req.URL.Path = getRemainingPath(req.URL.Path, 3)
 	}
 	proxy := &httputil.ReverseProxy{Director: director}
 
@@ -432,20 +432,20 @@ func Devtools(c *gin.Context) {
 		req.URL.Scheme = "http"
 		req.URL.Host = url.Host
 		req.Host = url.Host
-		req.URL.Path = getRemainingPath(req.URL.Path)
+		req.URL.Path = getRemainingPath(req.URL.Path, 3)
 	}
 	proxy := &httputil.ReverseProxy{Director: director}
 	proxy.ServeHTTP(c.Writer, c.Request)
 }
 
-func getRemainingPath(path string) string {
+func getRemainingPath(path string, subPathStartIndex int) string {
 	pathFragments := strings.Split(path, "/")
 	//Path= /devtools/:session/...
-	if len(pathFragments) < 4 {
+	if len(pathFragments) < subPathStartIndex+1 {
 		return "/"
 	}
 
-	return "/" + strings.Join(pathFragments[3:], "/")
+	return "/" + strings.Join(pathFragments[subPathStartIndex:], "/")
 }
 
 func defaultErrorHandler(c *gin.Context) func(http.ResponseWriter, *http.Request, error) {
