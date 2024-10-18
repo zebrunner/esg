@@ -26,6 +26,5 @@ Suitable for personal usage and in big clusters:
 
 ### Documentation 
 
-* [Prerequisites](https://github.com/zebrunner/e3s/blob/main/docs/prerequisites.md)
-* [ECS E3S cluster creation](https://github.com/zebrunner/e3s/blob/main/docs/ecs_e3s_cluster_creation.md)
+* [E3S infrastructure creation](https://github.com/zebrunner/e3s-terraform-deploy)
 * [Usage](https://github.com/zebrunner/e3s/blob/main/docs/usage.md)
