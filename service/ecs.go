@@ -228,3 +228,61 @@ func GeneratePreSignedURL(key string) (string, error) {
 
 	return urlStr, nil
 }
+
+func DescribeService(serviceName string) (*ecs.Service, error) {
+	svc := ecs.New(AwsSess)
+
+	input := &ecs.DescribeServicesInput{
+		Cluster:  &config.Conf.AwsCluster,
+		Services: []*string{&serviceName},
+	}
+
+	res, err := utils.RetryThrottling(svc.DescribeServices)(input)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(res.Failures) >= 1 {
+		for _, failure := range res.Failures {
+			if failure != nil {
+				l := log.NewEntry(log.StandardLogger())
+				if failure.Detail != nil {
+					l.WithField("detail", *failure.Detail)
+				}
+
+				if failure.Reason != nil {
+					l.WithField("reason", *failure.Reason)
+				}
+
+				l.Error("describe services failure")
+			}
+		}
+
+		return nil, fmt.Errorf("describe services contains failures")
+	}
+
+	if len(res.Services) < 1 {
+		return nil, nil
+	}
+
+	return res.Services[0], nil
+}
+
+func DescribeTaskDefinition(taskDefinition string) (*ecs.TaskDefinition, error) {
+	svc := ecs.New(AwsSess)
+
+	input := &ecs.DescribeTaskDefinitionInput{
+		TaskDefinition: &taskDefinition,
+	}
+
+	res, err := utils.RetryThrottling(svc.DescribeTaskDefinition)(input)
+	if err != nil {
+		return nil, err
+	}
+
+	if res == nil {
+		return nil, nil
+	}
+
+	return res.TaskDefinition, nil
+}
