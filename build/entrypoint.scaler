@@ -33,6 +33,9 @@ fi
 if [ ! -z ${RESERVE_MAX_CAPACITY} ]; then
   CMD_ARGS="${CMD_ARGS} -reserve-max-capacity ${RESERVE_MAX_CAPACITY}"
 fi
+if [ ! -z ${LOST_TASK_COOLDOWN_TIMEOUT} ]; then
+  CMD_ARGS="${CMD_ARGS} -lost-task-cooldown-timeout ${LOST_TASK_COOLDOWN_TIMEOUT}"
+fi
 if [ ! -z ${INSTANCE_COOLDOWN_TIMEOUT} ]; then
   CMD_ARGS="${CMD_ARGS} -instance-cooldown-timeout ${INSTANCE_COOLDOWN_TIMEOUT}"
 fi

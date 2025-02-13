@@ -40,6 +40,7 @@ type Config struct {
 	IdleTimeout                  time.Duration
 	SessionDeleteTimeout         time.Duration
 	ServiceStartupTimeout        time.Duration
+	LostTaskCooldownTimeout      time.Duration
 	InstanceCooldownTimeout      time.Duration
 	ContainerInstanceInitTimeout time.Duration
 	MaxTimeout                   time.Duration
@@ -93,6 +94,7 @@ func init() {
 	flag.DurationVar(&Conf.IdleTimeout, "idle-timeout", 60*time.Second, "Session idle timeout in time.Duration format")
 	flag.DurationVar(&Conf.SessionDeleteTimeout, "session-delete-timeout", 30*time.Second, "Session delete timeout in time.Duration format")
 	flag.DurationVar(&Conf.ServiceStartupTimeout, "service-startup-timeout", 10*time.Minute, "Service startup timeout in time.Duration format")
+	flag.DurationVar(&Conf.LostTaskCooldownTimeout, "lost-task-cooldown-timeout", 60*time.Minute, "Time after which an unknown (lost) task in ECS cluster will be removed in time.Duration format")
 	flag.DurationVar(&Conf.InstanceCooldownTimeout, "instance-cooldown-timeout", 4*time.Minute, "Time after instance start when shutdown is prohibited on scale down in time.Duration format")
 	flag.DurationVar(&Conf.ContainerInstanceInitTimeout, "container-instance-init-timeout", 10*time.Minute, "Time for ec2 instance after launch to initialize container-instance for asg in time.Duration format")
 	flag.DurationVar(&Conf.MaxTimeout, "max-timeout", 24*time.Hour, "Maximum valid task/session timeout in time.Duration format")

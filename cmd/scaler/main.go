@@ -29,6 +29,7 @@ import (
 func stopLostTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 	defer wg.Done()
 
+	// still use ServiceStartupTimeout for timer, however the task will be removed if it has been running for LostTaskCooldownTimeout
 	timer := utils.CreateTimer(config.Conf.ServiceStartupTimeout/2 + 1*time.Minute)
 
 	for {
@@ -91,7 +92,7 @@ func stopLostTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 
 			for _, task := range tasks {
 				if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
-					if time.Since(*task.StartedAt) <= config.Conf.ServiceStartupTimeout {
+					if time.Since(*task.StartedAt) <= config.Conf.LostTaskCooldownTimeout {
 						continue
 					}
 
