@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
@@ -74,7 +75,7 @@ func IsTaskDefinitionRefreshDone(c *gin.Context) {
 
 func RefreshDefinitions(c *gin.Context) {
 	var refreshData refreshDefinitionsModel
-	err := c.ShouldBindJSON(refreshData)
+	err := c.ShouldBindJSON(&refreshData)
 	if err != nil {
 		log.WithError(err).Error("Failed to parse request body")
 		c.Status(http.StatusBadRequest)

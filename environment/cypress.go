@@ -19,22 +19,31 @@ import (
 func buildCypress(workspace string, routerUUID string, image images.Image, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
 	conf := &config.Conf
 
-	workDir := "/tmp/zebrunner"
-	taskVolume := "work"
+	var (
+		workDir    = "/tmp/zebrunner"
+		taskVolume = "work"
 
-	logDir := "/tmp/log"
-	logVolume := "log"
+		logDir    = "/tmp/log"
+		logVolume = "log"
 
-	cypressDir := "/tmp/cypress"
-	cypressVolume := "cypress"
+		cypressDir    = "/tmp/cypress"
+		cypressVolume = "cypress"
 
-	entrypointDir := "/opt/entrypoint"
-	entrypointVolume := "entrypoint"
+		entrypointDir    = "/opt/entrypoint"
+		entrypointVolume = "entrypoint"
 
-	// Potentially it is uselsess based on this article: https://github.com/cypress-io/cypress/pull/9242
-	// or one more issue in cypress which in spite of the disabling continue to use it.
-	shmDir := "/dev/shm"
-	shmVolume := "shm"
+		// Potentially it is uselsess based on this article: https://github.com/cypress-io/cypress/pull/9242
+		// or one more issue in cypress which in spite of the disabling continue to use it.
+		shmDir    = "/dev/shm"
+		shmVolume = "shm"
+
+		tmpDir            = "/tmp"
+		tmpRecorderVolume = "tmpRecorderVolume"
+		tmpCypressVolume  = "tmpCypressVolume"
+
+		homeDir           = "/home"
+		cypressHomeVolume = "cypressHome"
+	)
 
 	branchArg := ""
 	if caps.Branch != "" {
@@ -59,6 +68,8 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 		Mounts:     []string{taskVolume, logVolume},
 		Command:    []string{"-c", cloneCommand + taskLogRedirect},
 		EntryPoint: []string{"/bin/sh"},
+
+		ReadOnlyRootFileSystem: true,
 	}
 
 	launchCommand := "CHANGE_ME"
@@ -88,6 +99,8 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 				Condition:     aws.String("SUCCESS"),
 			},
 		},
+
+		ReadOnlyRootFileSystem: true,
 	}
 
 	// declare hardcoded vars without ability to override:
@@ -109,7 +122,7 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 			"COMMAND":           launchCommand,
 			"ZEBRUNNER_TASK_ID": routerUUID,
 		},
-		Mounts:           []string{entrypointVolume, taskVolume, logVolume, cypressVolume, shmVolume},
+		Mounts:           []string{entrypointVolume, taskVolume, logVolume, cypressVolume, shmVolume, tmpCypressVolume, cypressHomeVolume},
 		WorkingDirectory: workDir,
 		Command:          []string{"-c", entrypointDir + "/entrypoint.sh" + taskLogRedirect},
 		EntryPoint:       []string{"/bin/sh"},
@@ -137,6 +150,8 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 				Condition:     aws.String("SUCCESS"),
 			},
 		},
+
+		ReadOnlyRootFileSystem: true,
 	}
 
 	if caps.EnvVariables != nil {
@@ -168,7 +183,7 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 			"BASIC_AUTH":           basicAuthHeader,
 			"LOG_FILE":             "session.log",
 		},
-		Mounts:      []string{logVolume},
+		Mounts:      []string{logVolume, tmpRecorderVolume},
 		Links:       []string{"browser"},
 		Command:     []string{"-c", "/entrypoint.sh" + ">>" + logDir + "/video.log 2>&1"},
 		EntryPoint:  []string{"/bin/sh"},
@@ -187,6 +202,8 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 				Condition:     aws.String("START"),
 			},
 		},
+
+		ReadOnlyRootFileSystem: true,
 	}
 
 	//TODO: do we need sharing vars? it is required for the real time logs only (?!)
@@ -214,6 +231,8 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 		},
 		Mounts:      []string{logVolume},
 		HealthCheck: nil,
+
+		ReadOnlyRootFileSystem: true,
 	}
 
 	containers := []*Container{&cloneContainer, &entrypointContainer, &cypressContainer, &recorderContainer, &uploaderContainer}
@@ -223,11 +242,14 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 		Containers:           containers,
 		Capabilities:         caps,
 		Volumes: map[string]volume{
-			taskVolume:       {Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false},
-			logVolume:        {Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false},
-			cypressVolume:    {Driver: "local", Scope: "task", ContainerPath: cypressDir, ReadOnly: false},
-			entrypointVolume: {Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false},
-			shmVolume:        {ContainerPath: shmDir, HostPath: shmDir, ReadOnly: false}, // no way to reuse local task volume due to the reset of permissions on browser container start
+			taskVolume:        {Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false},
+			logVolume:         {Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false},
+			cypressVolume:     {Driver: "local", Scope: "task", ContainerPath: cypressDir, ReadOnly: false},
+			entrypointVolume:  {Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false},
+			shmVolume:         {ContainerPath: shmDir, HostPath: shmDir, ReadOnly: false}, // no way to reuse local task volume due to the reset of permissions on browser container start
+			tmpRecorderVolume: {Driver: "local", Scope: "task", ContainerPath: tmpDir, ReadOnly: false},
+			cypressHomeVolume: {Driver: "local", Scope: "task", ContainerPath: homeDir, ReadOnly: false}, //worked without it but added for future safety
+			tmpCypressVolume:  {Driver: "local", Scope: "task", ContainerPath: tmpDir, ReadOnly: false},
 		},
 		Network: &network.NetworkConfiguration{
 			IP: "",

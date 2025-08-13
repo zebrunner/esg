@@ -22,17 +22,50 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 	caps.EnableVNC = false
 	caps.EnableVideo = false
 
-	workDir := "/tmp/zebrunner"
-	taskVolume := "work"
+	var (
+		workDir    = "/tmp/zebrunner"
+		taskVolume = "work"
 
-	logDir := "/tmp/log"
-	logVolume := "log"
+		logDir    = "/tmp/log"
+		logVolume = "log"
 
-	entrypointDir := "/opt/entrypoint"
-	entrypointVolume := "entrypoint"
+		entrypointDir    = "/opt/entrypoint"
+		entrypointVolume = "entrypoint"
 
-	mavenDir := "/root/.m2/repository"
-	mavenVolume := "maven"
+		mavenDir    = "/root/.m2/repository"
+		mavenVolume = "maven"
+
+		mavenLogDir    = "/root/.m2"
+		mavenLogVolume = "mavenLog"
+
+		tmpDir            = "/tmp"
+		tmpRecorderVolume = "tmpRecorderVolume"
+		tmpExecutorVolume = "tmpExecutorVolume"
+
+		executorConfigDir    = "/root/.config"
+		executorConfigVolume = "executorConfigVolume"
+
+		executorCacheDir    = "/root/.cache"
+		executorCacheVolume = "executorCacheVolume"
+
+		executorPythonLocalDir    = "/root/.local"
+		executorPythonLocalVolume = "executorPythonLocalVolume"
+
+		executorPythonBinDir    = "/usr/local/bin"
+		executorPythonBinVolume = "executorUserBin"
+
+		executorPythonLibDir    = "/usr/local/lib"
+		executorPythonLibVolume = "executorUserLib"
+
+		executorGradleDir    = "/home/gradle"
+		executorGradleVolume = "executorGradleHome"
+
+		executorPlaywrighNpmDir     = "/root/.npm"
+		executorPlaywrightNpmVolume = "executorPlaywrightNpmVolume"
+
+		executorPlaywrighCacheDir     = "/usr/local/share/.cache"
+		executorPlaywrightCacheVolume = "executorPlaywrightCacheVolume"
+	)
 
 	branch := ""
 	branchArg := ""
@@ -57,11 +90,12 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 			Cpu:    cloneContainerMinCpu,
 			Memory: cloneContainerMinMemory,
 		},
-		Privileged: false,
-		Essential:  false,
-		Mounts:     []string{taskVolume, logVolume},
-		Command:    []string{"-c", cloneCommand + taskLogRedirect},
-		EntryPoint: []string{"/bin/sh"},
+		Privileged:             false,
+		Essential:              false,
+		Mounts:                 []string{taskVolume, logVolume},
+		Command:                []string{"-c", cloneCommand + taskLogRedirect},
+		EntryPoint:             []string{"/bin/sh"},
+		ReadOnlyRootFileSystem: true,
 	}
 
 	entrypointContainer := Container{
@@ -71,13 +105,23 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 			Cpu:    16,
 			Memory: 16,
 		},
-		Privileged: false,
-		Essential:  false,
-		Mounts:     []string{entrypointVolume, logVolume},
-		EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
+		Privileged:             false,
+		Essential:              false,
+		Mounts:                 []string{entrypointVolume, logVolume},
+		EntryPoint:             []string{entrypointDir + "/entrypoint.sh"},
+		ReadOnlyRootFileSystem: true,
 	}
 
 	includeMaven := strings.Contains(caps.Image.ToPrimitive(), "maven")
+
+	includePython := false
+	if strings.Contains(caps.Image.ToPrimitive(), "python") || strings.Contains(caps.Image.ToPrimitive(), "amancevice/pandas") {
+		includePython = true
+	}
+
+	includeGradle := strings.Contains(caps.Image.ToPrimitive(), "gradle")
+	includePlaywright := strings.Contains(caps.Image.ToPrimitive(), "playwright")
+
 	var mavenContainer *Container = nil
 	if includeMaven {
 		mavenContainer = &Container{
@@ -87,9 +131,10 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 				Cpu:    16,
 				Memory: 16,
 			},
-			Privileged: false,
-			Essential:  false,
-			Mounts:     []string{mavenVolume},
+			Privileged:             false,
+			Essential:              false,
+			Mounts:                 []string{mavenVolume},
+			ReadOnlyRootFileSystem: true,
 		}
 	}
 
@@ -101,9 +146,19 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 	//basic auth header for executor-logs service
 	basicAuthHeader := "Basic " + b64.StdEncoding.EncodeToString([]byte(conf.ZebrunnerIntegrationUser+":"+conf.ZebrunnerIntegrationPassword))
 
-	mounts := []string{entrypointVolume, taskVolume, logVolume}
+	mounts := []string{entrypointVolume, taskVolume, logVolume, tmpExecutorVolume, executorCacheVolume, executorConfigVolume}
 	if includeMaven {
 		mounts = append(mounts, mavenVolume)
+		mounts = append(mounts, mavenLogVolume)
+	} else if includePython {
+		mounts = append(mounts, executorPythonBinVolume)
+		mounts = append(mounts, executorPythonLibVolume)
+		mounts = append(mounts, executorPythonLocalVolume)
+	} else if includeGradle {
+		mounts = append(mounts, executorGradleVolume)
+	} else if includePlaywright {
+		mounts = append(mounts, executorPlaywrightNpmVolume)
+		mounts = append(mounts, executorPlaywrightCacheVolume)
 	}
 
 	dependsOn := make([]*ecs.ContainerDependency, 0)
@@ -142,7 +197,8 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 			Timeout:     aws.Int64(10),
 			StartPeriod: aws.Int64(0),
 		},
-		DependsOn: dependsOn,
+		DependsOn:              dependsOn,
+		ReadOnlyRootFileSystem: true,
 	}
 
 	if caps.EnvVariables != nil {
@@ -175,7 +231,7 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 			"BASIC_AUTH":           basicAuthHeader,
 			"LOG_FILE":             "console.log",
 		},
-		Mounts: []string{logVolume},
+		Mounts: []string{logVolume, tmpRecorderVolume},
 		HealthCheck: &ecs.HealthCheck{
 			// check if recorder's binary process is running, no curl is downloaded inside of container
 			Command:     []*string{aws.String("CMD-SHELL"), aws.String("pgrep recorder")},
@@ -184,6 +240,7 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 			Timeout:     aws.Int64(5),
 			StartPeriod: aws.Int64(2),
 		},
+		ReadOnlyRootFileSystem: true,
 	}
 	if caps.EnvVariables != nil {
 		for v, k := range caps.EnvVariables {
@@ -196,8 +253,8 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 		Name:  "uploader",
 		Image: uploaderImage,
 		Res: Resources{
-			Cpu:    64,
-			Memory: 64,
+			Cpu:    128,
+			Memory: 256,
 		},
 		Privileged: false,
 		Essential:  false,
@@ -207,19 +264,34 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 			"AWS_SECRET_ACCESS_KEY": conf.S3AwsSecretAccessKey,
 			"AWS_DEFAULT_REGION":    conf.S3Region,
 		},
-		Mounts:      []string{logVolume},
-		HealthCheck: nil,
+		Mounts:                 []string{logVolume},
+		HealthCheck:            nil,
+		ReadOnlyRootFileSystem: true,
 	}
 
 	volumes := make(map[string]volume, 0)
 	volumes[entrypointVolume] = volume{Driver: "local", Scope: "task", ContainerPath: entrypointDir, ReadOnly: false}
 	volumes[taskVolume] = volume{Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false}
 	volumes[logVolume] = volume{Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false}
+	volumes[tmpRecorderVolume] = volume{Driver: "local", Scope: "task", ContainerPath: tmpDir, ReadOnly: false}
+	volumes[tmpExecutorVolume] = volume{Driver: "local", Scope: "task", ContainerPath: tmpDir, ReadOnly: false}
+	volumes[executorCacheVolume] = volume{Driver: "local", Scope: "task", ContainerPath: executorCacheDir, ReadOnly: false}
+	volumes[executorConfigVolume] = volume{Driver: "local", Scope: "task", ContainerPath: executorConfigDir, ReadOnly: false}
 
 	containers := []*Container{&cloneContainer, &entrypointContainer, &recorderContainer, &uploaderContainer, &executorContainer}
 	if includeMaven {
 		containers = append(containers, mavenContainer)
 		volumes[mavenVolume] = volume{Driver: "local", Scope: "task", ContainerPath: mavenDir, ReadOnly: false}
+		volumes[mavenLogVolume] = volume{Driver: "local", Scope: "task", ContainerPath: mavenLogDir, ReadOnly: false}
+	} else if includePython {
+		volumes[executorPythonLocalVolume] = volume{Driver: "local", Scope: "task", ContainerPath: executorPythonLocalDir, ReadOnly: false}
+		volumes[executorPythonBinVolume] = volume{Driver: "local", Scope: "task", ContainerPath: executorPythonBinDir, ReadOnly: false}
+		volumes[executorPythonLibVolume] = volume{Driver: "local", Scope: "task", ContainerPath: executorPythonLibDir, ReadOnly: false}
+	} else if includeGradle {
+		volumes[executorGradleVolume] = volume{Driver: "local", Scope: "task", ContainerPath: executorGradleDir, ReadOnly: false}
+	} else if includePlaywright {
+		volumes[executorPlaywrightNpmVolume] = volume{Driver: "local", Scope: "task", ContainerPath: executorPlaywrighNpmDir, ReadOnly: false}
+		volumes[executorPlaywrightCacheVolume] = volume{Driver: "local", Scope: "task", ContainerPath: executorPlaywrighCacheDir, ReadOnly: false}
 	}
 
 	env := ExecutionEnvironment{
