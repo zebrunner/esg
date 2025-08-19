@@ -60,8 +60,8 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 		executorGradleDir    = "/home/gradle"
 		executorGradleVolume = "executorGradleHome"
 
-		executorPlaywrighNpmDir     = "/root/.npm"
-		executorPlaywrightNpmVolume = "executorPlaywrightNpmVolume"
+		executorNpmDir    = "/root/.npm"
+		executorNpmVolume = "executorNpmVolume"
 
 		executorPlaywrighCacheDir     = "/usr/local/share/.cache"
 		executorPlaywrightCacheVolume = "executorPlaywrightCacheVolume"
@@ -146,7 +146,7 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 	//basic auth header for executor-logs service
 	basicAuthHeader := "Basic " + b64.StdEncoding.EncodeToString([]byte(conf.ZebrunnerIntegrationUser+":"+conf.ZebrunnerIntegrationPassword))
 
-	mounts := []string{entrypointVolume, taskVolume, logVolume, tmpExecutorVolume, executorCacheVolume, executorConfigVolume}
+	mounts := []string{entrypointVolume, taskVolume, logVolume, tmpExecutorVolume, executorCacheVolume, executorConfigVolume, executorNpmVolume}
 	if includeMaven {
 		mounts = append(mounts, mavenVolume)
 		mounts = append(mounts, mavenLogVolume)
@@ -157,7 +157,6 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 	} else if includeGradle {
 		mounts = append(mounts, executorGradleVolume)
 	} else if includePlaywright {
-		mounts = append(mounts, executorPlaywrightNpmVolume)
 		mounts = append(mounts, executorPlaywrightCacheVolume)
 	}
 
@@ -277,6 +276,7 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 	volumes[tmpExecutorVolume] = volume{Driver: "local", Scope: "task", ContainerPath: tmpDir, ReadOnly: false}
 	volumes[executorCacheVolume] = volume{Driver: "local", Scope: "task", ContainerPath: executorCacheDir, ReadOnly: false}
 	volumes[executorConfigVolume] = volume{Driver: "local", Scope: "task", ContainerPath: executorConfigDir, ReadOnly: false}
+	volumes[executorNpmVolume] = volume{Driver: "local", Scope: "task", ContainerPath: executorNpmDir, ReadOnly: false}
 
 	containers := []*Container{&cloneContainer, &entrypointContainer, &recorderContainer, &uploaderContainer, &executorContainer}
 	if includeMaven {
@@ -290,7 +290,6 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 	} else if includeGradle {
 		volumes[executorGradleVolume] = volume{Driver: "local", Scope: "task", ContainerPath: executorGradleDir, ReadOnly: false}
 	} else if includePlaywright {
-		volumes[executorPlaywrightNpmVolume] = volume{Driver: "local", Scope: "task", ContainerPath: executorPlaywrighNpmDir, ReadOnly: false}
 		volumes[executorPlaywrightCacheVolume] = volume{Driver: "local", Scope: "task", ContainerPath: executorPlaywrighCacheDir, ReadOnly: false}
 	}
 
