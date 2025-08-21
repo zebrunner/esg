@@ -6,11 +6,13 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ecs"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
 	envtype "github.com/zebrunner/esg/environment/envType"
 	"github.com/zebrunner/esg/environment/network"
 	"github.com/zebrunner/esg/images"
+	"github.com/zebrunner/esg/utils"
 
 	b64 "encoding/base64"
 	"fmt"
@@ -291,6 +293,51 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 		volumes[executorGradleVolume] = volume{Driver: "local", Scope: "task", ContainerPath: executorGradleDir, ReadOnly: false}
 	} else if includePlaywright {
 		volumes[executorPlaywrightCacheVolume] = volume{Driver: "local", Scope: "task", ContainerPath: executorPlaywrighCacheDir, ReadOnly: false}
+	}
+
+	executorVolumes, extractErr := utils.ExtractCapabilityAsString(caps.EnvVariables.ToPrimitive(), "zebrunner:executorVolumes")
+
+	if extractErr != nil {
+		log.Warn(extractErr)
+	} else {
+		executorVolumes := strings.Split(executorVolumes, ",")
+		seenPaths := make(map[string]bool)
+
+		for i, path := range executorVolumes {
+			path = strings.TrimSpace(path)
+			if path == "" {
+				continue
+			}
+
+			if seenPaths[path] {
+				log.Warnf("duplicate ExecutorVolume path skipped (already in request): %s", path)
+				continue
+			}
+
+			alreadyExists := false
+			for _, v := range volumes {
+				if v.ContainerPath == path {
+					alreadyExists = true
+					break
+				}
+			}
+			if alreadyExists {
+				log.Warnf("duplicate ExecutorVolume path skipped (already in volumes): %s", path)
+				continue
+			}
+
+			seenPaths[path] = true
+
+			mountName := fmt.Sprintf("executor-volume-%d", i)
+			executorContainer.Mounts = append(executorContainer.Mounts, mountName)
+
+			volumes[mountName] = volume{
+				Driver:        "local",
+				Scope:         "task",
+				ContainerPath: path,
+				ReadOnly:      false,
+			}
+		}
 	}
 
 	env := ExecutionEnvironment{
