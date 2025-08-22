@@ -2,7 +2,6 @@ package environment
 
 import (
 	"fmt"
-
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -132,15 +131,16 @@ func (env *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefiniti
 		memory := c.Memory()
 		imageUrl := c.getImageUrl()
 		containerDefinition := ecs.ContainerDefinition{
-			Name:        &c.Name,
-			Image:       &imageUrl,
-			Cpu:         &cpu,
-			Memory:      &memory,
-			Essential:   &c.Essential,
-			HealthCheck: c.HealthCheck,
-			DependsOn:   c.DependsOn,
-			Links:       aws.StringSlice(c.Links),
-			EntryPoint:  aws.StringSlice(c.EntryPoint),
+			Name:                   &c.Name,
+			Image:                  &imageUrl,
+			Cpu:                    &cpu,
+			Memory:                 &memory,
+			Essential:              &c.Essential,
+			HealthCheck:            c.HealthCheck,
+			DependsOn:              c.DependsOn,
+			Links:                  aws.StringSlice(c.Links),
+			EntryPoint:             aws.StringSlice(c.EntryPoint),
+			ReadonlyRootFilesystem: &c.ReadOnlyRootFileSystem,
 		}
 
 		if strings.ToLower(env.Capabilities.PlatformName.ToPrimitive()) != envtype.WINDOWS.String() {

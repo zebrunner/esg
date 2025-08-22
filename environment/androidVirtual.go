@@ -22,8 +22,25 @@ const (
 func buildAppiumRedroid(workspace string, routerUUID string, image images.Image, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
 	browserVolume := "browser"
 
-	logDir := "/tmp/log"
-	logVolume := "log"
+	var (
+		logDir    = "/tmp/log"
+		logVolume = "log"
+
+		tmpDir          = "/tmp"
+		tmpAppiumVolume = "tmpAppium"
+
+		androidDir    = "/root/.android"
+		androidVolume = "android"
+
+		appiumHomeDir    = "/usr/lib/node_modules/appium"
+		appiumHomeVolume = "appiumHome"
+
+		downloadDir    = "/opt/appium-storage/"
+		downloadVolume = "downloadVolume"
+
+		deviceDataDir    = "/data"
+		deviceDataVolume = "deviceData"
+	)
 
 	caps.EnableVNC = false
 
@@ -37,6 +54,8 @@ func buildAppiumRedroid(workspace string, routerUUID string, image images.Image,
 		Env: map[string]string{
 			"VERBOSE": "1",
 		},
+		Mounts:                 []string{deviceDataVolume},
+		ReadOnlyRootFileSystem: true,
 	}
 
 	appiumContainer := Container{
@@ -59,7 +78,7 @@ func buildAppiumRedroid(workspace string, routerUUID string, image images.Image,
 			"LOG_DIR":        logDir,
 			"TASK_LOG":       logDir + "/appium.log",
 		},
-		Mounts: []string{browserVolume, logVolume},
+		Mounts: []string{browserVolume, logVolume, tmpAppiumVolume, androidVolume, appiumHomeVolume, downloadVolume},
 		Links:  []string{"device"},
 		HealthCheck: &ecs.HealthCheck{
 			Command:     []*string{aws.String("CMD-SHELL"), aws.String("healthcheck")},
@@ -67,13 +86,14 @@ func buildAppiumRedroid(workspace string, routerUUID string, image images.Image,
 			Interval:    aws.Int64(24),
 			StartPeriod: aws.Int64(240),
 		},
+		ReadOnlyRootFileSystem: true,
 	}
 
 	uploaderContainer := Container{
 		Name:  "uploader",
 		Image: uploaderImage,
 		Res: Resources{
-			Cpu:    64,  // with 32 uploading is aborted
+			Cpu:    128, // with 32 uploading is aborted
 			Memory: 256, // 64 works for single thread. for background copying it is not enough
 		},
 		Privileged: false,
@@ -85,8 +105,9 @@ func buildAppiumRedroid(workspace string, routerUUID string, image images.Image,
 			"AWS_SECRET_ACCESS_KEY": conf.S3AwsSecretAccessKey,
 			"AWS_DEFAULT_REGION":    conf.S3Region,
 		},
-		Mounts:      []string{logVolume},
-		HealthCheck: nil,
+		Mounts:                 []string{logVolume},
+		HealthCheck:            nil,
+		ReadOnlyRootFileSystem: true,
 	}
 
 	containers := []*Container{&deviceContainer, &appiumContainer, &uploaderContainer}
@@ -96,8 +117,13 @@ func buildAppiumRedroid(workspace string, routerUUID string, image images.Image,
 		Containers:           containers,
 		Capabilities:         caps,
 		Volumes: map[string]volume{
-			logVolume:     {ContainerPath: logDir, Driver: "local", Scope: "task", ReadOnly: false},
-			browserVolume: {ContainerPath: "/tmp/zebrunner/chrome", HostPath: "/opt/zebrunner/chrome", ReadOnly: false}, //TODO: think about path unification on host and inside container
+			logVolume:        {ContainerPath: logDir, Driver: "local", Scope: "task", ReadOnly: false},
+			browserVolume:    {ContainerPath: "/tmp/zebrunner/chrome", HostPath: "/opt/zebrunner/chrome", ReadOnly: false}, //TODO: think about path unification on host and inside container
+			tmpAppiumVolume:  {ContainerPath: tmpDir, Driver: "local", Scope: "task", ReadOnly: false},
+			androidVolume:    {ContainerPath: androidDir, Driver: "local", Scope: "task", ReadOnly: false},
+			appiumHomeVolume: {ContainerPath: appiumHomeDir, Driver: "local", Scope: "task", ReadOnly: false},
+			downloadVolume:   {ContainerPath: downloadDir, Driver: "local", Scope: "task", ReadOnly: false},
+			deviceDataVolume: {ContainerPath: deviceDataDir, Driver: "local", Scope: "task", ReadOnly: false},
 		},
 		Network: &network.NetworkConfiguration{
 			IP: "",
