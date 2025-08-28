@@ -97,7 +97,7 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 			Interval:    aws.Int64(5),
 			Retries:     aws.Int64(4),
 			Timeout:     aws.Int64(5),
-			StartPeriod: aws.Int64(5),
+			StartPeriod: aws.Int64(10),
 		},
 
 		ReadOnlyRootFileSystem: true,
