@@ -94,8 +94,8 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 		EntryPoint: []string{"/bin/sh"},
 		HealthCheck: &ecs.HealthCheck{
 			Command:     []*string{aws.String("CMD-SHELL"), aws.String(fmt.Sprintf("curl -f localhost:%v/status || exit 1", seleniumPort))},
-			Interval:    aws.Int64(5),
-			Retries:     aws.Int64(4),
+			Interval:    aws.Int64(8),
+			Retries:     aws.Int64(8),
 			Timeout:     aws.Int64(5),
 			StartPeriod: aws.Int64(10),
 		},
