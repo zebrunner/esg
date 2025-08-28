@@ -127,18 +127,14 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 		Command:          []string{"-c", entrypointDir + "/entrypoint.sh" + taskLogRedirect},
 		EntryPoint:       []string{"/bin/sh"},
 		HealthCheck: &ecs.HealthCheck{
-			Command: []*string{aws.String("CMD-SHELL"),
-				aws.String(fmt.Sprintf("{"+
-					// check that 'Cypress: Config Manager' process started (looks like it appears only when cypress tests completely started)
-					" ps aux | awk '/Cypress: Config Manager/ && !/awk/ { print $2 }' | grep ''  &&"+
-					// check that browser returns something via debug port
-					" curl -f http://localhost:%v/json"+
-					"; } || exit 1", cypressDebugPort))},
-			Interval: aws.Int64(5),
-			Retries:  aws.Int64(7),
-			Timeout:  aws.Int64(5),
-			// todo think about optimizing cypress process startup so we can change startPeriod to 0
-			StartPeriod: aws.Int64(40),
+			Command: []*string{
+				aws.String("CMD-SHELL"),
+				aws.String("pgrep -f cypress >/dev/null || exit 1"),
+			},
+			Interval:    aws.Int64(5),
+			Retries:     aws.Int64(7),
+			Timeout:     aws.Int64(5),
+			StartPeriod: aws.Int64(30),
 		},
 		DependsOn: []*ecs.ContainerDependency{
 			{
