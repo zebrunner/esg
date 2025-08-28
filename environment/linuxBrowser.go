@@ -97,7 +97,7 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 			Interval:    aws.Int64(5),
 			Retries:     aws.Int64(4),
 			Timeout:     aws.Int64(5),
-			StartPeriod: aws.Int64(0),
+			StartPeriod: aws.Int64(5),
 		},
 
 		ReadOnlyRootFileSystem: true,
@@ -135,6 +135,12 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 			Retries:     aws.Int64(4),
 			Timeout:     aws.Int64(5),
 			StartPeriod: aws.Int64(2),
+		},
+		DependsOn: []*ecs.ContainerDependency{
+			{
+				ContainerName: aws.String("browser"),
+				Condition:     aws.String("START"),
+			},
 		},
 
 		ReadOnlyRootFileSystem: true,
