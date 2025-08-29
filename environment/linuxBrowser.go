@@ -94,10 +94,10 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 		EntryPoint: []string{"/bin/sh"},
 		HealthCheck: &ecs.HealthCheck{
 			Command:     []*string{aws.String("CMD-SHELL"), aws.String(fmt.Sprintf("curl -f localhost:%v/status || exit 1", seleniumPort))},
-			Interval:    aws.Int64(5),
-			Retries:     aws.Int64(4),
+			Interval:    aws.Int64(8),
+			Retries:     aws.Int64(8),
 			Timeout:     aws.Int64(5),
-			StartPeriod: aws.Int64(0),
+			StartPeriod: aws.Int64(10),
 		},
 
 		ReadOnlyRootFileSystem: true,
@@ -135,6 +135,12 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 			Retries:     aws.Int64(4),
 			Timeout:     aws.Int64(5),
 			StartPeriod: aws.Int64(2),
+		},
+		DependsOn: []*ecs.ContainerDependency{
+			{
+				ContainerName: aws.String("browser"),
+				Condition:     aws.String("START"),
+			},
 		},
 
 		ReadOnlyRootFileSystem: true,
@@ -232,14 +238,15 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 		Network: &network.NetworkConfiguration{
 			IP: "",
 			Endpoints: map[string]*network.Endpoint{
-				"driver":        {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
-				"vnc":           {ContainerPort: vncPort, HostPort: 0, Path: "/"},
-				"clipboard":     {ContainerPort: clipboardPort, HostPort: 0, Path: "/"},
-				"devtools":      {ContainerPort: devtoolsPort, HostPort: 0, Path: "/"},
-				"fileserver":    {ContainerPort: fileserverPort, HostPort: 0, Path: "/"},
-				"healthcheck":   {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
-				"recorderStart": {ContainerPort: recorderdPort, HostPort: 0, Path: "/start"},
-				"recorderStop":  {ContainerPort: recorderdPort, HostPort: 0, Path: "/stop"},
+				"driver":         {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
+				"vnc":            {ContainerPort: vncPort, HostPort: 0, Path: "/"},
+				"clipboard":      {ContainerPort: clipboardPort, HostPort: 0, Path: "/"},
+				"devtools":       {ContainerPort: devtoolsPort, HostPort: 0, Path: "/"},
+				"fileserver":     {ContainerPort: fileserverPort, HostPort: 0, Path: "/"},
+				"healthcheck":    {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
+				"recorderStart":  {ContainerPort: recorderdPort, HostPort: 0, Path: "/start"},
+				"recorderStop":   {ContainerPort: recorderdPort, HostPort: 0, Path: "/stop"},
+				"recorderFinish": {ContainerPort: recorderdPort, HostPort: 0, Path: "/finish"},
 			},
 		},
 		Type:             envtype.LINUX,
