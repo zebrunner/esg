@@ -369,6 +369,10 @@ func stopIdleSessions(ctx context.Context, wg *sync.WaitGroup) {
 					defer wg.Done()
 
 					selenium.CloseSession(m)
+
+					l.Info("Waiting 10 seconds for recorder/session to finish...")
+					time.Sleep(10 * time.Second)
+
 					err = service.StopTask(*m, mapper.SessionIdleTimeout)
 					if err != nil {
 						l.WithError(err).Error("Failed to stop idle driver task!")

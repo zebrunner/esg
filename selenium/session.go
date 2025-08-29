@@ -108,9 +108,9 @@ func CloseSession(mapperEntity *mapper.Mapper) {
 	conf := &config.Conf
 
 	go func() {
-		err := stopRecording(&mapperEntity.Network)
+		err := finishRecording(&mapperEntity.Network)
 		if err != nil {
-			log.WithError(err).Error("Failed to start recording")
+			log.WithError(err).Error("Failed to finish recording")
 		}
 	}()
 

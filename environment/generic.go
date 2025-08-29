@@ -298,7 +298,7 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 	executorVolumes, extractErr := utils.ExtractCapabilityAsString(caps.EnvVariables.ToPrimitive(), "zebrunner:executorVolumes")
 
 	if extractErr != nil {
-		log.Warn(extractErr)
+		log.Debug(extractErr)
 	} else {
 		executorVolumes := strings.Split(executorVolumes, ",")
 		seenPaths := make(map[string]bool)
@@ -349,9 +349,10 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 		Network: &network.NetworkConfiguration{
 			IP: "",
 			Endpoints: map[string]*network.Endpoint{
-				"driver":        {ContainerPort: genericPort, HostPort: 0, Path: "/"},
-				"recorderStart": {ContainerPort: recorderdPort, HostPort: 0, Path: "/start"},
-				"recorderStop":  {ContainerPort: recorderdPort, HostPort: 0, Path: "/stop"},
+				"driver":         {ContainerPort: genericPort, HostPort: 0, Path: "/"},
+				"recorderStart":  {ContainerPort: recorderdPort, HostPort: 0, Path: "/start"},
+				"recorderStop":   {ContainerPort: recorderdPort, HostPort: 0, Path: "/stop"},
+				"recorderFinish": {ContainerPort: recorderdPort, HostPort: 0, Path: "/finish"},
 			},
 		},
 		Type:             envtype.GENERIC,
