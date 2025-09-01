@@ -172,8 +172,8 @@ func CloseSession(c *gin.Context) {
 
 	selenium.CloseSession(mapperEntity)
 
-	l.Info("Waiting 10 seconds for recorder/session to finish...")
-	time.Sleep(10 * time.Second)
+	l.Debugf("Waiting %s for recorder/session to finish...", config.Conf.RecordingShutdownGracePeriod)
+	time.Sleep(config.Conf.RecordingShutdownGracePeriod)
 
 	err := service.StopTask(*mapperEntity, mapper.TaskFinished)
 	if err != nil {
