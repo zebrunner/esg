@@ -99,7 +99,7 @@ func init() {
 	flag.DurationVar(&Conf.InstanceCooldownTimeout, "instance-cooldown-timeout", 4*time.Minute, "Time after instance start when shutdown is prohibited on scale down in time.Duration format")
 	flag.DurationVar(&Conf.ContainerInstanceInitTimeout, "container-instance-init-timeout", 10*time.Minute, "Time for ec2 instance after launch to initialize container-instance for asg in time.Duration format")
 	flag.DurationVar(&Conf.MaxTimeout, "max-timeout", 24*time.Hour, "Maximum valid task/session timeout in time.Duration format")
-	flag.DurationVar(&Conf.RecordingShutdownGracePeriod, "recording-shutdown-grace-period", 5*time.Second, "The wait time required to stop recording before sending an exit command to the ECS task")
+	flag.DurationVar(&Conf.RecordingShutdownGracePeriod, "recording-shutdown-grace-period", 0*time.Second, "The wait time required to stop recording before sending an exit command to the ECS task")
 
 	flag.StringVar(&Conf.DbConnectionString, "db-connection", "localhost:5432", "Connection string for database")
 	flag.StringVar(&Conf.RedisConnectionString, "elastic-cache", "localhost:6379", "Connection string for Session cache")
