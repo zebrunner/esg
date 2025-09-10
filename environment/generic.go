@@ -356,7 +356,7 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 			},
 		},
 		Type:             envtype.GENERIC,
-		CapacityProvider: config.Conf.AwsLinuxCapacityProvider,
+		CapacityProvider: config.Conf.AwsLinuxGenericCapacityProvider,
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
 		AwsLogsGroup:     config.Conf.AwsLogsGroup,
 	}

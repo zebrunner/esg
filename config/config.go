@@ -24,16 +24,17 @@ var (
 
 type Config struct {
 	// AWS settings
-	AwsRegion                string
-	AwsRetry                 int
-	AwsCluster               string
-	AwsLinuxCapacityProvider string
-	AwsWinCapacityProvider   string
-	AwsAccessKeyID           string
-	AwsSecretAccessKey       string
-	AwsTaskRoleArn           string
-	AwsTargetGroup           string
-	E3SUrl                   string
+	AwsRegion                       string
+	AwsRetry                        int
+	AwsCluster                      string
+	AwsLinuxCapacityProvider        string
+	AwsLinuxGenericCapacityProvider string
+	AwsWinCapacityProvider          string
+	AwsAccessKeyID                  string
+	AwsSecretAccessKey              string
+	AwsTaskRoleArn                  string
+	AwsTargetGroup                  string
+	E3SUrl                          string
 
 	// Timeouts
 	MaxIdleTimeout               time.Duration
@@ -84,6 +85,7 @@ func init() {
 	flag.IntVar(&Conf.AwsRetry, "aws-retry", 10, "AWS client retry count")
 	flag.StringVar(&Conf.AwsCluster, "aws-cluster", "esg", "AWS ECS cluster name")
 	flag.StringVar(&Conf.AwsLinuxCapacityProvider, "aws-linux-capacity-provider", "esg-linux-capacityprovider", "AWS capacity provider for linux instances")
+	flag.StringVar(&Conf.AwsLinuxGenericCapacityProvider, "aws-linux-generic-capacity-provider", "esg-linux-generic-capacityprovider", "AWS capacity provider for generic linux instances")
 	flag.StringVar(&Conf.AwsWinCapacityProvider, "aws-win-capacity-provider", "esg-win-capacityprovider", "AWS capacity provicer for windows instances")
 	flag.StringVar(&Conf.AwsAccessKeyID, "aws-access-key-id", "", "Access key for AWS services")
 	flag.StringVar(&Conf.AwsSecretAccessKey, "aws-secret-access-key", "", "Secret key for AWS services")
