@@ -94,9 +94,9 @@ func InitScalingData() (map[string]scaler, error) {
 			return nil, err
 		}
 
-		instanceOverrides := describeGroupOutput.AutoScalingGroups[0].MixedInstancesPolicy.LaunchTemplate.Overrides
-		if len(instanceOverrides) <= 0 {
-			return nil, fmt.Errorf("no instances were provided in MixedInstancesPolicy")
+		instanceOverrides, err := getOverrides(describeGroupOutput)
+		if err != nil {
+			return nil, err
 		}
 
 		// From doc: Value must be in the range of 1 to 999.
@@ -652,4 +652,21 @@ func (s *scaler) SetDesiredCapacity(autoscalingSvc autoscaling.AutoScaling, newC
 
 func deleteElement(slice []*ecs.ContainerInstance, index int) []*ecs.ContainerInstance {
 	return append(slice[:index], slice[index+1:]...)
+}
+
+func getOverrides(out *autoscaling.DescribeAutoScalingGroupsOutput) ([]*autoscaling.LaunchTemplateOverrides, error) {
+	if out == nil || len(out.AutoScalingGroups) == 0 {
+		return nil, fmt.Errorf("no AutoScalingGroups in response")
+	}
+	g := out.AutoScalingGroups[0]
+	if g.MixedInstancesPolicy == nil {
+		return nil, fmt.Errorf("ASG does not use MixedInstancesPolicy")
+	}
+	if g.MixedInstancesPolicy.LaunchTemplate == nil {
+		return nil, fmt.Errorf("MixedInstancesPolicy has no LaunchTemplate")
+	}
+	if g.MixedInstancesPolicy.LaunchTemplate.Overrides == nil {
+		return nil, fmt.Errorf("no Overrides on MixedInstancesPolicy.LaunchTemplate")
+	}
+	return g.MixedInstancesPolicy.LaunchTemplate.Overrides, nil
 }
