@@ -81,6 +81,19 @@ func InitScalingData() (map[string]scaler, error) {
 
 	scalers := make(map[string]scaler)
 	for _, capacityProvider := range describeCapacityProvidersOutput.CapacityProviders {
+		name := aws.StringValue(capacityProvider.Name)
+
+		if isFargate(capacityProvider) {
+			log.Printf("Skipping capacity provider %q (Fargate).", name)
+			continue
+		}
+
+		if capacityProvider.AutoScalingGroupProvider == nil ||
+			capacityProvider.AutoScalingGroupProvider.AutoScalingGroupArn == nil {
+			log.Printf("Skipping capacity provider %q: no AutoScalingGroupProvider.", name)
+			continue
+		}
+
 		asgArn := capacityProvider.AutoScalingGroupProvider.AutoScalingGroupArn
 		asgArnSplited := strings.Split(*asgArn, "/")
 		asgName := asgArnSplited[len(asgArnSplited)-1]
@@ -669,4 +682,12 @@ func getOverrides(out *autoscaling.DescribeAutoScalingGroupsOutput) ([]*autoscal
 		return nil, fmt.Errorf("no Overrides on MixedInstancesPolicy.LaunchTemplate")
 	}
 	return g.MixedInstancesPolicy.LaunchTemplate.Overrides, nil
+}
+
+func isFargate(cp *ecs.CapacityProvider) bool {
+	if cp == nil || cp.Name == nil {
+		return false
+	}
+	n := strings.ToUpper(aws.StringValue(cp.Name))
+	return n == "FARGATE" || n == "FARGATE_SPOT"
 }
