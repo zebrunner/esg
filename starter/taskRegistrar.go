@@ -46,6 +46,12 @@ func registerTask(ctx context.Context, env *environment.ExecutionEnvironment, ro
 			},
 		},
 		CapacityProviderStrategy: []*ecs.CapacityProviderStrategyItem{{CapacityProvider: &env.CapacityProvider}},
+		NetworkConfiguration: &ecs.NetworkConfiguration{
+			AwsvpcConfiguration: &ecs.AwsVpcConfiguration{
+				SecurityGroups: config.Conf.SecurityGroups.ToStringSlice(),
+				Subnets:        config.Conf.Subnets.ToStringSlice(),
+			},
+		},
 	}
 
 	l.WithField("runTaskInput", runTaskInput).Trace("Res runTaskInput")

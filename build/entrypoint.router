@@ -61,9 +61,6 @@ fi
 if [ ! -z ${AWS_TASK_ROLE} ]; then
   CMD_ARGS="${CMD_ARGS} -aws-task-role-arn ${AWS_TASK_ROLE}"
 fi
-if [ ! -z ${USE_PUBLIC_IP} ]; then
-  CMD_ARGS="${CMD_ARGS} -use-public-ip=${USE_PUBLIC_IP}"
-fi
 
 if [ ! -z ${ELASTIC_CACHE} ]; then
   CMD_ARGS="${CMD_ARGS} -elastic-cache ${ELASTIC_CACHE}"
@@ -106,6 +103,9 @@ fi
 if [ ! -z ${MAX_TIMEOUT} ]; then
   CMD_ARGS="${CMD_ARGS} -max-timeout ${MAX_TIMEOUT}"
 fi
+if [ ! -z ${RECORDING_SHUTDOWN_GRACE_PERIOD} ]; then
+  CMD_ARGS="${CMD_ARGS} -recording-shutdown-grace-period ${RECORDING_SHUTDOWN_GRACE_PERIOD}"
+fi
 
 if [ ! -z ${ZEBRUNNER_HOST} ]; then
   CMD_ARGS="${CMD_ARGS} -zebrunner-host ${ZEBRUNNER_HOST}"
@@ -128,6 +128,13 @@ if [ ! -z ${SINGLE_TENANT} ]; then
 fi
 if [ ! -z ${OLD_ABORT_API} ]; then
   CMD_ARGS="${CMD_ARGS} -old-abort-api=${OLD_ABORT_API}"
+fi
+
+if [ ! -z ${SECURITY_GROUPS} ]; then
+  CMD_ARGS="${CMD_ARGS} -security-groups=${SECURITY_GROUPS}"
+fi
+if [ ! -z ${SUBNETS} ]; then
+  CMD_ARGS="${CMD_ARGS} -subnets=${SUBNETS}"
 fi
 
 echo "CMD_ARGS: $CMD_ARGS"

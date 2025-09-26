@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/utils"
 )
 
 const (
@@ -44,6 +45,7 @@ type Config struct {
 	InstanceCooldownTimeout      time.Duration
 	ContainerInstanceInitTimeout time.Duration
 	MaxTimeout                   time.Duration
+	RecordingShutdownGracePeriod time.Duration
 
 	// External connections
 	DbConnectionString          string
@@ -55,7 +57,9 @@ type Config struct {
 	ZebrunnerIntegrationUser     string
 	ZebrunnerIntegrationPassword string
 
-	UsePublicIp          bool
+	SecurityGroups utils.StringSlice
+	Subnets        utils.StringSlice
+
 	S3Bucket             string // For static artifacts
 	S3Region             string
 	S3AwsAccessKeyID     string
@@ -98,6 +102,7 @@ func init() {
 	flag.DurationVar(&Conf.InstanceCooldownTimeout, "instance-cooldown-timeout", 4*time.Minute, "Time after instance start when shutdown is prohibited on scale down in time.Duration format")
 	flag.DurationVar(&Conf.ContainerInstanceInitTimeout, "container-instance-init-timeout", 10*time.Minute, "Time for ec2 instance after launch to initialize container-instance for asg in time.Duration format")
 	flag.DurationVar(&Conf.MaxTimeout, "max-timeout", 24*time.Hour, "Maximum valid task/session timeout in time.Duration format")
+	flag.DurationVar(&Conf.RecordingShutdownGracePeriod, "recording-shutdown-grace-period", 0*time.Second, "The wait time required to stop recording before sending an exit command to the ECS task")
 
 	flag.StringVar(&Conf.DbConnectionString, "db-connection", "localhost:5432", "Connection string for database")
 	flag.StringVar(&Conf.RedisConnectionString, "elastic-cache", "localhost:6379", "Connection string for Session cache")
@@ -108,7 +113,9 @@ func init() {
 	flag.StringVar(&Conf.ZebrunnerIntegrationUser, "zebrunner-integration-user", "", "User for zebrunner for current env")
 	flag.StringVar(&Conf.ZebrunnerIntegrationPassword, "zebrunner-integration-password", "", "Password for zebrunner for current env")
 
-	flag.BoolVar(&Conf.UsePublicIp, "use-public-ip", false, "Use or no public ip address for browser slave instances")
+	flag.Var(&Conf.SecurityGroups, "security-groups", "AWS security-groups for ECS tasks")
+	flag.Var(&Conf.Subnets, "subnets", "AWS private subnets for ECS tasks")
+
 	flag.StringVar(&Conf.S3Bucket, "s3-bucket", "", "S3 Bucket name for pushing artifacts")
 	flag.StringVar(&Conf.S3Region, "s3-region", "", "S3 Bucket region for pushing artifacts")
 	flag.StringVar(&Conf.S3AwsAccessKeyID, "s3-aws-access-key-id", "", "Access key for S3 bucket")

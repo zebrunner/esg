@@ -21,12 +21,32 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 
 	log.Trace("caps: ", caps)
 
-	// for browsers images try to reuse Doensloads to be able to share this content via upload/download endpoint
-	logDir := "/home/selenium/Downloads"
-	logVolume := "log"
+	var (
+		// for browsers images try to reuse Doensloads to be able to share this content via upload/download endpoint
+		logDir    = "/home/selenium/Downloads"
+		logVolume = "log"
 
-	shmDir := "/dev/shm"
-	shmVolume := "shm"
+		shmDir    = "/dev/shm"
+		shmVolume = "shm"
+
+		seleniumDir           = "/home/selenium"
+		seleniumBrowserVolume = "seleniumBrowserVolume"
+		seleniumMitmVolume    = "seleniumMitmVolume"
+
+		tmpDir            = "/tmp"
+		tmpBrowserVolume  = "tmpBrowserVolume"
+		tmpRecorderVolume = "tmpRecorderVolume"
+		tmpMitmVolume     = "tmpMitmVolume"
+
+		mitmCacheDir    = "/root/.cache"
+		mitmCacheVolume = "mitmCacheVolume"
+
+		mitmCertificateDir    = "/root/.mitmproxy"
+		mitmCertificateVolume = "mitmCertificateVolume"
+
+		mitmPythonDir    = "/urs/local/lib/python3.11"
+		mitmPythonVolume = "mitmPythonVolume"
+	)
 
 	tz, err := caps.GetTimeZone()
 	// Video recorder & artifacts uploader logic
@@ -55,11 +75,11 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 		image:     &image,
 		Essential: true,
 		Ports: map[string]portMapping{
-			"driver":         {ContainerPort: seleniumPort, HostPort: 0},
-			"vnc":            {ContainerPort: vncPort, HostPort: 0},
-			"devtools":       {ContainerPort: devtoolsPort, HostPort: 0},
-			"fileserverPort": {ContainerPort: fileserverPort, HostPort: 0},
-			"clipboardPort":  {ContainerPort: clipboardPort, HostPort: 0},
+			"driver":         {ContainerPort: seleniumPort, HostPort: seleniumPort},
+			"vnc":            {ContainerPort: vncPort, HostPort: vncPort},
+			"devtools":       {ContainerPort: devtoolsPort, HostPort: devtoolsPort},
+			"fileserverPort": {ContainerPort: fileserverPort, HostPort: fileserverPort},
+			"clipboardPort":  {ContainerPort: clipboardPort, HostPort: clipboardPort},
 		},
 		Env: map[string]string{
 			"DRIVER_ARGS":       driverArgs,
@@ -69,16 +89,18 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 			"TZ":                tz.String(),
 			"SCREEN_RESOLUTION": resolution,
 		},
-		Mounts:     []string{shmVolume, logVolume},
+		Mounts:     []string{logVolume, shmVolume, seleniumBrowserVolume, tmpBrowserVolume},
 		Command:    []string{"-c", "/entrypoint.sh" + taskLogRedirect},
 		EntryPoint: []string{"/bin/sh"},
 		HealthCheck: &ecs.HealthCheck{
 			Command:     []*string{aws.String("CMD-SHELL"), aws.String(fmt.Sprintf("curl -f localhost:%v/status || exit 1", seleniumPort))},
-			Interval:    aws.Int64(5),
-			Retries:     aws.Int64(4),
+			Interval:    aws.Int64(8),
+			Retries:     aws.Int64(8),
 			Timeout:     aws.Int64(5),
-			StartPeriod: aws.Int64(0),
+			StartPeriod: aws.Int64(10),
 		},
+
+		ReadOnlyRootFileSystem: true,
 	}
 
 	recorderContainer := Container{
@@ -91,7 +113,7 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 		Privileged: false,
 		Essential:  false,
 		Ports: map[string]portMapping{
-			"recorder": {recorderdPort, 0},
+			"recorder": {recorderdPort, recorderdPort},
 		},
 		Env: map[string]string{
 			"ROUTER_UUID":          routerUUID,
@@ -102,10 +124,10 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 			"ENABLE_VIDEO":         strconv.FormatBool(caps.EnableVideo.ToPrimitive()),
 			"ENABLE_REALTIME_LOGS": "false",
 			"BASIC_AUTH":           "",
+			"DISPLAY":              "localhost:99",
 			// "CODEC":                caps.VideoCodec.ToPrimitive(), // temporary disabled
 		},
-		Mounts: []string{logVolume},
-		Links:  []string{"browser"},
+		Mounts: []string{logVolume, tmpRecorderVolume},
 		HealthCheck: &ecs.HealthCheck{
 			// check if recorder's binary process is running, no curl is downloaded inside of container
 			Command:     []*string{aws.String("CMD-SHELL"), aws.String("pgrep recorder")},
@@ -114,6 +136,14 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 			Timeout:     aws.Int64(5),
 			StartPeriod: aws.Int64(2),
 		},
+		DependsOn: []*ecs.ContainerDependency{
+			{
+				ContainerName: aws.String("browser"),
+				Condition:     aws.String("START"),
+			},
+		},
+
+		ReadOnlyRootFileSystem: true,
 	}
 
 	if caps.EnableVideo.ToPrimitive() {
@@ -143,7 +173,7 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 		Name:  "uploader",
 		Image: uploaderImage,
 		Res: Resources{
-			Cpu:    64, // with 32 uploading is aborted
+			Cpu:    128, // with 32 uploading is aborted
 			Memory: 256, // 64 works for single thread. for backgroud copying it is not enough
 		},
 		Privileged: false,
@@ -157,6 +187,8 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 		},
 		Mounts:      []string{logVolume},
 		HealthCheck: nil,
+
+		ReadOnlyRootFileSystem: true,
 	}
 
 	containers := []*Container{&browserContainer, &recorderContainer, &uploaderContainer}
@@ -171,14 +203,17 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 			Env: map[string]string{
 				"LOG_DIR":    logDir,
 				"PROXY_ARGS": caps.MitmArgs.ToPrimitive(),
+				"PROXY_PORT": "8081",
 			},
 			Ports: map[string]portMapping{
-				"fileserverPort":   {ContainerPort: fileserverPort, HostPort: 0},
-				"proxyHandlerPort": {ContainerPort: proxyHandlerPort, HostPort: 0},
+				"fileserverPort":   {ContainerPort: fileserverPortMitm, HostPort: fileserverPortMitm},
+				"proxyHandlerPort": {ContainerPort: proxyHandlerPort, HostPort: proxyHandlerPort},
 			},
-			Mounts:     []string{logVolume},
+			Mounts:     []string{logVolume, seleniumMitmVolume, tmpMitmVolume, mitmCacheVolume, mitmCertificateVolume, mitmPythonVolume},
 			Command:    []string{"-c", "/entrypoint.sh"},
 			EntryPoint: []string{"/bin/sh"},
+
+			ReadOnlyRootFileSystem: true,
 		}
 
 		if caps.MitmType.ToPrimitive() != "" {
@@ -186,7 +221,6 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 		}
 
 		containers = append(containers, &mitmContainer)
-		browserContainer.Links = []string{"mitm"}
 	}
 
 	env := ExecutionEnvironment{
@@ -195,20 +229,25 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 		Containers:           containers,
 		Capabilities:         caps,
 		Volumes: map[string]volume{
-			logVolume: {ContainerPath: logDir, Driver: "local", Scope: "task", ReadOnly: false},
-			shmVolume: {ContainerPath: shmDir, HostPath: shmDir, ReadOnly: false}, // no way to reuse local task volume due to the reset of permissions on browser container start
+			logVolume:             {ContainerPath: logDir, Driver: "local", Scope: "task", ReadOnly: false},
+			shmVolume:             {ContainerPath: shmDir, HostPath: shmDir, ReadOnly: false}, // no way to reuse local task volume due to the reset of permissions on browser container start
+			seleniumBrowserVolume: {ContainerPath: seleniumDir, Driver: "local", Scope: "task", ReadOnly: false},
+			tmpBrowserVolume:      {ContainerPath: tmpDir, Driver: "local", Scope: "task", ReadOnly: false},
+			tmpRecorderVolume:     {ContainerPath: tmpDir, Driver: "local", Scope: "task", ReadOnly: false},
 		},
 		Network: &network.NetworkConfiguration{
 			IP: "",
 			Endpoints: map[string]*network.Endpoint{
-				"driver":        {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
-				"vnc":           {ContainerPort: vncPort, HostPort: 0, Path: "/"},
-				"clipboard":     {ContainerPort: clipboardPort, HostPort: 0, Path: "/"},
-				"devtools":      {ContainerPort: devtoolsPort, HostPort: 0, Path: "/"},
-				"fileserver":    {ContainerPort: fileserverPort, HostPort: 0, Path: "/"},
-				"healthcheck":   {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
-				"recorderStart": {ContainerPort: recorderdPort, HostPort: 0, Path: "/start"},
-				"recorderStop":  {ContainerPort: recorderdPort, HostPort: 0, Path: "/stop"},
+				"driver":         {ContainerPort: seleniumPort, HostPort: seleniumPort, Path: "/"},
+				"vnc":            {ContainerPort: vncPort, HostPort: vncPort, Path: "/"},
+				"clipboard":      {ContainerPort: clipboardPort, HostPort: clipboardPort, Path: "/"},
+				"devtools":       {ContainerPort: devtoolsPort, HostPort: devtoolsPort, Path: "/"},
+				"fileserver":     {ContainerPort: fileserverPort, HostPort: fileserverPort, Path: "/"},
+				"fileserverMitm": {ContainerPort: fileserverPortMitm, HostPort: fileserverPortMitm, Path: "/"},
+				"healthcheck":    {ContainerPort: seleniumPort, HostPort: seleniumPort, Path: "/"},
+				"recorderStart":  {ContainerPort: recorderdPort, HostPort: recorderdPort, Path: "/start"},
+				"recorderStop":   {ContainerPort: recorderdPort, HostPort: recorderdPort, Path: "/stop"},
+				"recorderFinish": {ContainerPort: recorderdPort, HostPort: recorderdPort, Path: "/finish"},
 			},
 		},
 		Type:             envtype.LINUX,
@@ -231,13 +270,18 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 	})
 
 	if caps.Mitm {
-		env.Network.Endpoints["proxyHandlerPort"] = &network.Endpoint{ContainerPort: proxyHandlerPort, HostPort: 0, Path: "/"}
+		env.Network.Endpoints["proxyHandlerPort"] = &network.Endpoint{ContainerPort: proxyHandlerPort, HostPort: proxyHandlerPort, Path: "/"}
 		calcArr = append(calcArr, &resourceCalculationHelper{
 			MinimumRes: Resources{Cpu: 512, Memory: 512},
 			Container:  &mitmContainer,
 			Memory:     &caps.MitmMemory,
 			Cpu:        &caps.MitmCpu,
 		})
+		env.Volumes[seleniumMitmVolume] = volume{ContainerPath: seleniumDir, Driver: "local", Scope: "task", ReadOnly: false}
+		env.Volumes[tmpMitmVolume] = volume{ContainerPath: tmpDir, Driver: "local", Scope: "task", ReadOnly: false}
+		env.Volumes[mitmCacheVolume] = volume{ContainerPath: mitmCacheDir, Driver: "local", Scope: "task", ReadOnly: false}
+		env.Volumes[mitmCertificateVolume] = volume{ContainerPath: mitmCertificateDir, Driver: "local", Scope: "task", ReadOnly: false}
+		env.Volumes[mitmPythonVolume] = volume{ContainerPath: mitmPythonDir, Driver: "local", Scope: "task", ReadOnly: false}
 	}
 
 	err = calculateResources(&env, calcArr...)

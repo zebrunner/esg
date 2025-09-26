@@ -14,26 +14,27 @@ import (
 
 const (
 	uploaderImage        = config.ZebrunnerEcrRegistryUri + "/" + "uploader:3.6.1"
-	mitmImage            = config.ZebrunnerEcrRegistryUri + "/" + "mitmproxy:2.1"
-	recorderImage        = config.ZebrunnerEcrRegistryUri + "/" + "recorder:2.0"
+	mitmImage            = config.ZebrunnerEcrRegistryUri + "/" + "mitmproxy:2.2"
+	recorderImage        = config.ZebrunnerEcrRegistryUri + "/" + "recorder:2.2"
 	cypressRecorderImage = config.ZebrunnerEcrRegistryUri + "/" + "cypress-recorder:1.3"
-	appiumImage          = config.ZebrunnerEcrRegistryUri + "/" + "appium:2.0.15"
+	appiumImage          = config.ZebrunnerEcrRegistryUri + "/" + "appium:2.0.15-awsvpc"
 	cloneImage           = config.ZebrunnerEcrRegistryUri + "/" + "git:2.36.2"
-	entrypointImage      = config.ZebrunnerEcrRegistryUri + "/" + "entrypoint:2.5.2"
+	entrypointImage      = config.ZebrunnerEcrRegistryUri + "/" + "entrypoint:2.5.3"
 	mavenImage           = config.ZebrunnerEcrRegistryUri + "/" + "m2-repo-carina:1.5"
 	winUploaderImage     = config.ZebrunnerEcrRegistryUri + "/" + "uploader:1.1-win"
 	winRecorderImage     = config.ZebrunnerEcrRegistryUri + "/" + "recorder:2.0-win"
 )
 
 const (
-	genericPort      int64 = 22
-	seleniumPort     int64 = 4444
-	vncPort          int64 = 5900
-	devtoolsPort     int64 = 7070
-	fileserverPort   int64 = 8080
-	clipboardPort    int64 = 9090
-	proxyHandlerPort int64 = 8060
-	recorderdPort    int64 = 9080
+	genericPort        int64 = 22
+	seleniumPort       int64 = 4444
+	vncPort            int64 = 5900
+	devtoolsPort       int64 = 7070
+	fileserverPort     int64 = 8080
+	fileserverPortMitm int64 = 8082
+	clipboardPort      int64 = 9090
+	proxyHandlerPort   int64 = 8060
+	recorderdPort      int64 = 9080
 
 	cypressDebugPort int64 = 9222
 

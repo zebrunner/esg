@@ -60,7 +60,6 @@ type Container struct {
 
 	Ports            map[string]portMapping
 	Mounts           []string // List of volume names
-	Links            []string // List of linked containers
 	Command          []string // Comma separated container startup command
 	Env              envVariables
 	EntryPoint       []string
@@ -68,6 +67,8 @@ type Container struct {
 
 	HealthCheck *ecs.HealthCheck
 	DependsOn   []*ecs.ContainerDependency
+
+	ReadOnlyRootFileSystem bool
 }
 
 func (c *Container) Cpu() int64 {

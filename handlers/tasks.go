@@ -172,6 +172,9 @@ func CloseSession(c *gin.Context) {
 
 	selenium.CloseSession(mapperEntity)
 
+	l.Debugf("Waiting %s for recorder/session to finish...", config.Conf.RecordingShutdownGracePeriod)
+	time.Sleep(config.Conf.RecordingShutdownGracePeriod)
+
 	err := service.StopTask(*mapperEntity, mapper.TaskFinished)
 	if err != nil {
 		l.WithError(err).Warn("Failed to stop task")
@@ -382,6 +385,7 @@ func TaskDescribe(c *gin.Context) {
 
 func Downloads(c *gin.Context) {
 	mapperEntity := c.MustGet(config.RouterUUID).(*mapper.Mapper)
+	// Because of the awsvpc network mode, we may need additional implementation for the MITM file server connection
 	url, ok := mapperEntity.Network.GetUrl("fileserver")
 	if !ok {
 		log.Error("failed to get `fileserver` url from session")

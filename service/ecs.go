@@ -58,7 +58,7 @@ func InitAws() (*awsSession.Session, error) {
 func CreateTaskDefinition(definitions []*ecs.ContainerDefinition, volumes []*ecs.Volume, taskDefinitionFamily string, taskRoleArn string) (*ecs.TaskDefinition, error) {
 	svc := ecs.New(AwsSess)
 
-	networkMode := "bridge"
+	networkMode := "awsvpc"
 	input := ecs.RegisterTaskDefinitionInput{
 		NetworkMode:          &networkMode,
 		ContainerDefinitions: definitions,

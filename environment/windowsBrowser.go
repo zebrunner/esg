@@ -29,7 +29,7 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 		image:     &image,
 		Essential: true,
 		Ports: map[string]portMapping{
-			"driver": {ContainerPort: seleniumPort, HostPort: 0},
+			"driver": {ContainerPort: seleniumPort, HostPort: seleniumPort},
 		},
 		Mounts: []string{logVolume},
 		Env: map[string]string{
@@ -57,7 +57,7 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 		Privileged: false,
 		Essential:  false,
 		Ports: map[string]portMapping{
-			"recorder": {recorderdPort, 0},
+			"recorder": {recorderdPort, recorderdPort},
 		},
 		Env: map[string]string{
 			"ROUTER_UUID": routerUUID,
@@ -122,10 +122,11 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 		Network: &network.NetworkConfiguration{
 			IP: "",
 			Endpoints: map[string]*network.Endpoint{
-				"driver":        {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
-				"healthcheck":   {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
-				"recorderStart": {ContainerPort: recorderdPort, HostPort: 0, Path: "/start"},
-				"recorderStop":  {ContainerPort: recorderdPort, HostPort: 0, Path: "/stop"},
+				"driver":         {ContainerPort: seleniumPort, HostPort: seleniumPort, Path: "/"},
+				"healthcheck":    {ContainerPort: seleniumPort, HostPort: seleniumPort, Path: "/"},
+				"recorderStart":  {ContainerPort: recorderdPort, HostPort: recorderdPort, Path: "/start"},
+				"recorderStop":   {ContainerPort: recorderdPort, HostPort: recorderdPort, Path: "/stop"},
+				"recorderFinish": {ContainerPort: recorderdPort, HostPort: recorderdPort, Path: "/finish"},
 			},
 		},
 		Type:             envtype.WINDOWS,

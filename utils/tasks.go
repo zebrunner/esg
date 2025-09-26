@@ -33,3 +33,19 @@ func GetContainerExitReason(container *ecs.Container) string {
 
 	return reason
 }
+
+func GetAwsVpcTaskPrivateIPv4(attachments []*ecs.Attachment) string {
+	for _, attachment := range attachments {
+		if attachment == nil {
+			continue
+		}
+		for _, kv := range attachment.Details {
+			if kv != nil && kv.Name != nil && kv.Value != nil {
+				if *kv.Name == "privateIPv4Address" {
+					return *kv.Value
+				}
+			}
+		}
+	}
+	return ""
+}

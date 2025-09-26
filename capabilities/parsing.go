@@ -155,8 +155,8 @@ func replaceName(name string) func(string) string {
 func appendProxy(value interface{}) map[string]interface{} {
 	capabilityToAdd := map[string]interface{}{
 		"proxy": map[string]interface{}{
-			"httpProxy": "mitm:8080",
-			"sslProxy":  "mitm:8080",
+			"httpProxy": "localhost:8081",
+			"sslProxy":  "localhost:8081",
 			"proxyType": "manual",
 		},
 	}

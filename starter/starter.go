@@ -160,17 +160,15 @@ func (s *startBasis) setNetworkPhase(ctx context.Context) (essential *utils.Sele
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(nonEssential).Warn("Failed to get Network configuration, restarting...")
 		return
 	case instance := <-waitRequest.ResponseCh:
-		if config.Conf.UsePublicIp {
-			s.Env.Network.IP = *instance.PublicIpAddress
+		ip := utils.GetAwsVpcTaskPrivateIPv4(s.Task.Attachments)
+		if ip == "" {
+			s.Log.Warn("Private IPv4 address not found in task attachments")
 		} else {
-			s.Env.Network.IP = *instance.PrivateIpAddress
+			s.Env.Network.IP = ip
+			s.Log.WithField("privateIP", ip).Info("Task ENI private IP acquired")
 		}
 
-		nonEssential = s.setHostPort()
-		if nonEssential != nil {
-			s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(nonEssential).Warn("failed to set host port")
-			return
-		}
+		s.Log.WithField("instanceId", instance.ImageId).Info("Instance is ready")
 
 		s.MapperEntity.Network = *s.Env.Network
 
@@ -220,22 +218,6 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (essential *utils.Sel
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("driver started")
 		return nil, nil
 	}
-}
-
-func (s *startBasis) setHostPort() error {
-	if s.Task == nil {
-		return fmt.Errorf("task is nil")
-	}
-
-	for _, endpoint := range s.Env.Network.Endpoints {
-		hostPort, ok := searchHostPort(s.Task, endpoint.ContainerPort)
-		if !ok {
-			return fmt.Errorf("host port not found. containerPort=%d", endpoint.ContainerPort)
-		}
-		endpoint.HostPort = hostPort
-	}
-
-	return nil
 }
 
 type genericStarter struct {
@@ -461,18 +443,6 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, workspace string, 
 	}
 
 	return starter
-}
-
-func searchHostPort(task *ecs.Task, containerPort int64) (port int64, ok bool) {
-	for _, container := range task.Containers {
-		for _, networkBinding := range container.NetworkBindings {
-			if *networkBinding.ContainerPort == containerPort {
-				return *networkBinding.HostPort, true
-			}
-		}
-	}
-
-	return 0, false
 }
 
 // replaceSessionId returns actual driver's session id and changes it value in driverResponse map with router uuid.

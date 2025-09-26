@@ -3,7 +3,7 @@
 # Edit at https://www.toptal.com/developers/gitignore?templates=go,visualstudiocode,intellij+all,macos
 
 ### Go ###
-# Any init internal scripts and etc. 
+# Any init internal scripts and etc.
 111_*/
 
 # Binaries for programs and plugins
@@ -167,3 +167,10 @@ esg
 entrypoint.sh
 management_entrypoint.sh
 *.bak
+
+# Test/temp files and folders
+test-delpoy.bash
+build/push
+build/temp
+e3s
+containers
