@@ -165,10 +165,20 @@ func (s *startBasis) setNetworkPhase(ctx context.Context) (essential *utils.Sele
 			s.Log.Warn("Private IPv4 address not found in task attachments")
 		} else {
 			s.Env.Network.IP = ip
-			s.Log.WithField("privateIP", ip).Info("Task ENI private IP acquired")
+
+			s.Log.WithFields(log.Fields{
+				"taskArn":    (s.Task.TaskArn),
+				"taskId":     (s.TaskId),
+				"privateIP":  ip,
+				"eniDetails": s.Task.Attachments,
+			}).Debug("Task ENI private IP acquired")
 		}
 
-		s.Log.WithField("instanceId", instance.ImageId).Info("Instance is ready")
+		s.Log.WithFields(log.Fields{
+			"instanceId": instance.ImageId,
+			"taskArn":    (s.Task.TaskArn),
+			"latency":    time.Since(s.ServiceStart),
+		}).Debug("Instance is ready, network environment set")
 
 		s.MapperEntity.Network = *s.Env.Network
 
@@ -214,6 +224,13 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (essential *utils.Sel
 			return
 		}
 		s.MapperEntity.SessionID = sessionId
+
+		s.Log.WithFields(log.Fields{
+			"taskArn":   (s.Task.TaskArn),
+			"taskId":    (s.TaskId),
+			"privateIP": s.Env.Network.IP,
+			"caps":      s.DriverReqCaps,
+		}).Debug("Driver starting with capabilities")
 
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("driver started")
 		return nil, nil
