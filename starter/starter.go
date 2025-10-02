@@ -230,6 +230,7 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (essential *utils.Sel
 			"taskId":    (s.TaskId),
 			"privateIP": s.Env.Network.IP,
 			"caps":      s.DriverReqCaps,
+			"sessionId": sessionId,
 		}).Debug("Driver starting with capabilities")
 
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("driver started")
