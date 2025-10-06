@@ -82,6 +82,7 @@ func Create(c *gin.Context) {
 	l = l.WithField("family", env.TaskDefinitionFamily).WithField(config.RouterUUID, routerUUID)
 
 	l.Info("new request")
+	l.Infof("Session create requested from %s (user=%s, workspace=%s)", remote, user, workspace)
 
 	resp, seErr := starter.GetServiceStarter(
 		env,
@@ -101,7 +102,6 @@ func Create(c *gin.Context) {
 
 func Proxy(c *gin.Context) {
 	mapperEntity := c.MustGet(config.RouterUUID).(*mapper.Mapper)
-	// c.Request.URL.Path contains router UUID which should be replaced by selenium/selenoid sess.SessionID
 	c.Request.URL.Path = rerouteProxy(c.Request.URL.Path, mapperEntity.SessionID)
 
 	url, ok := mapperEntity.Network.GetUrl("driver")
@@ -111,26 +111,57 @@ func Proxy(c *gin.Context) {
 		return
 	}
 
-	(&httputil.ReverseProxy{
+	clientIP := c.ClientIP()
+	method := c.Request.Method
+	l := log.WithFields(log.Fields{
+		"routerUUID": mapperEntity.RouterUUID,
+		"sessionID":  mapperEntity.SessionID,
+		"targetHost": url.Host,
+		"clientIP":   clientIP,
+		"method":     method,
+		"path":       c.Request.URL.Path,
+	})
+	l.Debug("Proxy request forwarding")
+
+	retryTransport := &utils.RetryingTransport{
+		Base:    http.DefaultTransport,
+		Retries: 10,
+		Delay:   500 * time.Millisecond,
+	}
+
+	proxy := &httputil.ReverseProxy{
 		Director: func(r *http.Request) {
-			// fix for file upload using selenium 4
 			seUploadPath, uploadPath := "/se/file", "/file"
 			if strings.HasSuffix(r.URL.Path, seUploadPath) {
 				r.URL.Path = strings.TrimSuffix(r.URL.Path, seUploadPath) + uploadPath
 			}
-
-			r.URL.Host, r.URL.Path = url.Host, path.Clean(url.Path+r.URL.Path)
 			r.URL.Scheme = "http"
+			r.URL.Host = url.Host
+			r.URL.Path = path.Clean(url.Path + r.URL.Path)
+			r.Host = url.Host
 		},
-		ErrorHandler: defaultErrorHandler(c),
-		ModifyResponse: func(response *http.Response) error {
-			contentType := response.Header.Get("Content-Type")
+		Transport: retryTransport,
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			l.WithError(err).Error("Proxy failed after retries")
+			w.WriteHeader(http.StatusBadGateway)
+			_ = json.NewEncoder(w).Encode(gin.H{
+				"value": gin.H{
+					"error":   "proxy_error",
+					"message": fmt.Sprintf("Failed to connect to driver after retries: %v", err),
+				},
+			})
+		},
+		ModifyResponse: func(resp *http.Response) error {
+			contentType := resp.Header.Get("Content-Type")
 			if contentType != "application/json; charset=utf-8" && contentType != "" {
-				response.Header.Set("Content-Type", "application/json; charset=utf-8")
+				resp.Header.Set("Content-Type", "application/json; charset=utf-8")
 			}
+			l.WithField("status", resp.StatusCode).Trace("Proxy response received")
 			return nil
 		},
-	}).ServeHTTP(c.Writer, c.Request)
+	}
+
+	proxy.ServeHTTP(c.Writer, c.Request)
 }
 
 // replace inside c.Request.URL.Path Router UUID by actual selenium/selenoid sessionID for valid routing
@@ -169,6 +200,9 @@ func CloseSession(c *gin.Context) {
 	mapperEntity := c.MustGet(config.RouterUUID).(*mapper.Mapper)
 
 	l := log.WithFields(log.Fields{config.RouterUUID: mapperEntity.RouterUUID, config.TaskIdKey: mapperEntity.TaskId, config.SessionIdKey: mapperEntity.SessionID})
+
+	remoteIp := c.ClientIP()
+	l.Infof("Session DELETE called by remote=%s routerUUID=%s sessionID=%s", remoteIp, mapperEntity.RouterUUID, mapperEntity.SessionID)
 
 	selenium.CloseSession(mapperEntity)
 

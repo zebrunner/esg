@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"net"
 	"net/http"
 	"net/http/httputil"
 	"os"
@@ -44,7 +43,7 @@ func ReverseProxy() gin.HandlerFunc {
 	target := "localhost" + listen
 
 	// Retryable transport definition
-	retryTransport := &retryingTransport{
+	retryTransport := &utils.RetryingTransport{
 		Base:    http.DefaultTransport,
 		Retries: 10,                     // number of retries
 		Delay:   500 * time.Millisecond, // delay between retries
@@ -76,39 +75,6 @@ func ReverseProxy() gin.HandlerFunc {
 
 		proxy.ServeHTTP(c.Writer, c.Request)
 	}
-}
-
-type retryingTransport struct {
-	Base    http.RoundTripper
-	Retries int
-	Delay   time.Duration
-}
-
-func (t *retryingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	var resp *http.Response
-	var err error
-	for i := 0; i <= t.Retries; i++ {
-		resp, err = t.Base.RoundTrip(req)
-		if err == nil {
-			return resp, nil
-		}
-
-		// Retry on transient network errors
-		if nerr, ok := err.(net.Error); ok && (nerr.Timeout() || nerr.Temporary()) {
-			log.WithError(err).Warnf("Retrying proxy request (attempt %d/%d)", i+1, t.Retries)
-			time.Sleep(t.Delay)
-			continue
-		}
-		if strings.Contains(err.Error(), "connection refused") ||
-			strings.Contains(err.Error(), "EOF") {
-			log.WithError(err).Warnf("Retrying proxy request (attempt %d/%d)", i+1, t.Retries)
-			time.Sleep(t.Delay)
-			continue
-		}
-
-		break // non-retryable error
-	}
-	return resp, err
 }
 
 func getRouterBasis() *gin.Engine {
