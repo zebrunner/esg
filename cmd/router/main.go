@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"os"
@@ -38,8 +40,16 @@ func init() {
 }
 
 func ReverseProxy() gin.HandlerFunc {
-	// TODO: Replace hardcoded target
+	// Replace hardcoded target (still uses local driver listener)
 	target := "localhost" + listen
+
+	// Retryable transport definition
+	retryTransport := &retryingTransport{
+		Base:    http.DefaultTransport,
+		Retries: 10,                     // number of retries
+		Delay:   500 * time.Millisecond, // delay between retries
+	}
+
 	return func(c *gin.Context) {
 		director := func(req *http.Request) {
 			req.URL.Scheme = "http"
@@ -47,9 +57,58 @@ func ReverseProxy() gin.HandlerFunc {
 			req.URL.Path = strings.TrimPrefix(req.URL.Path, "/wd/hub")
 			req.Host = target
 		}
-		proxy := &httputil.ReverseProxy{Director: director}
+
+		proxy := &httputil.ReverseProxy{
+			Director:  director,
+			Transport: retryTransport,
+			ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+				log.WithError(err).WithField("url", r.URL.String()).
+					Error("Reverse proxy failed after retries")
+				w.WriteHeader(http.StatusBadGateway)
+				_ = json.NewEncoder(w).Encode(gin.H{
+					"value": gin.H{
+						"error":   "unknown error",
+						"message": "Driver connection failed after retries",
+					},
+				})
+			},
+		}
+
 		proxy.ServeHTTP(c.Writer, c.Request)
 	}
+}
+
+type retryingTransport struct {
+	Base    http.RoundTripper
+	Retries int
+	Delay   time.Duration
+}
+
+func (t *retryingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	var resp *http.Response
+	var err error
+	for i := 0; i <= t.Retries; i++ {
+		resp, err = t.Base.RoundTrip(req)
+		if err == nil {
+			return resp, nil
+		}
+
+		// Retry on transient network errors
+		if nerr, ok := err.(net.Error); ok && (nerr.Timeout() || nerr.Temporary()) {
+			log.WithError(err).Warnf("Retrying proxy request (attempt %d/%d)", i+1, t.Retries)
+			time.Sleep(t.Delay)
+			continue
+		}
+		if strings.Contains(err.Error(), "connection refused") ||
+			strings.Contains(err.Error(), "EOF") {
+			log.WithError(err).Warnf("Retrying proxy request (attempt %d/%d)", i+1, t.Retries)
+			time.Sleep(t.Delay)
+			continue
+		}
+
+		break // non-retryable error
+	}
+	return resp, err
 }
 
 func getRouterBasis() *gin.Engine {
