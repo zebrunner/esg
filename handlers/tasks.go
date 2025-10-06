@@ -114,19 +114,20 @@ func Proxy(c *gin.Context) {
 	}
 
 	clientIP := c.ClientIP()
-	remoteIp := c.RemoteIP()
+	remoteIP := c.RemoteIP()
 	method := c.Request.Method
 	l := log.WithFields(log.Fields{
 		"routerUUID": mapperEntity.RouterUUID,
 		"sessionID":  mapperEntity.SessionID,
 		"targetHost": url.Host,
 		"clientIP":   clientIP,
-		"remoteIp":   remoteIp,
+		"remoteIP":   remoteIP,
 		"method":     method,
 		"path":       c.Request.URL.Path,
 	})
 	l.Debug("Proxy request forwarding")
 
+	// Transport that retries failed TCP or transient requests
 	retryTransport := &utils.RetryingTransport{
 		Base:    http.DefaultTransport,
 		Retries: 3,
@@ -139,6 +140,7 @@ func Proxy(c *gin.Context) {
 			if strings.HasSuffix(r.URL.Path, seUploadPath) {
 				r.URL.Path = strings.TrimSuffix(r.URL.Path, seUploadPath) + uploadPath
 			}
+
 			r.URL.Scheme = "http"
 			r.URL.Host = url.Host
 			r.URL.Path = path.Clean(url.Path + r.URL.Path)
@@ -146,14 +148,17 @@ func Proxy(c *gin.Context) {
 		},
 		Transport: retryTransport,
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			// after all retries failed
 			l.WithError(err).Error("Proxy failed after retries")
-			w.WriteHeader(http.StatusBadGateway)
-			_ = json.NewEncoder(w).Encode(gin.H{
+
+			w.WriteHeader(http.StatusInternalServerError)
+			driverError := gin.H{
 				"value": gin.H{
-					"error":   "proxy_error",
-					"message": fmt.Sprintf("Failed to connect to driver after retries: %v", err),
+					"error":   "unknown error",
+					"message": "Driver connection refused",
 				},
-			})
+			}
+			_ = json.NewEncoder(w).Encode(driverError)
 		},
 		ModifyResponse: func(resp *http.Response) error {
 			contentType := resp.Header.Get("Content-Type")
