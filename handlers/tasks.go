@@ -32,8 +32,8 @@ func Create(c *gin.Context) {
 	// start context with deadline before any other action
 	startupTime, _ := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout)
 
-	remote := c.ClientIP()
-	l := log.WithField("remote", remote)
+	clientIp := c.ClientIP()
+	l := log.WithField("clientIp", clientIp)
 	user, password, ok := c.Request.BasicAuth()
 	if !ok {
 		l.Warn("credentials not provided")
@@ -82,7 +82,9 @@ func Create(c *gin.Context) {
 	l = l.WithField("family", env.TaskDefinitionFamily).WithField(config.RouterUUID, routerUUID)
 
 	l.Info("new request")
-	l.Infof("Session create requested from %s (user=%s, workspace=%s)", remote, user, workspace)
+
+	remoteIp := c.RemoteIP()
+	l.Infof("Session create requested clientIp %s, remoteIp %s (user=%s, workspace=%s)", clientIp, remoteIp, user, workspace)
 
 	resp, seErr := starter.GetServiceStarter(
 		env,
@@ -112,12 +114,14 @@ func Proxy(c *gin.Context) {
 	}
 
 	clientIP := c.ClientIP()
+	remoteIp := c.RemoteIP()
 	method := c.Request.Method
 	l := log.WithFields(log.Fields{
 		"routerUUID": mapperEntity.RouterUUID,
 		"sessionID":  mapperEntity.SessionID,
 		"targetHost": url.Host,
 		"clientIP":   clientIP,
+		"remoteIp":   remoteIp,
 		"method":     method,
 		"path":       c.Request.URL.Path,
 	})
@@ -125,7 +129,7 @@ func Proxy(c *gin.Context) {
 
 	retryTransport := &utils.RetryingTransport{
 		Base:    http.DefaultTransport,
-		Retries: 10,
+		Retries: 3,
 		Delay:   500 * time.Millisecond,
 	}
 
@@ -201,8 +205,9 @@ func CloseSession(c *gin.Context) {
 
 	l := log.WithFields(log.Fields{config.RouterUUID: mapperEntity.RouterUUID, config.TaskIdKey: mapperEntity.TaskId, config.SessionIdKey: mapperEntity.SessionID})
 
-	remoteIp := c.ClientIP()
-	l.Infof("Session DELETE called by remote=%s routerUUID=%s sessionID=%s", remoteIp, mapperEntity.RouterUUID, mapperEntity.SessionID)
+	clientIp := c.ClientIP()
+	remoteIp := c.RemoteIP()
+	l.Infof("Session DELETE called by clientIp=%s remoteIp=%s routerUUID=%s sessionID=%s", clientIp, remoteIp, mapperEntity.RouterUUID, mapperEntity.SessionID)
 
 	selenium.CloseSession(mapperEntity)
 
