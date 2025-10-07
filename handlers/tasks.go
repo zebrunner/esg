@@ -146,20 +146,8 @@ func Proxy(c *gin.Context) {
 			r.URL.Path = path.Clean(url.Path + r.URL.Path)
 			r.Host = url.Host
 		},
-		Transport: retryTransport,
-		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
-			// after all retries failed
-			l.WithError(err).Error("Proxy failed after retries")
-
-			w.WriteHeader(http.StatusInternalServerError)
-			driverError := gin.H{
-				"value": gin.H{
-					"error":   "unknown error",
-					"message": "Driver connection refused",
-				},
-			}
-			_ = json.NewEncoder(w).Encode(driverError)
-		},
+		Transport:    retryTransport,
+		ErrorHandler: defaultErrorHandler(c),
 		ModifyResponse: func(resp *http.Response) error {
 			contentType := resp.Header.Get("Content-Type")
 			if contentType != "application/json; charset=utf-8" && contentType != "" {
