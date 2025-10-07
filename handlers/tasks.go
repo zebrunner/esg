@@ -130,7 +130,7 @@ func Proxy(c *gin.Context) {
 	// Transport that retries failed TCP or transient requests
 	retryTransport := &utils.RetryingTransport{
 		Base:    http.DefaultTransport,
-		Retries: 2,
+		Retries: 1,
 		Delay:   500 * time.Millisecond,
 	}
 
@@ -146,8 +146,11 @@ func Proxy(c *gin.Context) {
 			r.URL.Path = path.Clean(url.Path + r.URL.Path)
 			r.Host = url.Host
 		},
-		Transport:    retryTransport,
-		ErrorHandler: defaultErrorHandler(c),
+		Transport: retryTransport,
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			l.WithError(err).Error("Proxy failed after retries, delegating to defaultErrorHandler")
+			defaultErrorHandler(c)(w, r, err)
+		},
 		ModifyResponse: func(resp *http.Response) error {
 			contentType := resp.Header.Get("Content-Type")
 			if contentType != "application/json; charset=utf-8" && contentType != "" {
