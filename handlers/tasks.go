@@ -130,7 +130,7 @@ func Proxy(c *gin.Context) {
 	// Transport that retries failed TCP or transient requests
 	retryTransport := &utils.RetryingTransport{
 		Base:    http.DefaultTransport,
-		Retries: 3,
+		Retries: 2,
 		Delay:   500 * time.Millisecond,
 	}
 
