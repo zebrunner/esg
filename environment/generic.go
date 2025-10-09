@@ -340,6 +340,13 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 		}
 	}
 
+	var capacityProvider string
+	if config.Conf.AwsLinuxGenericCapacityProvider == "" {
+		capacityProvider = config.Conf.AwsLinuxCapacityProvider
+	} else {
+		capacityProvider = config.Conf.AwsLinuxGenericCapacityProvider
+	}
+
 	env := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
 		Schema:               buildSchema(containers),
@@ -356,7 +363,7 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 			},
 		},
 		Type:             envtype.GENERIC,
-		CapacityProvider: config.Conf.AwsLinuxCapacityProvider,
+		CapacityProvider: capacityProvider,
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
 		AwsLogsGroup:     config.Conf.AwsLogsGroup,
 	}
