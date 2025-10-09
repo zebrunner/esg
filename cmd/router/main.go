@@ -42,8 +42,8 @@ func ReverseProxy() gin.HandlerFunc {
 	// Retryable transport definition
 	retryTransport := &utils.RetryingTransport{
 		Base:    http.DefaultTransport,
-		Retries: 3,                      // number of retries
-		Delay:   500 * time.Millisecond, // delay between retries
+		Retries: 1,
+		Delay:   500 * time.Millisecond,
 	}
 
 	return func(c *gin.Context) {

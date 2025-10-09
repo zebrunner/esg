@@ -55,7 +55,6 @@ func startSession(ctx context.Context, net *network.NetworkConfiguration, driver
 	req.Host = reqUrl.Host
 	req = req.WithContext(ctx)
 
-	// log request
 	log.WithFields(log.Fields{
 		"request_url": reqUrl.String(),
 		"host_header": req.Host,
@@ -76,7 +75,6 @@ func startSession(ctx context.Context, net *network.NetworkConfiguration, driver
 		return
 	}
 
-	// log what Selenium returned
 	log.WithFields(log.Fields{
 		"status_code": resp.StatusCode,
 		"reply":       reply,
