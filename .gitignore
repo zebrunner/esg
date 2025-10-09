@@ -170,7 +170,9 @@ management_entrypoint.sh
 
 # Test/temp files and folders
 test-delpoy.bash
+deploy.sh
 build/push
 build/temp
 e3s
 containers
+logs/

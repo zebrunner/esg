@@ -18,7 +18,8 @@ func startRecording(network *network.NetworkConfiguration) error {
 		return err
 	}
 
-	req.Host = "localhost"
+	// Use the actual network IP instead of localhost for AWS VPC mode
+	req.Host = url.Host
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -44,7 +45,8 @@ func stopRecording(network *network.NetworkConfiguration) error {
 		return err
 	}
 
-	req.Host = "localhost"
+	// Use the actual network IP instead of localhost for AWS VPC mode
+	req.Host = url.Host
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -70,7 +72,8 @@ func finishRecording(network *network.NetworkConfiguration) error {
 		return err
 	}
 
-	req.Host = "localhost"
+	// Use the actual network IP instead of localhost for AWS VPC mode
+	req.Host = url.Host
 
 	resp, err := httpClient.Do(req)
 	if err != nil {

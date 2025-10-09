@@ -39,6 +39,16 @@ func GetAwsVpcTaskPrivateIPv4(attachments []*ecs.Attachment) string {
 		if attachment == nil {
 			continue
 		}
+
+		// Validate that this is an ENI attachment and it's attached
+		if attachment.Type == nil || *attachment.Type != "ElasticNetworkInterface" {
+			continue
+		}
+
+		if attachment.Status == nil || *attachment.Status != "ATTACHED" {
+			continue
+		}
+
 		for _, kv := range attachment.Details {
 			if kv != nil && kv.Name != nil && kv.Value != nil {
 				if *kv.Name == "privateIPv4Address" {

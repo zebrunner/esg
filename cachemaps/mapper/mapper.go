@@ -117,3 +117,31 @@ func WriteShapedEntities(mappers map[string]Mapper, expiration time.Duration) er
 func FindAll(uuids []string) ([]Mapper, error) {
 	return cachemaps.FindAll[Mapper](config.RedisCluster.Pipeline(), uuids)
 }
+
+func FindBySessionID(sessionID string) (*Mapper, error) {
+	// Get all keys from Redis
+	keys, err := config.RedisCluster.Keys(context.Background(), "*").Result()
+	if err != nil {
+		return nil, err
+	}
+
+	// Search through all mapper entities to find one with matching session ID
+	for _, key := range keys {
+		data, err := config.RedisCluster.Get(context.Background(), key).Result()
+		if err != nil {
+			continue // Skip invalid entries
+		}
+
+		var entity Mapper
+		err = json.Unmarshal([]byte(data), &entity)
+		if err != nil {
+			continue // Skip invalid entries
+		}
+
+		if entity.SessionID == sessionID {
+			return &entity, nil
+		}
+	}
+
+	return nil, fmt.Errorf("mapper entity not found for session ID: %s", sessionID)
+}

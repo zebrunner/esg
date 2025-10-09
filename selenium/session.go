@@ -51,7 +51,8 @@ func startSession(ctx context.Context, net *network.NetworkConfiguration, driver
 	}
 
 	req.Method = http.MethodPost
-	req.Host = "localhost"
+	// Use the actual network IP instead of localhost for AWS VPC mode
+	req.Host = reqUrl.Host
 	req = req.WithContext(ctx)
 
 	// log request
@@ -137,7 +138,8 @@ func CloseSession(mapperEntity *mapper.Mapper) {
 			l.WithError(err).Error("Failed to create request")
 			return
 		}
-		req.Host = "localhost"
+		// Use the actual network IP instead of localhost for AWS VPC mode
+		req.Host = sessionUrl.Host
 
 		l.WithFields(log.Fields{"method": req.Method, "url": req.URL}).Debug("closing driver")
 		resp, err := httpClient.Do(req)

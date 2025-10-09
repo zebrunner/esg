@@ -39,9 +39,6 @@ func init() {
 }
 
 func ReverseProxy() gin.HandlerFunc {
-	// Replace hardcoded target (still uses local driver listener)
-	target := "localhost" + listen
-
 	// Retryable transport definition
 	retryTransport := &utils.RetryingTransport{
 		Base:    http.DefaultTransport,
@@ -50,6 +47,43 @@ func ReverseProxy() gin.HandlerFunc {
 	}
 
 	return func(c *gin.Context) {
+		// Extract session ID from path to find the correct target
+		var target string
+		path := c.Request.URL.Path
+
+		// Handle session creation: /wd/hub/session -> route to handlers.Create
+		if c.Request.Method == "POST" && strings.HasSuffix(path, "/session") {
+			c.Request.URL.Path = "/session"
+			c.Request.URL.RawPath = "/session"
+			handlers.Create(c)
+			return
+		}
+
+		if strings.Contains(path, "/session/") {
+			// Extract session ID from /wd/hub/session/{sessionId}/...
+			parts := strings.Split(path, "/")
+			if len(parts) >= 4 && parts[2] == "session" {
+				sessionId := parts[3]
+				// Find mapper entity by session ID to get the correct target
+				if mapperEntity, err := mapper.FindBySessionID(sessionId); err == nil && mapperEntity != nil {
+					if url, ok := mapperEntity.Network.GetUrl("driver"); ok {
+						target = url.Host
+					}
+				}
+			}
+		}
+
+		// If no target found, return error (should not happen in AWS VPC mode)
+		if target == "" {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"value": gin.H{
+					"error":   "session not found",
+					"message": "Session not found or not yet available",
+				},
+			})
+			return
+		}
+
 		director := func(req *http.Request) {
 			req.URL.Scheme = "http"
 			req.URL.Host = target
@@ -74,6 +108,7 @@ func ReverseProxy() gin.HandlerFunc {
 		}
 
 		proxy.ServeHTTP(c.Writer, c.Request)
+
 	}
 }
 
