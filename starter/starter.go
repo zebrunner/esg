@@ -3,7 +3,6 @@ package starter
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -168,7 +167,7 @@ func (s *startBasis) setNetworkPhase(ctx context.Context) (essential *utils.Sele
 		}).Debug("Instance is ready, starting network configuration")
 
 		// Enhanced AWS VPC network setup with robust IP waiting and validation
-		ip, err := s.waitForPrivateIPWithRetry(ctx)
+		ip, err := utils.WaitForPrivateIPWithRetry(ctx, s.Task, s.ServiceStart, s.Log)
 		if err != nil {
 			s.Log.WithError(err).Error("Failed to acquire private IP address")
 			nonEssential = err
@@ -184,7 +183,14 @@ func (s *startBasis) setNetworkPhase(ctx context.Context) (essential *utils.Sele
 		}).Info("Task ENI private IP acquired successfully")
 
 		// Validate network readiness before proceeding
-		if err := s.validateNetworkReadiness(ctx); err != nil {
+		driverURL, ok := s.Env.Network.GetUrl("driver")
+		if !ok {
+			s.Log.Error("Failed to generate driver URL from network configuration")
+			nonEssential = fmt.Errorf("failed to generate driver URL from network configuration")
+			return
+		}
+
+		if err := utils.ValidateNetworkReadiness(ctx, driverURL.String(), s.ServiceStart, s.Log); err != nil {
 			s.Log.WithError(err).Error("Network readiness validation failed")
 			nonEssential = err
 			return
@@ -540,230 +546,4 @@ func modifyDriverReply(driverReply map[string]interface{}, env *environment.Exec
 	}
 
 	return nil
-}
-
-// waitForPrivateIPWithRetry implements robust IP waiting logic for AWS VPC mode
-// It handles the race condition where ENI attachment might be delayed
-func (s *startBasis) waitForPrivateIPWithRetry(ctx context.Context) (string, error) {
-	const maxRetries = 10
-	const retryInterval = 2 * time.Second
-
-	s.Log.Debug("Starting robust private IP acquisition for AWS VPC")
-
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		select {
-		case <-ctx.Done():
-			return "", fmt.Errorf("context cancelled while waiting for private IP")
-		default:
-		}
-
-		// Try to get the private IP from task attachments
-		ip := utils.GetAwsVpcTaskPrivateIPv4(s.Task.Attachments)
-
-		if ip != "" {
-			s.Log.WithFields(log.Fields{
-				"attempt":   attempt + 1,
-				"privateIP": ip,
-				"latency":   time.Since(s.ServiceStart),
-			}).Debug("Private IP acquired successfully")
-			return ip, nil
-		}
-
-		// Log the attempt with detailed information
-		s.Log.WithFields(log.Fields{
-			"attempt":     attempt + 1,
-			"maxRetries":  maxRetries,
-			"retryIn":     retryInterval,
-			"attachments": len(s.Task.Attachments),
-		}).Warn("Private IP not found in task attachments, retrying...")
-
-		// Log attachment details for debugging
-		for i, attachment := range s.Task.Attachments {
-			if attachment != nil {
-				s.Log.WithFields(log.Fields{
-					"attachmentIndex":  i,
-					"attachmentId":     attachment.Id,
-					"attachmentType":   attachment.Type,
-					"attachmentStatus": attachment.Status,
-					"detailsCount":     len(attachment.Details),
-				}).Debug("Attachment details")
-
-				// Log each detail for debugging
-				for j, detail := range attachment.Details {
-					if detail != nil && detail.Name != nil && detail.Value != nil {
-						s.Log.WithFields(log.Fields{
-							"attachmentIndex": i,
-							"detailIndex":     j,
-							"detailName":      *detail.Name,
-							"detailValue":     *detail.Value,
-						}).Debug("Attachment detail")
-					}
-				}
-			}
-		}
-
-		// Wait before retrying, but respect context cancellation
-		select {
-		case <-ctx.Done():
-			return "", fmt.Errorf("context cancelled while waiting for private IP")
-		case <-time.After(retryInterval):
-			// Continue to next attempt
-		}
-	}
-
-	return "", fmt.Errorf("failed to acquire private IP after %d attempts", maxRetries)
-}
-
-// validateNetworkReadiness performs comprehensive network connectivity validation
-func (s *startBasis) validateNetworkReadiness(ctx context.Context) error {
-	s.Log.Debug("Starting network readiness validation")
-
-	// Test 1: Validate network URL generation
-	url, ok := s.Env.Network.GetUrl("driver")
-	if !ok {
-		return fmt.Errorf("failed to generate driver URL from network configuration")
-	}
-
-	s.Log.WithFields(log.Fields{
-		"driverURL": url.String(),
-		"host":      url.Host,
-		"scheme":    url.Scheme,
-		"path":      url.Path,
-	}).Debug("Driver URL generated successfully")
-
-	// Test 2: Validate TCP connectivity to driver port
-	if err := s.validateTCPConnectivity(ctx, url.Host); err != nil {
-		return fmt.Errorf("TCP connectivity validation failed: %v", err)
-	}
-
-	// Test 3: Validate HTTP connectivity to driver endpoint
-	if err := s.validateHTTPConnectivity(ctx, url.String()); err != nil {
-		return fmt.Errorf("HTTP connectivity validation failed: %v", err)
-	}
-
-	s.Log.WithFields(log.Fields{
-		"driverURL": url.String(),
-		"latency":   time.Since(s.ServiceStart),
-	}).Info("Network readiness validation completed successfully")
-
-	return nil
-}
-
-// validateTCPConnectivity tests basic TCP connectivity to the driver port
-func (s *startBasis) validateTCPConnectivity(ctx context.Context, host string) error {
-	const maxRetries = 5
-	const retryInterval = 1 * time.Second
-
-	s.Log.WithField("host", host).Debug("Starting TCP connectivity validation")
-
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("context cancelled during TCP connectivity test")
-		default:
-		}
-
-		// Create a timeout context for the connection attempt
-		connCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
-
-		// Attempt to establish TCP connection
-		conn, err := s.dialWithContext(connCtx, "tcp", host)
-		if err == nil {
-			conn.Close()
-			s.Log.WithFields(log.Fields{
-				"host":    host,
-				"attempt": attempt + 1,
-			}).Debug("TCP connectivity validation successful")
-			return nil
-		}
-
-		s.Log.WithFields(log.Fields{
-			"host":    host,
-			"attempt": attempt + 1,
-			"error":   err.Error(),
-		}).Warn("TCP connectivity test failed, retrying...")
-
-		// Wait before retrying
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("context cancelled during TCP connectivity test")
-		case <-time.After(retryInterval):
-			// Continue to next attempt
-		}
-	}
-
-	return fmt.Errorf("TCP connectivity validation failed after %d attempts", maxRetries)
-}
-
-// validateHTTPConnectivity tests HTTP connectivity to the driver endpoint
-func (s *startBasis) validateHTTPConnectivity(ctx context.Context, url string) error {
-	const maxRetries = 3
-	const retryInterval = 2 * time.Second
-
-	s.Log.WithField("url", url).Debug("Starting HTTP connectivity validation")
-
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("context cancelled during HTTP connectivity test")
-		default:
-		}
-
-		// Create a timeout context for the HTTP request
-		reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		defer cancel()
-
-		// Create HTTP request
-		req, err := http.NewRequestWithContext(reqCtx, "GET", url, nil)
-		if err != nil {
-			s.Log.WithError(err).Warn("Failed to create HTTP request for connectivity test")
-			continue
-		}
-
-		// Set appropriate headers
-		req.Header.Set("User-Agent", "ESG-NetworkValidator/1.0")
-		req.Header.Set("Accept", "application/json")
-
-		// Make HTTP request
-		client := &http.Client{
-			Timeout: 10 * time.Second,
-		}
-
-		resp, err := client.Do(req)
-		if err != nil {
-			s.Log.WithFields(log.Fields{
-				"url":     url,
-				"attempt": attempt + 1,
-				"error":   err.Error(),
-			}).Warn("HTTP connectivity test failed, retrying...")
-
-			// Wait before retrying
-			select {
-			case <-ctx.Done():
-				return fmt.Errorf("context cancelled during HTTP connectivity test")
-			case <-time.After(retryInterval):
-				// Continue to next attempt
-			}
-			continue
-		}
-
-		resp.Body.Close()
-
-		// Accept any HTTP response (even 404) as it means the service is reachable
-		s.Log.WithFields(log.Fields{
-			"url":        url,
-			"statusCode": resp.StatusCode,
-			"attempt":    attempt + 1,
-		}).Debug("HTTP connectivity validation successful")
-		return nil
-	}
-
-	return fmt.Errorf("HTTP connectivity validation failed after %d attempts", maxRetries)
-}
-
-// dialWithContext is a helper function for context-aware network dialing
-func (s *startBasis) dialWithContext(ctx context.Context, network, address string) (net.Conn, error) {
-	var d net.Dialer
-	return d.DialContext(ctx, network, address)
 }
