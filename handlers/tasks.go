@@ -82,9 +82,7 @@ func Create(c *gin.Context) {
 	l = l.WithField("family", env.TaskDefinitionFamily).WithField(config.RouterUUID, routerUUID)
 
 	l.Info("new request")
-
-	remoteIp := c.RemoteIP()
-	l.Infof("Session create requested clientIp %s, remoteIp %s (user=%s, workspace=%s)", clientIp, remoteIp, user, workspace)
+	l.Infof("Session create requested clientIp %s, (user=%s, workspace=%s)", clientIp, user, workspace)
 
 	resp, seErr := starter.GetServiceStarter(
 		env,
@@ -114,18 +112,16 @@ func Proxy(c *gin.Context) {
 	}
 
 	clientIP := c.ClientIP()
-	remoteIP := c.RemoteIP()
 	method := c.Request.Method
 	l := log.WithFields(log.Fields{
 		"routerUUID": mapperEntity.RouterUUID,
 		"sessionID":  mapperEntity.SessionID,
 		"targetHost": url.Host,
 		"clientIP":   clientIP,
-		"remoteIP":   remoteIP,
 		"method":     method,
 		"path":       c.Request.URL.Path,
 	})
-	l.Debug("Proxy request forwarding")
+	l.Trace("Proxy request forwarding")
 
 	// Transport that retries failed TCP or transient requests
 	retryTransport := &utils.RetryingTransport{
@@ -202,8 +198,7 @@ func CloseSession(c *gin.Context) {
 	l := log.WithFields(log.Fields{config.RouterUUID: mapperEntity.RouterUUID, config.TaskIdKey: mapperEntity.TaskId, config.SessionIdKey: mapperEntity.SessionID})
 
 	clientIp := c.ClientIP()
-	remoteIp := c.RemoteIP()
-	l.Infof("Session DELETE called by clientIp=%s remoteIp=%s routerUUID=%s sessionID=%s", clientIp, remoteIp, mapperEntity.RouterUUID, mapperEntity.SessionID)
+	l.Infof("Session DELETE called by clientIp=%s routerUUID=%s sessionID=%s", clientIp, mapperEntity.RouterUUID, mapperEntity.SessionID)
 
 	selenium.CloseSession(mapperEntity)
 

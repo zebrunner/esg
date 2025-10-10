@@ -175,12 +175,7 @@ func (s *startBasis) setNetworkPhase(ctx context.Context) (essential *utils.Sele
 		}
 
 		s.Env.Network.IP = ip
-		s.Log.WithFields(log.Fields{
-			"taskArn":    (s.Task.TaskArn),
-			"taskId":     (s.TaskId),
-			"privateIP":  ip,
-			"eniDetails": s.Task.Attachments,
-		}).Info("Task ENI private IP acquired successfully")
+		s.Log.Info("Task ENI private IP acquired successfully")
 
 		// Validate network readiness before proceeding
 		driverURL, ok := s.Env.Network.GetUrl("driver")
