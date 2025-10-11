@@ -45,7 +45,7 @@ func ReverseProxy() gin.HandlerFunc {
 	// Retryable transport definition
 	retryTransport := &utils.RetryingTransport{
 		Base:    http.DefaultTransport,
-		Retries: 10,                     // number of retries
+		Retries: 1,                      // number of retries
 		Delay:   500 * time.Millisecond, // delay between retries
 	}
 
@@ -67,7 +67,7 @@ func ReverseProxy() gin.HandlerFunc {
 				_ = json.NewEncoder(w).Encode(gin.H{
 					"value": gin.H{
 						"error":   "unknown error",
-						"message": "Driver connection failed after retries",
+						"message": "connection failed after retries",
 					},
 				})
 			},
