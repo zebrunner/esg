@@ -62,7 +62,7 @@ ENV EXTERNAL_PORT=
 ENV SINGLE_TENANT=
 ENV OLD_ABORT_API=
 
-#format sg-1;sg-2 and sub-1;sub-2;sub-3
+#format sg-1,sg-2 and sub-1,sub-2,sub-3
 ENV SECURITY_GROUPS=
 ENV SUBNETS=
 

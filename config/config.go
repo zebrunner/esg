@@ -58,6 +58,7 @@ type Config struct {
 	ZebrunnerIntegrationUser     string
 	ZebrunnerIntegrationPassword string
 
+	// Formating sg-1,sg-2 and sub-1,sub-2,sub-3
 	SecurityGroups utils.StringSlice
 	Subnets        utils.StringSlice
 
