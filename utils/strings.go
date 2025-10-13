@@ -7,11 +7,11 @@ import "strings"
 type StringSlice []string
 
 func (s *StringSlice) String() string {
-	return strings.Join(*s, ";")
+	return strings.Join(*s, ",")
 }
 
 func (s *StringSlice) Set(value string) error {
-	*s = strings.Split(value, ";")
+	*s = strings.Split(value, ",")
 	for i := range *s {
 		(*s)[i] = strings.TrimSpace((*s)[i])
 	}
