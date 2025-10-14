@@ -177,18 +177,20 @@ func (s *startBasis) setNetworkPhase(ctx context.Context) (essential *utils.Sele
 		s.Env.Network.IP = ip
 		s.Log.Info("Task ENI private IP acquired successfully")
 
-		// Validate network readiness before proceeding
-		driverURL, ok := s.Env.Network.GetUrl("driver")
-		if !ok {
-			s.Log.Error("Failed to generate driver URL from network configuration")
-			nonEssential = fmt.Errorf("failed to generate driver URL from network configuration")
-			return
-		}
+		if s.Env.Type != envtype.CYPRESS {
+			// Validate network readiness before proceeding
+			driverURL, ok := s.Env.Network.GetUrl("driver")
+			if !ok {
+				s.Log.Error("Failed to generate driver URL from network configuration")
+				nonEssential = fmt.Errorf("failed to generate driver URL from network configuration")
+				return
+			}
 
-		if err := utils.ValidateNetworkReadiness(ctx, driverURL.String(), s.ServiceStart, s.Log); err != nil {
-			s.Log.WithError(err).Error("Network readiness validation failed")
-			nonEssential = err
-			return
+			if err := utils.ValidateNetworkReadiness(ctx, driverURL.String(), s.ServiceStart, s.Log); err != nil {
+				s.Log.WithError(err).Error("Network readiness validation failed")
+				nonEssential = err
+				return
+			}
 		}
 
 		s.MapperEntity.Network = *s.Env.Network
