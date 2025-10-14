@@ -136,8 +136,8 @@ fi
 if [ ! -z ${SECURITY_GROUPS} ]; then
   CMD_ARGS="${CMD_ARGS} -security-groups=${SECURITY_GROUPS}"
 fi
-if [ ! -z ${SUBNETS} ]; then
-  CMD_ARGS="${CMD_ARGS} -subnets=${SUBNETS}"
+if [ ! -z ${SUBNET} ]; then
+  CMD_ARGS="${CMD_ARGS} -subnet=${SUBNET}"
 fi
 
 echo "CMD_ARGS: $CMD_ARGS"

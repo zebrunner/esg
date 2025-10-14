@@ -49,7 +49,7 @@ func registerTask(ctx context.Context, env *environment.ExecutionEnvironment, ro
 		NetworkConfiguration: &ecs.NetworkConfiguration{
 			AwsvpcConfiguration: &ecs.AwsVpcConfiguration{
 				SecurityGroups: config.Conf.SecurityGroups.ToStringSlice(),
-				Subnets:        config.Conf.Subnets.ToStringSlice(),
+				Subnets:        config.Conf.Subnet.ToStringSlice(),
 			},
 		},
 	}

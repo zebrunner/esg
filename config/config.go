@@ -58,9 +58,9 @@ type Config struct {
 	ZebrunnerIntegrationUser     string
 	ZebrunnerIntegrationPassword string
 
-	// Formating sg-1,sg-2 and sub-1,sub-2,sub-3
+	// Formating sg-1,sg-2 and sub-1
 	SecurityGroups utils.StringSlice
-	Subnets        utils.StringSlice
+	Subnet         utils.StringSlice
 
 	S3Bucket             string // For static artifacts
 	S3Region             string
@@ -117,7 +117,7 @@ func init() {
 	flag.StringVar(&Conf.ZebrunnerIntegrationPassword, "zebrunner-integration-password", "", "Password for zebrunner for current env")
 
 	flag.Var(&Conf.SecurityGroups, "security-groups", "AWS security-groups for ECS tasks")
-	flag.Var(&Conf.Subnets, "subnets", "AWS private subnets for ECS tasks")
+	flag.Var(&Conf.Subnet, "subnet", "AWS private subnet for ECS tasks")
 
 	flag.StringVar(&Conf.S3Bucket, "s3-bucket", "", "S3 Bucket name for pushing artifacts")
 	flag.StringVar(&Conf.S3Region, "s3-region", "", "S3 Bucket region for pushing artifacts")
