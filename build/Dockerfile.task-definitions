@@ -39,6 +39,8 @@ ENV DATABASE=
 ENV IMAGE_REPOSITORIES=
 ENV EXCLUDE_BROWSERS=
 
+ENV TASK_DEFINITIONS_UPDATE_INTERVAL=12h
+
 COPY ./build/.env version
 COPY ./build/entrypoint.task-definitions /entrypoint.sh
 

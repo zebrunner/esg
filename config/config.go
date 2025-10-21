@@ -36,15 +36,16 @@ type Config struct {
 	E3SUrl                   string
 
 	// Timeouts
-	MaxIdleTimeout               time.Duration
-	IdleTimeout                  time.Duration
-	SessionDeleteTimeout         time.Duration
-	ServiceStartupTimeout        time.Duration
-	LostTaskCooldownTimeout      time.Duration
-	InstanceCooldownTimeout      time.Duration
-	ContainerInstanceInitTimeout time.Duration
-	MaxTimeout                   time.Duration
-	RecordingShutdownGracePeriod time.Duration
+	MaxIdleTimeout                time.Duration
+	IdleTimeout                   time.Duration
+	SessionDeleteTimeout          time.Duration
+	ServiceStartupTimeout         time.Duration
+	LostTaskCooldownTimeout       time.Duration
+	InstanceCooldownTimeout       time.Duration
+	ContainerInstanceInitTimeout  time.Duration
+	MaxTimeout                    time.Duration
+	RecordingShutdownGracePeriod  time.Duration
+	TaskDefinitionsUpdateInterval time.Duration
 
 	// External connections
 	DbConnectionString          string
@@ -100,6 +101,7 @@ func init() {
 	flag.DurationVar(&Conf.ContainerInstanceInitTimeout, "container-instance-init-timeout", 10*time.Minute, "Time for ec2 instance after launch to initialize container-instance for asg in time.Duration format")
 	flag.DurationVar(&Conf.MaxTimeout, "max-timeout", 24*time.Hour, "Maximum valid task/session timeout in time.Duration format")
 	flag.DurationVar(&Conf.RecordingShutdownGracePeriod, "recording-shutdown-grace-period", 0*time.Second, "The wait time required to stop recording before sending an exit command to the ECS task")
+	flag.DurationVar(&Conf.TaskDefinitionsUpdateInterval, "task-definitions-update-interval", 12*time.Hour, "Interval for updating task definitions in time.Duration format")
 
 	flag.StringVar(&Conf.DbConnectionString, "db-connection", "localhost:5432", "Connection string for database")
 	flag.StringVar(&Conf.RedisConnectionString, "elastic-cache", "localhost:6379", "Connection string for Session cache")
