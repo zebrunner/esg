@@ -167,21 +167,24 @@ func ProxyMitm(c *gin.Context) {
 
 func CloseSession(c *gin.Context) {
 	mapperEntity := c.MustGet(config.RouterUUID).(*mapper.Mapper)
+	entity := *mapperEntity
 
 	l := log.WithFields(log.Fields{config.RouterUUID: mapperEntity.RouterUUID, config.TaskIdKey: mapperEntity.TaskId, config.SessionIdKey: mapperEntity.SessionID})
 
 	selenium.CloseSession(mapperEntity)
 
-	l.Debugf("Waiting %s for recorder/session to finish...", config.Conf.RecordingShutdownGracePeriod)
-	time.Sleep(config.Conf.RecordingShutdownGracePeriod)
-
-	err := service.StopTask(*mapperEntity, mapper.TaskFinished)
-	if err != nil {
-		l.WithError(err).Warn("Failed to stop task")
-	}
-
-	l.Info("task closed")
 	c.JSON(http.StatusOK, gin.H{"value": nil})
+
+	go func(ent mapper.Mapper, lg *log.Entry) {
+		lg.Debugf("Waiting %s for recorder/session to finish...", config.Conf.RecordingShutdownGracePeriod)
+		time.Sleep(config.Conf.RecordingShutdownGracePeriod)
+
+		if err := service.StopTask(ent, mapper.TaskFinished); err != nil {
+			lg.WithError(err).Warn("Failed to stop task")
+			return
+		}
+		lg.Info("task closed")
+	}(entity, l)
 }
 
 func AbortTask(c *gin.Context) {
