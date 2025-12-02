@@ -172,9 +172,6 @@ func CloseSession(c *gin.Context) {
 
 	selenium.CloseSession(mapperEntity)
 
-	l.Debugf("Waiting %s for recorder/session to finish...", config.Conf.RecordingShutdownGracePeriod)
-	time.Sleep(config.Conf.RecordingShutdownGracePeriod)
-
 	err := service.StopTask(*mapperEntity, mapper.TaskFinished)
 	if err != nil {
 		l.WithError(err).Warn("Failed to stop task")
