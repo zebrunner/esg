@@ -109,9 +109,6 @@ fi
 if [ ! -z ${MAX_TIMEOUT} ]; then
   CMD_ARGS="${CMD_ARGS} -max-timeout ${MAX_TIMEOUT}"
 fi
-if [ ! -z ${RECORDING_SHUTDOWN_GRACE_PERIOD} ]; then
-  CMD_ARGS="${CMD_ARGS} -recording-shutdown-grace-period ${RECORDING_SHUTDOWN_GRACE_PERIOD}"
-fi
 
 if [ ! -z ${ZEBRUNNER_HOST} ]; then
   CMD_ARGS="${CMD_ARGS} -zebrunner-host ${ZEBRUNNER_HOST}"
