@@ -24,27 +24,28 @@ var (
 
 type Config struct {
 	// AWS settings
-	AwsRegion                string
-	AwsRetry                 int
-	AwsCluster               string
-	AwsLinuxCapacityProvider string
-	AwsWinCapacityProvider   string
-	AwsAccessKeyID           string
-	AwsSecretAccessKey       string
-	AwsTaskRoleArn           string
-	AwsTargetGroup           string
-	E3SUrl                   string
+	AwsRegion                       string
+	AwsRetry                        int
+	AwsCluster                      string
+	AwsLinuxCapacityProvider        string
+	AwsLinuxGenericCapacityProvider string
+	AwsWinCapacityProvider          string
+	AwsAccessKeyID                  string
+	AwsSecretAccessKey              string
+	AwsTaskRoleArn                  string
+	AwsTargetGroup                  string
+	E3SUrl                          string
 
 	// Timeouts
-	MaxIdleTimeout               time.Duration
-	IdleTimeout                  time.Duration
-	SessionDeleteTimeout         time.Duration
-	ServiceStartupTimeout        time.Duration
-	LostTaskCooldownTimeout      time.Duration
-	InstanceCooldownTimeout      time.Duration
-	ContainerInstanceInitTimeout time.Duration
-	MaxTimeout                   time.Duration
-	RecordingShutdownGracePeriod time.Duration
+	MaxIdleTimeout                time.Duration
+	IdleTimeout                   time.Duration
+	SessionDeleteTimeout          time.Duration
+	ServiceStartupTimeout         time.Duration
+	LostTaskCooldownTimeout       time.Duration
+	InstanceCooldownTimeout       time.Duration
+	ContainerInstanceInitTimeout  time.Duration
+	MaxTimeout                    time.Duration
+	TaskDefinitionsUpdateInterval time.Duration
 
 	// External connections
 	DbConnectionString          string
@@ -84,6 +85,7 @@ func init() {
 	flag.IntVar(&Conf.AwsRetry, "aws-retry", 10, "AWS client retry count")
 	flag.StringVar(&Conf.AwsCluster, "aws-cluster", "esg", "AWS ECS cluster name")
 	flag.StringVar(&Conf.AwsLinuxCapacityProvider, "aws-linux-capacity-provider", "esg-linux-capacityprovider", "AWS capacity provider for linux instances")
+	flag.StringVar(&Conf.AwsLinuxGenericCapacityProvider, "aws-linux-generic-capacity-provider", "", "AWS capacity provider for generic linux instances")
 	flag.StringVar(&Conf.AwsWinCapacityProvider, "aws-win-capacity-provider", "esg-win-capacityprovider", "AWS capacity provicer for windows instances")
 	flag.StringVar(&Conf.AwsAccessKeyID, "aws-access-key-id", "", "Access key for AWS services")
 	flag.StringVar(&Conf.AwsSecretAccessKey, "aws-secret-access-key", "", "Secret key for AWS services")
@@ -99,7 +101,7 @@ func init() {
 	flag.DurationVar(&Conf.InstanceCooldownTimeout, "instance-cooldown-timeout", 4*time.Minute, "Time after instance start when shutdown is prohibited on scale down in time.Duration format")
 	flag.DurationVar(&Conf.ContainerInstanceInitTimeout, "container-instance-init-timeout", 10*time.Minute, "Time for ec2 instance after launch to initialize container-instance for asg in time.Duration format")
 	flag.DurationVar(&Conf.MaxTimeout, "max-timeout", 24*time.Hour, "Maximum valid task/session timeout in time.Duration format")
-	flag.DurationVar(&Conf.RecordingShutdownGracePeriod, "recording-shutdown-grace-period", 0*time.Second, "The wait time required to stop recording before sending an exit command to the ECS task")
+	flag.DurationVar(&Conf.TaskDefinitionsUpdateInterval, "task-definitions-update-interval", 12*time.Hour, "Interval for updating task definitions in time.Duration format")
 
 	flag.StringVar(&Conf.DbConnectionString, "db-connection", "localhost:5432", "Connection string for database")
 	flag.StringVar(&Conf.RedisConnectionString, "elastic-cache", "localhost:6379", "Connection string for Session cache")

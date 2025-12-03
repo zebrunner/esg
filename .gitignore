@@ -174,3 +174,4 @@ build/push
 build/temp
 e3s
 containers
+build.sh

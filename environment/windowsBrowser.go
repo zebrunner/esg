@@ -122,11 +122,10 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 		Network: &network.NetworkConfiguration{
 			IP: "",
 			Endpoints: map[string]*network.Endpoint{
-				"driver":         {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
-				"healthcheck":    {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
-				"recorderStart":  {ContainerPort: recorderdPort, HostPort: 0, Path: "/start"},
-				"recorderStop":   {ContainerPort: recorderdPort, HostPort: 0, Path: "/stop"},
-				"recorderFinish": {ContainerPort: recorderdPort, HostPort: 0, Path: "/finish"},
+				"driver":        {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
+				"healthcheck":   {ContainerPort: seleniumPort, HostPort: 0, Path: "/"},
+				"recorderStart": {ContainerPort: recorderdPort, HostPort: 0, Path: "/start"},
+				"recorderStop":  {ContainerPort: recorderdPort, HostPort: 0, Path: "/stop"},
 			},
 		},
 		Type:             envtype.WINDOWS,

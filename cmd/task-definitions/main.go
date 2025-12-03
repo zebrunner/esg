@@ -72,7 +72,7 @@ func startEnvironmentUpdate() error {
 		return err
 	}
 
-	envUpdateInterval := time.Hour * 12
+	envUpdateInterval := config.Conf.TaskDefinitionsUpdateInterval
 	go func() {
 		time.Sleep(envUpdateInterval)
 

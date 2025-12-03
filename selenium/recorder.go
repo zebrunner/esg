@@ -62,7 +62,7 @@ func stopRecording(network *network.NetworkConfiguration) error {
 func finishRecording(network *network.NetworkConfiguration) error {
 	url, ok := network.GetUrl("recorderFinish")
 	if !ok {
-		return fmt.Errorf("failed to get url of recorder")
+		return fmt.Errorf("failed to get url of recorder finish")
 	}
 
 	req, err := http.NewRequest(http.MethodDelete, url.String(), nil)
