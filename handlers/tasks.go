@@ -131,29 +131,6 @@ func Create(c *gin.Context) {
 				}
 				json.NewEncoder(c.Writer).Encode(errorResp)
 			} else {
-				// Apply configurable delay before sending response (for testing NAT/timeout scenarios)
-				if config.Conf.SessionResponseDelay > 0 {
-					l.WithField("delay", config.Conf.SessionResponseDelay).Info("Applying configured session response delay")
-					delayTimer := time.NewTimer(config.Conf.SessionResponseDelay)
-				delayLoop:
-					for {
-						select {
-						case <-delayTimer.C:
-							break delayLoop
-						case <-ticker.C:
-							// Continue sending keep-alive during delay
-							_, err := c.Writer.Write([]byte(" "))
-							if err != nil {
-								l.WithError(err).Warn("Failed to send keep-alive during delay, client may have disconnected")
-								delayTimer.Stop()
-								return
-							}
-							c.Writer.(http.Flusher).Flush()
-							l.Trace("Sent keep-alive whitespace during delay")
-						}
-					}
-					l.Info("Session response delay completed")
-				}
 				l.WithFields(log.Fields{"resp": res.resp}).Debug("Response")
 				json.NewEncoder(c.Writer).Encode(res.resp)
 			}
@@ -168,17 +145,6 @@ func Create(c *gin.Context) {
 			}
 			c.Writer.(http.Flusher).Flush()
 			l.Trace("Sent keep-alive whitespace")
-		case <-startupTime.Done():
-			// Context timeout - send error response
-			l.Error("Service startup timed out")
-			errorResp := gin.H{
-				"value": gin.H{
-					"error":   "timeout",
-					"message": "Session creation timed out",
-				},
-			}
-			json.NewEncoder(c.Writer).Encode(errorResp)
-			return
 		}
 	}
 }
