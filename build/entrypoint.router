@@ -133,6 +133,10 @@ if [ ! -z ${OLD_ABORT_API} ]; then
   CMD_ARGS="${CMD_ARGS} -old-abort-api=${OLD_ABORT_API}"
 fi
 
+if [ ! -z ${SESSION_RESPONSE_DELAY} ]; then
+  CMD_ARGS="${CMD_ARGS} -session-response-delay ${SESSION_RESPONSE_DELAY}"
+fi
+
 echo "CMD_ARGS: $CMD_ARGS"
 
 ./router -listen :$LISTEN_PORT $CMD_ARGS &
