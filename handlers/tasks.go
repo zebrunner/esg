@@ -30,13 +30,16 @@ import (
 
 func Create(c *gin.Context) {
 	// start context with deadline before any other action
+	// Note: We don't defer cancel() because generic tasks continue provisioning in background
+	// after returning the taskId to the client. The context will timeout naturally.
 	startupTime, cancel := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout)
-	defer cancel()
+	_ = cancel // Explicitly acknowledge cancel may not be called on all paths (generic tasks need context to continue)
 
 	remote := c.ClientIP()
 	l := log.WithField("remote", remote)
 	user, password, ok := c.Request.BasicAuth()
 	if !ok {
+		cancel()
 		l.Warn("credentials not provided")
 		// Hotfix: Selenium java client don't send request with credentials without this sleep.
 		// Remove with full migration to Selenium 4.0
@@ -48,6 +51,7 @@ func Create(c *gin.Context) {
 
 	apiErr := db.CheckAuth(user, password)
 	if apiErr != nil {
+		cancel()
 		l.WithError(apiErr).WithField("password", password).Warn("Failed to authenticate user on session creation")
 		c.Error(utils.AuthErr(fmt.Errorf("invalid username or password"))).SetType(gin.ErrorTypePublic)
 		return
@@ -55,6 +59,7 @@ func Create(c *gin.Context) {
 
 	workspace, err := db.GetWorkspace(user)
 	if err != nil {
+		cancel()
 		l.Warnf("Workspace for user %s not found", user)
 		c.Error(utils.AuthErr(err)).SetType(gin.ErrorTypePublic)
 		return
@@ -67,6 +72,7 @@ func Create(c *gin.Context) {
 
 	reqCaps, configurationCaps, err := capabilities.ParseRequestCapabilities(c.Request.Body)
 	if err != nil {
+		cancel()
 		l.WithError(err).Error("Failed to process capabilities")
 		c.Error(utils.InvalidArgErr(fmt.Errorf("failed to process capabilities"), err.Error())).SetType(gin.ErrorTypePublic)
 		return
@@ -76,6 +82,7 @@ func Create(c *gin.Context) {
 
 	env, routerUUID, err := environment.BuildEnvForTaskDefinitionOverride(workspace, configurationCaps)
 	if err != nil {
+		cancel()
 		log.WithError(err).Error("Failed to build execution environment")
 		c.Error(utils.CreationErr(fmt.Errorf("failed to create executor"), err.Error())).SetType(gin.ErrorTypePublic)
 		return

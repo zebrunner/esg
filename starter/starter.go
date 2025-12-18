@@ -338,15 +338,6 @@ func (starter basicStarter) StartService(startupTime context.Context) (map[strin
 			starter.basis.GinCtx.Set(config.RouterUUID, starter.basis.MapperEntity)
 			starter.finalize()
 			starter.basis.Log.Info("service started")
-
-			// Apply configurable delay only for browser sessions (not generic tasks)
-			// Browser sessions have "value.sessionId", generic tasks only have "taskId"
-			if config.Conf.SessionResponseDelay > 0 {
-				starter.basis.Log.WithField("delay", config.Conf.SessionResponseDelay).Info("Applying configured session response delay")
-				time.Sleep(config.Conf.SessionResponseDelay)
-				starter.basis.Log.Info("Session response delay completed")
-			}
-
 			return starter.basis.Reply, nil
 		}
 	}
