@@ -41,13 +41,35 @@ func ReverseProxy() gin.HandlerFunc {
 	// TODO: Replace hardcoded target
 	target := "localhost" + listen
 	return func(c *gin.Context) {
+		// Recover from panics caused by client disconnecting during proxy
+		defer func() {
+			if r := recover(); r != nil {
+				if err, ok := r.(error); ok && err == http.ErrAbortHandler {
+					log.Debug("Client disconnected during /wd/hub proxy")
+					return
+				}
+				// Re-panic for other errors
+				panic(r)
+			}
+		}()
+
 		director := func(req *http.Request) {
 			req.URL.Scheme = "http"
 			req.URL.Host = target
 			req.URL.Path = strings.TrimPrefix(req.URL.Path, "/wd/hub")
 			req.Host = target
 		}
-		proxy := &httputil.ReverseProxy{Director: director}
+		proxy := &httputil.ReverseProxy{
+			Director: director,
+			ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+				// Client disconnected - don't try to write to closed connection
+				if r.Context().Err() != nil {
+					log.Debug("Client disconnected during /wd/hub proxy")
+					return
+				}
+				log.WithError(err).Error("Proxy error on /wd/hub")
+			},
+		}
 		proxy.ServeHTTP(c.Writer, c.Request)
 	}
 }
