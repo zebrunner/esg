@@ -30,12 +30,16 @@ import (
 
 func Create(c *gin.Context) {
 	// start context with deadline before any other action
-	startupTime, _ := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout)
+	// Note: We don't defer cancel() because generic tasks continue provisioning in background
+	// after returning the taskId to the client. The context will timeout naturally.
+	startupTime, cancel := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout)
+	_ = cancel // Explicitly acknowledge cancel may not be called on all paths (generic tasks need context to continue)
 
 	remote := c.ClientIP()
 	l := log.WithField("remote", remote)
 	user, password, ok := c.Request.BasicAuth()
 	if !ok {
+		cancel()
 		l.Warn("credentials not provided")
 		// Hotfix: Selenium java client don't send request with credentials without this sleep.
 		// Remove with full migration to Selenium 4.0
@@ -47,6 +51,7 @@ func Create(c *gin.Context) {
 
 	apiErr := db.CheckAuth(user, password)
 	if apiErr != nil {
+		cancel()
 		l.WithError(apiErr).WithField("password", password).Warn("Failed to authenticate user on session creation")
 		c.Error(utils.AuthErr(fmt.Errorf("invalid username or password"))).SetType(gin.ErrorTypePublic)
 		return
@@ -54,6 +59,7 @@ func Create(c *gin.Context) {
 
 	workspace, err := db.GetWorkspace(user)
 	if err != nil {
+		cancel()
 		l.Warnf("Workspace for user %s not found", user)
 		c.Error(utils.AuthErr(err)).SetType(gin.ErrorTypePublic)
 		return
@@ -66,6 +72,7 @@ func Create(c *gin.Context) {
 
 	reqCaps, configurationCaps, err := capabilities.ParseRequestCapabilities(c.Request.Body)
 	if err != nil {
+		cancel()
 		l.WithError(err).Error("Failed to process capabilities")
 		c.Error(utils.InvalidArgErr(fmt.Errorf("failed to process capabilities"), err.Error())).SetType(gin.ErrorTypePublic)
 		return
@@ -75,6 +82,7 @@ func Create(c *gin.Context) {
 
 	env, routerUUID, err := environment.BuildEnvForTaskDefinitionOverride(workspace, configurationCaps)
 	if err != nil {
+		cancel()
 		log.WithError(err).Error("Failed to build execution environment")
 		c.Error(utils.CreationErr(fmt.Errorf("failed to create executor"), err.Error())).SetType(gin.ErrorTypePublic)
 		return
@@ -83,19 +91,68 @@ func Create(c *gin.Context) {
 
 	l.Info("new request")
 
-	resp, seErr := starter.GetServiceStarter(
-		env,
-		workspace,
-		routerUUID,
-		reqCaps,
-		c,
-		l,
-	).StartService(startupTime)
-	if seErr != nil {
-		c.Error(seErr).SetType(gin.ErrorTypePublic)
-	} else {
-		l.WithFields(log.Fields{"resp": resp}).Debug("Response")
-		c.JSON(http.StatusOK, resp)
+	// Send HTTP headers immediately to prevent client timeout during infrastructure provisioning.
+	// This keeps the connection alive by sending periodic whitespace (which JSON parsers ignore)
+	// while waiting for the session to be created.
+	c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
+	c.Writer.Header().Set("X-Content-Type-Options", "nosniff")
+	c.Writer.WriteHeader(http.StatusOK)
+	c.Writer.(http.Flusher).Flush()
+
+	// Channel to receive result from service starter
+	type serviceResult struct {
+		resp map[string]interface{}
+		err  *utils.SeleniumError
+	}
+	resultCh := make(chan serviceResult, 1)
+
+	// Run service startup in goroutine
+	go func() {
+		resp, seErr := starter.GetServiceStarter(
+			env,
+			workspace,
+			routerUUID,
+			reqCaps,
+			c,
+			l,
+		).StartService(startupTime)
+		resultCh <- serviceResult{resp: resp, err: seErr}
+	}()
+
+	// Send periodic whitespace to keep connection alive (every 30 seconds)
+	// JSON parsers ignore leading whitespace, so this doesn't affect response parsing
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case res := <-resultCh:
+			if res.err != nil {
+				// WebDriver errors are returned in JSON body, not HTTP status code
+				l.WithError(res.err).Error("Service startup failed")
+				errorResp := gin.H{
+					"value": gin.H{
+						"error":   "session not created",
+						"message": res.err.Error(),
+					},
+				}
+				json.NewEncoder(c.Writer).Encode(errorResp)
+			} else {
+				l.WithFields(log.Fields{"resp": res.resp}).Debug("Response")
+				json.NewEncoder(c.Writer).Encode(res.resp)
+			}
+			return
+		case <-ticker.C:
+			// Send whitespace to keep connection alive - JSON parsers will ignore it
+			_, err := c.Writer.Write([]byte(" "))
+			if err != nil {
+				l.WithError(err).Warn("Failed to send keep-alive, client may have disconnected")
+				cancel() // Cancel the startup context to stop provisioning
+				return
+			}
+			c.Writer.(http.Flusher).Flush()
+			l.Trace("Sent keep-alive whitespace")
+		}
 	}
 }
 
