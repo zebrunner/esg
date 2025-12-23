@@ -34,6 +34,8 @@ type Config struct {
 	AwsSecretAccessKey              string
 	AwsTaskRoleArn                  string
 	AwsTargetGroup                  string
+	AwsTargetId                     string
+	AwsDisableIMDS                  bool
 	E3SUrl                          string
 
 	// Timeouts
@@ -91,6 +93,8 @@ func init() {
 	flag.StringVar(&Conf.AwsSecretAccessKey, "aws-secret-access-key", "", "Secret key for AWS services")
 	flag.StringVar(&Conf.AwsTaskRoleArn, "aws-task-role-arn", "", "Role that would be assigned to all task's definitions")
 	flag.StringVar(&Conf.AwsTargetGroup, "aws-target-group", "", "Application load balancer name")
+	flag.StringVar(&Conf.AwsTargetId, "aws-target-id", "", "Instance ID or IP address for ELB target registration (use when IMDS is disabled)")
+	flag.BoolVar(&Conf.AwsDisableIMDS, "aws-disable-imds", false, "Disable IMDS calls (set to true when hop limit = 1)")
 	flag.StringVar(&Conf.E3SUrl, "e3s-url", "", "e3s external url")
 
 	flag.DurationVar(&Conf.MaxIdleTimeout, "max-idle-timeout", 20*time.Minute, "Maximum session idle timeout time that could be set by user's capabilities")

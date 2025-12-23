@@ -39,11 +39,17 @@ fi
 if [ ! -z ${AWS_CLUSTER} ]; then
   CMD_ARGS="${CMD_ARGS} -aws-cluster ${AWS_CLUSTER}"
 fi
-if [ ! -z ${AWS_ACESS_KEY_ID} ]; then
-  CMD_ARGS="${CMD_ARGS} -aws-access-key-id ${AWS_ACESS_KEY_ID}"
+if [ ! -z ${AWS_ACCESS_KEY_ID} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-access-key-id ${AWS_ACCESS_KEY_ID}"
 fi
 if [ ! -z ${AWS_SECRET_ACCESS_KEY} ]; then
   CMD_ARGS="${CMD_ARGS} -aws-secret-access-key ${AWS_SECRET_ACCESS_KEY}"
+fi
+if [ ! -z ${AWS_DISABLE_IMDS} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-disable-imds=${AWS_DISABLE_IMDS}"
+fi
+if [ ! -z ${AWS_TARGET_ID} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-target-id ${AWS_TARGET_ID}"
 fi
 
 if [ ! -z ${AWS_LINUX_CAPACITY_PROVIDER} ]; then
@@ -87,8 +93,8 @@ fi
 if [ ! -z ${S3_REGION} ]; then
   CMD_ARGS="${CMD_ARGS} -s3-region ${S3_REGION}"
 fi
-if [ ! -z ${S3_AWS_ACESS_KEY_ID} ]; then
-  CMD_ARGS="${CMD_ARGS} -s3-aws-access-key-id ${S3_AWS_ACESS_KEY_ID}"
+if [ ! -z ${S3_AWS_ACCESS_KEY_ID} ]; then
+  CMD_ARGS="${CMD_ARGS} -s3-aws-access-key-id ${S3_AWS_ACCESS_KEY_ID}"
 fi
 if [ ! -z ${S3_AWS_SECRET_ACCESS_KEY} ]; then
   CMD_ARGS="${CMD_ARGS} -s3-aws-secret-access-key ${S3_AWS_SECRET_ACCESS_KEY}"

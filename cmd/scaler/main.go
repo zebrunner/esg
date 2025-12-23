@@ -438,7 +438,12 @@ func main() {
 		cancel()
 	}()
 
-	go refreshIMDSV2Token()
+	// Skip IMDS calls when disabled (hop limit = 1)
+	if !config.Conf.AwsDisableIMDS {
+		go refreshIMDSV2Token()
+	} else {
+		log.Info("IMDS disabled, skipping token refresh")
+	}
 
 	var wg sync.WaitGroup
 
