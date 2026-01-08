@@ -82,7 +82,7 @@ NetworkConfiguration: &ecs.NetworkConfiguration{
 
 ## Critical Limitations and Requirements
 
-### ⚠️ Single Subnet Requirement for Auto Scaling Groups
+### Single Subnet Requirement for Auto Scaling Groups
 
 **IMPORTANT**: When using Auto Scaling Groups (ASG) with AWSVPC mode, you **MUST configure only ONE subnet** in your ASG configuration.
 
