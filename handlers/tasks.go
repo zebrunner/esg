@@ -106,7 +106,6 @@ func Create(c *gin.Context) {
 	// the 5-minute timeout limitation from NAT gateways and client HTTP timeouts.
 	c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 	c.Writer.Header().Set("X-Content-Type-Options", "nosniff")
-	// Note: HTTP 200 is sent before session creation completes, so errors are returned only in the JSON body (per WebDriver spec).
 	c.Writer.WriteHeader(http.StatusOK)
 	c.Writer.(http.Flusher).Flush()
 
