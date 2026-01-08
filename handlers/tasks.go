@@ -92,12 +92,21 @@ func Create(c *gin.Context) {
 	l.Info("new request")
 	l.Infof("Session create requested clientIp %s, (user=%s, workspace=%s)", clientIp, user, workspace)
 
-	// Send HTTP headers immediately to prevent client timeout during infrastructure provisioning.
-	// This keeps the connection alive by sending periodic whitespace (which JSON parsers ignore)
-	// while waiting for the session to be created.
+	// IMPORTANT: Non-standard HTTP chunked response to prevent client timeout during long provisioning.
+	// This approach is NOT officially supported by Selenium/WebDriver spec but works with standard clients.
+	//
+	// How it works:
+	// 1. Send HTTP 200 + headers immediately
+	// 2. Send whitespace every 30s to keep connection alive (JSON parsers ignore leading whitespace)
+	// 3. Send actual JSON response when session is ready
+	//
+	// Trade-off: Errors return HTTP 200 with error in JSON body (instead of proper 4xx/5xx status codes).
+	// This is acceptable as WebDriver clients primarily check JSON body for errors, not HTTP status.
+	//
+	// If this causes issues with non-standard clients, revert to synchronous response and accept
+	// the 5-minute timeout limitation from NAT gateways and client HTTP timeouts.
 	c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 	c.Writer.Header().Set("X-Content-Type-Options", "nosniff")
-	// Note: HTTP 200 is sent before session creation completes, so errors are returned only in the JSON body (per WebDriver spec).
 	c.Writer.WriteHeader(http.StatusOK)
 	c.Writer.(http.Flusher).Flush()
 
