@@ -35,6 +35,7 @@ type Config struct {
 	AwsSecretAccessKey              string
 	AwsTaskRoleArn                  string
 	AwsTargetGroup                  string
+	AwsTargetId                     string
 	E3SUrl                          string
 
 	// Timeouts
@@ -95,6 +96,7 @@ func init() {
 	flag.StringVar(&Conf.AwsSecretAccessKey, "aws-secret-access-key", "", "Secret key for AWS services")
 	flag.StringVar(&Conf.AwsTaskRoleArn, "aws-task-role-arn", "", "Role that would be assigned to all task's definitions")
 	flag.StringVar(&Conf.AwsTargetGroup, "aws-target-group", "", "Application load balancer name")
+	flag.StringVar(&Conf.AwsTargetId, "aws-target-id", "", "Instance ID or IP address for ELB target registration (use when static AWS credentials are configured)")
 	flag.StringVar(&Conf.E3SUrl, "e3s-url", "", "e3s external url")
 
 	flag.DurationVar(&Conf.MaxIdleTimeout, "max-idle-timeout", 20*time.Minute, "Maximum session idle timeout time that could be set by user's capabilities")
@@ -138,6 +140,11 @@ func init() {
 	flag.Int64Var(&Conf.ExternalPort, "external-port", 0, "Router's external listening port")
 
 	flag.BoolVar(&Conf.OldAbortApi, "old-abort-api", false, "Usage of reporting's old api abort path")
+}
+
+// When static credentials are provided, IMDS calls should be skipped.
+func (c *Config) HasStaticCredentials() bool {
+	return c.AwsAccessKeyID != "" && c.AwsSecretAccessKey != ""
 }
 
 func (c *Config) ParseLogLevel() logrus.Level {

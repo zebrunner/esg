@@ -441,7 +441,12 @@ func main() {
 		cancel()
 	}()
 
-	go refreshIMDSV2Token()
+	// Skip IMDS calls when static AWS credentials are configured
+	if !config.Conf.HasStaticCredentials() {
+		go refreshIMDSV2Token()
+	} else {
+		log.Info("Static AWS credentials configured, skipping IMDS token refresh")
+	}
 
 	var wg sync.WaitGroup
 
