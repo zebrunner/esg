@@ -35,20 +35,7 @@ func RemoveFromSet(st SetType, key string) error {
 
 func GetKeys(st SetType) ([]string, error) {
 	keys := make([]string, 0)
-
-	appendCh := make(chan string)
-	ctx, ctxCancel := context.WithCancel(context.Background())
-	defer ctxCancel()
-	go func(ctx context.Context, appencCh <-chan string) {
-		for {
-			select {
-			case v := <-appendCh:
-				keys = append(keys, v)
-			case <-ctx.Done():
-				return
-			}
-		}
-	}(ctx, appendCh)
+	var mu sync.Mutex
 
 	err := config.RedisCluster.ForEachMaster(context.Background(), func(ctx context.Context, rdb *redis.Client) error {
 		keysSet := make(map[string]string)
@@ -64,9 +51,11 @@ func GetKeys(st SetType) ([]string, error) {
 			}
 		}
 
+		mu.Lock()
 		for key := range keysSet {
-			appendCh <- key
+			keys = append(keys, key)
 		}
+		mu.Unlock()
 
 		return nil
 	})

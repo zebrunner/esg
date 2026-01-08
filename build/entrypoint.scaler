@@ -39,9 +39,6 @@ fi
 if [ ! -z ${INSTANCE_COOLDOWN_TIMEOUT} ]; then
   CMD_ARGS="${CMD_ARGS} -instance-cooldown-timeout ${INSTANCE_COOLDOWN_TIMEOUT}"
 fi
-if [ ! -z ${RECORDING_SHUTDOWN_GRACE_PERIOD} ]; then
-  CMD_ARGS="${CMD_ARGS} -recording-shutdown-grace-period ${RECORDING_SHUTDOWN_GRACE_PERIOD}"
-fi
 
 # common cli args:
 if [ ! -z ${AWS_REGION} ]; then

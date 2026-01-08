@@ -123,6 +123,13 @@ func CloseSession(mapperEntity *mapper.Mapper) {
 		err := finishRecording(&mapperEntity.Network)
 		if err != nil {
 			log.WithError(err).Error("Failed to finish recording")
+			// Try to stop recording as fallback if the error is "failed to get url of recorder finish"
+			if err.Error() == "failed to get url of recorder finish" {
+				stopErr := stopRecording(&mapperEntity.Network)
+				if stopErr != nil {
+					log.WithError(stopErr).Error("Failed to stop recording as fallback")
+				}
+			}
 		}
 	}()
 

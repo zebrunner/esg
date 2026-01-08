@@ -295,6 +295,9 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 		volumes[executorPlaywrightCacheVolume] = volume{Driver: "local", Scope: "task", ContainerPath: executorPlaywrighCacheDir, ReadOnly: false}
 	}
 
+	// Extract custom executor volumes capability directly from ZEBRUNNER_CAPABILITIES env var
+	// This bypasses the standard capabilities parsing pipeline (vendor options, pre/post processors)
+	// since "zebrunner:executorVolumes" is not part of the standard Capabilities struct
 	executorVolumes, extractErr := utils.ExtractCapabilityAsString(caps.EnvVariables.ToPrimitive(), "zebrunner:executorVolumes")
 
 	if extractErr != nil {
