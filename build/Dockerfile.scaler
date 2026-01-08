@@ -43,8 +43,6 @@ ENV ZEBRUNNER_INTEGRATION_PASSWORD=
 
 ENV OLD_ABORT_API=
 
-ENV AWS_DISABLE_IMDS=
-
 COPY ./build/.env version
 COPY ./build/entrypoint.scaler /entrypoint.sh
 

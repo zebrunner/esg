@@ -45,9 +45,6 @@ fi
 if [ ! -z ${AWS_SECRET_ACCESS_KEY} ]; then
   CMD_ARGS="${CMD_ARGS} -aws-secret-access-key ${AWS_SECRET_ACCESS_KEY}"
 fi
-if [ ! -z ${AWS_DISABLE_IMDS} ]; then
-  CMD_ARGS="${CMD_ARGS} -aws-disable-imds=${AWS_DISABLE_IMDS}"
-fi
 if [ ! -z ${AWS_TARGET_ID} ]; then
   CMD_ARGS="${CMD_ARGS} -aws-target-id ${AWS_TARGET_ID}"
 fi

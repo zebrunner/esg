@@ -438,11 +438,11 @@ func main() {
 		cancel()
 	}()
 
-	// Skip IMDS calls when disabled (hop limit = 1)
-	if !config.Conf.AwsDisableIMDS {
+	// Skip IMDS calls when static AWS credentials are configured
+	if !config.Conf.HasStaticCredentials() {
 		go refreshIMDSV2Token()
 	} else {
-		log.Info("IMDS disabled, skipping token refresh")
+		log.Info("Static AWS credentials configured, skipping IMDS token refresh")
 	}
 
 	var wg sync.WaitGroup

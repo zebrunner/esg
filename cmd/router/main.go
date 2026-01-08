@@ -190,8 +190,8 @@ func InitClusterInfo() error {
 	}
 	service.AwsSess = aws
 
-	// Skip IMDS calls when disabled (hop limit = 1)
-	if !config.Conf.AwsDisableIMDS {
+	// Skip IMDS calls when static AWS credentials are configured
+	if !config.Conf.HasStaticCredentials() {
 		err = utils.RefreshIMDSV2Token()
 		if err != nil {
 			log.WithError(err).Error("Failed to generate IMDSV2 token")
@@ -210,7 +210,7 @@ func InitClusterInfo() error {
 			}
 		}()
 	} else {
-		log.Info("IMDS disabled, skipping token refresh")
+		log.Info("Static AWS credentials configured, skipping IMDS token refresh")
 	}
 
 	scalersMap, err := service.InitScalingData()
