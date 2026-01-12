@@ -60,22 +60,30 @@ func (i Image) GetMockCapabilities() ([]*capabilities.Capabilities, error) {
 }
 
 func GetGenericImage(genericImg string) (*Image, error) {
-	imgArr := strings.Split(genericImg, ":")
-	if len(imgArr) != 2 {
-		err := fmt.Errorf("failed to parse generic image")
-		return nil, err
+	if genericImg == "" {
+		return nil, fmt.Errorf("generic image uri is empty")
 	}
 
-	if imgArr[0] == "" {
-		err := fmt.Errorf("generic image uri is empty")
-		return nil, err
+	repo := genericImg
+	tag := "latest"
+
+	// Split tag only after last slash
+	lastSlash := strings.LastIndex(genericImg, "/")
+	lastColon := strings.LastIndex(genericImg, ":")
+
+	if lastColon > lastSlash {
+		repo = genericImg[:lastColon]
+		tag = genericImg[lastColon+1:]
+		if tag == "" {
+			tag = "latest"
+		}
 	}
 
 	return &Image{
-		RepositoryName: imgArr[0],
+		RepositoryName: repo,
 		BrowserName:    GENERIC.GetBrowserName(),
 		Platform:       envtype.GENERIC,
-		Tag:            imgArr[1],
+		Tag:            tag,
 	}, nil
 }
 
