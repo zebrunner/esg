@@ -176,3 +176,4 @@ build/temp
 e3s
 containers
 logs/
+build.sh

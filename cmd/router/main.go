@@ -50,19 +50,50 @@ func ReverseProxy() gin.HandlerFunc {
 	}
 
 	return func(c *gin.Context) {
+		remote := c.ClientIP()
+		path := c.Request.URL.Path
+
+		// Recover from panics caused by client disconnecting during proxy
+		defer func() {
+			if r := recover(); r != nil {
+				if err, ok := r.(error); ok && err == http.ErrAbortHandler {
+					log.WithFields(log.Fields{
+						"remote": remote,
+						"path":   path,
+					}).Debug("Client disconnected during /wd/hub proxy (panic recovered)")
+					return
+				}
+				// Re-panic for other errors
+				panic(r)
+			}
+		}()
+
 		director := func(req *http.Request) {
 			req.URL.Scheme = "http"
 			req.URL.Host = target
 			req.URL.Path = strings.TrimPrefix(req.URL.Path, "/wd/hub")
 			req.Host = target
 		}
-
 		proxy := &httputil.ReverseProxy{
 			Director:  director,
 			Transport: retryTransport,
 			ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
-				log.WithError(err).WithField("url", r.URL.String()).
-					Error("Reverse proxy failed after retries")
+				// Case 1: client disconnected — do NOT write a response
+				if r.Context().Err() != nil {
+					log.WithFields(log.Fields{
+						"remote": remote,
+						"path":   path,
+					}).Debug("Client disconnected during /wd/hub proxy")
+					return
+				}
+
+				// Case 2: proxy failed after retries
+				log.WithError(err).WithFields(log.Fields{
+					"remote": remote,
+					"path":   path,
+					"url":    r.URL.String(),
+				}).Error("Reverse proxy failed after retries")
+
 				w.WriteHeader(http.StatusBadGateway)
 				_ = json.NewEncoder(w).Encode(gin.H{
 					"value": gin.H{
@@ -72,7 +103,6 @@ func ReverseProxy() gin.HandlerFunc {
 				})
 			},
 		}
-
 		proxy.ServeHTTP(c.Writer, c.Request)
 	}
 }
@@ -181,23 +211,28 @@ func InitClusterInfo() error {
 	}
 	service.AwsSess = aws
 
-	err = utils.RefreshIMDSV2Token()
-	if err != nil {
-		log.WithError(err).Error("Failed to generate IMDSV2 token")
-		return err
-	}
-
-	go func() {
-		for {
-			time.Sleep(2*time.Hour + 30*time.Minute)
-			err := utils.RefreshIMDSV2Token()
-			if err != nil {
-				log.WithError(err).Error("Failed to generate IMDSV2 token")
-			} else {
-				log.Debug("Successfully generated IMDSV2 token")
-			}
+	// Skip IMDS calls when static AWS credentials are configured
+	if !config.Conf.HasStaticCredentials() {
+		err = utils.RefreshIMDSV2Token()
+		if err != nil {
+			log.WithError(err).Error("Failed to generate IMDSV2 token")
+			return err
 		}
-	}()
+
+		go func() {
+			for {
+				time.Sleep(2*time.Hour + 30*time.Minute)
+				err := utils.RefreshIMDSV2Token()
+				if err != nil {
+					log.WithError(err).Error("Failed to generate IMDSV2 token")
+				} else {
+					log.Debug("Successfully generated IMDSV2 token")
+				}
+			}
+		}()
+	} else {
+		log.Info("Static AWS credentials configured, skipping IMDS token refresh")
+	}
 
 	scalersMap, err := service.InitScalingData()
 	if err != nil {

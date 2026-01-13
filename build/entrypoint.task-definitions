@@ -38,8 +38,8 @@ fi
 if [ ! -z ${AWS_CLUSTER} ]; then
   CMD_ARGS="${CMD_ARGS} -aws-cluster ${AWS_CLUSTER}"
 fi
-if [ ! -z ${AWS_ACESS_KEY_ID} ]; then
-  CMD_ARGS="${CMD_ARGS} -aws-access-key-id ${AWS_ACESS_KEY_ID}"
+if [ ! -z ${AWS_ACCESS_KEY_ID} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-access-key-id ${AWS_ACCESS_KEY_ID}"
 fi
 if [ ! -z ${AWS_SECRET_ACCESS_KEY} ]; then
   CMD_ARGS="${CMD_ARGS} -aws-secret-access-key ${AWS_SECRET_ACCESS_KEY}"
@@ -54,8 +54,8 @@ fi
 if [ ! -z ${S3_REGION} ]; then
   CMD_ARGS="${CMD_ARGS} -s3-region ${S3_REGION}"
 fi
-if [ ! -z ${S3_AWS_ACESS_KEY_ID} ]; then
-  CMD_ARGS="${CMD_ARGS} -s3-aws-access-key-id ${S3_AWS_ACESS_KEY_ID}"
+if [ ! -z ${S3_AWS_ACCESS_KEY_ID} ]; then
+  CMD_ARGS="${CMD_ARGS} -s3-aws-access-key-id ${S3_AWS_ACCESS_KEY_ID}"
 fi
 if [ ! -z ${S3_AWS_SECRET_ACCESS_KEY} ]; then
   CMD_ARGS="${CMD_ARGS} -s3-aws-secret-access-key ${S3_AWS_SECRET_ACCESS_KEY}"
@@ -76,6 +76,10 @@ if [ ! -z ${IMAGE_REPOSITORIES} ]; then
 fi
 if [ ! -z ${EXCLUDE_BROWSERS} ]; then
   CMD_ARGS="${CMD_ARGS} -exclude-browsers ${EXCLUDE_BROWSERS}"
+fi
+
+if [ ! -z ${TASK_DEFINITIONS_UPDATE_INTERVAL} ]; then
+  CMD_ARGS="${CMD_ARGS} -task-definitions-update-interval ${TASK_DEFINITIONS_UPDATE_INTERVAL}"
 fi
 
 echo "CMD_ARGS: $CMD_ARGS"

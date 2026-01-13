@@ -35,18 +35,19 @@ type Config struct {
 	AwsSecretAccessKey              string
 	AwsTaskRoleArn                  string
 	AwsTargetGroup                  string
+	AwsTargetId                     string
 	E3SUrl                          string
 
 	// Timeouts
-	MaxIdleTimeout               time.Duration
-	IdleTimeout                  time.Duration
-	SessionDeleteTimeout         time.Duration
-	ServiceStartupTimeout        time.Duration
-	LostTaskCooldownTimeout      time.Duration
-	InstanceCooldownTimeout      time.Duration
-	ContainerInstanceInitTimeout time.Duration
-	MaxTimeout                   time.Duration
-	RecordingShutdownGracePeriod time.Duration
+	MaxIdleTimeout                time.Duration
+	IdleTimeout                   time.Duration
+	SessionDeleteTimeout          time.Duration
+	ServiceStartupTimeout         time.Duration
+	LostTaskCooldownTimeout       time.Duration
+	InstanceCooldownTimeout       time.Duration
+	ContainerInstanceInitTimeout  time.Duration
+	MaxTimeout                    time.Duration
+	TaskDefinitionsUpdateInterval time.Duration
 
 	// External connections
 	DbConnectionString          string
@@ -95,6 +96,7 @@ func init() {
 	flag.StringVar(&Conf.AwsSecretAccessKey, "aws-secret-access-key", "", "Secret key for AWS services")
 	flag.StringVar(&Conf.AwsTaskRoleArn, "aws-task-role-arn", "", "Role that would be assigned to all task's definitions")
 	flag.StringVar(&Conf.AwsTargetGroup, "aws-target-group", "", "Application load balancer name")
+	flag.StringVar(&Conf.AwsTargetId, "aws-target-id", "", "Instance ID or IP address for ELB target registration (use when static AWS credentials are configured)")
 	flag.StringVar(&Conf.E3SUrl, "e3s-url", "", "e3s external url")
 
 	flag.DurationVar(&Conf.MaxIdleTimeout, "max-idle-timeout", 20*time.Minute, "Maximum session idle timeout time that could be set by user's capabilities")
@@ -105,7 +107,7 @@ func init() {
 	flag.DurationVar(&Conf.InstanceCooldownTimeout, "instance-cooldown-timeout", 4*time.Minute, "Time after instance start when shutdown is prohibited on scale down in time.Duration format")
 	flag.DurationVar(&Conf.ContainerInstanceInitTimeout, "container-instance-init-timeout", 10*time.Minute, "Time for ec2 instance after launch to initialize container-instance for asg in time.Duration format")
 	flag.DurationVar(&Conf.MaxTimeout, "max-timeout", 24*time.Hour, "Maximum valid task/session timeout in time.Duration format")
-	flag.DurationVar(&Conf.RecordingShutdownGracePeriod, "recording-shutdown-grace-period", 0*time.Second, "The wait time required to stop recording before sending an exit command to the ECS task")
+	flag.DurationVar(&Conf.TaskDefinitionsUpdateInterval, "task-definitions-update-interval", 12*time.Hour, "Interval for updating task definitions in time.Duration format")
 
 	flag.StringVar(&Conf.DbConnectionString, "db-connection", "localhost:5432", "Connection string for database")
 	flag.StringVar(&Conf.RedisConnectionString, "elastic-cache", "localhost:6379", "Connection string for Session cache")
@@ -138,6 +140,11 @@ func init() {
 	flag.Int64Var(&Conf.ExternalPort, "external-port", 0, "Router's external listening port")
 
 	flag.BoolVar(&Conf.OldAbortApi, "old-abort-api", false, "Usage of reporting's old api abort path")
+}
+
+// When static credentials are provided, IMDS calls should be skipped.
+func (c *Config) HasStaticCredentials() bool {
+	return c.AwsAccessKeyID != "" && c.AwsSecretAccessKey != ""
 }
 
 func (c *Config) ParseLogLevel() logrus.Level {

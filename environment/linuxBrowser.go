@@ -22,7 +22,8 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 	log.Trace("caps: ", caps)
 
 	var (
-		// for browsers images try to reuse Doensloads to be able to share this content via upload/download endpoint
+		// Use the Downloads directory as the log directory for browser images.
+		// Files stored here can be accessed via the upload/download endpoint for sharing and reuse.
 		logDir    = "/home/selenium/Downloads"
 		logVolume = "log"
 
