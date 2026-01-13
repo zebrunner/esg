@@ -24,8 +24,11 @@ Suitable for personal usage and in big clusters:
 * **Browser consumption API** working out of the box
 * Fully **isolated** and **reproducible** environment
 
-### Documentation 
+### Documentation
 
-* [Prerequisites](https://github.com/zebrunner/e3s/blob/main/docs/prerequisites.md)
-* [ECS E3S cluster creation](https://github.com/zebrunner/e3s/blob/main/docs/ecs_e3s_cluster_creation.md)
-* [Usage](https://github.com/zebrunner/e3s/blob/main/docs/usage.md)
+#### Infrastructure Setup
+* [Infrastructure Deploy with Terraform](https://github.com/zebrunner/e3s-terraform-deploy) - Automated infrastructure deployment using Terraform
+* [Manual Infrastructure Setup Guide](https://github.com/zebrunner/e3s/blob/docs/docs/e3s-manual-infra-creation/ESG%20Deploy%20step%20by%20step%20guide.md) - Step-by-step guide for manual AWS infrastructure creation
+
+#### Usage
+* [Usage Guide](https://github.com/zebrunner/e3s/blob/main/docs/usage.md)
