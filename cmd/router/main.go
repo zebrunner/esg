@@ -190,23 +190,28 @@ func InitClusterInfo() error {
 	}
 	service.AwsSess = aws
 
-	err = utils.RefreshIMDSV2Token()
-	if err != nil {
-		log.WithError(err).Error("Failed to generate IMDSV2 token")
-		return err
-	}
-
-	go func() {
-		for {
-			time.Sleep(2*time.Hour + 30*time.Minute)
-			err := utils.RefreshIMDSV2Token()
-			if err != nil {
-				log.WithError(err).Error("Failed to generate IMDSV2 token")
-			} else {
-				log.Debug("Successfully generated IMDSV2 token")
-			}
+	// Skip IMDS calls when static AWS credentials are configured
+	if !config.Conf.HasStaticCredentials() {
+		err = utils.RefreshIMDSV2Token()
+		if err != nil {
+			log.WithError(err).Error("Failed to generate IMDSV2 token")
+			return err
 		}
-	}()
+
+		go func() {
+			for {
+				time.Sleep(2*time.Hour + 30*time.Minute)
+				err := utils.RefreshIMDSV2Token()
+				if err != nil {
+					log.WithError(err).Error("Failed to generate IMDSV2 token")
+				} else {
+					log.Debug("Successfully generated IMDSV2 token")
+				}
+			}
+		}()
+	} else {
+		log.Info("Static AWS credentials configured, skipping IMDS token refresh")
+	}
 
 	scalersMap, err := service.InitScalingData()
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/aws/aws-sdk-go/service/elbv2"
+	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/utils"
 )
 
@@ -106,6 +107,11 @@ func DeregisterTarget(targetGroup *elbv2.TargetGroup, port int64) error {
 }
 
 func getTargetId(targetGroup *elbv2.TargetGroup) (string, error) {
+	// Use explicit target ID from config when IMDS is disabled (hop limit = 1)
+	if config.Conf.AwsTargetId != "" {
+		return config.Conf.AwsTargetId, nil
+	}
+
 	switch *targetGroup.TargetType {
 	case "ip":
 		if targetGroup.IpAddressType != nil && *targetGroup.IpAddressType == "ipv6" {
