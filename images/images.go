@@ -64,6 +64,14 @@ func GetGenericImage(genericImg string) (*Image, error) {
 		return nil, fmt.Errorf("generic image uri is empty")
 	}
 
+	// Basic validation
+	if strings.HasSuffix(genericImg, "/") {
+		return nil, fmt.Errorf("invalid generic image: trailing slash")
+	}
+	if strings.HasPrefix(genericImg, ":") {
+		return nil, fmt.Errorf("invalid generic image: missing repository name")
+	}
+
 	repo := genericImg
 	tag := "latest"
 
@@ -77,6 +85,10 @@ func GetGenericImage(genericImg string) (*Image, error) {
 		if tag == "" {
 			tag = "latest"
 		}
+	}
+
+	if repo == "" {
+		return nil, fmt.Errorf("invalid generic image: empty repository name")
 	}
 
 	return &Image{
