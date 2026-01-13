@@ -15,7 +15,7 @@ import (
 const (
 	uploaderImage        = config.ZebrunnerEcrRegistryUri + "/" + "uploader:3.6.1"
 	mitmImage            = config.ZebrunnerEcrRegistryUri + "/" + "mitmproxy:2.2"
-	recorderImage        = config.ZebrunnerEcrRegistryUri + "/" + "recorder:2.2"
+	recorderImage        = config.ZebrunnerEcrRegistryUri + "/" + "recorder:2.3"
 	cypressRecorderImage = config.ZebrunnerEcrRegistryUri + "/" + "cypress-recorder:1.3"
 	appiumImage          = config.ZebrunnerEcrRegistryUri + "/" + "appium:2.0.15-awsvpc"
 	cloneImage           = config.ZebrunnerEcrRegistryUri + "/" + "git:2.36.2"
