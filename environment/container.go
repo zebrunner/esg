@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/aws/aws-sdk-go/service/ecs"
+	ecsTypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/images"
@@ -66,8 +66,8 @@ type Container struct {
 	EntryPoint       []string
 	WorkingDirectory string
 
-	HealthCheck *ecs.HealthCheck
-	DependsOn   []*ecs.ContainerDependency
+	HealthCheck *ecsTypes.HealthCheck
+	DependsOn   []ecsTypes.ContainerDependency
 
 	ReadOnlyRootFileSystem bool
 }

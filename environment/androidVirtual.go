@@ -3,8 +3,8 @@ package environment
 import (
 	"fmt"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/ecs"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	ecsTypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
 	envtype "github.com/zebrunner/esg/environment/envType"
@@ -80,11 +80,11 @@ func buildAppiumRedroid(workspace string, routerUUID string, image images.Image,
 		},
 		Mounts: []string{browserVolume, logVolume, tmpAppiumVolume, androidVolume, appiumHomeVolume, downloadVolume},
 		Links:  []string{"device"},
-		HealthCheck: &ecs.HealthCheck{
-			Command:     []*string{aws.String("CMD-SHELL"), aws.String("healthcheck")},
-			Retries:     aws.Int64(10),
-			Interval:    aws.Int64(24),
-			StartPeriod: aws.Int64(240),
+		HealthCheck: &ecsTypes.HealthCheck{
+			Command:     []string{"CMD-SHELL", "healthcheck"},
+			Retries:     aws.Int32(10),
+			Interval:    aws.Int32(24),
+			StartPeriod: aws.Int32(240),
 		},
 		ReadOnlyRootFileSystem: true,
 	}

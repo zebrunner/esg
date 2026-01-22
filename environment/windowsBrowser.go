@@ -3,8 +3,8 @@ package environment
 import (
 	"fmt"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/ecs"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	ecsTypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
@@ -38,12 +38,12 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 			"LOG_FILE":  "session.log",
 			"LOG_LEVEL": "INFO",
 		},
-		HealthCheck: &ecs.HealthCheck{
-			Command:     []*string{aws.String("cmd.exe"), aws.String("curl -f localhost:4444/status || exit 1")},
-			Interval:    aws.Int64(5),
-			Retries:     aws.Int64(4),
-			Timeout:     aws.Int64(5),
-			StartPeriod: aws.Int64(0),
+		HealthCheck: &ecsTypes.HealthCheck{
+			Command:     []string{"cmd.exe", "curl -f localhost:4444/status || exit 1"},
+			Interval:    aws.Int32(5),
+			Retries:     aws.Int32(4),
+			Timeout:     aws.Int32(5),
+			StartPeriod: aws.Int32(0),
 		},
 	}
 
@@ -67,17 +67,17 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 			"LOG_FILE":    "session.log",
 		},
 		Mounts: []string{logVolume},
-		HealthCheck: &ecs.HealthCheck{
-			Command:     []*string{aws.String("CMD-SHELL"), aws.String(fmt.Sprintf("curl -f localhost:%v/ || exit 1", recorderdPort))},
-			Interval:    aws.Int64(5),
-			Retries:     aws.Int64(4),
-			Timeout:     aws.Int64(5),
-			StartPeriod: aws.Int64(2),
+		HealthCheck: &ecsTypes.HealthCheck{
+			Command:     []string{"CMD-SHELL", fmt.Sprintf("curl -f localhost:%v/ || exit 1", recorderdPort)},
+			Interval:    aws.Int32(5),
+			Retries:     aws.Int32(4),
+			Timeout:     aws.Int32(5),
+			StartPeriod: aws.Int32(2),
 		},
-		DependsOn: []*ecs.ContainerDependency{
+		DependsOn: []ecsTypes.ContainerDependency{
 			{
-				Condition:     aws.String("START"),
-				ContainerName: &browserContainer.Name,
+				Condition:     ecsTypes.ContainerConditionStart,
+				ContainerName: aws.String(browserContainer.Name),
 			},
 		},
 	}
@@ -101,10 +101,10 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 		},
 		Mounts:      []string{logVolume},
 		HealthCheck: nil,
-		DependsOn: []*ecs.ContainerDependency{
+		DependsOn: []ecsTypes.ContainerDependency{
 			{
-				Condition:     aws.String("START"),
-				ContainerName: &browserContainer.Name,
+				Condition:     ecsTypes.ContainerConditionStart,
+				ContainerName: aws.String(browserContainer.Name),
 			},
 		},
 	}

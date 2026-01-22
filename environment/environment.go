@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/ecs"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	ecsTypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 
 	"github.com/zebrunner/esg/cachemaps/definitionmap"
 	"github.com/zebrunner/esg/cachemaps/resourcesToAllocate"
@@ -29,13 +29,13 @@ type ExecutionEnvironment struct {
 	AwsLogsGroup         string
 }
 
-func (env *ExecutionEnvironment) ContainerOverrides() []*ecs.ContainerOverride {
-	overrides := []*ecs.ContainerOverride{}
+func (env *ExecutionEnvironment) ContainerOverrides() []ecsTypes.ContainerOverride {
+	overrides := []ecsTypes.ContainerOverride{}
 	for _, container := range env.Containers {
-		cpu := container.Cpu()
-		memory := container.Memory()
-		override := ecs.ContainerOverride{
-			Name:   &container.Name,
+		cpu := int32(container.Cpu())
+		memory := int32(container.Memory())
+		override := ecsTypes.ContainerOverride{
+			Name:   aws.String(container.Name),
 			Cpu:    &cpu,
 			Memory: &memory,
 		}
@@ -51,18 +51,18 @@ func (env *ExecutionEnvironment) ContainerOverrides() []*ecs.ContainerOverride {
 		// ClientException: Actual length: '117374'. Max allowed length is '65536' bytes.
 		// It is also possible because we always register new generic task definition before it starts
 		if env.Type != envtype.GENERIC {
-			override.Command = aws.StringSlice(container.Command)
-			env := []*ecs.KeyValuePair{}
+			override.Command = container.Command
+			envVars := []ecsTypes.KeyValuePair{}
 			for k, v := range container.Env {
-				// need to declare local variables to provide as pointer later
-				key := k
-				value := v
-				env = append(env, &ecs.KeyValuePair{Name: &key, Value: &value})
+				envVars = append(envVars, ecsTypes.KeyValuePair{
+					Name:  aws.String(k),
+					Value: aws.String(v),
+				})
 			}
-			override.Environment = env
+			override.Environment = envVars
 		}
 
-		overrides = append(overrides, &override)
+		overrides = append(overrides, override)
 	}
 
 	return overrides
@@ -72,22 +72,19 @@ func (e *ExecutionEnvironment) HashOvverideDefinition() string {
 	overrideContainersData := make([]*Container, 0, len(e.Containers))
 
 	for _, container := range e.Containers {
-		dependsOn := make([]*ecs.ContainerDependency, 0)
+		dependsOn := make([]ecsTypes.ContainerDependency, 0)
 		if container.DependsOn != nil {
 			for _, dependency := range container.DependsOn {
-				if dependency == nil {
-					continue
-				}
-				dependsOn = append(dependsOn, &ecs.ContainerDependency{
+				dependsOn = append(dependsOn, ecsTypes.ContainerDependency{
 					Condition:     dependency.Condition,
 					ContainerName: dependency.ContainerName,
 				})
 			}
 		}
 
-		var healthCheck *ecs.HealthCheck
+		var healthCheck *ecsTypes.HealthCheck
 		if container.HealthCheck != nil {
-			healthCheck = &ecs.HealthCheck{
+			healthCheck = &ecsTypes.HealthCheck{
 				Command:     container.HealthCheck.Command,
 				Interval:    container.HealthCheck.Interval,
 				Retries:     container.HealthCheck.Retries,
@@ -123,70 +120,65 @@ func (e *ExecutionEnvironment) HashOvverideDefinition() string {
 	return overrideDefinitionHash
 }
 
-func (env *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefinition {
-	definitions := []*ecs.ContainerDefinition{}
+func (env *ExecutionEnvironment) ContainerDefinitions() []ecsTypes.ContainerDefinition {
+	definitions := []ecsTypes.ContainerDefinition{}
 
 	for _, c := range env.Containers {
-		cpu := c.Cpu()
-		memory := c.Memory()
+		cpu := int32(c.Cpu())
+		memory := int32(c.Memory())
 		imageUrl := c.getImageUrl()
-		containerDefinition := ecs.ContainerDefinition{
-			Name:                   &c.Name,
-			Image:                  &imageUrl,
-			Cpu:                    &cpu,
+		containerDefinition := ecsTypes.ContainerDefinition{
+			Name:                   aws.String(c.Name),
+			Image:                  aws.String(imageUrl),
+			Cpu:                    cpu,
 			Memory:                 &memory,
-			Essential:              &c.Essential,
+			Essential:              aws.Bool(c.Essential),
 			HealthCheck:            c.HealthCheck,
 			DependsOn:              c.DependsOn,
-			Links:                  aws.StringSlice(c.Links),
-			EntryPoint:             aws.StringSlice(c.EntryPoint),
-			ReadonlyRootFilesystem: &c.ReadOnlyRootFileSystem,
+			Links:                  c.Links,
+			EntryPoint:             c.EntryPoint,
+			ReadonlyRootFilesystem: aws.Bool(c.ReadOnlyRootFileSystem),
 		}
 
 		if strings.ToLower(env.Capabilities.PlatformName.ToPrimitive()) != envtype.WINDOWS.String() {
 			containerDefinition.MemoryReservation = &memory
-			containerDefinition.Privileged = &c.Privileged
+			containerDefinition.Privileged = aws.Bool(c.Privileged)
 		}
 
 		if c.WorkingDirectory != "" {
-			containerDefinition.WorkingDirectory = &c.WorkingDirectory
+			containerDefinition.WorkingDirectory = aws.String(c.WorkingDirectory)
 		}
 
 		if env.AwsLogsGroup != "" {
 			streamPrefix := env.Type.String()
 
-			containerDefinition.LogConfiguration = &ecs.LogConfiguration{
-				LogDriver: aws.String("awslogs"),
-				Options: map[string]*string{
-					"awslogs-group":         &env.AwsLogsGroup,
-					"awslogs-region":        &config.Conf.AwsRegion,
-					"awslogs-stream-prefix": &streamPrefix,
+			containerDefinition.LogConfiguration = &ecsTypes.LogConfiguration{
+				LogDriver: ecsTypes.LogDriverAwslogs,
+				Options: map[string]string{
+					"awslogs-group":         env.AwsLogsGroup,
+					"awslogs-region":        config.Conf.AwsRegion,
+					"awslogs-stream-prefix": streamPrefix,
 				},
 			}
 		}
 
-		volumes := []*ecs.MountPoint{}
+		volumes := []ecsTypes.MountPoint{}
 		for _, volumeName := range c.Mounts {
-			// local declarations required to append all values
 			volume := env.Volumes[volumeName]
-			name := volumeName
-			containerPath := volume.ContainerPath
-			readOnly := volume.ReadOnly
-			volumes = append(volumes, &ecs.MountPoint{
-				ContainerPath: &containerPath,
-				SourceVolume:  &name,
-				ReadOnly:      &readOnly,
+			volumes = append(volumes, ecsTypes.MountPoint{
+				ContainerPath: aws.String(volume.ContainerPath),
+				SourceVolume:  aws.String(volumeName),
+				ReadOnly:      aws.Bool(volume.ReadOnly),
 			})
 		}
 		containerDefinition.MountPoints = volumes
 
-		portMappings := []*ecs.PortMapping{}
+		portMappings := []ecsTypes.PortMapping{}
 		for _, mapping := range c.Ports {
-			m := ecs.PortMapping{
-				ContainerPort: aws.Int64(mapping.ContainerPort),
-				HostPort:      aws.Int64(mapping.HostPort),
-			}
-			portMappings = append(portMappings, &m)
+			portMappings = append(portMappings, ecsTypes.PortMapping{
+				ContainerPort: aws.Int32(int32(mapping.ContainerPort)),
+				HostPort:      aws.Int32(int32(mapping.HostPort)),
+			})
 		}
 		containerDefinition.PortMappings = portMappings
 
@@ -197,39 +189,49 @@ func (env *ExecutionEnvironment) ContainerDefinitions() []*ecs.ContainerDefiniti
 		// ClientException: Actual length: '117374'. Max allowed length is '65536' bytes.
 		// It is also possible because we always register new generic task definition before it starts
 		if env.Type == envtype.GENERIC {
-			env := []*ecs.KeyValuePair{}
+			envVars := []ecsTypes.KeyValuePair{}
 			for k, v := range c.Env {
-				// need to declare local variables to provide as pointer later
-				key := k
-				value := v
-				env = append(env, &ecs.KeyValuePair{Name: &key, Value: &value})
+				envVars = append(envVars, ecsTypes.KeyValuePair{
+					Name:  aws.String(k),
+					Value: aws.String(v),
+				})
 			}
 
-			containerDefinition.Environment = env
-			containerDefinition.Command = aws.StringSlice(c.Command)
+			containerDefinition.Environment = envVars
+			containerDefinition.Command = c.Command
 		}
 
-		definitions = append(definitions, &containerDefinition)
+		definitions = append(definitions, containerDefinition)
 	}
 
 	return definitions
 }
 
-func (env *ExecutionEnvironment) Volume() []*ecs.Volume {
-	volumes := []*ecs.Volume{}
+func (env *ExecutionEnvironment) Volume() []ecsTypes.Volume {
+	volumes := []ecsTypes.Volume{}
 	for n, v := range env.Volumes {
 		if v.HostPath != "" {
-			volumes = append(volumes, &ecs.Volume{
-				Host: &ecs.HostVolumeProperties{
+			volumes = append(volumes, ecsTypes.Volume{
+				Host: &ecsTypes.HostVolumeProperties{
 					SourcePath: aws.String(v.HostPath),
 				},
 				Name: aws.String(n),
 			})
 		} else {
-			volumes = append(volumes, &ecs.Volume{
-				DockerVolumeConfiguration: &ecs.DockerVolumeConfiguration{
+			var scope ecsTypes.Scope
+			switch v.Scope {
+			case "task":
+				scope = ecsTypes.ScopeTask
+			case "shared":
+				scope = ecsTypes.ScopeShared
+			default:
+				scope = ecsTypes.ScopeTask
+			}
+
+			volumes = append(volumes, ecsTypes.Volume{
+				DockerVolumeConfiguration: &ecsTypes.DockerVolumeConfiguration{
 					Driver: aws.String(v.Driver),
-					Scope:  aws.String(v.Scope),
+					Scope:  scope,
 				},
 				Name: aws.String(n),
 			})
@@ -242,22 +244,19 @@ func (env *ExecutionEnvironment) Volume() []*ecs.Volume {
 func (env *ExecutionEnvironment) HashRegisterDefinition() string {
 	containers := make([]*Container, 0)
 	for _, container := range env.Containers {
-		dependsOn := make([]*ecs.ContainerDependency, 0)
+		dependsOn := make([]ecsTypes.ContainerDependency, 0)
 		if container.DependsOn != nil {
 			for _, dependency := range container.DependsOn {
-				if dependency == nil {
-					continue
-				}
-				dependsOn = append(dependsOn, &ecs.ContainerDependency{
+				dependsOn = append(dependsOn, ecsTypes.ContainerDependency{
 					Condition:     dependency.Condition,
 					ContainerName: dependency.ContainerName,
 				})
 			}
 		}
 
-		var healthCheck *ecs.HealthCheck
+		var healthCheck *ecsTypes.HealthCheck
 		if container.HealthCheck != nil {
-			healthCheck = &ecs.HealthCheck{
+			healthCheck = &ecsTypes.HealthCheck{
 				Command:     container.HealthCheck.Command,
 				Interval:    container.HealthCheck.Interval,
 				Retries:     container.HealthCheck.Retries,

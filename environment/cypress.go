@@ -1,8 +1,8 @@
 package environment
 
 import (
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/ecs"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	ecsTypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
@@ -93,10 +93,10 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 		},
 		Mounts:     []string{entrypointVolume, taskVolume, logVolume, cypressVolume},
 		EntryPoint: []string{entrypointDir + "/entrypoint.sh"},
-		DependsOn: []*ecs.ContainerDependency{
+		DependsOn: []ecsTypes.ContainerDependency{
 			{
 				ContainerName: aws.String("clone"),
-				Condition:     aws.String("SUCCESS"),
+				Condition:     ecsTypes.ContainerConditionSuccess,
 			},
 		},
 
@@ -126,24 +126,21 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 		WorkingDirectory: workDir,
 		Command:          []string{"-c", entrypointDir + "/entrypoint.sh" + taskLogRedirect},
 		EntryPoint:       []string{"/bin/sh"},
-		HealthCheck: &ecs.HealthCheck{
-			Command: []*string{
-				aws.String("CMD-SHELL"),
-				aws.String("pgrep -f cypress >/dev/null || exit 1"),
-			},
-			Interval:    aws.Int64(5),
-			Retries:     aws.Int64(7),
-			Timeout:     aws.Int64(5),
-			StartPeriod: aws.Int64(30),
+		HealthCheck: &ecsTypes.HealthCheck{
+			Command:     []string{"CMD-SHELL", "pgrep -f cypress >/dev/null || exit 1"},
+			Interval:    aws.Int32(5),
+			Retries:     aws.Int32(7),
+			Timeout:     aws.Int32(5),
+			StartPeriod: aws.Int32(30),
 		},
-		DependsOn: []*ecs.ContainerDependency{
+		DependsOn: []ecsTypes.ContainerDependency{
 			{
 				ContainerName: aws.String("clone"),
-				Condition:     aws.String("SUCCESS"),
+				Condition:     ecsTypes.ContainerConditionSuccess,
 			},
 			{
 				ContainerName: aws.String("entrypoint"),
-				Condition:     aws.String("SUCCESS"),
+				Condition:     ecsTypes.ContainerConditionSuccess,
 			},
 		},
 
@@ -184,18 +181,18 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 		Command:     []string{"-c", "/entrypoint.sh" + ">>" + logDir + "/video.log 2>&1"},
 		EntryPoint:  []string{"/bin/sh"},
 		HealthCheck: nil,
-		DependsOn: []*ecs.ContainerDependency{
+		DependsOn: []ecsTypes.ContainerDependency{
 			{
 				ContainerName: aws.String("clone"),
-				Condition:     aws.String("SUCCESS"),
+				Condition:     ecsTypes.ContainerConditionSuccess,
 			},
 			{
 				ContainerName: aws.String("entrypoint"),
-				Condition:     aws.String("SUCCESS"),
+				Condition:     ecsTypes.ContainerConditionSuccess,
 			},
 			{
 				ContainerName: aws.String("browser"),
-				Condition:     aws.String("START"),
+				Condition:     ecsTypes.ContainerConditionStart,
 			},
 		},
 

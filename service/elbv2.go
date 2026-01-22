@@ -1,127 +1,130 @@
 package service
 
 import (
+	"context"
 	"fmt"
 
-	"github.com/aws/aws-sdk-go/service/elbv2"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	elbv2 "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
+	elbv2Types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/utils"
 )
 
-func DescribeLoadBalancer(lbArn string) (*elbv2.LoadBalancer, error) {
-	svc := elbv2.New(AwsSess)
+func DescribeLoadBalancer(ctx context.Context, lbArn string) (*elbv2Types.LoadBalancer, error) {
+	svc := elbv2.NewFromConfig(AwsCfg)
 
-	describeLBInput := elbv2.DescribeLoadBalancersInput{
-		LoadBalancerArns: []*string{&lbArn},
+	describeLBInput := &elbv2.DescribeLoadBalancersInput{
+		LoadBalancerArns: []string{lbArn},
 	}
 
-	describeLBOutput, err := utils.RetryThrottling(svc.DescribeLoadBalancers)(&describeLBInput)
+	describeLBOutput, err := svc.DescribeLoadBalancers(ctx, describeLBInput)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(describeLBOutput.LoadBalancers) < 1 || describeLBOutput.LoadBalancers[0] == nil {
+	if len(describeLBOutput.LoadBalancers) < 1 {
 		return nil, fmt.Errorf("load balancer %s was not found", lbArn)
 	}
 
-	return describeLBOutput.LoadBalancers[0], nil
+	return &describeLBOutput.LoadBalancers[0], nil
 }
 
-func DescribeTargetGroup(tgName string) (*elbv2.TargetGroup, error) {
-	svc := elbv2.New(AwsSess)
+func DescribeTargetGroup(ctx context.Context, tgName string) (*elbv2Types.TargetGroup, error) {
+	svc := elbv2.NewFromConfig(AwsCfg)
 
-	describeTGInput := elbv2.DescribeTargetGroupsInput{
-		Names: []*string{&tgName},
+	describeTGInput := &elbv2.DescribeTargetGroupsInput{
+		Names: []string{tgName},
 	}
 
-	describeTGOutput, err := utils.RetryThrottling(svc.DescribeTargetGroups)(&describeTGInput)
+	describeTGOutput, err := svc.DescribeTargetGroups(ctx, describeTGInput)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(describeTGOutput.TargetGroups) < 1 || describeTGOutput.TargetGroups[0] == nil {
+	if len(describeTGOutput.TargetGroups) < 1 {
 		return nil, fmt.Errorf("target group %s was not found", tgName)
 	}
 
-	return describeTGOutput.TargetGroups[0], nil
+	return &describeTGOutput.TargetGroups[0], nil
 }
 
-func DescribeListener(lbArn string) (*elbv2.Listener, error) {
-	svc := elbv2.New(AwsSess)
+func DescribeListener(ctx context.Context, lbArn string) (*elbv2Types.Listener, error) {
+	svc := elbv2.NewFromConfig(AwsCfg)
 
-	describeListenerInput := elbv2.DescribeListenersInput{
-		LoadBalancerArn: &lbArn,
+	describeListenerInput := &elbv2.DescribeListenersInput{
+		LoadBalancerArn: aws.String(lbArn),
 	}
 
-	describeListenerOutput, err := utils.RetryThrottling(svc.DescribeListeners)(&describeListenerInput)
+	describeListenerOutput, err := svc.DescribeListeners(ctx, describeListenerInput)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(describeListenerOutput.Listeners) < 1 || describeListenerOutput.Listeners[0] == nil {
+	if len(describeListenerOutput.Listeners) < 1 {
 		return nil, fmt.Errorf("no listener is attached to load balancer: %s", lbArn)
 	}
 
-	return describeListenerOutput.Listeners[0], nil
-
+	return &describeListenerOutput.Listeners[0], nil
 }
 
-func RegisterTarget(targetGroup *elbv2.TargetGroup, port int64) error {
+func RegisterTarget(ctx context.Context, targetGroup *elbv2Types.TargetGroup, port int64) error {
 	id, err := getTargetId(targetGroup)
 	if err != nil {
 		return err
 	}
 
-	registerTargetInput := elbv2.RegisterTargetsInput{
+	portInt32 := int32(port)
+	registerTargetInput := &elbv2.RegisterTargetsInput{
 		TargetGroupArn: targetGroup.TargetGroupArn,
-		Targets: []*elbv2.TargetDescription{{
-			Id:   &id,
-			Port: &port,
+		Targets: []elbv2Types.TargetDescription{{
+			Id:   aws.String(id),
+			Port: &portInt32,
 		}},
 	}
 
-	svc := elbv2.New(AwsSess)
-	_, err = utils.RetryThrottling(svc.RegisterTargets)(&registerTargetInput)
+	svc := elbv2.NewFromConfig(AwsCfg)
+	_, err = svc.RegisterTargets(ctx, registerTargetInput)
 
 	return err
 }
 
-func DeregisterTarget(targetGroup *elbv2.TargetGroup, port int64) error {
+func DeregisterTarget(ctx context.Context, targetGroup *elbv2Types.TargetGroup, port int64) error {
 	id, err := getTargetId(targetGroup)
 	if err != nil {
 		return err
 	}
 
-	deregisterTargetInput := elbv2.DeregisterTargetsInput{
+	portInt32 := int32(port)
+	deregisterTargetInput := &elbv2.DeregisterTargetsInput{
 		TargetGroupArn: targetGroup.TargetGroupArn,
-		Targets: []*elbv2.TargetDescription{{
-			Id:   &id,
-			Port: &port,
+		Targets: []elbv2Types.TargetDescription{{
+			Id:   aws.String(id),
+			Port: &portInt32,
 		}},
 	}
 
-	svc := elbv2.New(AwsSess)
-	_, err = utils.RetryThrottling(svc.DeregisterTargets)(&deregisterTargetInput)
+	svc := elbv2.NewFromConfig(AwsCfg)
+	_, err = svc.DeregisterTargets(ctx, deregisterTargetInput)
 
 	return err
 }
 
-func getTargetId(targetGroup *elbv2.TargetGroup) (string, error) {
+func getTargetId(targetGroup *elbv2Types.TargetGroup) (string, error) {
 	// Use explicit target ID from config when IMDS is disabled (hop limit = 1)
 	if config.Conf.AwsTargetId != "" {
 		return config.Conf.AwsTargetId, nil
 	}
 
-	switch *targetGroup.TargetType {
-	case "ip":
-		if targetGroup.IpAddressType != nil && *targetGroup.IpAddressType == "ipv6" {
+	switch targetGroup.TargetType {
+	case elbv2Types.TargetTypeEnumIp:
+		if targetGroup.IpAddressType == elbv2Types.TargetGroupIpAddressTypeEnumIpv6 {
 			return utils.GetMetadata(utils.Ipv6Item)
-		} else {
-			return utils.GetMetadata(utils.PrivateIpv4Item)
 		}
-	case "instance":
+		return utils.GetMetadata(utils.PrivateIpv4Item)
+	case elbv2Types.TargetTypeEnumInstance:
 		return utils.GetMetadata(utils.InstanceIdItem)
 	default:
-		return "", fmt.Errorf("unsupported target group type: %s", *targetGroup.TargetType)
+		return "", fmt.Errorf("unsupported target group type: %s", targetGroup.TargetType)
 	}
 }
