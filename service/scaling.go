@@ -361,6 +361,11 @@ func (s *scaler) AdjustCapacity(ctx context.Context) {
 	if len(requiredResources) == 0 {
 		s.ScaleDown(ctx, asg, freeResources)
 	} else {
+		// Check current ASG weight configuration before scale up
+		if s.hasInvalidWeightConfig(asg) {
+			s.log.Error("Scale up blocked: ASG has invalid instance weight configuration (nil or 0)")
+			return
+		}
 		s.ScaleUp(ctx, asg, requiredResources)
 	}
 }
@@ -655,6 +660,33 @@ func (s *scaler) SetDesiredCapacity(ctx context.Context, autoscalingSvc *autosca
 	_, err := autoscalingSvc.SetDesiredCapacity(ctx, setDesiredCapacityInput)
 
 	return err
+}
+
+// hasInvalidWeightConfig checks if ASG has any instance with nil or 0 weight
+func (s *scaler) hasInvalidWeightConfig(asg *autoscalingTypes.AutoScalingGroup) bool {
+	if asg.MixedInstancesPolicy == nil ||
+		asg.MixedInstancesPolicy.LaunchTemplate == nil ||
+		asg.MixedInstancesPolicy.LaunchTemplate.Overrides == nil {
+		s.log.Warn("ASG does not have MixedInstancesPolicy configured")
+		return true
+	}
+
+	for _, override := range asg.MixedInstancesPolicy.LaunchTemplate.Overrides {
+		if override.WeightedCapacity == nil {
+			s.log.WithField("instanceType", aws.ToString(override.InstanceType)).Warn("Instance has nil WeightedCapacity")
+			return true
+		}
+		weight, err := strconv.ParseInt(*override.WeightedCapacity, 10, 64)
+		if err != nil || weight <= 0 {
+			s.log.WithFields(log.Fields{
+				"instanceType":     aws.ToString(override.InstanceType),
+				"weightedCapacity": aws.ToString(override.WeightedCapacity),
+			}).Warn("Instance has invalid WeightedCapacity")
+			return true
+		}
+	}
+
+	return false
 }
 
 func deleteElement(slice []ecsTypes.ContainerInstance, index int) []ecsTypes.ContainerInstance {
