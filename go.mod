@@ -1,6 +1,6 @@
 module github.com/zebrunner/esg
 
-go 1.25.5
+go 1.25.6
 
 require (
 	github.com/aerokube/util v1.0.1
@@ -11,8 +11,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.7
 
 	// AWS SDK v2 - Service clients (for upcoming migration)
-	github.com/aws/aws-sdk-go-v2/service/autoscaling v1.62.5
-	github.com/aws/aws-sdk-go-v2/service/ec2 v1.279.2
+	github.com/aws/aws-sdk-go-v2/service/autoscaling v1.64.0
+	github.com/aws/aws-sdk-go-v2/service/ec2 v1.281.0
 	github.com/aws/aws-sdk-go-v2/service/ecr v1.55.1
 	github.com/aws/aws-sdk-go-v2/service/ecs v1.71.0
 	github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2 v1.54.6
