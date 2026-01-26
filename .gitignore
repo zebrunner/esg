@@ -169,11 +169,8 @@ management_entrypoint.sh
 *.bak
 
 # Test/temp files and folders
-test-delpoy.bash
-deploy.sh
-build/push
-build/temp
-e3s
-containers
-logs/
 build.sh
+
+# Ai rules
+.cursorrules
+.cursor/rules/
