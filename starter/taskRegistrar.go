@@ -122,7 +122,7 @@ out:
 		}
 
 		if outputErr == nil {
-			l.Debug("Task registered")
+			l.Debugf("task register attempt successful, placement strategy: %s, result task arn: %s", strategyName, aws.ToString(resultRunTask.Tasks[0].TaskArn))
 			utils.SendToChanIfNotBlocked(waitRequest.ResponseCh, aws.ToString(resultRunTask.Tasks[0].TaskArn))
 
 			if resourceAllocationEntity != nil {
