@@ -14,10 +14,7 @@ var (
 	Ipv6Item        metadataItem = "ipv6"
 )
 
-const (
-	longTermToken  = "21600"
-	shortTermToken = "15"
-)
+const shortTermToken = "15"
 
 const (
 	tokenURL    = "http://169.254.169.254/latest/api/token"
@@ -44,23 +41,6 @@ func GetMetadata(item metadataItem) (string, error) {
 	defer response.Body.Close()
 	body, err := io.ReadAll(response.Body)
 	return string(body), err
-}
-
-func RefreshIMDSV2Token() error {
-	tokenBytes, err := getToken(longTermToken)
-	if err != nil {
-		return err
-	}
-
-	generateMetadataReq, err := http.NewRequest("GET", metadataURL, nil)
-	if err != nil {
-		return err
-	}
-
-	generateMetadataReq.Header.Set("X-aws-ec2-metadata-token", string(tokenBytes))
-	_, err = http.DefaultClient.Do(generateMetadataReq)
-
-	return err
 }
 
 func getToken(ttlSeconds string) ([]byte, error) {

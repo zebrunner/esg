@@ -1,33 +1,29 @@
 package service
 
 import (
-	"github.com/aws/aws-sdk-go/service/ecr"
-	"github.com/zebrunner/esg/utils"
+	"context"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ecr"
+	ecrTypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
 )
 
-func DescribeImages(registryAlly string, repositories []string) ([]*ecr.ImageDetail, error) {
-	svc := ecr.New(AwsSess)
+func DescribeImages(ctx context.Context, registryId string, repositories []string) ([]ecrTypes.ImageDetail, error) {
+	svc := ecr.NewFromConfig(AwsCfg)
 
-	imgDetails := []*ecr.ImageDetail{}
+	imgDetails := []ecrTypes.ImageDetail{}
 	for _, repository := range repositories {
-		describeImagesInput := ecr.DescribeImagesInput{
-			RegistryId:     &registryAlly,
-			RepositoryName: &repository,
-		}
+		paginator := ecr.NewDescribeImagesPaginator(svc, &ecr.DescribeImagesInput{
+			RegistryId:     aws.String(registryId),
+			RepositoryName: aws.String(repository),
+		})
 
-		for {
-			describeImagesOutput, err := utils.RetryThrottling(svc.DescribeImages)(&describeImagesInput)
+		for paginator.HasMorePages() {
+			page, err := paginator.NextPage(ctx)
 			if err != nil {
 				return nil, err
 			}
-
-			imgDetails = append(imgDetails, describeImagesOutput.ImageDetails...)
-
-			if describeImagesOutput.NextToken == nil {
-				break
-			}
-
-			describeImagesInput.NextToken = describeImagesOutput.NextToken
+			imgDetails = append(imgDetails, page.ImageDetails...)
 		}
 	}
 

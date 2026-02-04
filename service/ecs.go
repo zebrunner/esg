@@ -1,23 +1,20 @@
 package service
 
 import (
+	"context"
 	"fmt"
+	"math/rand"
 	"strings"
 	"time"
 
-	"math/rand"
-
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/client"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	awsSession "github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/ecs"
-	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ecs"
+	ecsTypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps"
 	"github.com/zebrunner/esg/cachemaps/mapper"
 	"github.com/zebrunner/esg/config"
-
 	"github.com/zebrunner/esg/utils"
 )
 
@@ -26,45 +23,22 @@ const (
 )
 
 var (
-	AwsSess          *awsSession.Session
 	progressivePause utils.ProgressivePause
 )
 
 func init() {
-	sess, err := InitAws()
-	if err != nil {
-		log.Fatal("failed to init aws session")
-	}
-	AwsSess = sess
 	progressivePause = utils.CreateProgressivePause(0, 350)
 }
 
-func InitAws() (*awsSession.Session, error) {
-	sess, err := awsSession.NewSession(&aws.Config{
-		Region:     &config.Conf.AwsRegion,
-		MaxRetries: &config.Conf.AwsRetry,
-		Retryer: client.DefaultRetryer{
-			MaxThrottleDelay: 60 * time.Second,
-			MinThrottleDelay: 5 * time.Second,
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
+func CreateTaskDefinition(ctx context.Context, definitions []ecsTypes.ContainerDefinition, volumes []ecsTypes.Volume, taskDefinitionFamily string, taskRoleArn string) (*ecsTypes.TaskDefinition, error) {
+	svc := ecs.NewFromConfig(AwsCfg)
 
-	return sess, nil
-}
-
-func CreateTaskDefinition(definitions []*ecs.ContainerDefinition, volumes []*ecs.Volume, taskDefinitionFamily string, taskRoleArn string) (*ecs.TaskDefinition, error) {
-	svc := ecs.New(AwsSess)
-
-	networkMode := "bridge"
-	input := ecs.RegisterTaskDefinitionInput{
-		NetworkMode:          &networkMode,
+	input := &ecs.RegisterTaskDefinitionInput{
+		NetworkMode:          ecsTypes.NetworkModeBridge,
 		ContainerDefinitions: definitions,
 		Volumes:              volumes,
-		Family:               &taskDefinitionFamily,
-		TaskRoleArn:          &taskRoleArn,
+		Family:               aws.String(taskDefinitionFamily),
+		TaskRoleArn:          aws.String(taskRoleArn),
 	}
 
 	var err error
@@ -73,7 +47,7 @@ func CreateTaskDefinition(definitions []*ecs.ContainerDefinition, volumes []*ecs
 		time.Sleep(progressivePause.GetPause())
 
 		var resultTaskDefinition *ecs.RegisterTaskDefinitionOutput
-		resultTaskDefinition, err = utils.RetryThrottling(svc.RegisterTaskDefinition)(&input)
+		resultTaskDefinition, err = svc.RegisterTaskDefinition(ctx, input)
 
 		if err != nil {
 			log.WithField("retry", i).WithError(err).Warn("failed to create task definition")
@@ -93,11 +67,11 @@ func ConstDelay(t time.Duration) func(int) time.Duration {
 	}
 }
 
-func StopTaskForcibly(taskId string, stopReason mapper.StoppedReason) error {
-	svc := ecs.New(AwsSess)
+func StopTaskForcibly(ctx context.Context, taskId string, stopReason mapper.StoppedReason) error {
+	svc := ecs.NewFromConfig(AwsCfg)
 
 	stopTaskInput := &ecs.StopTaskInput{
-		Cluster: &config.Conf.AwsCluster,
+		Cluster: aws.String(config.Conf.AwsCluster),
 		Reason:  aws.String(string(stopReason)),
 		Task:    aws.String(taskId),
 	}
@@ -108,7 +82,7 @@ func StopTaskForcibly(taskId string, stopReason mapper.StoppedReason) error {
 	for i := 0; i < 5; i++ {
 		l = l.WithField("retry", i)
 
-		result, err = utils.RetryThrottling(svc.StopTask)(stopTaskInput)
+		result, err = svc.StopTask(ctx, stopTaskInput)
 		if err != nil {
 			l.WithError(err).Debug("Failed to stop task")
 			time.Sleep(time.Duration(rand.Intn(30)) * time.Second)
@@ -122,10 +96,10 @@ func StopTaskForcibly(taskId string, stopReason mapper.StoppedReason) error {
 	return err
 }
 
-func StopTask(mapperEntity mapper.Mapper, stopReason mapper.StoppedReason) error {
+func StopTask(ctx context.Context, mapperEntity mapper.Mapper, stopReason mapper.StoppedReason) error {
 	l := log.WithField(config.TaskIdKey, mapperEntity.TaskId).WithField(config.RouterUUID, mapperEntity.RouterUUID)
 
-	err := StopTaskForcibly(mapperEntity.TaskId, stopReason)
+	err := StopTaskForcibly(ctx, mapperEntity.TaskId, stopReason)
 	if err != nil {
 		l.WithError(err).Error("Failed to stop task!")
 		return err
@@ -147,32 +121,29 @@ func StopTask(mapperEntity mapper.Mapper, stopReason mapper.StoppedReason) error
 	return nil
 }
 
-func DescribeTask(taskArn string) (*ecs.DescribeTasksOutput, error) {
-	svc := ecs.New(AwsSess)
+func DescribeTask(ctx context.Context, taskArn string) (*ecs.DescribeTasksOutput, error) {
+	svc := ecs.NewFromConfig(AwsCfg)
 	input := &ecs.DescribeTasksInput{
-		Cluster: &config.Conf.AwsCluster,
-		Tasks: []*string{
-			aws.String(taskArn),
-		},
+		Cluster: aws.String(config.Conf.AwsCluster),
+		Tasks:   []string{taskArn},
 	}
 
-	result, err := utils.RetryThrottling(svc.DescribeTasks)(input)
-	return result, err
+	return svc.DescribeTasks(ctx, input)
 }
 
-func DescribeTasks(taskArns []string) ([]*ecs.Task, error) {
-	svc := ecs.New(AwsSess)
+func DescribeTasks(ctx context.Context, taskArns []string) ([]ecsTypes.Task, error) {
+	svc := ecs.NewFromConfig(AwsCfg)
 	taskPages := utils.Paginate(taskArns, 100)
-	resultArr := make([]*ecs.Task, 0)
+	resultArr := make([]ecsTypes.Task, 0)
 
 	for _, tasks := range taskPages {
 		time.Sleep(2 * time.Second)
 		input := &ecs.DescribeTasksInput{
-			Cluster: &config.Conf.AwsCluster,
-			Tasks:   aws.StringSlice(tasks),
+			Cluster: aws.String(config.Conf.AwsCluster),
+			Tasks:   tasks,
 		}
 
-		result, err := utils.RetryThrottling(svc.DescribeTasks)(input)
+		result, err := svc.DescribeTasks(ctx, input)
 		if err != nil {
 			return nil, err
 		}
@@ -182,49 +153,34 @@ func DescribeTasks(taskArns []string) ([]*ecs.Task, error) {
 	return resultArr, nil
 }
 
-func GeneratePreSignedURL(key string) (string, error) {
-	conf := &config.Conf
-
-	s3Session := AwsSess
-	if conf.S3AwsAccessKeyID == "" && conf.S3AwsSecretAccessKey == "" && conf.S3Region != "" {
-		// only s3 region is provided
-		s3Session = awsSession.Must(awsSession.NewSession(&aws.Config{
-			Region: &conf.S3Region,
-		}))
-
-	} else if conf.S3AwsAccessKeyID != "" && conf.S3AwsSecretAccessKey != "" && conf.S3Region != "" {
-		creds := credentials.NewStaticCredentials(conf.S3AwsAccessKeyID, conf.S3AwsSecretAccessKey, "")
-		s3Session = awsSession.Must(awsSession.NewSession(&aws.Config{
-			Credentials: creds,
-			Region:      &conf.S3Region,
-		}))
+func GeneratePreSignedURL(ctx context.Context, key string) (string, error) {
+	s3Cfg, err := GetS3Config(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to get S3 config: %w", err)
 	}
 
-	//S3 connection information
-	s3Svc := s3.New(s3Session)
+	s3Svc := s3.NewFromConfig(s3Cfg)
 
-	//ZEB-5145: ESG: return 404 when requested video/session or execution log is not available
-	res, err := utils.RetryThrottling(s3Svc.ListObjectsV2)(&s3.ListObjectsV2Input{
-		Bucket: &config.Conf.S3Bucket,
-		Prefix: &key,
+	res, err := s3Svc.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+		Bucket: aws.String(config.Conf.S3Bucket),
+		Prefix: aws.String(key),
 	})
-
 	if err != nil {
 		return "", err
 	}
-	if *res.KeyCount == 0 {
-		err = fmt.Errorf("The specified key does not exist: " + key)
-		return "", err
+	if aws.ToInt32(res.KeyCount) == 0 {
+		return "", fmt.Errorf("the specified key does not exist: %s", key)
 	}
 
-	req, _ := s3Svc.GetObjectRequest(&s3.GetObjectInput{
-		Bucket: &config.Conf.S3Bucket,
-		Key:    &key,
-	})
-	urlStr, err := req.Presign(presignUrlTimeout)
+	presignClient := s3.NewPresignClient(s3Svc)
+
+	presignedReq, err := presignClient.PresignGetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(config.Conf.S3Bucket),
+		Key:    aws.String(key),
+	}, s3.WithPresignExpires(presignUrlTimeout))
 	if err != nil {
 		return "", err
 	}
 
-	return urlStr, nil
+	return presignedReq.URL, nil
 }

@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/ecs"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	ecsTypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
 	envtype "github.com/zebrunner/esg/environment/envType"
@@ -93,12 +93,12 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 		Mounts:     []string{logVolume, shmVolume, seleniumBrowserVolume, tmpBrowserVolume},
 		Command:    []string{"-c", "/entrypoint.sh" + taskLogRedirect},
 		EntryPoint: []string{"/bin/sh"},
-		HealthCheck: &ecs.HealthCheck{
-			Command:     []*string{aws.String("CMD-SHELL"), aws.String(fmt.Sprintf("curl -f localhost:%v/status || exit 1", seleniumPort))},
-			Interval:    aws.Int64(8),
-			Retries:     aws.Int64(8),
-			Timeout:     aws.Int64(5),
-			StartPeriod: aws.Int64(10),
+		HealthCheck: &ecsTypes.HealthCheck{
+			Command:     []string{"CMD-SHELL", fmt.Sprintf("curl -f localhost:%v/status || exit 1", seleniumPort)},
+			Interval:    aws.Int32(8),
+			Retries:     aws.Int32(8),
+			Timeout:     aws.Int32(5),
+			StartPeriod: aws.Int32(10),
 		},
 
 		ReadOnlyRootFileSystem: true,
@@ -129,18 +129,18 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 		},
 		Mounts: []string{logVolume, tmpRecorderVolume},
 		Links:  []string{"browser"},
-		HealthCheck: &ecs.HealthCheck{
+		HealthCheck: &ecsTypes.HealthCheck{
 			// check if recorder's binary process is running, no curl is downloaded inside of container
-			Command:     []*string{aws.String("CMD-SHELL"), aws.String("pgrep recorder")},
-			Interval:    aws.Int64(5),
-			Retries:     aws.Int64(4),
-			Timeout:     aws.Int64(5),
-			StartPeriod: aws.Int64(2),
+			Command:     []string{"CMD-SHELL", "pgrep recorder"},
+			Interval:    aws.Int32(5),
+			Retries:     aws.Int32(4),
+			Timeout:     aws.Int32(5),
+			StartPeriod: aws.Int32(2),
 		},
-		DependsOn: []*ecs.ContainerDependency{
+		DependsOn: []ecsTypes.ContainerDependency{
 			{
 				ContainerName: aws.String("browser"),
-				Condition:     aws.String("START"),
+				Condition:     ecsTypes.ContainerConditionStart,
 			},
 		},
 

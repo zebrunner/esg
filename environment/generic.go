@@ -3,8 +3,8 @@ package environment
 import (
 	"strings"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/ecs"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	ecsTypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/capabilities"
@@ -162,20 +162,20 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 		mounts = append(mounts, executorPlaywrightCacheVolume)
 	}
 
-	dependsOn := make([]*ecs.ContainerDependency, 0)
+	dependsOn := make([]ecsTypes.ContainerDependency, 0)
 	if includeMaven {
-		dependsOn = append(dependsOn, &ecs.ContainerDependency{
+		dependsOn = append(dependsOn, ecsTypes.ContainerDependency{
 			ContainerName: aws.String("maven"),
-			Condition:     aws.String("COMPLETE"),
+			Condition:     ecsTypes.ContainerConditionComplete,
 		})
 	}
-	dependsOn = append(dependsOn, &ecs.ContainerDependency{
+	dependsOn = append(dependsOn, ecsTypes.ContainerDependency{
 		ContainerName: aws.String("entrypoint"),
-		Condition:     aws.String("COMPLETE"),
+		Condition:     ecsTypes.ContainerConditionComplete,
 	})
-	dependsOn = append(dependsOn, &ecs.ContainerDependency{
+	dependsOn = append(dependsOn, ecsTypes.ContainerDependency{
 		ContainerName: aws.String("clone"),
-		Condition:     aws.String("COMPLETE"),
+		Condition:     ecsTypes.ContainerConditionComplete,
 	})
 	executorContainer := Container{
 		Name:       "executor",
@@ -191,12 +191,12 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 		// we can't redirect logs from this place to support SIGTERM detection on trap
 		// actual redirection happens inside entrypoint container: https://github.com/zebrunner/entrypoint/issues/51
 		Command: []string{entrypointDir + "/entrypoint.sh"},
-		HealthCheck: &ecs.HealthCheck{
-			Command:     []*string{aws.String("CMD-SHELL"), aws.String("exit 0")}, // Healthy as container started
-			Interval:    aws.Int64(5),
-			Retries:     aws.Int64(3),
-			Timeout:     aws.Int64(10),
-			StartPeriod: aws.Int64(0),
+		HealthCheck: &ecsTypes.HealthCheck{
+			Command:     []string{"CMD-SHELL", "exit 0"}, // Healthy as container started
+			Interval:    aws.Int32(5),
+			Retries:     aws.Int32(3),
+			Timeout:     aws.Int32(10),
+			StartPeriod: aws.Int32(0),
 		},
 		DependsOn:              dependsOn,
 		ReadOnlyRootFileSystem: true,
@@ -233,13 +233,13 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 			"LOG_FILE":             "console.log",
 		},
 		Mounts: []string{logVolume, tmpRecorderVolume},
-		HealthCheck: &ecs.HealthCheck{
+		HealthCheck: &ecsTypes.HealthCheck{
 			// check if recorder's binary process is running, no curl is downloaded inside of container
-			Command:     []*string{aws.String("CMD-SHELL"), aws.String("pgrep recorder")},
-			Interval:    aws.Int64(5),
-			Retries:     aws.Int64(4),
-			Timeout:     aws.Int64(5),
-			StartPeriod: aws.Int64(2),
+			Command:     []string{"CMD-SHELL", "pgrep recorder"},
+			Interval:    aws.Int32(5),
+			Retries:     aws.Int32(4),
+			Timeout:     aws.Int32(5),
+			StartPeriod: aws.Int32(2),
 		},
 		ReadOnlyRootFileSystem: true,
 	}

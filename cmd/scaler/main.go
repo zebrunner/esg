@@ -10,8 +10,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/ecs"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ecs"
+	ecsTypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/zebrunner/esg/cachemaps"
 	"github.com/zebrunner/esg/cachemaps/mapper"
 	"github.com/zebrunner/esg/cachemaps/utilsmap"
@@ -19,14 +20,13 @@ import (
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
 
-	awsSession "github.com/aws/aws-sdk-go/aws/session"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 
 	"github.com/zebrunner/esg/zebrunner"
 )
 
-func stopLostTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
+func stopLostTasks(ctx context.Context, svc *ecs.Client, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	// still use ServiceStartupTimeout for timer, however the task will be removed if it has been running for LostTaskCooldownTimeout
@@ -56,7 +56,7 @@ func stopLostTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 				}
 			}
 
-			taskArns, err := service.GetClusterTasksArn(svc)
+			taskArns, err := service.GetClusterTasksArn(ctx, svc)
 			if err != nil {
 				log.WithError(err).Error("Error on ecs list-tasks operation")
 				continue
@@ -67,7 +67,7 @@ func stopLostTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 			for _, taskArn := range taskArns {
 				isFound := false
 				for _, key := range taskIds {
-					taskId := strings.Split(*taskArn, "/")[2]
+					taskId := strings.Split(taskArn, "/")[2]
 					if key == taskId {
 						isFound = true
 						break
@@ -75,7 +75,7 @@ func stopLostTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 				}
 
 				if !isFound {
-					tasksToDescribe = append(tasksToDescribe, *taskArn)
+					tasksToDescribe = append(tasksToDescribe, taskArn)
 				}
 			}
 
@@ -84,15 +84,15 @@ func stopLostTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 				continue
 			}
 
-			tasks, err := service.DescribeTasks(tasksToDescribe)
+			tasks, err := service.DescribeTasks(ctx, tasksToDescribe)
 			if err != nil {
 				log.WithError(err).Warn("StopLostTasks(): failed to describe lost tasks")
 				continue
 			}
 
 			for _, task := range tasks {
-				if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
-					if time.Since(*task.StartedAt) <= config.Conf.LostTaskCooldownTimeout {
+				if aws.ToString(task.LastStatus) == "RUNNING" && aws.ToString(task.DesiredStatus) != "STOPPED" {
+					if time.Since(aws.ToTime(task.StartedAt)) <= config.Conf.LostTaskCooldownTimeout {
 						continue
 					}
 
@@ -100,11 +100,11 @@ func stopLostTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 						continue
 					}
 
-					taskId := strings.Split(*task.TaskArn, "/")[2]
+					taskId := strings.Split(aws.ToString(task.TaskArn), "/")[2]
 					l := log.WithField(config.TaskIdKey, taskId)
 					l.Warn("Unrecognized task detected! Aborting")
 
-					err := service.StopTaskForcibly(taskId, mapper.TaskLost)
+					err := service.StopTaskForcibly(context.Background(), taskId, mapper.TaskLost)
 					if err != nil {
 						l.WithError(err).Error("Failed to stop the task")
 					}
@@ -114,7 +114,7 @@ func stopLostTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 	}
 }
 
-func stopUnhealthyTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
+func stopUnhealthyTasks(ctx context.Context, svc *ecs.Client, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	timer := utils.CreateTimer(10 * time.Minute)
@@ -147,7 +147,7 @@ func stopUnhealthyTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 				continue
 			}
 
-			tasks := service.GetTasksByTaskIds(taskIds, svc)
+			tasks := service.GetTasksByTaskIds(ctx, taskIds, svc)
 
 			if len(tasks) <= 0 {
 				continue
@@ -161,11 +161,11 @@ func stopUnhealthyTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 			}
 
 			for _, task := range tasks {
-				taskId := strings.Split(*task.TaskArn, "/")[2]
+				taskId := strings.Split(aws.ToString(task.TaskArn), "/")[2]
 				l := log.WithField(config.TaskIdKey, taskId)
 				// stop zombie and UNHEALTHY tasks that are not pending for stop.
 				// resource usage register and taskId mark for removal is performed only for stopped tasks
-				if *task.LastStatus == "RUNNING" && *task.DesiredStatus != "STOPPED" {
+				if aws.ToString(task.LastStatus) == "RUNNING" && aws.ToString(task.DesiredStatus) != "STOPPED" {
 					mapperEntity, ok := taskIdMapperMap[taskId]
 					if !ok {
 						l.Warn("Failed to find task in cache")
@@ -176,9 +176,9 @@ func stopUnhealthyTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 						continue
 					}
 
-					if *task.HealthStatus == "UNHEALTHY" {
+					if task.HealthStatus == ecsTypes.HealthStatusUnhealthy {
 						l.Warn("Aborting task due to UNHEALTHY HealthStatus")
-						err := service.StopTask(mapperEntity, mapper.TaskUnhealthy)
+						err := service.StopTask(ctx, mapperEntity, mapper.TaskUnhealthy)
 						if err != nil {
 							l.WithError(err).Error("Failed to stop the task")
 						}
@@ -186,10 +186,10 @@ func stopUnhealthyTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 						maxTimeout := time.Duration(mapperEntity.Capabilities.MaxTimeout) * time.Second
 						if task.CreatedAt != nil && time.Since(*task.CreatedAt) > maxTimeout {
 							l.WithField("maxTimeout", maxTimeout).Warn("Aborting task due to the max timeout")
-							err := service.StopTask(mapperEntity, mapper.TaskMaxTimeout)
+							err := service.StopTask(ctx, mapperEntity, mapper.TaskMaxTimeout)
 							if err != nil {
 								l.WithError(err).Error("Failed to stop task. Trying to stop forcibly")
-								err := service.StopTaskForcibly(mapperEntity.TaskId, mapper.TaskMaxTimeout)
+								err := service.StopTaskForcibly(context.Background(), mapperEntity.TaskId, mapper.TaskMaxTimeout)
 								if err != nil {
 									l.WithError(err).Error("Failed to stop task forcibly")
 								}
@@ -202,7 +202,7 @@ func stopUnhealthyTasks(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 	}
 }
 
-func trackResourceUsage(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
+func trackResourceUsage(ctx context.Context, svc *ecs.Client, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	timer := utils.CreateTimer(1 * time.Minute)
@@ -237,7 +237,7 @@ func trackResourceUsage(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 				continue
 			}
 
-			tasks := service.GetTasksByTaskIds(taskIds, svc)
+			tasks := service.GetTasksByTaskIds(ctx, taskIds, svc)
 
 			if len(tasks) <= 0 {
 				continue
@@ -252,13 +252,14 @@ func trackResourceUsage(ctx context.Context, svc *ecs.ECS, wg *sync.WaitGroup) {
 
 			// analyze tasks response
 			tasksCacheToUpdate := make(map[string]mapper.Mapper)
-			tasksToTrack := make(map[*mapper.Mapper]*ecs.Task)
-			for _, task := range tasks {
-				taskId := strings.Split(*task.TaskArn, "/")[2]
+			tasksToTrack := make(map[*mapper.Mapper]*ecsTypes.Task)
+			for i := range tasks {
+				task := &tasks[i]
+				taskId := strings.Split(aws.ToString(task.TaskArn), "/")[2]
 				l := log.WithField(config.TaskIdKey, taskId)
 
 				// tracking task only when execution is stopped
-				if *task.LastStatus != "STOPPED" {
+				if aws.ToString(task.LastStatus) != "STOPPED" {
 					continue
 				}
 
@@ -370,7 +371,7 @@ func stopIdleSessions(ctx context.Context, wg *sync.WaitGroup) {
 
 					selenium.CloseSession(m)
 
-					err = service.StopTask(*m, mapper.SessionIdleTimeout)
+					err = service.StopTask(context.Background(), *m, mapper.SessionIdleTimeout)
 					if err != nil {
 						l.WithError(err).Error("Failed to stop idle driver task!")
 					} else {
@@ -384,18 +385,6 @@ func stopIdleSessions(ctx context.Context, wg *sync.WaitGroup) {
 	}
 }
 
-func refreshIMDSV2Token() {
-	for {
-		err := utils.RefreshIMDSV2Token()
-		if err != nil {
-			utils.ExitWithError(err, "Failed to generate IMDSV2 token", log.NewEntry(log.StandardLogger()))
-		}
-
-		log.Debug("Successfully generated IMDSV2 token")
-		time.Sleep(2*time.Hour + 30*time.Minute)
-	}
-}
-
 func main() {
 	defer func() {
 		config.CloseConnections()
@@ -405,11 +394,12 @@ func main() {
 
 	log.SetLevel(config.Conf.ParseLogLevel())
 
-	awsSess, err := service.InitAws()
+	ctx := context.Background()
+
+	_, err := service.InitAwsConfig(ctx)
 	if err != nil {
-		utils.ExitWithError(err, "Failed to init aws session", log.NewEntry(log.StandardLogger()))
+		utils.ExitWithError(err, "Failed to init AWS config", log.NewEntry(log.StandardLogger()))
 	}
-	service.AwsSess = awsSess
 
 	err = config.InitRedisClusterConnection()
 	if err != nil {
@@ -422,13 +412,13 @@ func main() {
 		log.WithError(err).Error("Failed to set scaler version in cache")
 	}
 
-	scalersMap, err := service.InitScalingData()
+	scalersMap, err := service.InitScalingData(ctx)
 	if err != nil {
 		utils.ExitWithError(err, "Failed to init scaling data", log.NewEntry(log.StandardLogger()))
 	}
-	service.StartScalers(scalersMap)
+	service.StartScalers(ctx, scalersMap)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	workerCtx, cancel := context.WithCancel(context.Background())
 
 	go func() {
 		exit := make(chan os.Signal, 1)
@@ -438,35 +428,23 @@ func main() {
 		cancel()
 	}()
 
-	// Skip IMDS calls when static AWS credentials are configured
-	if !config.Conf.HasStaticCredentials() {
-		go refreshIMDSV2Token()
-	} else {
-		log.Info("Static AWS credentials configured, skipping IMDS token refresh")
-	}
-
 	var wg sync.WaitGroup
 
-	session, err := awsSession.NewSession(&aws.Config{Region: &config.Conf.AwsRegion, MaxRetries: &config.Conf.AwsRetry})
-	if err != nil {
-		utils.ExitWithError(err, "Failed to create AWS session", log.NewEntry(log.StandardLogger()))
-	} else {
-		svc := ecs.New(session)
+	svc := ecs.NewFromConfig(service.AwsCfg)
 
-		wg.Add(1)
-		go stopIdleSessions(ctx, &wg)
+	wg.Add(1)
+	go stopIdleSessions(workerCtx, &wg)
 
-		wg.Add(1)
-		go stopLostTasks(ctx, svc, &wg)
+	wg.Add(1)
+	go stopLostTasks(workerCtx, svc, &wg)
 
-		wg.Add(1)
-		go stopUnhealthyTasks(ctx, svc, &wg)
+	wg.Add(1)
+	go stopUnhealthyTasks(workerCtx, svc, &wg)
 
-		wg.Add(1)
-		go trackResourceUsage(ctx, svc, &wg)
+	wg.Add(1)
+	go trackResourceUsage(workerCtx, svc, &wg)
 
-		log.Info("Service started")
-	}
+	log.Info("Service started")
 
 	wg.Wait()
 	log.Info("Scaler exited")

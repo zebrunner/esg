@@ -2,6 +2,7 @@ package images
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -270,7 +271,8 @@ func buildImagesFromPublic(wg *sync.WaitGroup, repositories []string, imgsCh cha
 
 func buildImagesFromPrivate(wg *sync.WaitGroup, registryId string, repositories []string, imgsCh chan<- []Image, errorCh chan<- error) {
 	defer wg.Done()
-	imgsDetails, err := service.DescribeImages(registryId, repositories)
+	ctx := context.Background()
+	imgsDetails, err := service.DescribeImages(ctx, registryId, repositories)
 	if err != nil {
 		log.WithError(err).Error("Failed to describe private ecr images")
 		errorCh <- err
@@ -279,7 +281,7 @@ func buildImagesFromPrivate(wg *sync.WaitGroup, registryId string, repositories 
 
 	images := make([]Image, 0, len(imgsDetails))
 	for _, details := range imgsDetails {
-		if details != nil && details.RepositoryName != nil && details.ImageTags != nil {
+		if details.RepositoryName != nil && len(details.ImageTags) > 0 {
 			repository, err := RepositoryFromString(*details.RepositoryName)
 			if err != nil {
 				log.WithError(err).Error("Failed to get repository from string")
@@ -288,12 +290,12 @@ func buildImagesFromPrivate(wg *sync.WaitGroup, registryId string, repositories 
 			}
 
 			for _, imgTag := range details.ImageTags {
-				if imgTag != nil {
+				if imgTag != "" {
 					images = append(images, Image{
 						RepositoryName: repository.String(),
 						BrowserName:    repository.GetBrowserName(),
 						Platform:       repository.GetPlatform(),
-						Tag:            *imgTag,
+						Tag:            imgTag,
 						RegistryUri:    fmt.Sprintf("%s.dkr.ecr.%s.amazonaws.com", registryId, config.Conf.AwsRegion),
 					})
 				}

@@ -8,7 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aws/aws-sdk-go/service/ecs"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	ecsTypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps"
@@ -64,7 +65,7 @@ type startBasis struct {
 	DriverReqCaps *capabilities.RequestCaps
 	Env           *environment.ExecutionEnvironment
 	Phases        []phase
-	Task          *ecs.Task
+	Task          *ecsTypes.Task
 	TaskId        *string
 	MapperEntity  *mapper.Mapper
 	Reply         map[string]interface{}
@@ -94,7 +95,7 @@ func (s *startBasis) registerTaskPhase(ctx context.Context) (essential *utils.Se
 			case taskArn := <-waitRequest.ResponseCh:
 				taskId := strings.Split(taskArn, "/")[2]
 				log.WithField(config.TaskIdKey, taskId).Warn("Task registered after context is done")
-				service.StopTaskForcibly(taskId, mapper.TaskStartupFailure)
+				service.StopTaskForcibly(ctx, taskId, mapper.TaskStartupFailure)
 				return
 			}
 		}()
@@ -161,9 +162,9 @@ func (s *startBasis) setNetworkPhase(ctx context.Context) (essential *utils.Sele
 		return
 	case instance := <-waitRequest.ResponseCh:
 		if config.Conf.UsePublicIp {
-			s.Env.Network.IP = *instance.PublicIpAddress
+			s.Env.Network.IP = aws.ToString(instance.PublicIpAddress)
 		} else {
-			s.Env.Network.IP = *instance.PrivateIpAddress
+			s.Env.Network.IP = aws.ToString(instance.PrivateIpAddress)
 		}
 
 		nonEssential = s.setHostPort()
@@ -251,7 +252,7 @@ func (starter genericStarter) StartService(startupTime context.Context) (map[str
 	starter.basis.Request = starter.basis.Request.WithContext(genericCtx)
 	go func() {
 		// create new task definition for generic task
-		taskDefinition, err := service.CreateTaskDefinition(starter.basis.Env.ContainerDefinitions(), starter.basis.Env.Volume(), starter.basis.Env.TaskDefinitionFamily, starter.basis.Env.TaskRoleArn)
+		taskDefinition, err := service.CreateTaskDefinition(genericCtx, starter.basis.Env.ContainerDefinitions(), starter.basis.Env.Volume(), starter.basis.Env.TaskDefinitionFamily, starter.basis.Env.TaskRoleArn)
 		// abort launch if failed to create new task definition
 		if err != nil {
 			log.WithError(err).Error("Failed to create task definition")
@@ -262,7 +263,7 @@ func (starter genericStarter) StartService(startupTime context.Context) (map[str
 			return
 		}
 		// set revision of newly created task definition
-		starter.basis.Env.TaskDefinitionFamily = fmt.Sprintf("%s:%v", starter.basis.Env.TaskDefinitionFamily, *taskDefinition.Revision)
+		starter.basis.Env.TaskDefinitionFamily = fmt.Sprintf("%s:%v", starter.basis.Env.TaskDefinitionFamily, taskDefinition.Revision)
 
 		_, startErr := basicStarter(starter).StartService(startupTime)
 
@@ -323,7 +324,7 @@ func (starter basicStarter) StartService(startupTime context.Context) (map[strin
 
 			if nonEssential != nil {
 				// flush data, next retry
-				service.StopTaskForcibly(starter.basis.MapperEntity.TaskId, mapper.TaskStartupFailure)
+				service.StopTaskForcibly(context.Background(), starter.basis.MapperEntity.TaskId, mapper.TaskStartupFailure)
 				starter.basis.Log = &logCopy
 				starter.basis.MapperEntity = &mapperEntityCopy
 				starter.basis.Task = nil
@@ -355,7 +356,7 @@ func (starter basicStarter) finalizeOnFailure() {
 		}
 
 	} else {
-		err := service.StopTaskForcibly(starter.basis.MapperEntity.TaskId, starter.basis.MapperEntity.StopReason)
+		err := service.StopTaskForcibly(context.Background(), starter.basis.MapperEntity.TaskId, starter.basis.MapperEntity.StopReason)
 		if err != nil {
 			starter.basis.Log.WithError(err).Error("Failed to stop task on failure")
 		}
@@ -410,7 +411,7 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, workspace string, 
 					s.MapperEntity.StopReason = actuallMapperEntity.StopReason
 					s.MapperEntity.Status = mapper.Stopped
 
-					err := service.StopTaskForcibly(s.MapperEntity.TaskId, actuallMapperEntity.StopReason)
+					err := service.StopTaskForcibly(context.Background(), s.MapperEntity.TaskId, actuallMapperEntity.StopReason)
 					if err != nil {
 						s.Log.WithError(err).Error("Failed to stop generic task on finalize!")
 					}
@@ -463,11 +464,11 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, workspace string, 
 	return starter
 }
 
-func searchHostPort(task *ecs.Task, containerPort int64) (port int64, ok bool) {
+func searchHostPort(task *ecsTypes.Task, containerPort int64) (port int64, ok bool) {
 	for _, container := range task.Containers {
 		for _, networkBinding := range container.NetworkBindings {
-			if *networkBinding.ContainerPort == containerPort {
-				return *networkBinding.HostPort, true
+			if int64(aws.ToInt32(networkBinding.ContainerPort)) == containerPort {
+				return int64(aws.ToInt32(networkBinding.HostPort)), true
 			}
 		}
 	}

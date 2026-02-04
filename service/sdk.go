@@ -1,36 +1,42 @@
 package service
 
 import (
+	"context"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/autoscaling"
-	"github.com/aws/aws-sdk-go/service/ec2"
-	"github.com/aws/aws-sdk-go/service/ecs"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	ec2Types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/aws/aws-sdk-go-v2/service/ecs"
+	ecsTypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/utils"
 )
 
-func GetCapacityProviderTasks(svc *ecs.ECS, capacityProviderName string) ([]*ecs.Task, error) {
-	tasks := []*ecs.Task{}
-	listTasksInput := &ecs.ListTasksInput{
-		Cluster: &config.Conf.AwsCluster,
-	}
-	for {
-		listTasksResult, err := utils.RetryThrottling(svc.ListTasks)(listTasksInput)
+func GetCapacityProviderTasks(ctx context.Context, svc *ecs.Client, capacityProviderName string) ([]ecsTypes.Task, error) {
+	tasks := []ecsTypes.Task{}
+
+	paginator := ecs.NewListTasksPaginator(svc, &ecs.ListTasksInput{
+		Cluster: aws.String(config.Conf.AwsCluster),
+	})
+
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
 		if err != nil {
 			return nil, err
 		}
-		if len(listTasksResult.TaskArns) == 0 {
-			break
+
+		if len(page.TaskArns) == 0 {
+			continue
 		}
 
 		describeTasksInput := &ecs.DescribeTasksInput{
-			Cluster: &config.Conf.AwsCluster,
-			Tasks:   listTasksResult.TaskArns,
+			Cluster: aws.String(config.Conf.AwsCluster),
+			Tasks:   page.TaskArns,
 		}
-		describeTasksResult, err := utils.RetryThrottling(svc.DescribeTasks)(describeTasksInput)
+		describeTasksResult, err := svc.DescribeTasks(ctx, describeTasksInput)
 		if err != nil {
 			log.WithError(err).Warn("Failed to get all tasks. Only partial results returned")
 			break
@@ -41,58 +47,43 @@ func GetCapacityProviderTasks(svc *ecs.ECS, capacityProviderName string) ([]*ecs
 				tasks = append(tasks, task)
 			}
 		}
-
-		if listTasksResult.NextToken == nil {
-			break
-		}
-		listTasksInput = listTasksInput.SetNextToken(*listTasksResult.NextToken)
 	}
 
 	return tasks, nil
 }
 
-func GetClusterTasksArn(svc *ecs.ECS) ([]*string, error) {
-	taskArns := make([]*string, 0)
-	listTasksInput := &ecs.ListTasksInput{
-		Cluster: &config.Conf.AwsCluster,
-	}
+func GetClusterTasksArn(ctx context.Context, svc *ecs.Client) ([]string, error) {
+	taskArns := make([]string, 0)
 
-	for {
-		listTasksResult, err := utils.RetryThrottling(svc.ListTasks)(listTasksInput)
+	paginator := ecs.NewListTasksPaginator(svc, &ecs.ListTasksInput{
+		Cluster: aws.String(config.Conf.AwsCluster),
+	})
+
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
 		if err != nil {
 			return nil, err
 		}
-		if len(listTasksResult.TaskArns) == 0 {
-			break
-		}
-
-		taskArns = append(taskArns, listTasksResult.TaskArns...)
-
-		if listTasksResult.NextToken == nil {
-			break
-		}
-		listTasksInput = listTasksInput.SetNextToken(*listTasksResult.NextToken)
+		taskArns = append(taskArns, page.TaskArns...)
 	}
 
 	return taskArns, nil
 }
 
-func GetTasksByTaskIds(taskIds []string, svc *ecs.ECS) []*ecs.Task {
-	tasks := make([]*ecs.Task, 0)
+func GetTasksByTaskIds(ctx context.Context, taskIds []string, svc *ecs.Client) []ecsTypes.Task {
+	tasks := make([]ecsTypes.Task, 0)
 
-	// Construct pages of *string with 100 or fewer elements for requests. 100 is an AWS limitation for Describe* requests
-	pages := utils.Paginate(aws.StringSlice(taskIds), 100)
+	pages := utils.Paginate(taskIds, 100)
 
-	// Send DescribeTasks requests and save response tasks into array
 	for _, tasksPage := range pages {
-
-		describeTasksInput := ecs.DescribeTasksInput{
-			Cluster: &config.Conf.AwsCluster,
+		describeTasksInput := &ecs.DescribeTasksInput{
+			Cluster: aws.String(config.Conf.AwsCluster),
 			Tasks:   tasksPage,
 		}
-		output, err := utils.RetryThrottling(svc.DescribeTasks)(&describeTasksInput)
+		output, err := svc.DescribeTasks(ctx, describeTasksInput)
 		if err != nil {
 			log.WithError(err).Error("Failed to describe tasks!")
+			continue
 		}
 		tasks = append(tasks, output.Tasks...)
 	}
@@ -100,60 +91,56 @@ func GetTasksByTaskIds(taskIds []string, svc *ecs.ECS) []*ecs.Task {
 	return tasks
 }
 
-func ListContainerInstances(svc *ecs.ECS) ([]*string, error) {
-	containerInstancesArns := make([]*string, 0)
-	listContainerInstancesInput := ecs.ListContainerInstancesInput{
-		Cluster: &config.Conf.AwsCluster,
-	}
-	for {
-		listContainerInstancesResult, err := utils.RetryThrottling(svc.ListContainerInstances)(&listContainerInstancesInput)
-		if err != nil && len(listContainerInstancesResult.ContainerInstanceArns) != 0 {
+func ListContainerInstances(ctx context.Context, svc *ecs.Client) ([]string, error) {
+	containerInstancesArns := make([]string, 0)
+
+	paginator := ecs.NewListContainerInstancesPaginator(svc, &ecs.ListContainerInstancesInput{
+		Cluster: aws.String(config.Conf.AwsCluster),
+	})
+
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			if len(containerInstancesArns) > 0 {
+				return containerInstancesArns, nil
+			}
 			return nil, err
 		}
-
-		if len(listContainerInstancesResult.ContainerInstanceArns) == 0 {
-			break
-		}
-
-		containerInstancesArns = append(containerInstancesArns, listContainerInstancesResult.ContainerInstanceArns...)
-
-		if listContainerInstancesResult.NextToken == nil {
-			break
-		}
-		listContainerInstancesInput = *listContainerInstancesInput.SetNextToken(*listContainerInstancesResult.NextToken)
+		containerInstancesArns = append(containerInstancesArns, page.ContainerInstanceArns...)
 	}
 
 	return containerInstancesArns, nil
 }
 
-func DescribeContainerInstances(containerInstanceIdPtrs []*string, svc *ecs.ECS) ([]*ecs.ContainerInstance, error) {
-	pages := utils.Paginate(containerInstanceIdPtrs, 100)
-	containerInstances := make([]*ecs.ContainerInstance, 0)
+func DescribeContainerInstances(ctx context.Context, containerInstanceIds []string, svc *ecs.Client) ([]ecsTypes.ContainerInstance, error) {
+	containerInstances := make([]ecsTypes.ContainerInstance, 0)
+
+	pages := utils.Paginate(containerInstanceIds, 100)
 
 	for _, page := range pages {
-		describeInput := ecs.DescribeContainerInstancesInput{
-			Cluster:            &config.Conf.AwsCluster,
+		describeInput := &ecs.DescribeContainerInstancesInput{
+			Cluster:            aws.String(config.Conf.AwsCluster),
 			ContainerInstances: page,
 		}
 
-		describeResult, err := utils.RetryThrottling(svc.DescribeContainerInstances)(&describeInput)
+		describeResult, err := svc.DescribeContainerInstances(ctx, describeInput)
 		if err != nil {
 			log.WithField("describeResult", describeResult).WithField("error", err).Error("Failed to DescribeContainerInstances!")
 			return nil, err
 		}
 
-		if describeResult.Failures != nil && len(describeResult.Failures) != 0 {
+		if len(describeResult.Failures) != 0 {
 			log.Error("Found failure in DescribeContainerInstances operation")
 			for _, failure := range describeResult.Failures {
 				l := log.NewEntry(log.StandardLogger())
 				if failure.Arn != nil {
-					l = l.WithField("Arn", &failure.Arn)
+					l = l.WithField("Arn", *failure.Arn)
 				}
 				if failure.Reason != nil {
-					l = l.WithField("Reason", &failure.Reason)
+					l = l.WithField("Reason", *failure.Reason)
 				}
 				if failure.Detail != nil {
-					l = l.WithField("Detail", &failure.Detail)
+					l = l.WithField("Detail", *failure.Detail)
 				}
 				l.Error("Failure in DescribeContainerInstances")
 			}
@@ -165,13 +152,13 @@ func DescribeContainerInstances(containerInstanceIdPtrs []*string, svc *ecs.ECS)
 	return containerInstances, nil
 }
 
-func DescribeActiveContainerInstancesOfCapacityProvider(containerInstanceIdPtrs []*string, svc *ecs.ECS, capacityProviderName string) ([]*ecs.ContainerInstance, error) {
-	ciArr, err := DescribeContainerInstances(containerInstanceIdPtrs, svc)
+func DescribeActiveContainerInstancesOfCapacityProvider(ctx context.Context, containerInstanceIds []string, svc *ecs.Client, capacityProviderName string) ([]ecsTypes.ContainerInstance, error) {
+	ciArr, err := DescribeContainerInstances(ctx, containerInstanceIds, svc)
 	if err != nil {
 		return nil, err
 	}
 
-	cpCIArr := make([]*ecs.ContainerInstance, 0)
+	cpCIArr := make([]ecsTypes.ContainerInstance, 0)
 	for _, containerInstance := range ciArr {
 		if containerInstance.Status == nil || *containerInstance.Status != "ACTIVE" {
 			continue
@@ -187,115 +174,98 @@ func DescribeActiveContainerInstancesOfCapacityProvider(containerInstanceIdPtrs 
 	return cpCIArr, nil
 }
 
-func DescribeInstances(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) ([]*ec2.Instance, error) {
-	var ec2Instances []*ec2.Instance
-	input := ec2.DescribeInstancesInput{
-		InstanceIds: ec2InstanceIdPtrs,
-	}
-	for {
-		ec2Result, err := utils.RetryThrottling(ec2Svc.DescribeInstances)(&input)
+func DescribeInstances(ctx context.Context, ec2InstanceIds []string, ec2Svc *ec2.Client) ([]ec2Types.Instance, error) {
+	var ec2Instances []ec2Types.Instance
+
+	paginator := ec2.NewDescribeInstancesPaginator(ec2Svc, &ec2.DescribeInstancesInput{
+		InstanceIds: ec2InstanceIds,
+	})
+
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
 		if err != nil {
 			log.WithField("error", err).Error("Failed to DescribeInstances!")
 			return nil, err
 		}
 
-		for _, reservation := range ec2Result.Reservations {
+		for _, reservation := range page.Reservations {
 			ec2Instances = append(ec2Instances, reservation.Instances...)
-		}
-
-		if ec2Result.NextToken != nil {
-			input.NextToken = ec2Result.NextToken
-		} else {
-			break
 		}
 	}
 
 	return ec2Instances, nil
 }
 
-func DescribeInstancesByAsgName(asg *string, ec2Svc *ec2.EC2) ([]*ec2.Instance, error) {
-	var ec2Instances []*ec2.Instance
-	//search instances by aws:autoscaling:groupName tag
-	input := ec2.DescribeInstancesInput{
-		Filters: []*ec2.Filter{{
+func DescribeInstancesByAsgName(ctx context.Context, asgName string, ec2Svc *ec2.Client) ([]ec2Types.Instance, error) {
+	var ec2Instances []ec2Types.Instance
+
+	paginator := ec2.NewDescribeInstancesPaginator(ec2Svc, &ec2.DescribeInstancesInput{
+		Filters: []ec2Types.Filter{{
 			Name:   aws.String("tag:aws:autoscaling:groupName"),
-			Values: []*string{asg},
+			Values: []string{asgName},
 		}},
-	}
+	})
 
-	for {
-		ec2Result, err := utils.RetryThrottling(ec2Svc.DescribeInstances)(&input)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
 		if err != nil {
 			log.WithField("error", err).Error("Failed to DescribeInstances!")
 			return nil, err
 		}
 
-		for _, reservation := range ec2Result.Reservations {
+		for _, reservation := range page.Reservations {
 			ec2Instances = append(ec2Instances, reservation.Instances...)
-		}
-
-		if ec2Result.NextToken != nil {
-			input.NextToken = ec2Result.NextToken
-		} else {
-			break
 		}
 	}
 
 	return ec2Instances, nil
 }
 
-func DescribeInstancesStatus(ec2InstanceIdPtrs []*string, ec2Svc *ec2.EC2) ([]*string, []*string, error) {
-	input := &ec2.DescribeInstanceStatusInput{
-		InstanceIds: ec2InstanceIdPtrs,
-	}
+func DescribeInstancesStatus(ctx context.Context, ec2InstanceIds []string, ec2Svc *ec2.Client) ([]string, []string, error) {
+	healthyInstanceIds := make([]string, 0)
+	unhealthyInstanceIds := make([]string, 0)
 
-	healthyInstanceIdPtrs := make([]*string, 0)
-	unhealthyInstanceIdPtrs := make([]*string, 0)
+	paginator := ec2.NewDescribeInstanceStatusPaginator(ec2Svc, &ec2.DescribeInstanceStatusInput{
+		InstanceIds: ec2InstanceIds,
+	})
 
-	for {
-		statusOutput, err := utils.RetryThrottling(ec2Svc.DescribeInstanceStatus)(input)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
 		if err != nil {
 			log.WithField("error", err).Error("Failed to DescribeInstancesStatus!")
 			return nil, nil, err
 		}
 
-		instanceStatuses := statusOutput.InstanceStatuses
-		for _, is := range instanceStatuses {
-			l := log.WithField("_ec2Id", *is.InstanceId)
+		for _, is := range page.InstanceStatuses {
+			l := log.WithField("_ec2Id", aws.ToString(is.InstanceId))
 
-			if *is.InstanceStatus.Status == ec2.SummaryStatusImpaired || *is.SystemStatus.Status == ec2.SummaryStatusImpaired {
+			if is.InstanceStatus.Status == ec2Types.SummaryStatusImpaired ||
+				is.SystemStatus.Status == ec2Types.SummaryStatusImpaired {
 				l.Error("Unhealthy instance")
-				unhealthyInstanceIdPtrs = append(unhealthyInstanceIdPtrs, is.InstanceId)
+				unhealthyInstanceIds = append(unhealthyInstanceIds, aws.ToString(is.InstanceId))
 			} else {
 				l.Trace("Healthy instance")
-				healthyInstanceIdPtrs = append(healthyInstanceIdPtrs, is.InstanceId)
+				healthyInstanceIds = append(healthyInstanceIds, aws.ToString(is.InstanceId))
 			}
-		}
-
-		if statusOutput.NextToken != nil {
-			input.NextToken = statusOutput.NextToken
-		} else {
-			break
 		}
 	}
 
-	return healthyInstanceIdPtrs, unhealthyInstanceIdPtrs, nil
+	return healthyInstanceIds, unhealthyInstanceIds, nil
 }
 
-func TerminateInstancesInASG(ec2InstanceIdPtrs []*string, decrementDesiredCapacity bool, autoscalingSvc *autoscaling.AutoScaling) error {
-	for _, instanceId := range ec2InstanceIdPtrs {
-		stopInstanceInput := autoscaling.TerminateInstanceInAutoScalingGroupInput{
-			InstanceId:                     instanceId,
+func TerminateInstancesInASG(ctx context.Context, ec2InstanceIds []string, decrementDesiredCapacity bool, autoscalingSvc *autoscaling.Client) error {
+	for _, instanceId := range ec2InstanceIds {
+		stopInstanceInput := &autoscaling.TerminateInstanceInAutoScalingGroupInput{
+			InstanceId:                     aws.String(instanceId),
 			ShouldDecrementDesiredCapacity: aws.Bool(decrementDesiredCapacity),
 		}
 
-		_, err := utils.RetryThrottling(autoscalingSvc.TerminateInstanceInAutoScalingGroup)(&stopInstanceInput)
+		_, err := autoscalingSvc.TerminateInstanceInAutoScalingGroup(ctx, stopInstanceInput)
 		if err != nil {
 			log.WithError(err).Error("Failed to terminate instance")
 			return err
 		}
 
-		// as we terminating one by one
 		time.Sleep(250 * time.Millisecond)
 	}
 
