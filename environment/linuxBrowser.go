@@ -45,8 +45,8 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 		mitmCertificateDir    = "/root/.mitmproxy"
 		mitmCertificateVolume = "mitmCertificateVolume"
 
-		mitmPythonDir    = "/urs/local/lib/python3.11"
-		mitmPythonVolume = "mitmPythonVolume"
+		mitmRunDir    = "/run"
+		mitmRunVolume = "mitmRunVolume"
 	)
 
 	tz, err := caps.GetTimeZone()
@@ -209,7 +209,7 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 				"fileserverPort":   {ContainerPort: fileserverPort, HostPort: 0},
 				"proxyHandlerPort": {ContainerPort: proxyHandlerPort, HostPort: 0},
 			},
-			Mounts:     []string{logVolume, seleniumMitmVolume, tmpMitmVolume, mitmCacheVolume, mitmCertificateVolume, mitmPythonVolume},
+			Mounts:     []string{logVolume, seleniumMitmVolume, tmpMitmVolume, mitmCacheVolume, mitmCertificateVolume, mitmRunVolume},
 			Command:    []string{"-c", "/entrypoint.sh"},
 			EntryPoint: []string{"/bin/sh"},
 
@@ -281,7 +281,7 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 		env.Volumes[tmpMitmVolume] = volume{ContainerPath: tmpDir, Driver: "local", Scope: "task", ReadOnly: false}
 		env.Volumes[mitmCacheVolume] = volume{ContainerPath: mitmCacheDir, Driver: "local", Scope: "task", ReadOnly: false}
 		env.Volumes[mitmCertificateVolume] = volume{ContainerPath: mitmCertificateDir, Driver: "local", Scope: "task", ReadOnly: false}
-		env.Volumes[mitmPythonVolume] = volume{ContainerPath: mitmPythonDir, Driver: "local", Scope: "task", ReadOnly: false}
+		env.Volumes[mitmRunVolume] = volume{ContainerPath: mitmRunDir, Driver: "local", Scope: "task", ReadOnly: false}
 	}
 
 	err = calculateResources(&env, calcArr...)
