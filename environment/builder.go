@@ -18,7 +18,7 @@ const (
 	recorderImage        = config.ZebrunnerEcrRegistryUri + "/" + "recorder:2.3"
 	cypressRecorderImage = config.ZebrunnerEcrRegistryUri + "/" + "cypress-recorder:1.3"
 	appiumImage          = config.ZebrunnerEcrRegistryUri + "/" + "appium:2.0.15-readonlyfs"
-	cloneImage           = config.ZebrunnerEcrRegistryUri + "/" + "git:2.36.2"
+	cloneImage           = config.ZebrunnerEcrRegistryUri + "/" + "git:2.36.6-download"
 	entrypointImage      = config.ZebrunnerEcrRegistryUri + "/" + "entrypoint:2.5.3"
 	mavenImage           = config.ZebrunnerEcrRegistryUri + "/" + "m2-repo-carina:1.5"
 	winUploaderImage     = config.ZebrunnerEcrRegistryUri + "/" + "uploader:1.1-win"
