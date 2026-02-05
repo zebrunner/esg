@@ -84,8 +84,6 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 	cloneCommand := fmt.Sprintf("git clone --progress --depth=1 --single-branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
 	//fmt.Printf("cloneCommand: %s\n", cloneCommand)
 
-	taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
-
 	downloadUrls, extractErr := utils.ExtractCapabilityAsString(caps.EnvVariables.ToPrimitive(), "zebrunner:downloadUrls")
 	if extractErr != nil {
 		log.Debug(extractErr)
@@ -100,11 +98,11 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 		},
 		Privileged: false,
 		Env: map[string]string{
-			"CLONE_COMMAND": cloneCommand + taskLogRedirect,
+			"CLONE_COMMAND": cloneCommand,
 			"DOWNLOAD_URLS": downloadUrls,
 		},
 		Mounts:                 []string{taskVolume, logVolume, tmpSharedVolume},
-		EntryPoint:             []string{"/bin/sh"},
+		EntryPoint:             []string{"/entrypoint.sh"},
 		ReadOnlyRootFileSystem: true,
 	}
 
