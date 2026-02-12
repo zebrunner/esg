@@ -24,6 +24,14 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 
 	log.Trace("caps: ", caps)
 
+	// firefox: --log <LEVEL>                 set Gecko log level [possible values: fatal, error, warn, info, config, debug, trace]
+	// chrome --log-level=LEVEL               set log level: ALL, DEBUG, INFO, WARNING, SEVERE, OFF
+	driverArgs := "--log-level=INFO" // Chrome and MicrosoftEdge case to define log level
+	if caps.BrowserName == "firefox" {
+		// geckodriver case to define log level
+		driverArgs = ", \"--log=info\""
+	}
+
 	browserContainer := Container{
 		Name:      "browser",
 		image:     &image,
@@ -33,10 +41,11 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 		},
 		Mounts: []string{logVolume},
 		Env: map[string]string{
-			"LOG_DIR":   logDir,
-			"TASK_LOG":  "task.log",
-			"LOG_FILE":  "session.log",
-			"LOG_LEVEL": "INFO",
+			"DRIVER_ARGS": driverArgs,
+			"LOG_DIR":     logDir,
+			"TASK_LOG":    "task.log",
+			"LOG_FILE":    "session.log",
+			"LOG_LEVEL":   "INFO",
 		},
 		HealthCheck: &ecsTypes.HealthCheck{
 			Command:     []string{"cmd.exe", "curl -f localhost:4444/status || exit 1"},
@@ -132,6 +141,11 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 		CapacityProvider: config.Conf.AwsWinCapacityProvider,
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
 		AwsLogsGroup:     config.Conf.AwsLogsGroup,
+	}
+
+	if caps.BrowserName == "firefox" {
+		env.Network.Endpoints["driver"].Path = "/wd/hub/"
+		env.Network.Endpoints["healthcheck"].Path = "/wd/hub/"
 	}
 
 	err := calculateResources(&env,
