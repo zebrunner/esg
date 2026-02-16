@@ -54,6 +54,10 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 		},
 	}
 
+	if caps.BrowserName == "firefox" {
+		browserContainer.Env["DRIVER_ARGS"] = "--allow-hosts localhost"
+	}
+
 	recorderContainer := Container{
 		Name:  "recorder",
 		Image: winRecorderImage,
@@ -139,6 +143,10 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 		CapacityProvider: config.Conf.AwsWinCapacityProvider,
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
 		AwsLogsGroup:     config.Conf.AwsLogsGroup,
+	}
+
+	if caps.BrowserName == "firefox" {
+		env.Network.Endpoints["gecko_driver"] = &network.Endpoint{ContainerPort: seleniumPort, HostPort: 0, Path: "/"}
 	}
 
 	err := calculateResources(&env,
