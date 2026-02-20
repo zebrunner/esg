@@ -56,6 +56,8 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 
 	if caps.BrowserName == "firefox" {
 		browserContainer.Env["DRIVER_ARGS"] = "--allow-hosts localhost"
+		browserContainer.Env["MOZ_WEBRENDER"] = "0"
+		browserContainer.Env["MOZ_DISABLE_GPU_SANDBOX"] = "1"
 	}
 
 	recorderContainer := Container{
