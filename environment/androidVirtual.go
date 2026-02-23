@@ -60,7 +60,7 @@ func buildAppiumRedroid(workspace string, routerUUID string, image images.Image,
 
 	appiumContainer := Container{
 		Name:  "appium",
-		image: &image,
+		Image: appiumImage,
 		Res: Resources{
 			Cpu:    appiumCpu,
 			Memory: appiumMemory,
