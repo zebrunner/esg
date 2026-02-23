@@ -310,7 +310,7 @@ func (starter basicStarter) StartService(startupTime context.Context) (map[strin
 				exitError = essential
 			} else if me != nil && (me.StopReason == mapper.TaskAborted || me.StopReason == mapper.TaskFinished) {
 				starter.basis.MapperEntity.StopReason = me.StopReason
-				exitError = utils.CreationErr(fmt.Errorf(string(me.StopReason)))
+				exitError = utils.CreationErr(fmt.Errorf("%s", me.StopReason))
 			} else if starter.basis.Request.Context().Err() != nil {
 				starter.basis.MapperEntity.StopReason = mapper.TaskStartupFailure
 				exitError = utils.CreationErr(fmt.Errorf("service start has been canceled"))

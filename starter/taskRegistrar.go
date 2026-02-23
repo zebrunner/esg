@@ -112,7 +112,7 @@ out:
 				sleepRateLimit = time.Duration(15+rand.Intn(15)) * time.Second
 			}
 		} else if len(resultRunTask.Failures) != 0 {
-			outputErr = fmt.Errorf(aws.ToString(resultRunTask.Failures[0].Reason))
+			outputErr = fmt.Errorf("%s", aws.ToString(resultRunTask.Failures[0].Reason))
 			l.WithError(outputErr).Debug("Task register failed: response contains failures")
 			sleepRateLimit = time.Duration(5+(rand.Intn(15))) * time.Second
 		} else if len(resultRunTask.Tasks) == 0 {

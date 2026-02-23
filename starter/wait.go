@@ -113,9 +113,9 @@ func (w *waitWorker) start() {
 						l.Error("Generic task stopped: ", *task)
 
 						if container.Reason != nil && strings.Contains(*container.Reason, "CannotPullContainerError") {
-							utils.SendToChanIfNotBlocked(req.EssentialErrCh, fmt.Errorf(utils.GetContainerExitReason(container)))
+							utils.SendToChanIfNotBlocked(req.EssentialErrCh, fmt.Errorf("%s", utils.GetContainerExitReason(container)))
 						} else {
-							utils.SendToChanIfNotBlocked(req.NonEssentialErrCh, fmt.Errorf(utils.GetContainerExitReason(container)))
+							utils.SendToChanIfNotBlocked(req.NonEssentialErrCh, fmt.Errorf("%s", utils.GetContainerExitReason(container)))
 						}
 					}
 				} else {
