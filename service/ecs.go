@@ -34,7 +34,7 @@ func CreateTaskDefinition(ctx context.Context, definitions []ecsTypes.ContainerD
 	svc := ecs.NewFromConfig(AwsCfg)
 
 	input := &ecs.RegisterTaskDefinitionInput{
-		NetworkMode:          ecsTypes.NetworkModeBridge,
+		NetworkMode:          ecsTypes.NetworkModeAwsvpc,
 		ContainerDefinitions: definitions,
 		Volumes:              volumes,
 		Family:               aws.String(taskDefinitionFamily),

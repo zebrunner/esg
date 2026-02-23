@@ -86,6 +86,12 @@ out:
 			Overrides:                &ecsTypes.TaskOverride{ContainerOverrides: env.ContainerOverrides()},
 			PlacementStrategy:        placementStrategy,
 			CapacityProviderStrategy: []ecsTypes.CapacityProviderStrategyItem{{CapacityProvider: aws.String(env.CapacityProvider)}},
+			NetworkConfiguration: &ecsTypes.NetworkConfiguration{
+				AwsvpcConfiguration: &ecsTypes.AwsVpcConfiguration{
+					SecurityGroups: []string(config.Conf.SecurityGroups),
+					Subnets:        []string(config.Conf.Subnet),
+				},
+			},
 		}
 
 		var outputErr error = nil

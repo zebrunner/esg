@@ -36,12 +36,8 @@ func GetContainerExitReason(container *ecsTypes.Container) string {
 	return reason
 }
 
-func GetAwsVpcTaskPrivateIPv4(attachments []*ecs.Attachment) string {
+func GetAwsVpcTaskPrivateIPv4(attachments []ecsTypes.Attachment) string {
 	for _, attachment := range attachments {
-		if attachment == nil {
-			continue
-		}
-
 		// Validate that this is an ENI attachment and it's attached
 		if attachment.Type == nil || *attachment.Type != "ElasticNetworkInterface" {
 			continue
@@ -52,7 +48,7 @@ func GetAwsVpcTaskPrivateIPv4(attachments []*ecs.Attachment) string {
 		}
 
 		for _, kv := range attachment.Details {
-			if kv != nil && kv.Name != nil && kv.Value != nil {
+			if kv.Name != nil && kv.Value != nil {
 				if *kv.Name == "privateIPv4Address" {
 					return *kv.Value
 				}

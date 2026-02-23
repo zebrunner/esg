@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	ecsTypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
@@ -161,15 +160,16 @@ func (s *startBasis) setNetworkPhase(ctx context.Context) (essential *utils.Sele
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(nonEssential).Warn("Failed to get Network configuration, restarting...")
 		return
 	case instance := <-waitRequest.ResponseCh:
-		if config.Conf.UsePublicIp {
-			s.Env.Network.IP = aws.ToString(instance.PublicIpAddress)
-		} else {
-			s.Env.Network.IP = aws.ToString(instance.PrivateIpAddress)
-		}
+		s.Log.WithFields(log.Fields{
+			"instanceId": instance.ImageId,
+			"taskArn":    s.Task.TaskArn,
+			"latency":    time.Since(s.ServiceStart),
+		}).Debug("Instance is ready, starting network configuration")
 
-		nonEssential = s.setHostPort()
-		if nonEssential != nil {
-			s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(nonEssential).Warn("failed to set host port")
+		ip, err := utils.WaitForPrivateIPWithRetry(ctx, s.Task, s.ServiceStart, s.Log)
+		if err != nil {
+			s.Log.WithError(err).Error("Failed to acquire private IP address")
+			nonEssential = err
 			return
 		}
 
@@ -491,18 +491,6 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, workspace string, 
 	}
 
 	return starter
-}
-
-func searchHostPort(task *ecsTypes.Task, containerPort int64) (port int64, ok bool) {
-	for _, container := range task.Containers {
-		for _, networkBinding := range container.NetworkBindings {
-			if int64(aws.ToInt32(networkBinding.ContainerPort)) == containerPort {
-				return int64(aws.ToInt32(networkBinding.HostPort)), true
-			}
-		}
-	}
-
-	return 0, false
 }
 
 // replaceSessionId returns actual driver's session id and changes it value in driverResponse map with router uuid.
