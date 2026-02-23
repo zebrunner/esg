@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/service/ecs"
+	ecsTypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 
 	log "github.com/sirupsen/logrus"
 
@@ -28,7 +28,7 @@ const (
 	RETRY_COUNT        = 3
 )
 
-func TrackResourcesUsage(cachedTask *mapper.Mapper, task *ecs.Task) {
+func TrackResourcesUsage(cachedTask *mapper.Mapper, task *ecsTypes.Task) {
 	//log.Info("Task:", task)
 	conf := &config.Conf
 	if conf.ZebrunnerHost == "" {

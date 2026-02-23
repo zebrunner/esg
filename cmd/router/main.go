@@ -14,7 +14,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/aws/aws-sdk-go/service/elbv2"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	elbv2Types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 	"github.com/gin-gonic/gin"
 
 	log "github.com/sirupsen/logrus"
@@ -203,38 +204,14 @@ func CreateRouter() *gin.Engine {
 	return r
 }
 
-func InitClusterInfo() error {
-	aws, err := service.InitAws()
+func InitClusterInfo(ctx context.Context) error {
+	_, err := service.InitAwsConfig(ctx)
 	if err != nil {
-		log.WithError(err).Error("Failed to start aws session")
+		log.WithError(err).Error("Failed to init AWS config")
 		return err
 	}
-	service.AwsSess = aws
 
-	// Skip IMDS calls when static AWS credentials are configured
-	if !config.Conf.HasStaticCredentials() {
-		err = utils.RefreshIMDSV2Token()
-		if err != nil {
-			log.WithError(err).Error("Failed to generate IMDSV2 token")
-			return err
-		}
-
-		go func() {
-			for {
-				time.Sleep(2*time.Hour + 30*time.Minute)
-				err := utils.RefreshIMDSV2Token()
-				if err != nil {
-					log.WithError(err).Error("Failed to generate IMDSV2 token")
-				} else {
-					log.Debug("Successfully generated IMDSV2 token")
-				}
-			}
-		}()
-	} else {
-		log.Info("Static AWS credentials configured, skipping IMDS token refresh")
-	}
-
-	scalersMap, err := service.InitScalingData()
+	scalersMap, err := service.InitScalingData(ctx)
 	if err != nil {
 		log.WithError(err).Error("Failed to init scaling data")
 		return err
@@ -244,7 +221,7 @@ func InitClusterInfo() error {
 		environment.AddSmallestInstanceResources(scaler.InstanceResources.CPU, scaler.InstanceResources.Memory, capacityProvider)
 	}
 
-	config.Conf.E3SUrl, err = getE3SUrl()
+	config.Conf.E3SUrl, err = getE3SUrl(ctx)
 	if err != nil {
 		return err
 	}
@@ -269,23 +246,23 @@ func InitClusterInfo() error {
 	return nil
 }
 
-func getE3SUrl() (string, error) {
+func getE3SUrl(ctx context.Context) (string, error) {
 	if config.Conf.E3SUrl != "" {
 		return config.Conf.E3SUrl, nil
 	}
 
 	l := log.WithField("targetGroup", config.Conf.AwsTargetGroup)
-	targetGroup, err := service.DescribeTargetGroup(config.Conf.AwsTargetGroup)
+	targetGroup, err := service.DescribeTargetGroup(ctx, config.Conf.AwsTargetGroup)
 	if err != nil {
 		l.WithError(err).Error("Failed to describe target group")
 		return "", err
-	} else if len(targetGroup.LoadBalancerArns) < 1 || targetGroup.LoadBalancerArns[0] == nil {
+	} else if len(targetGroup.LoadBalancerArns) < 1 {
 		err = fmt.Errorf("target group is not attached to load balancer")
 		l.WithError(err).Error("Failed to describe target group")
 		return "", err
 	}
 
-	loadBalancer, err := service.DescribeLoadBalancer(*targetGroup.LoadBalancerArns[0])
+	loadBalancer, err := service.DescribeLoadBalancer(ctx, targetGroup.LoadBalancerArns[0])
 	if err != nil {
 		l.WithError(err).Error("Failed to describe load balancer")
 		return "", err
@@ -295,13 +272,13 @@ func getE3SUrl() (string, error) {
 		return "", err
 	}
 
-	listener, err := service.DescribeListener(*loadBalancer.LoadBalancerArn)
+	listener, err := service.DescribeListener(ctx, aws.ToString(loadBalancer.LoadBalancerArn))
 	if err != nil {
 		l.WithError(err).Error("Failed to describe load balancer")
 		return "", err
 	}
 
-	return fmt.Sprintf("%s://%s", *listener.Protocol, *loadBalancer.DNSName), nil
+	return fmt.Sprintf("%s://%s", listener.Protocol, aws.ToString(loadBalancer.DNSName)), nil
 }
 
 func main() {
@@ -321,6 +298,8 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
+	ctx := context.Background()
+
 	err := config.InitDBConnection(config.Conf.DbConnectionString)
 	if err != nil {
 		utils.ExitWithError(err, "Failed to init DB client", log.NewEntry(log.StandardLogger()))
@@ -333,18 +312,18 @@ func main() {
 	mapper.InitMapperWorkers()
 	resourcesToAllocate.InitResourceWorker()
 
-	err = InitClusterInfo()
+	err = InitClusterInfo(ctx)
 	if err != nil {
 		log.WithError(err).Error("Failed to init cluster info")
 		startMockRouter()
 	} else {
-		startRouter()
+		startRouter(ctx)
 	}
 
 	log.Info("Router exited")
 }
 
-func startRouter() {
+func startRouter(ctx context.Context) {
 	// init all starter workers
 	starter.InitInstanceWorker()
 	starter.InitWaitWorker()
@@ -366,21 +345,21 @@ func startRouter() {
 		}
 	}()
 
-	var tg *elbv2.TargetGroup = nil
+	var tg *elbv2Types.TargetGroup = nil
 	if config.Conf.AwsTargetGroup != "" {
 		var err error
 		l := log.WithField("targetGroup", config.Conf.AwsTargetGroup)
 
-		tg, err = service.DescribeTargetGroup(config.Conf.AwsTargetGroup)
+		tg, err = service.DescribeTargetGroup(ctx, config.Conf.AwsTargetGroup)
 		if err != nil {
 			l.WithError(err).Error("Failed to describe target group")
 			utils.ExitWithError(err, "Failed to append target to the elb target group", l)
-		} else if len(tg.LoadBalancerArns) < 1 || tg.LoadBalancerArns[0] == nil {
+		} else if len(tg.LoadBalancerArns) < 1 {
 			err = fmt.Errorf("target group is not attached to load balancer")
 			utils.ExitWithError(err, "Failed to append target to the elb target group", l)
 		}
 
-		err = service.RegisterTarget(tg, config.Conf.ExternalPort)
+		err = service.RegisterTarget(ctx, tg, config.Conf.ExternalPort)
 		if err != nil {
 			utils.ExitWithError(err, "Failed to append target to the elb target group", l)
 		}
@@ -396,13 +375,13 @@ func startRouter() {
 	<-quit
 
 	log.Info("Shutdown router ...")
-	ctx, cancel := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout+5*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), config.Conf.ServiceStartupTimeout+5*time.Second)
 	defer cancel()
 
 	if tg != nil {
 		l := log.WithField("targetGroup", config.Conf.AwsTargetGroup)
 
-		err := service.DeregisterTarget(tg, config.Conf.ExternalPort)
+		err := service.DeregisterTarget(context.Background(), tg, config.Conf.ExternalPort)
 		if err != nil {
 			l.WithError(err).Fatal("Failed to detach target from the elb target group")
 		}
@@ -414,19 +393,19 @@ func startRouter() {
 	}
 
 	log.Info("finalizing connections...")
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.WithError(err).Error("Failed to shutdown correctly")
 	}
 
 	var wg sync.WaitGroup
-	for routerUUID, ctx := range starter.GenericCtxWorker.CtxMap {
+	for routerUUID, routerCtx := range starter.GenericCtxWorker.CtxMap {
 		wg.Add(1)
-		go func(routerUUID string, ctx context.Context) {
+		go func(routerUUID string, routerCtx context.Context) {
 			log.WithField(config.RouterUUID, routerUUID).Info("Waiting for task to start")
-			<-ctx.Done()
+			<-routerCtx.Done()
 			log.WithField(config.RouterUUID, routerUUID).Info("Task started")
 			wg.Done()
-		}(routerUUID, ctx)
+		}(routerUUID, routerCtx)
 	}
 
 	wg.Wait()

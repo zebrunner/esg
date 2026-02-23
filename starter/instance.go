@@ -6,9 +6,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aws/aws-sdk-go/service/autoscaling"
-	"github.com/aws/aws-sdk-go/service/ec2"
-	"github.com/aws/aws-sdk-go/service/ecs"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	ec2Types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/aws/aws-sdk-go-v2/service/ecs"
+	ecsTypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
@@ -29,7 +32,7 @@ type instanceWaitRequest struct {
 	containerInstanceArn *string
 	EssentialErrCh       chan error
 	NonEssentialErrCh    chan error
-	ResponseCh           chan *ec2.Instance
+	ResponseCh           chan *ec2Types.Instance
 }
 
 type instanceWatchWorker struct {
@@ -38,9 +41,10 @@ type instanceWatchWorker struct {
 }
 
 func (w *instanceWatchWorker) start() {
-	svc := ecs.New(service.AwsSess)
-	ec2Svc := ec2.New(service.AwsSess)
-	autoScalingSvc := autoscaling.New(service.AwsSess)
+	svc := ecs.NewFromConfig(service.AwsCfg)
+	ec2Svc := ec2.NewFromConfig(service.AwsCfg)
+	autoScalingSvc := autoscaling.NewFromConfig(service.AwsCfg)
+	ctx := context.Background()
 
 	for {
 		time.Sleep(5 * time.Second)
@@ -60,66 +64,68 @@ func (w *instanceWatchWorker) start() {
 			continue
 		}
 
-		// ciArnPtrs - array of ptrs for container-instance describing
-		ciArnPtrs := make([]*string, 0)
+		// ciArns - array for container-instance describing
+		ciArns := make([]string, 0)
 		// ciArnTaskArnsMap - map for organazing response send from instanceWatchWorker
 		ciArnTaskArnsMap := make(map[string][]string, 0)
 		for taskArn, req := range w.requests {
-			if ciArnTaskArnsMap[*req.containerInstanceArn] == nil {
-				ciArnTaskArnsMap[*req.containerInstanceArn] = make([]string, 0)
-				ciArnPtrs = append(ciArnPtrs, req.containerInstanceArn)
+			ciArn := aws.ToString(req.containerInstanceArn)
+			if ciArnTaskArnsMap[ciArn] == nil {
+				ciArnTaskArnsMap[ciArn] = make([]string, 0)
+				ciArns = append(ciArns, ciArn)
 			}
-			ciArnTaskArnsMap[*req.containerInstanceArn] = append(ciArnTaskArnsMap[*req.containerInstanceArn], taskArn)
+			ciArnTaskArnsMap[ciArn] = append(ciArnTaskArnsMap[ciArn], taskArn)
 		}
 
-		containerInstances, err := service.DescribeContainerInstances(ciArnPtrs, svc)
+		containerInstances, err := service.DescribeContainerInstances(ctx, ciArns, svc)
 		if err != nil {
 			log.WithError(err).Error("instanceWatchWorker: failed to describe container instances.")
 			continue
 		}
 
-		// ec2IdPtrs - array of ptrs for instance describing
-		ec2IdPtrs := make([]*string, 0)
+		// ec2Ids - array for instance describing
+		ec2Ids := make([]string, 0)
 		// ec2IdCiArnsMap - map for organazing response send from instanceWatchWorker
 		ec2IdCiArnsMap := make(map[string][]string, 0)
 		for _, ci := range containerInstances {
-			if *ci.Ec2InstanceId == "" {
-				log.WithField("ciArn", *ci.ContainerInstanceArn).Warn("instanceWatchWorker: container instance doesn't contain ec2 instance id")
+			ec2Id := aws.ToString(ci.Ec2InstanceId)
+			if ec2Id == "" {
+				log.WithField("ciArn", aws.ToString(ci.ContainerInstanceArn)).Warn("instanceWatchWorker: container instance doesn't contain ec2 instance id")
 				continue
 			}
 
-			if ec2IdCiArnsMap[*ci.Ec2InstanceId] == nil {
-				ec2IdCiArnsMap[*ci.Ec2InstanceId] = make([]string, 0)
-				ec2IdPtrs = append(ec2IdPtrs, ci.Ec2InstanceId)
+			if ec2IdCiArnsMap[ec2Id] == nil {
+				ec2IdCiArnsMap[ec2Id] = make([]string, 0)
+				ec2Ids = append(ec2Ids, ec2Id)
 			}
-			ec2IdCiArnsMap[*ci.Ec2InstanceId] = append(ec2IdCiArnsMap[*ci.Ec2InstanceId], *ci.ContainerInstanceArn)
+			ec2IdCiArnsMap[ec2Id] = append(ec2IdCiArnsMap[ec2Id], aws.ToString(ci.ContainerInstanceArn))
 		}
 
-		if len(ec2IdPtrs) == 0 {
+		if len(ec2Ids) == 0 {
 			log.Trace("instanceWatchWorker: ec2 instance ids list is empty")
 			continue
 		}
 
-		healthyInstanceIdPtrs, unhealthyInstanceIdPtrs, err := service.DescribeInstancesStatus(ec2IdPtrs, ec2Svc)
+		healthyInstanceIds, unhealthyInstanceIds, err := service.DescribeInstancesStatus(ctx, ec2Ids, ec2Svc)
 		if err != nil {
 			log.WithError(err).Error("instanceWatchWorker: failed to describe instances status.")
-			if len(healthyInstanceIdPtrs) == 0 && len(unhealthyInstanceIdPtrs) == 0 {
+			if len(healthyInstanceIds) == 0 && len(unhealthyInstanceIds) == 0 {
 				log.Trace("instanceWatchWorker: healthy and unhealthy instances lists are empty")
 				continue
 			}
 		}
 
-		if len(unhealthyInstanceIdPtrs) != 0 {
+		if len(unhealthyInstanceIds) != 0 {
 			// stop unhealthy instances
-			err := service.TerminateInstancesInASG(unhealthyInstanceIdPtrs, false, autoScalingSvc)
+			err := service.TerminateInstancesInASG(ctx, unhealthyInstanceIds, false, autoScalingSvc)
 			if err != nil {
 				log.WithError(err).Error("instanceWatchWorker: failed to terminate unhealthy instances.")
 				continue
 			}
 
 			// send err to errorChan, so new task on new instance could be recreated
-			for _, ec2InstanceId := range unhealthyInstanceIdPtrs {
-				containerInstanceArns := ec2IdCiArnsMap[*ec2InstanceId]
+			for _, ec2InstanceId := range unhealthyInstanceIds {
+				containerInstanceArns := ec2IdCiArnsMap[ec2InstanceId]
 				for _, containerInstanceArn := range containerInstanceArns {
 					taskArns := ciArnTaskArnsMap[containerInstanceArn]
 					for _, taskArn := range taskArns {
@@ -134,20 +140,21 @@ func (w *instanceWatchWorker) start() {
 			}
 		}
 
-		if len(healthyInstanceIdPtrs) == 0 {
+		if len(healthyInstanceIds) == 0 {
 			log.Warn("instanceWatchWorker: healthy instances are not found")
 			continue
 		}
 
 		// describing only healthy instances...
-		ec2Instances, err := service.DescribeInstances(healthyInstanceIdPtrs, ec2Svc)
+		ec2Instances, err := service.DescribeInstances(ctx, healthyInstanceIds, ec2Svc)
 		if err != nil {
 			log.Error("instanceWatchWorker: failed to describe ec2 instances")
 			continue
 		}
 
-		for _, ec2Instance := range ec2Instances {
-			ciArns := ec2IdCiArnsMap[*ec2Instance.InstanceId]
+		for i := range ec2Instances {
+			ec2Instance := &ec2Instances[i]
+			ciArns := ec2IdCiArnsMap[aws.ToString(ec2Instance.InstanceId)]
 			for _, ciArn := range ciArns {
 				taskArns := ciArnTaskArnsMap[ciArn]
 				for _, taskArn := range taskArns {
@@ -161,17 +168,17 @@ func (w *instanceWatchWorker) start() {
 	}
 }
 
-func (w *instanceWatchWorker) waitForInstance(ctx context.Context, task *ecs.Task) *instanceWaitRequest {
+func (w *instanceWatchWorker) waitForInstance(ctx context.Context, task *ecsTypes.Task) *instanceWaitRequest {
 	req := instanceWaitRequest{
 		ctx:                  ctx,
 		EssentialErrCh:       make(chan error),
 		NonEssentialErrCh:    make(chan error),
-		ResponseCh:           make(chan *ec2.Instance),
+		ResponseCh:           make(chan *ec2Types.Instance),
 		containerInstanceArn: task.ContainerInstanceArn,
 	}
 
 	instMutex.Lock()
-	w.requests[*task.TaskArn] = &req
+	w.requests[aws.ToString(task.TaskArn)] = &req
 	instMutex.Unlock()
 
 	return &req
