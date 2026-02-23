@@ -8,13 +8,13 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/aws/aws-sdk-go/service/ecs"
+	ecsTypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	log "github.com/sirupsen/logrus"
 )
 
 // WaitForPrivateIPWithRetry implements robust IP waiting logic for AWS VPC mode
 // It handles the race condition where ENI attachment might be delayed
-func WaitForPrivateIPWithRetry(ctx context.Context, task *ecs.Task, serviceStart time.Time, logEntry *log.Entry) (string, error) {
+func WaitForPrivateIPWithRetry(ctx context.Context, task *ecsTypes.Task, serviceStart time.Time, logEntry *log.Entry) (string, error) {
 	const maxRetries = 10
 	const retryInterval = 2 * time.Second
 
@@ -49,25 +49,23 @@ func WaitForPrivateIPWithRetry(ctx context.Context, task *ecs.Task, serviceStart
 
 		// Log attachment details for debugging
 		for i, attachment := range task.Attachments {
-			if attachment != nil {
-				logEntry.WithFields(log.Fields{
-					"attachmentIndex":  i,
-					"attachmentId":     attachment.Id,
-					"attachmentType":   attachment.Type,
-					"attachmentStatus": attachment.Status,
-					"detailsCount":     len(attachment.Details),
-				}).Debug("Attachment details")
+		logEntry.WithFields(log.Fields{
+			"attachmentIndex":  i,
+			"attachmentId":     attachment.Id,
+			"attachmentType":   attachment.Type,
+			"attachmentStatus": attachment.Status,
+			"detailsCount":     len(attachment.Details),
+		}).Debug("Attachment details")
 
-				// Log each detail for debugging
-				for j, detail := range attachment.Details {
-					if detail != nil && detail.Name != nil && detail.Value != nil {
-						logEntry.WithFields(log.Fields{
-							"attachmentIndex": i,
-							"detailIndex":     j,
-							"detailName":      *detail.Name,
-							"detailValue":     *detail.Value,
-						}).Debug("Attachment detail")
-					}
+		// Log each detail for debugging
+		for j, detail := range attachment.Details {
+			if detail.Name != nil && detail.Value != nil {
+				logEntry.WithFields(log.Fields{
+					"attachmentIndex": i,
+					"detailIndex":     j,
+					"detailName":      *detail.Name,
+					"detailValue":     *detail.Value,
+				}).Debug("Attachment detail")
 				}
 			}
 		}

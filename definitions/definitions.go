@@ -1,6 +1,7 @@
 package definitions
 
 import (
+	"context"
 	"database/sql"
 	"time"
 
@@ -53,6 +54,7 @@ func UpdateTaskDefinitions(imagesArr []images.Image) error {
 
 func compareWithStoredTaskDefinition(env *environment.ExecutionEnvironment) (*db.TaskDefinition, error) {
 	l := log.WithField("schema", env.Schema).WithField("family", env.TaskDefinitionFamily)
+	ctx := context.Background()
 
 	newDbDefinititon := db.CreateTaskDefinitionEntity(env)
 	savedDbDefinition, err := db.GetDefinition(env.TaskDefinitionFamily, env.Schema)
@@ -62,13 +64,13 @@ func compareWithStoredTaskDefinition(env *environment.ExecutionEnvironment) (*db
 		}
 
 		l.Info("Creating new record")
-		taskDef, err := service.CreateTaskDefinition(env.ContainerDefinitions(), env.Volume(), env.TaskDefinitionFamily, env.TaskRoleArn)
+		taskDef, err := service.CreateTaskDefinition(ctx, env.ContainerDefinitions(), env.Volume(), env.TaskDefinitionFamily, env.TaskRoleArn)
 		if err != nil {
 			return nil, err
 		}
 		// pause after aws call
 		time.Sleep(1 * time.Second)
-		newDbDefinititon.RevisionTag = *taskDef.Revision
+		newDbDefinititon.RevisionTag = int64(taskDef.Revision)
 
 		err = db.InsertDefinition(newDbDefinititon)
 		if err != nil {
@@ -76,13 +78,13 @@ func compareWithStoredTaskDefinition(env *environment.ExecutionEnvironment) (*db
 		}
 	} else if newDbDefinititon.RegisterDefinitionHash != savedDbDefinition.RegisterDefinitionHash {
 		l.Debug("Updating definition record")
-		taskDef, err := service.CreateTaskDefinition(env.ContainerDefinitions(), env.Volume(), env.TaskDefinitionFamily, env.TaskRoleArn)
+		taskDef, err := service.CreateTaskDefinition(ctx, env.ContainerDefinitions(), env.Volume(), env.TaskDefinitionFamily, env.TaskRoleArn)
 		if err != nil {
 			return nil, err
 		}
 		// pause after aws call
 		time.Sleep(1 * time.Second)
-		newDbDefinititon.RevisionTag = *taskDef.Revision
+		newDbDefinititon.RevisionTag = int64(taskDef.Revision)
 
 		err = db.RefreshTag(savedDbDefinition.RegisterDefinitionHash, newDbDefinititon)
 		if err != nil {

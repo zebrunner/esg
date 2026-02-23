@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/ecs"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	ecsTypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
 	envtype "github.com/zebrunner/esg/environment/envType"
@@ -45,8 +45,8 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 		mitmCertificateDir    = "/root/.mitmproxy"
 		mitmCertificateVolume = "mitmCertificateVolume"
 
-		mitmPythonDir    = "/urs/local/lib/python3.11"
-		mitmPythonVolume = "mitmPythonVolume"
+		mitmRunDir    = "/run"
+		mitmRunVolume = "mitmRunVolume"
 	)
 
 	tz, err := caps.GetTimeZone()
@@ -93,12 +93,12 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 		Mounts:     []string{logVolume, shmVolume, seleniumBrowserVolume, tmpBrowserVolume},
 		Command:    []string{"-c", "/entrypoint.sh" + taskLogRedirect},
 		EntryPoint: []string{"/bin/sh"},
-		HealthCheck: &ecs.HealthCheck{
-			Command:     []*string{aws.String("CMD-SHELL"), aws.String(fmt.Sprintf("curl -f localhost:%v/status || exit 1", seleniumPort))},
-			Interval:    aws.Int64(8),
-			Retries:     aws.Int64(8),
-			Timeout:     aws.Int64(5),
-			StartPeriod: aws.Int64(10),
+		HealthCheck: &ecsTypes.HealthCheck{
+			Command:     []string{"CMD-SHELL", fmt.Sprintf("curl -f localhost:%v/status || exit 1", seleniumPort)},
+			Interval:    aws.Int32(8),
+			Retries:     aws.Int32(8),
+			Timeout:     aws.Int32(5),
+			StartPeriod: aws.Int32(10),
 		},
 
 		ReadOnlyRootFileSystem: true,
@@ -129,18 +129,18 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 			// "CODEC":                caps.VideoCodec.ToPrimitive(), // temporary disabled
 		},
 		Mounts: []string{logVolume, tmpRecorderVolume},
-		HealthCheck: &ecs.HealthCheck{
+		HealthCheck: &ecsTypes.HealthCheck{
 			// check if recorder's binary process is running, no curl is downloaded inside of container
-			Command:     []*string{aws.String("CMD-SHELL"), aws.String("pgrep recorder")},
-			Interval:    aws.Int64(5),
-			Retries:     aws.Int64(4),
-			Timeout:     aws.Int64(5),
-			StartPeriod: aws.Int64(2),
+			Command:     []string{"CMD-SHELL", "pgrep recorder"},
+			Interval:    aws.Int32(5),
+			Retries:     aws.Int32(4),
+			Timeout:     aws.Int32(5),
+			StartPeriod: aws.Int32(2),
 		},
-		DependsOn: []*ecs.ContainerDependency{
+		DependsOn: []ecsTypes.ContainerDependency{
 			{
 				ContainerName: aws.String("browser"),
-				Condition:     aws.String("START"),
+				Condition:     ecsTypes.ContainerConditionStart,
 			},
 		},
 
@@ -210,7 +210,7 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 				"fileserverPort":   {ContainerPort: fileserverPortMitm, HostPort: fileserverPortMitm},
 				"proxyHandlerPort": {ContainerPort: proxyHandlerPort, HostPort: proxyHandlerPort},
 			},
-			Mounts:     []string{logVolume, seleniumMitmVolume, tmpMitmVolume, mitmCacheVolume, mitmCertificateVolume, mitmPythonVolume},
+			Mounts:     []string{logVolume, seleniumMitmVolume, tmpMitmVolume, mitmCacheVolume, mitmCertificateVolume, mitmRunVolume},
 			Command:    []string{"-c", "/entrypoint.sh"},
 			EntryPoint: []string{"/bin/sh"},
 
@@ -282,7 +282,7 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 		env.Volumes[tmpMitmVolume] = volume{ContainerPath: tmpDir, Driver: "local", Scope: "task", ReadOnly: false}
 		env.Volumes[mitmCacheVolume] = volume{ContainerPath: mitmCacheDir, Driver: "local", Scope: "task", ReadOnly: false}
 		env.Volumes[mitmCertificateVolume] = volume{ContainerPath: mitmCertificateDir, Driver: "local", Scope: "task", ReadOnly: false}
-		env.Volumes[mitmPythonVolume] = volume{ContainerPath: mitmPythonDir, Driver: "local", Scope: "task", ReadOnly: false}
+		env.Volumes[mitmRunVolume] = volume{ContainerPath: mitmRunDir, Driver: "local", Scope: "task", ReadOnly: false}
 	}
 
 	err = calculateResources(&env, calcArr...)

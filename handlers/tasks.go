@@ -269,7 +269,7 @@ func CloseSession(c *gin.Context) {
 
 	selenium.CloseSession(mapperEntity)
 
-	err := service.StopTask(*mapperEntity, mapper.TaskFinished)
+	err := service.StopTask(c.Request.Context(), *mapperEntity, mapper.TaskFinished)
 	if err != nil {
 		l.WithError(err).Warn("Failed to stop task")
 	}
@@ -293,7 +293,7 @@ func AbortTask(c *gin.Context) {
 			l.WithError(err).Error("Failed to update task's cache!")
 		}
 	} else {
-		err := service.StopTask(*mapperEntity, mapperEntity.StopReason)
+		err := service.StopTask(c.Request.Context(), *mapperEntity, mapperEntity.StopReason)
 		if err != nil {
 			l.WithError(err).Warn("Failed to stop task")
 		}
@@ -385,7 +385,7 @@ func Logs(c *gin.Context) {
 
 	routerUUID := c.Param("session")
 	logFile := strings.Join([]string{user, "artifacts", "test-sessions", routerUUID, "session.log"}, "/")
-	presignedUrl, err := service.GeneratePreSignedURL(logFile)
+	presignedUrl, err := service.GeneratePreSignedURL(c.Request.Context(), logFile)
 	if err != nil {
 		log.Printf("[URL GENERATION FAILED] %v", err)
 		c.Error(utils.NotFoundApiErr("resource not found")).SetType(gin.ErrorTypePublic)
@@ -404,7 +404,7 @@ func Video(c *gin.Context) {
 
 	routerUUID := c.Param("session")
 	videoFile := strings.Join([]string{user, "artifacts", "test-sessions", routerUUID, "video.mp4"}, "/")
-	presignedUrl, err := service.GeneratePreSignedURL(videoFile)
+	presignedUrl, err := service.GeneratePreSignedURL(c.Request.Context(), videoFile)
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{
 			"user":              user,
@@ -428,7 +428,7 @@ func TaskLog(c *gin.Context) {
 
 	routerUUID := c.Param("task")
 	logFile := strings.Join([]string{user, "artifacts", "launches", routerUUID, "console.log"}, "/")
-	presignedUrl, err := service.GeneratePreSignedURL(logFile)
+	presignedUrl, err := service.GeneratePreSignedURL(c.Request.Context(), logFile)
 	if err != nil {
 		log.Printf("[URL GENERATION FAILED] %v", err)
 		c.Error(utils.NotFoundApiErr("resource not found")).SetType(gin.ErrorTypePublic)
@@ -465,7 +465,7 @@ func TaskDescribe(c *gin.Context) {
 		return
 	}
 
-	result, err := service.DescribeTask(mapperEntity.TaskId)
+	result, err := service.DescribeTask(c.Request.Context(), mapperEntity.TaskId)
 
 	if err != nil {
 		l.Error("Failed to get task status")

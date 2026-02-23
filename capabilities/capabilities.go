@@ -492,7 +492,7 @@ func (c *Capabilities) ParseRequestCaps(reqCaps map[string]interface{}) error {
 
 	var err error
 	if len(errs) > 0 {
-		err = fmt.Errorf(strings.Join(errs, "\n"))
+		err = fmt.Errorf("%s", strings.Join(errs, "\n"))
 	} else {
 		if launchUUID, ok := c.EnvVariables["ZEBRUNNER_LAUNCH_UUID"]; ok {
 			c.LaunchUUID.From(launchUUID)

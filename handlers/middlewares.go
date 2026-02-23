@@ -112,7 +112,7 @@ func ValidateGenericMapperPresence(c *gin.Context) {
 	if err != nil || mapperEntity == nil {
 		seErr = utils.NoSuchSessionErr(fmt.Errorf("session timed out or not found"))
 	} else if mapperEntity.Status == mapper.Stopped {
-		seErr = utils.SessionStoppedErr(fmt.Errorf(string(mapperEntity.StopReason)))
+		seErr = utils.SessionStoppedErr(fmt.Errorf("%s", mapperEntity.StopReason))
 	}
 
 	if seErr != nil {
@@ -137,7 +137,7 @@ func ValidateMapperPresence(c *gin.Context) {
 	} else if mapperEntity.Status == mapper.Queued {
 		seErr = utils.NoSuchSessionErr(fmt.Errorf("session creation is in queue"))
 	} else if mapperEntity.Status == mapper.Stopped {
-		seErr = utils.SessionStoppedErr(fmt.Errorf(string(mapperEntity.StopReason)))
+		seErr = utils.SessionStoppedErr(fmt.Errorf("%s", mapperEntity.StopReason))
 	}
 
 	if seErr != nil {

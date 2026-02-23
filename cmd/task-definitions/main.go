@@ -109,11 +109,13 @@ func main() {
 	flag.Parse()
 
 	log.SetLevel(config.Conf.ParseLogLevel())
-	awsSess, err := service.InitAws()
+
+	ctx := context.Background()
+
+	_, err := service.InitAwsConfig(ctx)
 	if err != nil {
-		utils.ExitWithError(err, "Failed to init aws session", log.NewEntry(log.StandardLogger()))
+		utils.ExitWithError(err, "Failed to init AWS config", log.NewEntry(log.StandardLogger()))
 	}
-	service.AwsSess = awsSess
 
 	err = config.InitDBConnection(config.Conf.DbConnectionString)
 	if err != nil {
@@ -158,10 +160,10 @@ func main() {
 
 	log.Info("Shutdown task-definitions ...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.WithError(err).Error("Failed to shutdown correctly")
 	}
 
