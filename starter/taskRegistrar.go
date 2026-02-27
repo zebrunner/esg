@@ -92,6 +92,7 @@ out:
 					Subnets:        []string(config.Conf.Subnet),
 				},
 			},
+			Tags: service.BuildRunTaskTags(),
 		}
 
 		var outputErr error = nil

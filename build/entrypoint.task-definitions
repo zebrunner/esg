@@ -78,6 +78,10 @@ if [ ! -z ${EXCLUDE_BROWSERS} ]; then
   CMD_ARGS="${CMD_ARGS} -exclude-browsers ${EXCLUDE_BROWSERS}"
 fi
 
+if [ ! -z ${ECS_TASK_DEFINITION_TAGS} ]; then
+  CMD_ARGS="${CMD_ARGS} -ecs-task-definition-tags=${ECS_TASK_DEFINITION_TAGS}"
+fi
+
 if [ ! -z ${TASK_DEFINITIONS_UPDATE_INTERVAL} ]; then
   CMD_ARGS="${CMD_ARGS} -task-definitions-update-interval ${TASK_DEFINITIONS_UPDATE_INTERVAL}"
 fi
