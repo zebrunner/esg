@@ -55,10 +55,54 @@ func CreateTaskDefinition(ctx context.Context, definitions []ecsTypes.ContainerD
 				return nil, err
 			}
 		} else {
-			return resultTaskDefinition.TaskDefinition, nil
+			taskDef := resultTaskDefinition.TaskDefinition
+			familyRevision := fmt.Sprintf("%s:%d", taskDefinitionFamily, taskDef.Revision)
+			if tags := BuildTaskDefinitionTags(familyRevision); len(tags) > 0 {
+				_, tagErr := svc.TagResource(ctx, &ecs.TagResourceInput{
+					ResourceArn: taskDef.TaskDefinitionArn,
+					Tags:        tags,
+				})
+				if tagErr != nil {
+					log.WithError(tagErr).Warn("failed to tag task definition")
+				}
+			}
+			return taskDef, nil
 		}
 	}
 	return nil, fmt.Errorf("failed to create task definition in %v retries: %v", i, err)
+}
+
+func BuildRunTaskTags() []ecsTypes.Tag {
+	return buildTags(config.Conf.EcsTaskTags)
+}
+
+func BuildTaskDefinitionTags(familyRevision string) []ecsTypes.Tag {
+	tagMap := config.Conf.EcsTaskDefinitionTags
+	if len(tagMap) == 0 {
+		return nil
+	}
+	tags := buildTags(tagMap)
+	if _, hasName := tagMap["name"]; !hasName {
+		tags = append(tags, ecsTypes.Tag{
+			Key:   aws.String("name"),
+			Value: aws.String(familyRevision),
+		})
+	}
+	return tags
+}
+
+func buildTags(tagMap utils.TagMap) []ecsTypes.Tag {
+	if len(tagMap) == 0 {
+		return nil
+	}
+	tags := make([]ecsTypes.Tag, 0, len(tagMap))
+	for k, v := range tagMap {
+		tags = append(tags, ecsTypes.Tag{
+			Key:   aws.String(k),
+			Value: aws.String(v),
+		})
+	}
+	return tags
 }
 
 func ConstDelay(t time.Duration) func(int) time.Duration {
