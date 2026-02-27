@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/zebrunner/esg/utils"
 )
 
 const (
@@ -79,6 +80,9 @@ type Config struct {
 	ExternalPort  int64
 
 	OldAbortApi bool
+
+	EcsTaskTags           utils.TagMap
+	EcsTaskDefinitionTags utils.TagMap
 }
 
 func init() {
@@ -134,6 +138,9 @@ func init() {
 	flag.Int64Var(&Conf.ExternalPort, "external-port", 0, "Router's external listening port")
 
 	flag.BoolVar(&Conf.OldAbortApi, "old-abort-api", false, "Usage of reporting's old api abort path")
+
+	flag.Var(&Conf.EcsTaskTags, "ecs-task-tags", "Tags to apply to ECS tasks (RunTask) in key=value,key=value format")
+	flag.Var(&Conf.EcsTaskDefinitionTags, "ecs-task-definition-tags", "Tags to apply to ECS task definitions in key=value,key=value format. If 'name' is not provided, defaults to family:revision")
 }
 
 // When static credentials are provided, IMDS calls should be skipped.
