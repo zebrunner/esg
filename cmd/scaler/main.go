@@ -104,7 +104,7 @@ func stopLostTasks(ctx context.Context, svc *ecs.Client, wg *sync.WaitGroup) {
 					l := log.WithField(config.TaskIdKey, taskId)
 					l.Warn("Unrecognized task detected! Aborting")
 
-					err := service.StopTaskForcibly(context.Background(), taskId, mapper.TaskLost)
+					err := service.StopTaskForcibly(ctx, taskId, mapper.TaskLost)
 					if err != nil {
 						l.WithError(err).Error("Failed to stop the task")
 					}
@@ -189,7 +189,7 @@ func stopUnhealthyTasks(ctx context.Context, svc *ecs.Client, wg *sync.WaitGroup
 							err := service.StopTask(ctx, mapperEntity, mapper.TaskMaxTimeout)
 							if err != nil {
 								l.WithError(err).Error("Failed to stop task. Trying to stop forcibly")
-								err := service.StopTaskForcibly(context.Background(), mapperEntity.TaskId, mapper.TaskMaxTimeout)
+								err := service.StopTaskForcibly(ctx, mapperEntity.TaskId, mapper.TaskMaxTimeout)
 								if err != nil {
 									l.WithError(err).Error("Failed to stop task forcibly")
 								}
@@ -371,7 +371,7 @@ func stopIdleSessions(ctx context.Context, wg *sync.WaitGroup) {
 
 					selenium.CloseSession(m)
 
-					err = service.StopTask(context.Background(), *m, mapper.SessionIdleTimeout)
+					err = service.StopTask(ctx, *m, mapper.SessionIdleTimeout)
 					if err != nil {
 						l.WithError(err).Error("Failed to stop idle driver task!")
 					} else {
