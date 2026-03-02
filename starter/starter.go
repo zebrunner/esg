@@ -95,7 +95,7 @@ func (s *startBasis) registerTaskPhase(ctx context.Context) (essential *utils.Se
 			case taskArn := <-waitRequest.ResponseCh:
 				taskId := strings.Split(taskArn, "/")[2]
 				log.WithField(config.TaskIdKey, taskId).Warn("Task registered after context is done")
-				service.StopTaskForcibly(ctx, taskId, mapper.TaskStartupFailure)
+				service.StopTaskForcibly(context.Background(), taskId, mapper.TaskStartupFailure)
 				return
 			}
 		}()
@@ -310,7 +310,7 @@ func (starter basicStarter) StartService(startupTime context.Context) (map[strin
 				exitError = essential
 			} else if me != nil && (me.StopReason == mapper.TaskAborted || me.StopReason == mapper.TaskFinished) {
 				starter.basis.MapperEntity.StopReason = me.StopReason
-				exitError = utils.CreationErr(fmt.Errorf(string(me.StopReason)))
+				exitError = utils.CreationErr(fmt.Errorf("%s", me.StopReason))
 			} else if starter.basis.Request.Context().Err() != nil {
 				starter.basis.MapperEntity.StopReason = mapper.TaskStartupFailure
 				exitError = utils.CreationErr(fmt.Errorf("service start has been canceled"))
