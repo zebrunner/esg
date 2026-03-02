@@ -239,7 +239,7 @@ func CloseSession(c *gin.Context) {
 
 	selenium.CloseSession(mapperEntity)
 
-	err := service.StopTask(c.Request.Context(), *mapperEntity, mapper.TaskFinished)
+	err := service.StopTask(context.Background(), *mapperEntity, mapper.TaskFinished)
 	if err != nil {
 		l.WithError(err).Warn("Failed to stop task")
 	}
@@ -263,7 +263,7 @@ func AbortTask(c *gin.Context) {
 			l.WithError(err).Error("Failed to update task's cache!")
 		}
 	} else {
-		err := service.StopTask(c.Request.Context(), *mapperEntity, mapperEntity.StopReason)
+		err := service.StopTask(context.Background(), *mapperEntity, mapperEntity.StopReason)
 		if err != nil {
 			l.WithError(err).Warn("Failed to stop task")
 		}
