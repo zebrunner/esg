@@ -95,7 +95,7 @@ func (s *startBasis) registerTaskPhase(ctx context.Context) (essential *utils.Se
 			case taskArn := <-waitRequest.ResponseCh:
 				taskId := strings.Split(taskArn, "/")[2]
 				log.WithField(config.TaskIdKey, taskId).Warn("Task registered after context is done")
-				service.StopTaskForcibly(ctx, taskId, mapper.TaskStartupFailure)
+				service.StopTaskForcibly(context.Background(), taskId, mapper.TaskStartupFailure)
 				return
 			}
 		}()
