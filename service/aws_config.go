@@ -32,7 +32,7 @@ func InitAwsConfig(ctx context.Context) (aws.Config, error) {
 		config.WithRetryer(func() aws.Retryer {
 			return retry.NewStandard(func(o *retry.StandardOptions) {
 				o.MaxAttempts = appConfig.Conf.AwsRetry
-				o.MaxBackoff = 60 * time.Second
+				o.MaxBackoff = 20 * time.Second
 			})
 		}),
 	}

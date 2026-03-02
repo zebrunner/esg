@@ -123,6 +123,13 @@ if [ ! -z ${ZEBRUNNER_INTEGRATION_PASSWORD} ]; then
   CMD_ARGS="${CMD_ARGS} -zebrunner-integration-password ${ZEBRUNNER_INTEGRATION_PASSWORD}"
 fi
 
+if [ ! -z ${ECS_TASK_TAGS} ]; then
+  CMD_ARGS="${CMD_ARGS} -ecs-task-tags=${ECS_TASK_TAGS}"
+fi
+if [ ! -z ${ECS_TASK_DEFINITION_TAGS} ]; then
+  CMD_ARGS="${CMD_ARGS} -ecs-task-definition-tags=${ECS_TASK_DEFINITION_TAGS}"
+fi
+
 if [ ! -z ${PRODUCTION_ENV} ]; then
   CMD_ARGS="${CMD_ARGS} -production-env=${PRODUCTION_ENV}"
 fi
