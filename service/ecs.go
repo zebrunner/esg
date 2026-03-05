@@ -82,9 +82,9 @@ func BuildTaskDefinitionTags(familyRevision string) []ecsTypes.Tag {
 		return nil
 	}
 	tags := buildTags(tagMap)
-	if _, hasName := tagMap["name"]; !hasName {
+	if _, hasName := tagMap["Name"]; !hasName {
 		tags = append(tags, ecsTypes.Tag{
-			Key:   aws.String("name"),
+			Key:   aws.String("Name"),
 			Value: aws.String(familyRevision),
 		})
 	}
