@@ -11,6 +11,7 @@ import (
 	envtype "github.com/zebrunner/esg/environment/envType"
 	"github.com/zebrunner/esg/environment/network"
 	"github.com/zebrunner/esg/images"
+	"github.com/zebrunner/esg/utils"
 )
 
 func buildWindowsBrowser(workspace string, routerUUID string, image images.Image, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
@@ -24,6 +25,8 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 
 	log.Trace("caps: ", caps)
 
+	patchStackAndRun := utils.BuildWindowsPowerShellEncodedCommand(utils.WindowsDriverStackPatchScript) + " & C:\\start.bat"
+
 	browserContainer := Container{
 		Name:      "browser",
 		image:     &image,
@@ -31,7 +34,9 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 		Ports: map[string]portMapping{
 			"driver": {ContainerPort: seleniumPort, HostPort: 0},
 		},
-		Mounts: []string{logVolume},
+		Mounts:     []string{logVolume},
+		Command:    []string{"/c", patchStackAndRun},
+		EntryPoint: []string{"cmd.exe"},
 		Env: map[string]string{
 			"LOG_DIR":   logDir,
 			"TASK_LOG":  "task.log",
