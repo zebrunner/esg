@@ -30,6 +30,7 @@ type Config struct {
 	AwsCluster                      string
 	AwsLinuxCapacityProvider        string
 	AwsLinuxGenericCapacityProvider string
+	AwsLinuxRedroidCapacityProvider string
 	AwsWinCapacityProvider          string
 	AwsAccessKeyID                  string
 	AwsSecretAccessKey              string
@@ -91,6 +92,7 @@ func init() {
 	flag.StringVar(&Conf.AwsCluster, "aws-cluster", "esg", "AWS ECS cluster name")
 	flag.StringVar(&Conf.AwsLinuxCapacityProvider, "aws-linux-capacity-provider", "esg-linux-capacityprovider", "AWS capacity provider for linux instances")
 	flag.StringVar(&Conf.AwsLinuxGenericCapacityProvider, "aws-linux-generic-capacity-provider", "", "AWS capacity provider for generic linux instances")
+	flag.StringVar(&Conf.AwsLinuxRedroidCapacityProvider, "aws-linux-redroid-capacity-provider", "", "AWS capacity provider for redroid linux instances")
 	flag.StringVar(&Conf.AwsWinCapacityProvider, "aws-win-capacity-provider", "esg-win-capacityprovider", "AWS capacity provicer for windows instances")
 	flag.StringVar(&Conf.AwsAccessKeyID, "aws-access-key-id", "", "Access key for AWS services")
 	flag.StringVar(&Conf.AwsSecretAccessKey, "aws-secret-access-key", "", "Secret key for AWS services")
