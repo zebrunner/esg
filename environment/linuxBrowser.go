@@ -90,7 +90,7 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 			"TZ":                tz.String(),
 			"SCREEN_RESOLUTION": resolution,
 		},
-		Mounts:     []string{logVolume, shmVolume, seleniumBrowserVolume, tmpBrowserVolume},
+		Mounts: []string{logVolume, shmVolume, seleniumBrowserVolume, tmpBrowserVolume},
 		Command:    []string{"-c", "/entrypoint.sh" + taskLogRedirect},
 		EntryPoint: []string{"/bin/sh"},
 		HealthCheck: &ecsTypes.HealthCheck{
@@ -102,6 +102,10 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 		},
 
 		ReadOnlyRootFileSystem: true,
+	}
+
+	if cert := caps.RootCACert.ToPrimitive(); cert != "" {
+		browserContainer.Env["ROOT_CA_custom"] = cert
 	}
 
 	recorderContainer := Container{
