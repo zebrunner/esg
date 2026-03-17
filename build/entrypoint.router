@@ -147,6 +147,10 @@ if [ ! -z ${SUBNET} ]; then
   CMD_ARGS="${CMD_ARGS} -subnet=${SUBNET}"
 fi
 
+if [ ! -z ${ROOT_CA_CERT} ]; then
+  CMD_ARGS="${CMD_ARGS} -root-ca-cert=${ROOT_CA_CERT}"
+fi
+
 echo "CMD_ARGS: $CMD_ARGS"
 
 ./router -listen :$LISTEN_PORT $CMD_ARGS &

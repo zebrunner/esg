@@ -69,6 +69,9 @@ ENV SUBNET=
 # Instance ID or IP for ELB target registration (required when static AWS credentials are configured)
 ENV AWS_TARGET_ID=
 
+# Base64-encoded PEM CA certificate injected into browser containers (optional, overridden per-session via rootCACert capability)
+ENV ROOT_CA_CERT=
+
 RUN apk add -U tzdata
 
 COPY ./build/.env version

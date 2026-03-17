@@ -41,9 +41,6 @@ ENV EXCLUDE_BROWSERS=
 
 ENV TASK_DEFINITIONS_UPDATE_INTERVAL=
 
-# Base64-encoded PEM CA certificate injected into browser containers (optional, overridden per-session via rootCACert capability)
-ENV ROOT_CA_CERT=
-
 COPY ./build/.env version
 COPY ./build/entrypoint.task-definitions /entrypoint.sh
 
