@@ -465,6 +465,7 @@ func GetDefaultCaps() *Capabilities {
 		FrameRate:   12,
 		VideoCodec:  "libx264",
 
+		RootCACert:   rootCACertWrapper(config.Conf.RootCACert),
 		EnvVariables: make(mapStrStrWrapper, 0),
 	}
 }

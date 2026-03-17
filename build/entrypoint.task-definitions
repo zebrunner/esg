@@ -86,6 +86,10 @@ if [ ! -z ${TASK_DEFINITIONS_UPDATE_INTERVAL} ]; then
   CMD_ARGS="${CMD_ARGS} -task-definitions-update-interval ${TASK_DEFINITIONS_UPDATE_INTERVAL}"
 fi
 
+if [ ! -z ${ROOT_CA_CERT} ]; then
+  CMD_ARGS="${CMD_ARGS} -root-ca-cert=${ROOT_CA_CERT}"
+fi
+
 echo "CMD_ARGS: $CMD_ARGS"
 
 ./task-definitions $CMD_ARGS &
