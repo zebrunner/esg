@@ -51,7 +51,7 @@ func startSession(ctx context.Context, net *network.NetworkConfiguration, driver
 	}
 
 	req.Method = http.MethodPost
-	req.Host = "localhost"
+	req.Host = driverHost(net)
 	req = req.WithContext(ctx)
 
 	resp, err := httpClient.Do(req)
@@ -131,7 +131,7 @@ func CloseSession(mapperEntity *mapper.Mapper) {
 			l.WithError(err).Error("Failed to create request")
 			return
 		}
-		req.Host = "localhost"
+		req.Host = driverHost(&mapperEntity.Network)
 
 		l.WithFields(log.Fields{"method": req.Method, "url": req.URL}).Debug("closing driver")
 		resp, err := httpClient.Do(req)
@@ -149,4 +149,13 @@ func CloseSession(mapperEntity *mapper.Mapper) {
 	}
 
 	l.Debug("driver closed")
+}
+
+// driverHost returns the Host header value for driver requests.
+// Geckodriver requires host:port format; presence of "gecko_driver" endpoint signals this.
+func driverHost(net *network.NetworkConfiguration) string {
+	if ep, ok := net.Endpoints["gecko_driver"]; ok {
+		return fmt.Sprintf("localhost:%d", ep.ContainerPort)
+	}
+	return "localhost"
 }

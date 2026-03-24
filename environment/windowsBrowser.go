@@ -24,6 +24,13 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 
 	log.Trace("caps: ", caps)
 
+	// geckodriver expects lowercase log levels (info, debug, trace)
+	// chrome/edge use uppercase (INFO, DEBUG)
+	logLevel := "INFO"
+	if caps.BrowserName == "firefox" {
+		logLevel = "info"
+	}
+
 	browserContainer := Container{
 		Name:      "browser",
 		image:     &image,
@@ -36,7 +43,7 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 			"LOG_DIR":   logDir,
 			"TASK_LOG":  "task.log",
 			"LOG_FILE":  "session.log",
-			"LOG_LEVEL": "INFO",
+			"LOG_LEVEL": logLevel,
 		},
 		HealthCheck: &ecsTypes.HealthCheck{
 			Command:     []string{"cmd.exe", "curl -f localhost:4444/status || exit 1"},
@@ -45,6 +52,12 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 			Timeout:     aws.Int32(5),
 			StartPeriod: aws.Int32(0),
 		},
+	}
+
+	if caps.BrowserName == "firefox" {
+		browserContainer.Env["DRIVER_ARGS"] = "--allow-hosts localhost"
+		browserContainer.Env["MOZ_WEBRENDER"] = "0"
+		browserContainer.Env["MOZ_DISABLE_GPU_SANDBOX"] = "1"
 	}
 
 	recorderContainer := Container{
@@ -132,6 +145,10 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 		CapacityProvider: config.Conf.AwsWinCapacityProvider,
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
 		AwsLogsGroup:     config.Conf.AwsLogsGroup,
+	}
+
+	if caps.BrowserName == "firefox" {
+		env.Network.Endpoints["gecko_driver"] = &network.Endpoint{ContainerPort: seleniumPort, HostPort: 0, Path: "/"}
 	}
 
 	err := calculateResources(&env,

@@ -342,22 +342,26 @@ func ParseRequestCapabilities(body io.ReadCloser) (*RequestCaps, *Capabilities, 
 			return nil, nil, err
 		}
 
-		var windowsSize string
+		var windowsWidth, windowsHeight string
 		if resolutionArr := strings.Split(resolutionStr, "x"); len(resolutionArr) < 2 {
-			windowsSize = fmt.Sprintf("--window-size=%s,%s", "1920", "1080")
+			windowsWidth = "1920"
+			windowsHeight = "1080"
 		} else {
-			windowsSize = fmt.Sprintf("--window-size=%s,%s", resolutionArr[0], resolutionArr[1])
+			windowsWidth = resolutionArr[0]
+			windowsHeight = resolutionArr[1]
 		}
+
+		chromiumWindowSize := fmt.Sprintf("--window-size=%s,%s", windowsWidth, windowsHeight)
 
 		windowsCasProcessor := CapsProcessor{
 			"goog:chromeOptions": {
-				ValueProcessor: addArgs("--headless=new", "--disable-gpu", windowsSize),
+				ValueProcessor: addArgs("--headless=new", "--disable-gpu", chromiumWindowSize),
 			},
 			"ms:edgeOptions": {
-				ValueProcessor: addArgs("--headless=new", "--disable-gpu", windowsSize),
+				ValueProcessor: addArgs("--headless=new", "--disable-gpu", chromiumWindowSize),
 			},
 			"moz:firefoxOptions": {
-				ValueProcessor: addArgs("--headless=new", "--disable-gpu", windowsSize),
+				ValueProcessor: addArgs("-headless", fmt.Sprintf("--width=%s", windowsWidth), fmt.Sprintf("--height=%s", windowsHeight)),
 			},
 		}
 
