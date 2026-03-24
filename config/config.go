@@ -84,6 +84,8 @@ type Config struct {
 
 	EcsTaskTags           utils.TagMap
 	EcsTaskDefinitionTags utils.TagMap
+
+	RootCACert string
 }
 
 func init() {
@@ -143,6 +145,8 @@ func init() {
 
 	flag.Var(&Conf.EcsTaskTags, "ecs-task-tags", "Tags to apply to ECS tasks (RunTask) in key=value,key=value format")
 	flag.Var(&Conf.EcsTaskDefinitionTags, "ecs-task-definition-tags", "Tags to apply to ECS task definitions in key=value,key=value format. If 'Name' is not provided, defaults to family:revision")
+
+	flag.StringVar(&Conf.RootCACert, "root-ca-cert", "", "Default base64-encoded PEM CA certificate injected into browser containers. Can be overridden per-session via zebrunner:options.rootCACert capability")
 }
 
 // When static credentials are provided, IMDS calls should be skipped.

@@ -42,6 +42,7 @@ var (
 		"mitmCpu", "MitmCpu", "mitmcpu",
 		"mitmMemory", "MitmMemory", "mitmmemory",
 		"mitmType", "MitmType", "mitmtype",
+		"rootCACert", "RootCACert", "rootcacert",
 	}
 )
 
