@@ -18,9 +18,7 @@ import (
 	"github.com/zebrunner/esg/utils"
 )
 
-const (
-	presignUrlTimeout = 15 * time.Minute
-)
+const presignUrlTimeout = 15 * time.Minute
 
 var (
 	progressivePause utils.ProgressivePause
@@ -31,6 +29,9 @@ func init() {
 }
 
 func CreateTaskDefinition(ctx context.Context, definitions []ecsTypes.ContainerDefinition, volumes []ecsTypes.Volume, taskDefinitionFamily string, taskRoleArn string) (*ecsTypes.TaskDefinition, error) {
+	ctx, cancel := context.WithTimeout(ctx, AwsCallTimeout)
+	defer cancel()
+
 	svc := ecs.NewFromConfig(AwsCfg)
 
 	input := &ecs.RegisterTaskDefinitionInput{
@@ -112,6 +113,9 @@ func ConstDelay(t time.Duration) func(int) time.Duration {
 }
 
 func StopTaskForcibly(ctx context.Context, taskId string, stopReason mapper.StoppedReason) error {
+	ctx, cancel := context.WithTimeout(ctx, AwsCallTimeout)
+	defer cancel()
+
 	svc := ecs.NewFromConfig(AwsCfg)
 
 	stopTaskInput := &ecs.StopTaskInput{
