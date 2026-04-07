@@ -118,6 +118,8 @@ func getEnvironmentBuilder(caps *capabilities.Capabilities) (envBuilder, error) 
 			return buildAppiumRedroid, nil
 		}
 		return nil, fmt.Errorf("device is not supported. deviceName=%s", caps.DeviceName.ToPrimitive())
+	case envtype.PLAYWRIGHT.String():
+		return buildPlaywright, nil
 	default:
 		return nil, fmt.Errorf("platform is not supported. platformName=%s", caps.PlatformName.ToPrimitive())
 	}
@@ -163,6 +165,8 @@ func buildImageFromCaps(caps *capabilities.Capabilities) (*images.Image, error) 
 		return images.ImageFromString(repository, tag)
 	case envtype.ANDROID.String():
 		return images.ImageFromString(remapName(caps.DeviceName.ToPrimitive()), remapVersion(caps.PlatformVersion.ToPrimitive()))
+	case envtype.PLAYWRIGHT.String():
+		return images.ImageFromString("playwright", remapVersion(caps.BrowserVersion.ToPrimitive()))
 	default:
 		return nil, fmt.Errorf("platform '%s' is not supported", caps.PlatformName.ToPrimitive())
 	}
@@ -181,7 +185,11 @@ func buildTaskDefinitionFamily(caps *capabilities.Capabilities) string {
 	}
 	familyParts = append(familyParts, platformName)
 
-	if deviceName := strings.ToLower(caps.DeviceName.ToPrimitive()); deviceName != "" {
+	if platformName == envtype.PLAYWRIGHT.String() {
+		browserVersion := remapVersion(caps.BrowserVersion.ToPrimitive())
+		browserVersion = strings.Replace(browserVersion, ".", "-", -1)
+		familyParts = append(familyParts, browserVersion)
+	} else if deviceName := strings.ToLower(caps.DeviceName.ToPrimitive()); deviceName != "" {
 		deviceName := strings.ToLower(deviceName)
 		platformVersion := remapVersion(caps.PlatformVersion.ToPrimitive())
 		platformVersion = strings.Replace(platformVersion, ".", "-", -1)
@@ -206,6 +214,10 @@ func remapName(name string) string {
 	}
 	if newName, ok := remapName[name]; ok {
 		return newName
+	}
+
+	if strings.HasPrefix(name, "playwright-") {
+		return strings.TrimPrefix(name, "playwright-")
 	}
 
 	return name

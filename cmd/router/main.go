@@ -135,6 +135,7 @@ func CreateRouter() *gin.Engine {
 	{
 		selenium.POST("/session", handlers.Create) // Auth logic moved to handler
 		selenium.GET("/ws/vnc/:uuid", handlers.ValidateMapperPresence, handlers.Vnc)
+		selenium.GET("/ws/playwright", handlers.PlaywrightHub)
 
 		genericHub := selenium.Group("/", handlers.ValidateGenericMapperPresence, handlers.LockGenericTaskCache)
 		{

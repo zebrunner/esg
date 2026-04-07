@@ -444,6 +444,22 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, workspace string, 
 				}
 			},
 		}
+	} else if env.Type == envtype.PLAYWRIGHT {
+		basis.appendPhase(basis.registerTaskPhase).appendPhase(basis.startTaskPhase).appendPhase(basis.setNetworkPhase)
+
+		starter = basicStarter{
+			basis: basis,
+			finalizeFunc: func(s *startBasis) {
+				accessedAt := time.Now()
+				s.MapperEntity.AccessedAt = &accessedAt
+				s.MapperEntity.Status = mapper.Active
+
+				err := mapper.WritedByWorker(s.MapperEntity, []cachemaps.SetType{cachemaps.TASK}, nil, 0)
+				if err != nil {
+					basis.Log.WithError(err).Error("Failed to recache task on finalize!")
+				}
+			},
+		}
 	} else {
 		basis.appendPhase(basis.registerTaskPhase).appendPhase(basis.startTaskPhase).appendPhase(basis.setNetworkPhase).appendPhase(basis.startDriverPhase)
 		starter = basicStarter{

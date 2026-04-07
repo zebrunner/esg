@@ -3,6 +3,7 @@ package environment
 import (
 	b64 "encoding/base64"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -220,6 +221,32 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 
 	executorContainer.Env["UUID"] = routerUUID
 	executorContainer.Env["E3S_URL"] = config.Conf.E3SUrl
+
+	if includePlaywright {
+		pwWsEndpoint := ""
+
+		if hubUrl := executorContainer.Env["ZEBRUNNER_HUB_URL"]; hubUrl != "" {
+			if parsed, err := url.Parse(hubUrl); err == nil {
+				wsScheme := "ws"
+				if parsed.Scheme == "https" {
+					wsScheme = "wss"
+				}
+				pwWsEndpoint = fmt.Sprintf("%s://%s/ws/playwright", wsScheme, parsed.Host)
+			}
+		}
+
+		if pwWsEndpoint == "" {
+			e3sUrl := strings.ToLower(config.Conf.E3SUrl)
+			wsScheme := "ws"
+			if strings.HasPrefix(e3sUrl, "https") {
+				wsScheme = "wss"
+			}
+			wsHost := strings.TrimPrefix(strings.TrimPrefix(e3sUrl, "https://"), "http://")
+			pwWsEndpoint = fmt.Sprintf("%s://%s/ws/playwright", wsScheme, wsHost)
+		}
+
+		executorContainer.Env["PLAYWRIGHT_WS_ENDPOINT"] = pwWsEndpoint
+	}
 
 	recorderContainer := Container{
 		Name:  "recorder",

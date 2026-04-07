@@ -15,11 +15,12 @@ const (
 	WINDOWS
 	CYPRESS
 	ANDROID
+	PLAYWRIGHT
 	ANY
 )
 
 func (e ENV_TYPE) String() string {
-	return [...]string{"generic", "linux", "windows", "cypress", "android", "any"}[e]
+	return [...]string{"generic", "linux", "windows", "cypress", "android", "playwright", "any"}[e]
 }
 
 type capsForPlatform func(string, string) ([]*capabilities.Capabilities, error)
@@ -34,6 +35,8 @@ func (env ENV_TYPE) GetMockCapsBuilder() (capsForPlatform, error) {
 		return capsForCypress, nil
 	case ANDROID:
 		return capsForAndroid, nil
+	case PLAYWRIGHT:
+		return capsForPlaywright, nil
 	default:
 		return nil, fmt.Errorf("environment is not supported. env=%s", env.String())
 	}
@@ -109,6 +112,22 @@ func capsForAndroid(name string, version string) ([]*capabilities.Capabilities, 
 		"platformName":    ANDROID.String(),
 		"deviceName":      name,
 		"platformVersion": version,
+	}
+
+	err := caps.ParseRequestCaps(reqCaps)
+	if err != nil {
+		return nil, err
+	}
+
+	return append(capsList, caps), nil
+}
+
+func capsForPlaywright(name string, version string) ([]*capabilities.Capabilities, error) {
+	capsList := make([]*capabilities.Capabilities, 0)
+	caps := capabilities.GetDefaultCaps()
+	reqCaps := map[string]interface{}{
+		"platformName":   PLAYWRIGHT.String(),
+		"browserVersion": version,
 	}
 
 	err := caps.ParseRequestCaps(reqCaps)
