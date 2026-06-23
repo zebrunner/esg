@@ -12,7 +12,7 @@ import (
 	"github.com/zebrunner/esg/images"
 )
 
-const (
+var (
 	uploaderImage        = config.ZebrunnerEcrRegistryUri + "/" + "uploader:3.6.1"
 	mitmImage            = config.ZebrunnerEcrRegistryUri + "/" + "mitmproxy:2.3"
 	recorderImage        = config.ZebrunnerEcrRegistryUri + "/" + "recorder:2.3"
@@ -20,10 +20,35 @@ const (
 	appiumImage          = config.ZebrunnerEcrRegistryUri + "/" + "appium:2.0.15-readonlyfs"
 	cloneImage           = config.ZebrunnerEcrRegistryUri + "/" + "git:2.36.2"
 	entrypointImage      = config.ZebrunnerEcrRegistryUri + "/" + "entrypoint:2.5.3"
-	mavenImage           = config.ZebrunnerEcrRegistryUri + "/" + "m2-repo-carina:1.5"
+	mavenImage           = config.ZebrunnerEcrRegistryUri + "/" + "m2-repo-carina:2.0"
 	winUploaderImage     = config.ZebrunnerEcrRegistryUri + "/" + "uploader:1.1-win"
 	winRecorderImage     = config.ZebrunnerEcrRegistryUri + "/" + "recorder:2.0-win"
 )
+
+// Must run after flag.Parse so config-provided overrides replace the built-in defaults.
+func ResolveImageOverrides() {
+	overrides := []struct {
+		target   *string
+		override string
+	}{
+		{&uploaderImage, config.Conf.UploaderImage},
+		{&mitmImage, config.Conf.MitmImage},
+		{&recorderImage, config.Conf.RecorderImage},
+		{&cypressRecorderImage, config.Conf.CypressRecorderImage},
+		{&appiumImage, config.Conf.AppiumImage},
+		{&cloneImage, config.Conf.CloneImage},
+		{&entrypointImage, config.Conf.EntrypointImage},
+		{&mavenImage, config.Conf.MavenImage},
+		{&winUploaderImage, config.Conf.WinUploaderImage},
+		{&winRecorderImage, config.Conf.WinRecorderImage},
+	}
+
+	for _, o := range overrides {
+		if o.override != "" {
+			*o.target = o.override
+		}
+	}
+}
 
 const (
 	genericPort      int64 = 22

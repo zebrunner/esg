@@ -8,9 +8,9 @@ import (
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/utils"
 
-	"github.com/jackc/pgtype"
-	pgx "github.com/jackc/pgx/v4"
-	_ "github.com/jackc/pgx/v4/stdlib"
+	pgx "github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/sethvargo/go-password/password"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
