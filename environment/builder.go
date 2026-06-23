@@ -20,7 +20,7 @@ var (
 	appiumImage          = config.ZebrunnerEcrRegistryUri + "/" + "appium:2.0.15-readonlyfs"
 	cloneImage           = config.ZebrunnerEcrRegistryUri + "/" + "git:2.36.2"
 	entrypointImage      = config.ZebrunnerEcrRegistryUri + "/" + "entrypoint:2.5.3"
-	mavenImage           = config.ZebrunnerEcrRegistryUri + "/" + "m2-repo-carina:1.5"
+	mavenImage           = config.ZebrunnerEcrRegistryUri + "/" + "m2-repo-carina:2.0"
 	winUploaderImage     = config.ZebrunnerEcrRegistryUri + "/" + "uploader:1.1-win"
 	winRecorderImage     = config.ZebrunnerEcrRegistryUri + "/" + "recorder:2.0-win"
 )
