@@ -78,6 +78,40 @@ if [ ! -z ${EXCLUDE_BROWSERS} ]; then
   CMD_ARGS="${CMD_ARGS} -exclude-browsers ${EXCLUDE_BROWSERS}"
 fi
 
+if [ ! -z ${UPLOADER_IMAGE} ]; then
+  CMD_ARGS="${CMD_ARGS} -uploader-image ${UPLOADER_IMAGE}"
+fi
+if [ ! -z ${MITM_IMAGE} ]; then
+  CMD_ARGS="${CMD_ARGS} -mitm-image ${MITM_IMAGE}"
+fi
+if [ ! -z ${RECORDER_IMAGE} ]; then
+  CMD_ARGS="${CMD_ARGS} -recorder-image ${RECORDER_IMAGE}"
+fi
+if [ ! -z ${CYPRESS_RECORDER_IMAGE} ]; then
+  CMD_ARGS="${CMD_ARGS} -cypress-recorder-image ${CYPRESS_RECORDER_IMAGE}"
+fi
+if [ ! -z ${APPIUM_IMAGE} ]; then
+  CMD_ARGS="${CMD_ARGS} -appium-image ${APPIUM_IMAGE}"
+fi
+if [ ! -z ${CLONE_IMAGE} ]; then
+  CMD_ARGS="${CMD_ARGS} -clone-image ${CLONE_IMAGE}"
+fi
+if [ ! -z ${ENTRYPOINT_IMAGE} ]; then
+  CMD_ARGS="${CMD_ARGS} -entrypoint-image ${ENTRYPOINT_IMAGE}"
+fi
+if [ ! -z ${MAVEN_IMAGE} ]; then
+  CMD_ARGS="${CMD_ARGS} -maven-image ${MAVEN_IMAGE}"
+fi
+if [ ! -z ${WIN_UPLOADER_IMAGE} ]; then
+  CMD_ARGS="${CMD_ARGS} -win-uploader-image ${WIN_UPLOADER_IMAGE}"
+fi
+if [ ! -z ${WIN_RECORDER_IMAGE} ]; then
+  CMD_ARGS="${CMD_ARGS} -win-recorder-image ${WIN_RECORDER_IMAGE}"
+fi
+if [ ! -z ${GENERIC_EXECUTOR_IMAGE_PROFILES} ]; then
+  CMD_ARGS="${CMD_ARGS} -generic-executor-image-profiles ${GENERIC_EXECUTOR_IMAGE_PROFILES}"
+fi
+
 if [ ! -z ${ECS_TASK_DEFINITION_TAGS} ]; then
   CMD_ARGS="${CMD_ARGS} -ecs-task-definition-tags=${ECS_TASK_DEFINITION_TAGS}"
 fi

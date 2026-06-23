@@ -1,6 +1,8 @@
 package environment
 
 import (
+	b64 "encoding/base64"
+	"fmt"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -13,9 +15,6 @@ import (
 	"github.com/zebrunner/esg/environment/network"
 	"github.com/zebrunner/esg/images"
 	"github.com/zebrunner/esg/utils"
-
-	b64 "encoding/base64"
-	"fmt"
 )
 
 func buildGeneric(workspace string, routerUUID string, image images.Image, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
@@ -114,15 +113,20 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 		ReadOnlyRootFileSystem: true,
 	}
 
-	includeMaven := strings.Contains(caps.Image.ToPrimitive(), "maven")
-
-	includePython := false
-	if strings.Contains(caps.Image.ToPrimitive(), "python") || strings.Contains(caps.Image.ToPrimitive(), "amancevice/pandas") {
-		includePython = true
+	executorProfiles, extractProfilesErr := utils.ExtractCapabilityAsString(caps.EnvVariables.ToPrimitive(), "zebrunner:executorProfiles")
+	if extractProfilesErr != nil {
+		log.Debug(extractProfilesErr)
 	}
 
-	includeGradle := strings.Contains(caps.Image.ToPrimitive(), "gradle")
-	includePlaywright := strings.Contains(caps.Image.ToPrimitive(), "playwright")
+	profiles, err := utils.ResolveExecutorProfiles(executorProfiles, caps.Image.ToPrimitive(), conf.GenericExecutorImageProfiles)
+	if err != nil {
+		return nil, err
+	}
+
+	includeMaven := profiles.Has(utils.ExecutorProfileMaven)
+	includePython := profiles.Has(utils.ExecutorProfilePython)
+	includeGradle := profiles.Has(utils.ExecutorProfileGradle)
+	includePlaywright := profiles.Has(utils.ExecutorProfilePlaywright)
 
 	var mavenContainer *Container = nil
 	if includeMaven {
@@ -152,13 +156,16 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 	if includeMaven {
 		mounts = append(mounts, mavenVolume)
 		mounts = append(mounts, mavenLogVolume)
-	} else if includePython {
+	}
+	if includePython {
 		mounts = append(mounts, executorPythonBinVolume)
 		mounts = append(mounts, executorPythonLibVolume)
 		mounts = append(mounts, executorPythonLocalVolume)
-	} else if includeGradle {
+	}
+	if includeGradle {
 		mounts = append(mounts, executorGradleVolume)
-	} else if includePlaywright {
+	}
+	if includePlaywright {
 		mounts = append(mounts, executorPlaywrightCacheVolume)
 	}
 
@@ -285,13 +292,16 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 		containers = append(containers, mavenContainer)
 		volumes[mavenVolume] = volume{Driver: "local", Scope: "task", ContainerPath: mavenDir, ReadOnly: false}
 		volumes[mavenLogVolume] = volume{Driver: "local", Scope: "task", ContainerPath: mavenLogDir, ReadOnly: false}
-	} else if includePython {
+	}
+	if includePython {
 		volumes[executorPythonLocalVolume] = volume{Driver: "local", Scope: "task", ContainerPath: executorPythonLocalDir, ReadOnly: false}
 		volumes[executorPythonBinVolume] = volume{Driver: "local", Scope: "task", ContainerPath: executorPythonBinDir, ReadOnly: false}
 		volumes[executorPythonLibVolume] = volume{Driver: "local", Scope: "task", ContainerPath: executorPythonLibDir, ReadOnly: false}
-	} else if includeGradle {
+	}
+	if includeGradle {
 		volumes[executorGradleVolume] = volume{Driver: "local", Scope: "task", ContainerPath: executorGradleDir, ReadOnly: false}
-	} else if includePlaywright {
+	}
+	if includePlaywright {
 		volumes[executorPlaywrightCacheVolume] = volume{Driver: "local", Scope: "task", ContainerPath: executorPlaywrighCacheDir, ReadOnly: false}
 	}
 
@@ -371,7 +381,7 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 		AwsLogsGroup:     config.Conf.AwsLogsGroup,
 	}
 
-	err := calculateResources(&env,
+	err = calculateResources(&env,
 		&resourceCalculationHelper{
 			MinimumRes: Resources{Cpu: 1024, Memory: 1024},
 			Container:  &executorContainer,
