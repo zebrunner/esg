@@ -120,7 +120,7 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 		log.Debug(extractProfilesErr)
 	}
 
-	profiles, err := utils.ResolveExecutorProfiles(executorProfiles, envVars["ZEBRUNNER_PROFILES"], caps.Image.ToPrimitive(), conf.GenericExecutorImageProfiles)
+	profiles, err := utils.ResolveExecutorProfiles(executorProfiles, envVars["EXECUTOR_PROFILES"], caps.Image.ToPrimitive(), conf.GenericExecutorImageProfiles)
 	if err != nil {
 		return nil, err
 	}
