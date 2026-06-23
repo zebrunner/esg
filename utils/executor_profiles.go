@@ -25,7 +25,7 @@ func (p ExecutorProfiles) merge(other ExecutorProfiles) {
 	}
 }
 
-func ResolveExecutorProfiles(profileCaps string, image string, imageProfilesConfig string) (ExecutorProfiles, error) {
+func ResolveExecutorProfiles(profileCaps string, profileEnv string, image string, imageProfilesConfig string) (ExecutorProfiles, error) {
 	profiles := executorProfilesFromImageName(image)
 
 	configProfiles, err := executorProfilesFromConfig(image, imageProfilesConfig)
@@ -39,6 +39,12 @@ func ResolveExecutorProfiles(profileCaps string, image string, imageProfilesConf
 		return nil, err
 	}
 	profiles.merge(capProfiles)
+
+	envProfiles, err := executorProfilesFromCapabilities(profileEnv)
+	if err != nil {
+		return nil, err
+	}
+	profiles.merge(envProfiles)
 
 	return profiles, nil
 }

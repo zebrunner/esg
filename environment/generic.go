@@ -113,12 +113,14 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 		ReadOnlyRootFileSystem: true,
 	}
 
-	executorProfiles, extractProfilesErr := utils.ExtractCapabilityAsString(caps.EnvVariables.ToPrimitive(), "zebrunner:executorProfiles")
+	envVars := caps.EnvVariables.ToPrimitive()
+
+	executorProfiles, extractProfilesErr := utils.ExtractCapabilityAsString(envVars, "zebrunner:executorProfiles")
 	if extractProfilesErr != nil {
 		log.Debug(extractProfilesErr)
 	}
 
-	profiles, err := utils.ResolveExecutorProfiles(executorProfiles, caps.Image.ToPrimitive(), conf.GenericExecutorImageProfiles)
+	profiles, err := utils.ResolveExecutorProfiles(executorProfiles, envVars["ZEBRUNNER_PROFILES"], caps.Image.ToPrimitive(), conf.GenericExecutorImageProfiles)
 	if err != nil {
 		return nil, err
 	}
