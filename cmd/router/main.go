@@ -288,6 +288,8 @@ func main() {
 
 	flag.Parse()
 
+	environment.ResolveImageOverrides()
+
 	log.SetLevel(config.Conf.ParseLogLevel())
 	log.SetFormatter(&log.TextFormatter{
 		FullTimestamp: true,

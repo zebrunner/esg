@@ -14,6 +14,7 @@ import (
 	"github.com/zebrunner/esg/cachemaps/utilsmap"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/definitions"
+	"github.com/zebrunner/esg/environment"
 	"github.com/zebrunner/esg/handlers"
 	"github.com/zebrunner/esg/images"
 	"github.com/zebrunner/esg/service"
@@ -107,6 +108,8 @@ func main() {
 	}()
 
 	flag.Parse()
+
+	environment.ResolveImageOverrides()
 
 	log.SetLevel(config.Conf.ParseLogLevel())
 

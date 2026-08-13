@@ -75,8 +75,21 @@ type Config struct {
 	ReserveInstancesPercent float64
 	ReserveMaxCapacity      int64
 
-	ImageRepositories string
-	ExcludeBrowsers   string
+	ImageRepositories            string
+	ExcludeBrowsers              string
+	GenericExecutorImageProfiles string
+
+	// Image overrides (full image URLs). Empty value keeps the built-in default.
+	UploaderImage        string
+	MitmImage            string
+	RecorderImage        string
+	CypressRecorderImage string
+	AppiumImage          string
+	CloneImage           string
+	EntrypointImage      string
+	MavenImage           string
+	WinUploaderImage     string
+	WinRecorderImage     string
 
 	ProductionEnv bool
 	SingleTenant  bool
@@ -137,6 +150,18 @@ func init() {
 
 	flag.StringVar(&Conf.ImageRepositories, "image-repositories", "Zebrunner:chrome", "Pattern of supported browser images")
 	flag.StringVar(&Conf.ExcludeBrowsers, "exclude-browsers", "", "Pattern for excluding browsers from available images")
+	flag.StringVar(&Conf.GenericExecutorImageProfiles, "generic-executor-image-profiles", os.Getenv("GENERIC_EXECUTOR_IMAGE_PROFILES"), "JSON map of generic executor profiles to image name matchers")
+
+	flag.StringVar(&Conf.UploaderImage, "uploader-image", "", "Override full image URL for the uploader container")
+	flag.StringVar(&Conf.MitmImage, "mitm-image", "", "Override full image URL for the mitmproxy container")
+	flag.StringVar(&Conf.RecorderImage, "recorder-image", "", "Override full image URL for the recorder container")
+	flag.StringVar(&Conf.CypressRecorderImage, "cypress-recorder-image", "", "Override full image URL for the cypress recorder container")
+	flag.StringVar(&Conf.AppiumImage, "appium-image", "", "Override full image URL for the appium container")
+	flag.StringVar(&Conf.CloneImage, "clone-image", "", "Override full image URL for the git clone container")
+	flag.StringVar(&Conf.EntrypointImage, "entrypoint-image", "", "Override full image URL for the entrypoint container")
+	flag.StringVar(&Conf.MavenImage, "maven-image", "", "Override full image URL for the maven (m2-repo-carina) container")
+	flag.StringVar(&Conf.WinUploaderImage, "win-uploader-image", "", "Override full image URL for the windows uploader container")
+	flag.StringVar(&Conf.WinRecorderImage, "win-recorder-image", "", "Override full image URL for the windows recorder container")
 
 	flag.BoolVar(&Conf.SingleTenant, "single-tenant", false, "Single tenant mode")
 	flag.BoolVar(&Conf.ProductionEnv, "production-env", true, "Service configuration mode")
