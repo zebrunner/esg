@@ -20,6 +20,31 @@ const (
 	playwrightCdpPort int64 = 9222
 )
 
+// The image ships no branded channels, so chrome and edge resolve to the bundled chromium engine.
+// The empty key serves task definition generation only, where no browser is requested yet.
+var playwrightBrowserTypes = map[string]string{
+	"":              "playwright-chromium",
+	"chromium":      "playwright-chromium",
+	"chrome":        "playwright-chromium",
+	"edge":          "playwright-chromium",
+	"microsoftedge": "playwright-chromium",
+	"firefox":       "playwright-firefox",
+	"webkit":        "playwright-webkit",
+	"safari":        "playwright-webkit",
+}
+
+// resolvePlaywrightBrowserType maps a webdriver browser name onto the BROWSER_TYPE value of the image.
+func resolvePlaywrightBrowserType(browserName string) (string, error) {
+	name := strings.TrimPrefix(strings.ToLower(browserName), "playwright-")
+
+	browserType, ok := playwrightBrowserTypes[name]
+	if !ok {
+		return "", fmt.Errorf("browser is not supported on playwright platform. browserName=%s", browserName)
+	}
+
+	return browserType, nil
+}
+
 func buildPlaywright(workspace string, routerUUID string, image images.Image, caps *capabilities.Capabilities) (*ExecutionEnvironment, error) {
 	conf := &config.Conf
 
@@ -57,9 +82,10 @@ func buildPlaywright(workspace string, routerUUID string, image images.Image, ca
 		screenHeight = resParts[1]
 	}
 
-	browserType := caps.BrowserName.ToPrimitive()
-	if browserType == "" {
-		browserType = "playwright-chromium"
+	browserType, err := resolvePlaywrightBrowserType(caps.BrowserName.ToPrimitive())
+	if err != nil {
+		log.WithError(err).Error("failed to resolve playwright browser type")
+		return nil, err
 	}
 
 	browserContainer := Container{
@@ -92,6 +118,10 @@ func buildPlaywright(workspace string, routerUUID string, image images.Image, ca
 		},
 
 		ReadOnlyRootFileSystem: false,
+	}
+
+	if args := caps.PlaywrightArgs.ToPrimitive(); args != "" {
+		browserContainer.Env["PLAYWRIGHT_EXTRA_ARGS"] = args
 	}
 
 	if caps.EnvVariables != nil {

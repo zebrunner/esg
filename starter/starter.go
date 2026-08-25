@@ -453,8 +453,18 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, workspace string, 
 				accessedAt := time.Now()
 				s.MapperEntity.AccessedAt = &accessedAt
 				s.MapperEntity.Status = mapper.Active
+				// Playwright has no webdriver session, so mirror the uuid to keep the session routes usable.
+				s.MapperEntity.SessionID = s.MapperEntity.RouterUUID
+				s.Reply = map[string]interface{}{"sessionId": s.MapperEntity.SessionID}
 
-				err := mapper.WritedByWorker(s.MapperEntity, []cachemaps.SetType{cachemaps.TASK}, nil, 0)
+				go func() {
+					err := selenium.StartRecording(&s.MapperEntity.Network)
+					if err != nil {
+						basis.Log.WithError(err).Error("Failed to start recording")
+					}
+				}()
+
+				err := mapper.WritedByWorker(s.MapperEntity, []cachemaps.SetType{cachemaps.SESSION, cachemaps.TASK}, nil, 0)
 				if err != nil {
 					basis.Log.WithError(err).Error("Failed to recache task on finalize!")
 				}

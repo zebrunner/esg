@@ -242,23 +242,25 @@ func (m *mapStrStrWrapper) From(value map[string]string) {
 }
 
 type Capabilities struct {
-	BrowserName      stringWrapper
-	BrowserVersion   stringWrapper
-	PlatformName     stringWrapper
-	PlatformVersion  stringWrapper
-	Proxy            mapStrInterfaceWrapper
-	Timeouts         stringWrapper
-	EnableVNC        boolWrapper
-	EnableLog        boolWrapper // not implemented
-	EnableDebug      boolWrapper
-	ScreenResolution stringWrapper
-	DeviceName       stringWrapper
-	IdleTimeout      int64Wrapper
-	MaxTimeout       int64Wrapper
-	TimeZone         stringWrapper
-	Env              sliceStringWrapper
-	HostsEntries     sliceStringWrapper
-	DNSServers       sliceStringWrapper
+	BrowserName       stringWrapper
+	BrowserVersion    stringWrapper
+	PlatformName      stringWrapper
+	PlatformVersion   stringWrapper
+	PlaywrightVersion stringWrapper
+	PlaywrightArgs    stringWrapper
+	Proxy             mapStrInterfaceWrapper
+	Timeouts          stringWrapper
+	EnableVNC         boolWrapper
+	EnableLog         boolWrapper // not implemented
+	EnableDebug       boolWrapper
+	ScreenResolution  stringWrapper
+	DeviceName        stringWrapper
+	IdleTimeout       int64Wrapper
+	MaxTimeout        int64Wrapper
+	TimeZone          stringWrapper
+	Env               sliceStringWrapper
+	HostsEntries      sliceStringWrapper
+	DNSServers        sliceStringWrapper
 
 	//Video related caps
 	EnableVideo     boolWrapper
@@ -440,23 +442,25 @@ func GetDefaultCaps() *Capabilities {
 
 func (c *Capabilities) ParseRequestCaps(reqCaps map[string]interface{}) error {
 	mapping := map[string]Validator{
-		"browsername":      &c.BrowserName,
-		"browserversion":   &c.BrowserVersion,
-		"platformname":     &c.PlatformName,
-		"platformversion":  &c.PlatformVersion,
-		"proxy":            &c.Proxy,
-		"timeouts":         &c.Timeouts,
-		"enablevnc":        &c.EnableVNC,
-		"enablelog":        &c.EnableLog,
-		"enabledebug":      &c.EnableDebug,
-		"screenresolution": &c.ScreenResolution,
-		"devicename":       &c.DeviceName,
-		"idletimeout":      &c.IdleTimeout,
-		"maxtimeout":       &c.MaxTimeout,
-		"timezone":         &c.TimeZone,
-		"env":              &c.Env,
-		"hostsentries":     &c.HostsEntries,
-		"dnsservers":       &c.DNSServers,
+		"browsername":       &c.BrowserName,
+		"browserversion":    &c.BrowserVersion,
+		"platformname":      &c.PlatformName,
+		"platformversion":   &c.PlatformVersion,
+		"playwrightversion": &c.PlaywrightVersion,
+		"playwrightargs":    &c.PlaywrightArgs,
+		"proxy":             &c.Proxy,
+		"timeouts":          &c.Timeouts,
+		"enablevnc":         &c.EnableVNC,
+		"enablelog":         &c.EnableLog,
+		"enabledebug":       &c.EnableDebug,
+		"screenresolution":  &c.ScreenResolution,
+		"devicename":        &c.DeviceName,
+		"idletimeout":       &c.IdleTimeout,
+		"maxtimeout":        &c.MaxTimeout,
+		"timezone":          &c.TimeZone,
+		"env":               &c.Env,
+		"hostsentries":      &c.HostsEntries,
+		"dnsservers":        &c.DNSServers,
 
 		"enablevideo":     &c.EnableVideo,
 		"videoscreensize": &c.VideoScreenSize,

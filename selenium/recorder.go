@@ -7,7 +7,8 @@ import (
 	"github.com/zebrunner/esg/environment/network"
 )
 
-func startRecording(network *network.NetworkConfiguration) error {
+// StartRecording asks the recorder container to start the session recording.
+func StartRecording(network *network.NetworkConfiguration) error {
 	url, ok := network.GetUrl("recorderStart")
 	if !ok {
 		return fmt.Errorf("failed to get url of recorder")

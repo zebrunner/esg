@@ -78,7 +78,7 @@ func startSession(ctx context.Context, net *network.NetworkConfiguration, driver
 	}
 
 	go func() {
-		err := startRecording(net)
+		err := StartRecording(net)
 		if err != nil {
 			log.WithError(err).Error("Failed to start recording")
 		}
