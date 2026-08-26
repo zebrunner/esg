@@ -148,6 +148,8 @@ func CreateRouter() *gin.Engine {
 			cachedSeleniumSession.DELETE("/session/:uuid", handlers.CloseSession)
 			cachedSeleniumSession.Any("/session/:uuid/*action", handlers.Proxy)
 
+			cachedSeleniumSession.POST("/playwright/:uuid/refresh", handlers.PlaywrightRefresh)
+
 			cachedSeleniumSession.Any("/download/:uuid/*action", handlers.Downloads)
 
 			cachedSeleniumSession.GET("/clipboard/:uuid", handlers.Clipboard)

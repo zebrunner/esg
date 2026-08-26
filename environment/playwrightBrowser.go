@@ -16,8 +16,9 @@ import (
 )
 
 const (
-	playwrightPort    int64 = 5555
-	playwrightCdpPort int64 = 9222
+	playwrightPort        int64 = 5555
+	playwrightControlPort int64 = 5556
+	playwrightCdpPort     int64 = 9222
 )
 
 // The image ships no branded channels, so chrome and edge resolve to the bundled chromium engine.
@@ -33,8 +34,8 @@ var playwrightBrowserTypes = map[string]string{
 	"safari":        "playwright-webkit",
 }
 
-// resolvePlaywrightBrowserType maps a webdriver browser name onto the BROWSER_TYPE value of the image.
-func resolvePlaywrightBrowserType(browserName string) (string, error) {
+// ResolvePlaywrightBrowserType maps a webdriver browser name onto the BROWSER_TYPE value of the image.
+func ResolvePlaywrightBrowserType(browserName string) (string, error) {
 	name := strings.TrimPrefix(strings.ToLower(browserName), "playwright-")
 
 	browserType, ok := playwrightBrowserTypes[name]
@@ -82,7 +83,7 @@ func buildPlaywright(workspace string, routerUUID string, image images.Image, ca
 		screenHeight = resParts[1]
 	}
 
-	browserType, err := resolvePlaywrightBrowserType(caps.BrowserName.ToPrimitive())
+	browserType, err := ResolvePlaywrightBrowserType(caps.BrowserName.ToPrimitive())
 	if err != nil {
 		log.WithError(err).Error("failed to resolve playwright browser type")
 		return nil, err
@@ -94,23 +95,27 @@ func buildPlaywright(workspace string, routerUUID string, image images.Image, ca
 		Essential: true,
 		Ports: map[string]portMapping{
 			"driver":   {ContainerPort: playwrightPort, HostPort: 0},
+			"control":  {ContainerPort: playwrightControlPort, HostPort: 0},
 			"vnc":      {ContainerPort: vncPort, HostPort: 0},
 			"devtools": {ContainerPort: playwrightCdpPort, HostPort: 0},
 		},
 		Env: map[string]string{
-			"BROWSER_TYPE":     browserType,
-			"ENABLE_VNC":       strconv.FormatBool(caps.EnableVNC.ToPrimitive()),
-			"TZ":               tz.String(),
-			"SE_SCREEN_WIDTH":  screenWidth,
-			"SE_SCREEN_HEIGHT": screenHeight,
-			"DNS_SERVERS":      strings.Join(caps.DNSServers, " "),
-			"HOSTS_ENTRIES":    strings.Join(caps.HostsEntries, " "),
+			"BROWSER_TYPE":        browserType,
+			"PLAYWRIGHT_HEADLESS": strconv.FormatBool(caps.Headless.ToPrimitive()),
+			"ENABLE_VNC":          strconv.FormatBool(caps.EnableVNC.ToPrimitive()),
+			"TZ":                  tz.String(),
+			"SE_SCREEN_WIDTH":     screenWidth,
+			"SE_SCREEN_HEIGHT":    screenHeight,
+			"DNS_SERVERS":         strings.Join(caps.DNSServers, " "),
+			"HOSTS_ENTRIES":       strings.Join(caps.HostsEntries, " "),
 		},
-		Mounts:     []string{logVolume, shmVolume, tmpBrowserVolume},
-		Command:    []string{"-c", "/opt/bin/entrypoint.sh 2>&1 | tee " + logDir + "/task.log"},
+		Mounts: []string{logVolume, shmVolume, tmpBrowserVolume},
+		// The recorder truncates the task log on rotate, so append mode keeps writes at offset 0.
+		Command:    []string{"-c", "/opt/bin/entrypoint.sh 2>&1 | tee -a " + logDir + "/task.log"},
 		EntryPoint: []string{"/bin/bash"},
 		HealthCheck: &ecsTypes.HealthCheck{
-			Command:     []string{"CMD-SHELL", fmt.Sprintf("curl -sf http://localhost:%d/ || exit 1", playwrightCdpPort)},
+			// The supervisor outlives every browser, so a refresh never fails the probe.
+			Command:     []string{"CMD-SHELL", fmt.Sprintf("curl -sf http://localhost:%d/health || exit 1", playwrightControlPort)},
 			Interval:    aws.Int32(10),
 			Timeout:     aws.Int32(5),
 			Retries:     aws.Int32(6),
@@ -231,13 +236,16 @@ func buildPlaywright(workspace string, routerUUID string, image images.Image, ca
 		Network: &network.NetworkConfiguration{
 			IP: "",
 			Endpoints: map[string]*network.Endpoint{
-				"driver":         {ContainerPort: playwrightPort, HostPort: 0, Path: "/"},
-				"vnc":            {ContainerPort: vncPort, HostPort: 0, Path: "/"},
-				"devtools":       {ContainerPort: playwrightCdpPort, HostPort: 0, Path: "/"},
-				"healthcheck":    {ContainerPort: playwrightCdpPort, HostPort: 0, Path: "/"},
-				"recorderStart":  {ContainerPort: recorderdPort, HostPort: 0, Path: "/start"},
-				"recorderStop":   {ContainerPort: recorderdPort, HostPort: 0, Path: "/stop"},
-				"recorderFinish": {ContainerPort: recorderdPort, HostPort: 0, Path: "/finish"},
+				"driver":            {ContainerPort: playwrightPort, HostPort: 0, Path: "/"},
+				"playwrightRefresh": {ContainerPort: playwrightControlPort, HostPort: 0, Path: "/refresh"},
+				"playwrightHealth":  {ContainerPort: playwrightControlPort, HostPort: 0, Path: "/health"},
+				"vnc":               {ContainerPort: vncPort, HostPort: 0, Path: "/"},
+				"devtools":          {ContainerPort: playwrightCdpPort, HostPort: 0, Path: "/"},
+				"healthcheck":       {ContainerPort: playwrightCdpPort, HostPort: 0, Path: "/"},
+				"recorderStart":     {ContainerPort: recorderdPort, HostPort: 0, Path: "/start"},
+				"recorderStop":      {ContainerPort: recorderdPort, HostPort: 0, Path: "/stop"},
+				"recorderRotate":    {ContainerPort: recorderdPort, HostPort: 0, Path: "/rotate"},
+				"recorderFinish":    {ContainerPort: recorderdPort, HostPort: 0, Path: "/finish"},
 			},
 		},
 		Type:             envtype.PLAYWRIGHT,

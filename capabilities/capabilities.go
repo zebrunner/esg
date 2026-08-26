@@ -248,6 +248,7 @@ type Capabilities struct {
 	PlatformVersion   stringWrapper
 	PlaywrightVersion stringWrapper
 	PlaywrightArgs    stringWrapper
+	Headless          boolWrapper
 	Proxy             mapStrInterfaceWrapper
 	Timeouts          stringWrapper
 	EnableVNC         boolWrapper
@@ -448,6 +449,7 @@ func (c *Capabilities) ParseRequestCaps(reqCaps map[string]interface{}) error {
 		"platformversion":   &c.PlatformVersion,
 		"playwrightversion": &c.PlaywrightVersion,
 		"playwrightargs":    &c.PlaywrightArgs,
+		"headless":          &c.Headless,
 		"proxy":             &c.Proxy,
 		"timeouts":          &c.Timeouts,
 		"enablevnc":         &c.EnableVNC,
