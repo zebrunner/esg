@@ -34,6 +34,9 @@ var playwrightBrowserTypes = map[string]string{
 	"safari":        "playwright-webkit",
 }
 
+// PlaywrightCatalogBrowsers are the engine names GET /browsers advertises for each playwright image.
+var PlaywrightCatalogBrowsers = []string{"chromium", "firefox", "webkit"}
+
 // ResolvePlaywrightBrowserType maps a webdriver browser name onto the BROWSER_TYPE value of the image.
 func ResolvePlaywrightBrowserType(browserName string) (string, error) {
 	name := strings.TrimPrefix(strings.ToLower(browserName), "playwright-")
