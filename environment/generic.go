@@ -66,6 +66,9 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 
 		executorPlaywrighCacheDir     = "/usr/local/share/.cache"
 		executorPlaywrightCacheVolume = "executorPlaywrightCacheVolume"
+
+		shmDir    = "/dev/shm"
+		shmVolume = "shm"
 	)
 
 	branch := ""
@@ -169,6 +172,7 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 	}
 	if includePlaywright {
 		mounts = append(mounts, executorPlaywrightCacheVolume)
+		mounts = append(mounts, shmVolume)
 	}
 
 	dependsOn := make([]ecsTypes.ContainerDependency, 0)
@@ -321,6 +325,7 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 	}
 	if includePlaywright {
 		volumes[executorPlaywrightCacheVolume] = volume{Driver: "local", Scope: "task", ContainerPath: executorPlaywrighCacheDir, ReadOnly: false}
+		volumes[shmVolume] = volume{ContainerPath: shmDir, HostPath: shmDir, ReadOnly: false}
 	}
 
 	// Extract custom executor volumes capability directly from ZEBRUNNER_CAPABILITIES env var
