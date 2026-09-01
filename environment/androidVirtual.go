@@ -111,6 +111,11 @@ func buildAppiumRedroid(workspace string, routerUUID string, image images.Image,
 	}
 
 	containers := []*Container{&deviceContainer, &appiumContainer, &uploaderContainer}
+	capacityProvider := config.Conf.AwsLinuxCapacityProvider
+	if config.Conf.AwsLinuxRedroidCapacityProvider != "" {
+		capacityProvider = config.Conf.AwsLinuxRedroidCapacityProvider
+	}
+
 	env := ExecutionEnvironment{
 		TaskDefinitionFamily: buildTaskDefinitionFamily(caps),
 		Schema:               buildSchema(containers),
@@ -133,7 +138,7 @@ func buildAppiumRedroid(workspace string, routerUUID string, image images.Image,
 			},
 		},
 		Type:             envtype.ANDROID,
-		CapacityProvider: config.Conf.AwsLinuxCapacityProvider,
+		CapacityProvider: capacityProvider,
 		TaskRoleArn:      config.Conf.AwsTaskRoleArn,
 		AwsLogsGroup:     config.Conf.AwsLogsGroup,
 	}

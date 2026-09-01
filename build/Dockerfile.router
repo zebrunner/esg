@@ -31,6 +31,8 @@ ENV AWS_SECRET_ACCESS_KEY=
 ENV AWS_LINUX_CAPACITY_PROVIDER=
 #Optional capacity provider for generic linux instances
 ENV AWS_LINUX_GENERIC_CAPACITY_PROVIDER=
+#Optional capacity provider for redroid linux instances
+ENV AWS_LINUX_REDROID_CAPACITY_PROVIDER=
 ENV AWS_WIN_CAPACITY_PROVIDER=
 ENV AWS_TARGET_GROUP=
 ENV AWS_TASK_ROLE=
@@ -64,6 +66,9 @@ ENV SINGLE_TENANT=
 ENV OLD_ABORT_API=
 
 ENV AWS_TARGET_ID=
+
+# Base64-encoded PEM CA certificate injected into browser containers (optional, overridden per-session via rootCACert capability)
+ENV ROOT_CA_CERT=
 
 RUN apk add -U tzdata
 

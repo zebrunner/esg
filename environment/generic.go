@@ -318,8 +318,9 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 	executorVolumes, extractErr := utils.ExtractCapabilityAsString(caps.EnvVariables.ToPrimitive(), "zebrunner:executorVolumes")
 
 	if extractErr != nil {
-		log.Debug(extractErr)
+		log.Trace(extractErr)
 	} else {
+		log.Debugf("executorVolumes capability set: %s", executorVolumes)
 		executorVolumes := strings.Split(executorVolumes, ",")
 		seenPaths := make(map[string]bool)
 

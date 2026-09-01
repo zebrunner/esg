@@ -30,6 +30,7 @@ type Config struct {
 	AwsCluster                      string
 	AwsLinuxCapacityProvider        string
 	AwsLinuxGenericCapacityProvider string
+	AwsLinuxRedroidCapacityProvider string
 	AwsWinCapacityProvider          string
 	AwsAccessKeyID                  string
 	AwsSecretAccessKey              string
@@ -96,6 +97,8 @@ type Config struct {
 
 	EcsTaskTags           utils.TagMap
 	EcsTaskDefinitionTags utils.TagMap
+
+	RootCACert string
 }
 
 func init() {
@@ -104,6 +107,7 @@ func init() {
 	flag.StringVar(&Conf.AwsCluster, "aws-cluster", "esg", "AWS ECS cluster name")
 	flag.StringVar(&Conf.AwsLinuxCapacityProvider, "aws-linux-capacity-provider", "esg-linux-capacityprovider", "AWS capacity provider for linux instances")
 	flag.StringVar(&Conf.AwsLinuxGenericCapacityProvider, "aws-linux-generic-capacity-provider", "", "AWS capacity provider for generic linux instances")
+	flag.StringVar(&Conf.AwsLinuxRedroidCapacityProvider, "aws-linux-redroid-capacity-provider", "", "AWS capacity provider for redroid linux instances")
 	flag.StringVar(&Conf.AwsWinCapacityProvider, "aws-win-capacity-provider", "esg-win-capacityprovider", "AWS capacity provicer for windows instances")
 	flag.StringVar(&Conf.AwsAccessKeyID, "aws-access-key-id", "", "Access key for AWS services")
 	flag.StringVar(&Conf.AwsSecretAccessKey, "aws-secret-access-key", "", "Secret key for AWS services")
@@ -166,6 +170,8 @@ func init() {
 
 	flag.Var(&Conf.EcsTaskTags, "ecs-task-tags", "Tags to apply to ECS tasks (RunTask) in key=value,key=value format")
 	flag.Var(&Conf.EcsTaskDefinitionTags, "ecs-task-definition-tags", "Tags to apply to ECS task definitions in key=value,key=value format. If 'Name' is not provided, defaults to family:revision")
+
+	flag.StringVar(&Conf.RootCACert, "root-ca-cert", "", "Default base64-encoded PEM CA certificate injected into browser containers. Can be overridden per-session via zebrunner:options.rootCACert capability")
 }
 
 // When static credentials are provided, IMDS calls should be skipped.

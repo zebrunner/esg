@@ -55,6 +55,9 @@ fi
 if [ ! -z ${AWS_LINUX_GENERIC_CAPACITY_PROVIDER} ]; then
   CMD_ARGS="${CMD_ARGS} -aws-linux-generic-capacity-provider ${AWS_LINUX_GENERIC_CAPACITY_PROVIDER}"
 fi
+if [ ! -z ${AWS_LINUX_REDROID_CAPACITY_PROVIDER} ]; then
+  CMD_ARGS="${CMD_ARGS} -aws-linux-redroid-capacity-provider ${AWS_LINUX_REDROID_CAPACITY_PROVIDER}"
+fi
 if [ ! -z ${AWS_WIN_CAPACITY_PROVIDER} ]; then
   CMD_ARGS="${CMD_ARGS} -aws-win-capacity-provider ${AWS_WIN_CAPACITY_PROVIDER}"
 fi
@@ -175,6 +178,10 @@ if [ ! -z ${SINGLE_TENANT} ]; then
 fi
 if [ ! -z ${OLD_ABORT_API} ]; then
   CMD_ARGS="${CMD_ARGS} -old-abort-api=${OLD_ABORT_API}"
+fi
+
+if [ ! -z ${ROOT_CA_CERT} ]; then
+  CMD_ARGS="${CMD_ARGS} -root-ca-cert=${ROOT_CA_CERT}"
 fi
 
 echo "CMD_ARGS: $CMD_ARGS"
