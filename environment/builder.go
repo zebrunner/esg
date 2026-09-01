@@ -132,7 +132,13 @@ func buildImageFromCaps(caps *capabilities.Capabilities) (*images.Image, error) 
 	case envtype.ANY.String():
 		fallthrough
 	case envtype.LINUX.String():
-		return images.ImageFromString(remapName(caps.BrowserName.ToPrimitive()), remapVersion(caps.BrowserVersion.ToPrimitive()))
+		browser := remapName(caps.BrowserName.ToPrimitive())
+		version := remapVersion(caps.BrowserVersion.ToPrimitive())
+		// Auto-update tags carry the suffix, so the request must resolve the auto-update repository.
+		if strings.HasSuffix(version, capabilities.AutoUpdateVersionSuffix) {
+			browser += capabilities.AutoUpdateVersionSuffix
+		}
+		return images.ImageFromString(browser, version)
 	case envtype.GENERIC.String():
 		return images.GetGenericImage(caps.Image.ToPrimitive())
 	case envtype.WINDOWS.String():

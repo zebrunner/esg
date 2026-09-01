@@ -15,6 +15,9 @@ import (
 	"github.com/zebrunner/esg/config"
 )
 
+// AutoUpdateVersionSuffix marks auto-update browser image tags and repositories, e.g. 119.0-auto-update.
+const AutoUpdateVersionSuffix = "-auto-update"
+
 var (
 	vendorCapsProcessor            CapsProcessor
 	preConfigurationCapsProcessor  CapsProcessor
@@ -91,9 +94,11 @@ func init() {
 		},
 		"browserVersion": {
 			ValueProcessor: func(value interface{}) interface{} {
-				// debug browser images tags should be like 125.0-debug
+				// debug tags are like 125.0-debug; auto-update tags are like 119.0-auto-update.
 				if v, ok := value.(string); ok {
-					return strings.TrimSuffix(v, "-debug")
+					v = strings.TrimSuffix(v, "-debug")
+					v = strings.TrimSuffix(v, AutoUpdateVersionSuffix)
+					return v
 				}
 				return value
 			},
