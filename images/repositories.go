@@ -19,6 +19,7 @@ const (
 	CYPRESS_CHROMIUM
 	CYPRESS_EDGE
 	CYPRESS_FIREFOX
+	PLAYWRIGHT
 )
 
 type supportedRepository int
@@ -30,7 +31,8 @@ func (repository supportedRepository) String() string {
 		"chrome", "firefox", "edge",
 		"redroid",
 		"windows-chrome", "windows-edge", "windows-firefox",
-		"cypress-chrome", "cypress-chromium", "cypress-edge", "cypress-firefox"}[repository]
+		"cypress-chrome", "cypress-chromium", "cypress-edge", "cypress-firefox",
+		"playwright"}[repository]
 }
 
 func (repository supportedRepository) GetBrowserName() string {
@@ -39,7 +41,8 @@ func (repository supportedRepository) GetBrowserName() string {
 		"chrome", "firefox", "edge",
 		"redroid",
 		"chrome", "edge", "firefox",
-		"chrome", "chromium", "edge", "firefox"}[repository]
+		"chrome", "chromium", "edge", "firefox",
+		"playwright"}[repository]
 }
 
 func (repository supportedRepository) GetPlatform() envtype.ENV_TYPE {
@@ -48,7 +51,8 @@ func (repository supportedRepository) GetPlatform() envtype.ENV_TYPE {
 		envtype.LINUX, envtype.LINUX, envtype.LINUX,
 		envtype.ANDROID,
 		envtype.WINDOWS, envtype.WINDOWS, envtype.WINDOWS,
-		envtype.CYPRESS, envtype.CYPRESS, envtype.CYPRESS, envtype.CYPRESS}[repository]
+		envtype.CYPRESS, envtype.CYPRESS, envtype.CYPRESS, envtype.CYPRESS,
+		envtype.PLAYWRIGHT}[repository]
 }
 
 func RepositoryFromString(repName string) (supportedRepository, error) {
@@ -75,6 +79,8 @@ func RepositoryFromString(repName string) (supportedRepository, error) {
 		return CYPRESS_EDGE, nil
 	case CYPRESS_FIREFOX.String():
 		return CYPRESS_FIREFOX, nil
+	case PLAYWRIGHT.String():
+		return PLAYWRIGHT, nil
 	default:
 		return 0, fmt.Errorf("repository with name `%s` is not supported", repName)
 	}

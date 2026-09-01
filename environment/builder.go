@@ -15,7 +15,7 @@ import (
 var (
 	uploaderImage        = config.ZebrunnerEcrRegistryUri + "/" + "uploader:3.6.1"
 	mitmImage            = config.ZebrunnerEcrRegistryUri + "/" + "mitmproxy:2.3"
-	recorderImage        = config.ZebrunnerEcrRegistryUri + "/" + "recorder:2.3"
+	recorderImage        = config.ZebrunnerEcrRegistryUri + "/" + "recorder:2.4"
 	cypressRecorderImage = config.ZebrunnerEcrRegistryUri + "/" + "cypress-recorder:1.3"
 	appiumImage          = config.ZebrunnerEcrRegistryUri + "/" + "appium:2.0.15-readonlyfs"
 	cloneImage           = config.ZebrunnerEcrRegistryUri + "/" + "git:2.36.2"
@@ -118,6 +118,8 @@ func getEnvironmentBuilder(caps *capabilities.Capabilities) (envBuilder, error) 
 			return buildAppiumRedroid, nil
 		}
 		return nil, fmt.Errorf("device is not supported. deviceName=%s", caps.DeviceName.ToPrimitive())
+	case envtype.PLAYWRIGHT.String():
+		return buildPlaywright, nil
 	default:
 		return nil, fmt.Errorf("platform is not supported. platformName=%s", caps.PlatformName.ToPrimitive())
 	}
@@ -163,6 +165,17 @@ func buildImageFromCaps(caps *capabilities.Capabilities) (*images.Image, error) 
 		return images.ImageFromString(repository, tag)
 	case envtype.ANDROID.String():
 		return images.ImageFromString(remapName(caps.DeviceName.ToPrimitive()), remapVersion(caps.PlatformVersion.ToPrimitive()))
+	case envtype.PLAYWRIGHT.String():
+		if caps.BrowserName.ToPrimitive() == "" {
+			return nil, fmt.Errorf("browserName is required on playwright platform. supported: chromium, chrome, edge, firefox, webkit")
+		}
+
+		version := playwrightVersion(caps)
+		if version == "" {
+			return nil, fmt.Errorf("playwrightVersion is required on playwright platform. example: 1.58.2")
+		}
+
+		return images.ImageFromString("playwright", version)
 	default:
 		return nil, fmt.Errorf("platform '%s' is not supported", caps.PlatformName.ToPrimitive())
 	}
@@ -181,7 +194,11 @@ func buildTaskDefinitionFamily(caps *capabilities.Capabilities) string {
 	}
 	familyParts = append(familyParts, platformName)
 
-	if deviceName := strings.ToLower(caps.DeviceName.ToPrimitive()); deviceName != "" {
+	if platformName == envtype.PLAYWRIGHT.String() {
+		if version := playwrightVersion(caps); version != "" {
+			familyParts = append(familyParts, strings.Replace(version, ".", "-", -1))
+		}
+	} else if deviceName := strings.ToLower(caps.DeviceName.ToPrimitive()); deviceName != "" {
 		deviceName := strings.ToLower(deviceName)
 		platformVersion := remapVersion(caps.PlatformVersion.ToPrimitive())
 		platformVersion = strings.Replace(platformVersion, ".", "-", -1)
@@ -198,6 +215,18 @@ func buildTaskDefinitionFamily(caps *capabilities.Capabilities) string {
 	return strings.Join(familyParts, "-")
 }
 
+// playwrightVersion resolves the playwright release tag, and accepts browserVersion as a legacy alias.
+// It returns an empty string when no version is requested, because playwright publishes no `latest` tag.
+func playwrightVersion(caps *capabilities.Capabilities) string {
+	for _, version := range []string{caps.PlaywrightVersion.ToPrimitive(), caps.BrowserVersion.ToPrimitive()} {
+		if version = strings.ToLower(version); version != "" && version != "null" {
+			return version
+		}
+	}
+
+	return ""
+}
+
 func remapName(name string) string {
 	name = strings.ToLower(name)
 
@@ -206,6 +235,10 @@ func remapName(name string) string {
 	}
 	if newName, ok := remapName[name]; ok {
 		return newName
+	}
+
+	if strings.HasPrefix(name, "playwright-") {
+		return strings.TrimPrefix(name, "playwright-")
 	}
 
 	return name

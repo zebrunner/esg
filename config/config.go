@@ -18,6 +18,7 @@ var (
 	VendorPrefix = "zebrunner"
 	Conf         = Config{}
 	RouterUUID   = "_uuid"
+	ChildUUIDKey = "_childUuid"
 	TaskIdKey    = "_taskId"
 	SessionIdKey = "sessionId"
 	Version      = os.Getenv("VERSION")

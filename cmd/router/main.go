@@ -135,6 +135,7 @@ func CreateRouter() *gin.Engine {
 	{
 		selenium.POST("/session", handlers.Create) // Auth logic moved to handler
 		selenium.GET("/ws/vnc/:uuid", handlers.ValidateMapperPresence, handlers.Vnc)
+		selenium.GET("/ws/playwright/:uuid", handlers.ValidateMapperPresence, handlers.UpdateLastAccessTime, handlers.PlaywrightAttach)
 
 		genericHub := selenium.Group("/", handlers.ValidateGenericMapperPresence, handlers.LockGenericTaskCache)
 		{
@@ -146,6 +147,8 @@ func CreateRouter() *gin.Engine {
 		{
 			cachedSeleniumSession.DELETE("/session/:uuid", handlers.CloseSession)
 			cachedSeleniumSession.Any("/session/:uuid/*action", handlers.Proxy)
+
+			cachedSeleniumSession.POST("/playwright/:uuid/refresh", handlers.PlaywrightRefresh)
 
 			cachedSeleniumSession.Any("/download/:uuid/*action", handlers.Downloads)
 

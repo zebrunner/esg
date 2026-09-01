@@ -225,6 +225,22 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 	executorContainer.Env["UUID"] = routerUUID
 	executorContainer.Env["E3S_URL"] = config.Conf.E3SUrl
 
+	if includePlaywright {
+		pwWsEndpoint := ""
+
+		if pwWsEndpoint == "" {
+			e3sUrl := strings.ToLower(config.Conf.E3SUrl)
+			wsScheme := "ws"
+			if strings.HasPrefix(e3sUrl, "https") {
+				wsScheme = "wss"
+			}
+			wsHost := strings.TrimPrefix(strings.TrimPrefix(e3sUrl, "https://"), "http://")
+			pwWsEndpoint = fmt.Sprintf("%s://%s/ws/playwright", wsScheme, wsHost)
+		}
+
+		executorContainer.Env["PLAYWRIGHT_WS_ENDPOINT"] = pwWsEndpoint
+	}
+
 	recorderContainer := Container{
 		Name:  "recorder",
 		Image: recorderImage,
