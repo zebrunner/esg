@@ -11,7 +11,6 @@ const (
 	CHROME
 	FIREFOX
 	EDGE
-	REDROID
 	WINDOWS_CHROME
 	WINDOWS_EDGE
 	WINDOWS_FIREFOX
@@ -32,7 +31,6 @@ func (repository supportedRepository) String() string {
 	return [...]string{
 		"",
 		"chrome", "firefox", "edge",
-		"redroid",
 		"windows-chrome", "windows-edge", "windows-firefox",
 		"cypress-chrome", "cypress-chromium", "cypress-edge", "cypress-firefox",
 		"playwright",
@@ -43,7 +41,6 @@ func (repository supportedRepository) GetBrowserName() string {
 	return [...]string{
 		"",
 		"chrome", "firefox", "edge",
-		"redroid",
 		"chrome", "edge", "firefox",
 		"chrome", "chromium", "edge", "firefox",
 		"playwright",
@@ -54,7 +51,6 @@ func (repository supportedRepository) GetPlatform() envtype.ENV_TYPE {
 	return [...]envtype.ENV_TYPE{
 		envtype.GENERIC,
 		envtype.LINUX, envtype.LINUX, envtype.LINUX,
-		envtype.ANDROID,
 		envtype.WINDOWS, envtype.WINDOWS, envtype.WINDOWS,
 		envtype.CYPRESS, envtype.CYPRESS, envtype.CYPRESS, envtype.CYPRESS,
 		envtype.PLAYWRIGHT,
@@ -63,8 +59,6 @@ func (repository supportedRepository) GetPlatform() envtype.ENV_TYPE {
 
 func RepositoryFromString(repName string) (supportedRepository, error) {
 	switch repName {
-	case REDROID.String():
-		return REDROID, nil
 	case CHROME.String():
 		return CHROME, nil
 	case FIREFOX.String():

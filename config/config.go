@@ -31,7 +31,6 @@ type Config struct {
 	AwsCluster                      string
 	AwsLinuxCapacityProvider        string
 	AwsLinuxGenericCapacityProvider string
-	AwsLinuxRedroidCapacityProvider string
 	AwsWinCapacityProvider          string
 	AwsAccessKeyID                  string
 	AwsSecretAccessKey              string
@@ -83,7 +82,6 @@ type Config struct {
 	MitmImage            string
 	RecorderImage        string
 	CypressRecorderImage string
-	AppiumImage          string
 	CloneImage           string
 	EntrypointImage      string
 	MavenImage           string
@@ -108,7 +106,6 @@ func init() {
 	flag.StringVar(&Conf.AwsCluster, "aws-cluster", "esg", "AWS ECS cluster name")
 	flag.StringVar(&Conf.AwsLinuxCapacityProvider, "aws-linux-capacity-provider", "esg-linux-capacityprovider", "AWS capacity provider for linux instances")
 	flag.StringVar(&Conf.AwsLinuxGenericCapacityProvider, "aws-linux-generic-capacity-provider", "", "AWS capacity provider for generic linux instances")
-	flag.StringVar(&Conf.AwsLinuxRedroidCapacityProvider, "aws-linux-redroid-capacity-provider", "", "AWS capacity provider for redroid linux instances")
 	flag.StringVar(&Conf.AwsWinCapacityProvider, "aws-win-capacity-provider", "esg-win-capacityprovider", "AWS capacity provicer for windows instances")
 	flag.StringVar(&Conf.AwsAccessKeyID, "aws-access-key-id", "", "Access key for AWS services")
 	flag.StringVar(&Conf.AwsSecretAccessKey, "aws-secret-access-key", "", "Secret key for AWS services")
@@ -156,7 +153,6 @@ func init() {
 	flag.StringVar(&Conf.MitmImage, "mitm-image", "", "Override full image URL for the mitmproxy container")
 	flag.StringVar(&Conf.RecorderImage, "recorder-image", "", "Override full image URL for the recorder container")
 	flag.StringVar(&Conf.CypressRecorderImage, "cypress-recorder-image", "", "Override full image URL for the cypress recorder container")
-	flag.StringVar(&Conf.AppiumImage, "appium-image", "", "Override full image URL for the appium container")
 	flag.StringVar(&Conf.CloneImage, "clone-image", "", "Override full image URL for the git clone container")
 	flag.StringVar(&Conf.EntrypointImage, "entrypoint-image", "", "Override full image URL for the entrypoint container")
 	flag.StringVar(&Conf.MavenImage, "maven-image", "", "Override full image URL for the maven (m2-repo-carina) container")

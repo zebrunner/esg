@@ -283,7 +283,6 @@ type Capabilities struct {
 	EnableLog         boolWrapper // not implemented
 	EnableDebug       boolWrapper
 	ScreenResolution  stringWrapper
-	DeviceName        stringWrapper
 	IdleTimeout       int64Wrapper
 	MaxTimeout        int64Wrapper
 	TimeZone          stringWrapper
@@ -488,7 +487,6 @@ func (c *Capabilities) ParseRequestCaps(reqCaps map[string]interface{}) error {
 		"enablelog":         &c.EnableLog,
 		"enabledebug":       &c.EnableDebug,
 		"screenresolution":  &c.ScreenResolution,
-		"devicename":        &c.DeviceName,
 		"idletimeout":       &c.IdleTimeout,
 		"maxtimeout":        &c.MaxTimeout,
 		"timezone":          &c.TimeZone,

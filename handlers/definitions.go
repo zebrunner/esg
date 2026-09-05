@@ -46,11 +46,6 @@ func GetImages(c *gin.Context) {
 			Platform: image.Platform.String(),
 		}
 
-		if image.Platform == envtype.ANDROID {
-			imgData.BrowserName = "chrome"
-			imgData.BrowserVersion = "107.0"
-		}
-
 		if image.Platform == envtype.CYPRESS {
 			imgData.ImageUrl = image.GetUrl()
 		}

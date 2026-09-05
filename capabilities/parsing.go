@@ -33,7 +33,6 @@ var (
 		"videoScreenSize",
 		"videoCodec",
 		"frameRate",
-		"deviceName",
 		"cpu", "Cpu", //to support lower case and camel case
 		"memory", "Memory", //to support lower case and camel case
 		"timeZone",

@@ -55,9 +55,6 @@ fi
 if [ ! -z ${AWS_LINUX_GENERIC_CAPACITY_PROVIDER} ]; then
   CMD_ARGS="${CMD_ARGS} -aws-linux-generic-capacity-provider ${AWS_LINUX_GENERIC_CAPACITY_PROVIDER}"
 fi
-if [ ! -z ${AWS_LINUX_REDROID_CAPACITY_PROVIDER} ]; then
-  CMD_ARGS="${CMD_ARGS} -aws-linux-redroid-capacity-provider ${AWS_LINUX_REDROID_CAPACITY_PROVIDER}"
-fi
 if [ ! -z ${AWS_WIN_CAPACITY_PROVIDER} ]; then
   CMD_ARGS="${CMD_ARGS} -aws-win-capacity-provider ${AWS_WIN_CAPACITY_PROVIDER}"
 fi
@@ -144,9 +141,6 @@ if [ ! -z ${RECORDER_IMAGE} ]; then
 fi
 if [ ! -z ${CYPRESS_RECORDER_IMAGE} ]; then
   CMD_ARGS="${CMD_ARGS} -cypress-recorder-image ${CYPRESS_RECORDER_IMAGE}"
-fi
-if [ ! -z ${APPIUM_IMAGE} ]; then
-  CMD_ARGS="${CMD_ARGS} -appium-image ${APPIUM_IMAGE}"
 fi
 if [ ! -z ${CLONE_IMAGE} ]; then
   CMD_ARGS="${CMD_ARGS} -clone-image ${CLONE_IMAGE}"

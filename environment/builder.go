@@ -17,7 +17,6 @@ var (
 	mitmImage            = config.ZebrunnerEcrRegistryUri + "/" + "mitmproxy:2.3"
 	recorderImage        = config.ZebrunnerEcrRegistryUri + "/" + "recorder:2.4"
 	cypressRecorderImage = config.ZebrunnerEcrRegistryUri + "/" + "cypress-recorder:1.3"
-	appiumImage          = config.ZebrunnerEcrRegistryUri + "/" + "appium:2.0.15-readonlyfs"
 	cloneImage           = config.ZebrunnerEcrRegistryUri + "/" + "git:2.55.0"
 	entrypointImage      = config.ZebrunnerEcrRegistryUri + "/" + "entrypoint:2.5.3"
 	mavenImage           = config.ZebrunnerEcrRegistryUri + "/" + "m2-repo-carina:2.0"
@@ -35,7 +34,6 @@ func ResolveImageOverrides() {
 		{&mitmImage, config.Conf.MitmImage},
 		{&recorderImage, config.Conf.RecorderImage},
 		{&cypressRecorderImage, config.Conf.CypressRecorderImage},
-		{&appiumImage, config.Conf.AppiumImage},
 		{&cloneImage, config.Conf.CloneImage},
 		{&entrypointImage, config.Conf.EntrypointImage},
 		{&mavenImage, config.Conf.MavenImage},
@@ -113,11 +111,6 @@ func getEnvironmentBuilder(caps *capabilities.Capabilities) (envBuilder, error) 
 		return buildWindowsBrowser, nil
 	case envtype.CYPRESS.String():
 		return buildCypress, nil
-	case envtype.ANDROID.String():
-		if strings.ToLower(caps.DeviceName.ToPrimitive()) == "redroid" {
-			return buildAppiumRedroid, nil
-		}
-		return nil, fmt.Errorf("device is not supported. deviceName=%s", caps.DeviceName.ToPrimitive())
 	case envtype.PLAYWRIGHT.String():
 		return buildPlaywright, nil
 	default:
@@ -169,8 +162,6 @@ func buildImageFromCaps(caps *capabilities.Capabilities) (*images.Image, error) 
 		caps.BrowserVersion.From(tag)
 
 		return images.ImageFromString(repository, tag)
-	case envtype.ANDROID.String():
-		return images.ImageFromString(remapName(caps.DeviceName.ToPrimitive()), remapVersion(caps.PlatformVersion.ToPrimitive()))
 	case envtype.PLAYWRIGHT.String():
 		if caps.BrowserName.ToPrimitive() == "" {
 			return nil, fmt.Errorf("browserName is required on playwright platform. supported: chromium, chrome, edge, firefox, webkit")
@@ -204,12 +195,6 @@ func buildTaskDefinitionFamily(caps *capabilities.Capabilities) string {
 		if version := playwrightVersion(caps); version != "" {
 			familyParts = append(familyParts, strings.Replace(version, ".", "-", -1))
 		}
-	} else if deviceName := strings.ToLower(caps.DeviceName.ToPrimitive()); deviceName != "" {
-		deviceName := strings.ToLower(deviceName)
-		platformVersion := remapVersion(caps.PlatformVersion.ToPrimitive())
-		platformVersion = strings.Replace(platformVersion, ".", "-", -1)
-
-		familyParts = append(familyParts, deviceName, platformVersion)
 	} else if browserName := caps.BrowserName.ToPrimitive(); browserName != "" {
 		browserName = remapName(browserName)
 		browserVersion := remapVersion(caps.BrowserVersion.ToPrimitive())
