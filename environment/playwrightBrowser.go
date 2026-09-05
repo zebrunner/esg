@@ -58,6 +58,10 @@ func buildPlaywright(workspace string, routerUUID string, image images.Image, ca
 		logDir    = "/tmp/log"
 		logVolume = "log"
 
+		// fileserver serves this dir, so downloaded files need a writable task volume to be retrievable.
+		downloadsDir    = "/home/pwuser/Downloads"
+		downloadsVolume = "downloadsVolume"
+
 		shmDir    = "/dev/shm"
 		shmVolume = "shm"
 
@@ -97,10 +101,12 @@ func buildPlaywright(workspace string, routerUUID string, image images.Image, ca
 		image:     &image,
 		Essential: true,
 		Ports: map[string]portMapping{
-			"driver":   {ContainerPort: playwrightPort, HostPort: 0},
-			"control":  {ContainerPort: playwrightControlPort, HostPort: 0},
-			"vnc":      {ContainerPort: vncPort, HostPort: 0},
-			"devtools": {ContainerPort: playwrightCdpPort, HostPort: 0},
+			"driver":         {ContainerPort: playwrightPort, HostPort: 0},
+			"control":        {ContainerPort: playwrightControlPort, HostPort: 0},
+			"vnc":            {ContainerPort: vncPort, HostPort: 0},
+			"devtools":       {ContainerPort: playwrightCdpPort, HostPort: 0},
+			"fileserverPort": {ContainerPort: fileserverPort, HostPort: 0},
+			"clipboardPort":  {ContainerPort: clipboardPort, HostPort: 0},
 		},
 		Env: map[string]string{
 			"BROWSER_TYPE":        browserType,
@@ -112,7 +118,7 @@ func buildPlaywright(workspace string, routerUUID string, image images.Image, ca
 			"DNS_SERVERS":         strings.Join(caps.DNSServers, " "),
 			"HOSTS_ENTRIES":       strings.Join(caps.HostsEntries, " "),
 		},
-		Mounts: []string{logVolume, shmVolume, tmpBrowserVolume},
+		Mounts: []string{logVolume, downloadsVolume, shmVolume, tmpBrowserVolume},
 		// The recorder truncates the task log on rotate, so append mode keeps writes at offset 0.
 		Command:    []string{"-c", "/opt/bin/entrypoint.sh 2>&1 | tee -a " + logDir + "/task.log"},
 		EntryPoint: []string{"/bin/bash"},
@@ -232,6 +238,7 @@ func buildPlaywright(workspace string, routerUUID string, image images.Image, ca
 		Capabilities:         caps,
 		Volumes: map[string]volume{
 			logVolume:         {ContainerPath: logDir, Driver: "local", Scope: "task", ReadOnly: false},
+			downloadsVolume:   {ContainerPath: downloadsDir, Driver: "local", Scope: "task", ReadOnly: false},
 			shmVolume:         {ContainerPath: shmDir, HostPath: shmDir, ReadOnly: false},
 			tmpBrowserVolume:  {ContainerPath: tmpDir, Driver: "local", Scope: "task", ReadOnly: false},
 			tmpRecorderVolume: {ContainerPath: tmpDir, Driver: "local", Scope: "task", ReadOnly: false},
@@ -244,6 +251,8 @@ func buildPlaywright(workspace string, routerUUID string, image images.Image, ca
 				"playwrightHealth":  {ContainerPort: playwrightControlPort, HostPort: 0, Path: "/health"},
 				"vnc":               {ContainerPort: vncPort, HostPort: 0, Path: "/"},
 				"devtools":          {ContainerPort: playwrightCdpPort, HostPort: 0, Path: "/"},
+				"fileserver":        {ContainerPort: fileserverPort, HostPort: 0, Path: "/"},
+				"clipboard":         {ContainerPort: clipboardPort, HostPort: 0, Path: "/"},
 				"healthcheck":       {ContainerPort: playwrightCdpPort, HostPort: 0, Path: "/"},
 				"recorderStart":     {ContainerPort: recorderdPort, HostPort: 0, Path: "/start"},
 				"recorderStop":      {ContainerPort: recorderdPort, HostPort: 0, Path: "/stop"},
