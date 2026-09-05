@@ -20,6 +20,9 @@ import (
 
 const (
 	presignUrlTimeout = 15 * time.Minute
+
+	// Grace period a stopped session stays readable so callers get its stop reason instead of a miss.
+	stoppedSessionTTL = 10 * time.Minute
 )
 
 var (
@@ -31,6 +34,9 @@ func init() {
 }
 
 func CreateTaskDefinition(ctx context.Context, definitions []ecsTypes.ContainerDefinition, volumes []ecsTypes.Volume, taskDefinitionFamily string, taskRoleArn string) (*ecsTypes.TaskDefinition, error) {
+	ctx, cancel := context.WithTimeout(ctx, AwsCallTimeout)
+	defer cancel()
+
 	svc := ecs.NewFromConfig(AwsCfg)
 
 	input := &ecs.RegisterTaskDefinitionInput{
@@ -112,6 +118,9 @@ func ConstDelay(t time.Duration) func(int) time.Duration {
 }
 
 func StopTaskForcibly(ctx context.Context, taskId string, stopReason mapper.StoppedReason) error {
+	ctx, cancel := context.WithTimeout(ctx, AwsCallTimeout)
+	defer cancel()
+
 	svc := ecs.NewFromConfig(AwsCfg)
 
 	stopTaskInput := &ecs.StopTaskInput{
@@ -156,10 +165,15 @@ func StopTask(ctx context.Context, mapperEntity mapper.Mapper, stopReason mapper
 		setsToDettach = append(setsToDettach, cachemaps.SESSION)
 	}
 
-	err = mapper.WritedByWorker(&mapperEntity, nil, setsToDettach, 10*time.Minute)
+	err = mapper.WritedByWorker(&mapperEntity, nil, setsToDettach, stoppedSessionTTL)
 	if err != nil {
 		l.WithError(err).Error("Failed to update task's cache!")
 		return err
+	}
+
+	// Every id handed out for this session must stop resolving when the session it points at does.
+	if err := mapper.ExpireChildren(mapperEntity.Children, stoppedSessionTTL); err != nil {
+		l.WithError(err).Warn("Failed to expire child session ids")
 	}
 
 	return nil

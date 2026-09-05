@@ -15,6 +15,9 @@ import (
 	"github.com/zebrunner/esg/config"
 )
 
+// AutoUpdateVersionSuffix marks auto-update browser image tags and repositories, e.g. 119.0-auto-update.
+const AutoUpdateVersionSuffix = "-auto-update"
+
 var (
 	vendorCapsProcessor            CapsProcessor
 	preConfigurationCapsProcessor  CapsProcessor
@@ -30,7 +33,6 @@ var (
 		"videoScreenSize",
 		"videoCodec",
 		"frameRate",
-		"deviceName",
 		"cpu", "Cpu", //to support lower case and camel case
 		"memory", "Memory", //to support lower case and camel case
 		"timeZone",
@@ -42,6 +44,7 @@ var (
 		"mitmCpu", "MitmCpu", "mitmcpu",
 		"mitmMemory", "MitmMemory", "mitmmemory",
 		"mitmType", "MitmType", "mitmtype",
+		"rootCACert", "RootCACert", "rootcacert",
 	}
 )
 
@@ -91,9 +94,11 @@ func init() {
 		},
 		"browserVersion": {
 			ValueProcessor: func(value interface{}) interface{} {
-				// debug browser images tags should be like 125.0-debug
+				// debug tags are like 125.0-debug; auto-update tags are like 119.0-auto-update.
 				if v, ok := value.(string); ok {
-					return strings.TrimSuffix(v, "-debug")
+					v = strings.TrimSuffix(v, "-debug")
+					v = strings.TrimSuffix(v, AutoUpdateVersionSuffix)
+					return v
 				}
 				return value
 			},
@@ -342,22 +347,26 @@ func ParseRequestCapabilities(body io.ReadCloser) (*RequestCaps, *Capabilities, 
 			return nil, nil, err
 		}
 
-		var windowsSize string
+		var windowsWidth, windowsHeight string
 		if resolutionArr := strings.Split(resolutionStr, "x"); len(resolutionArr) < 2 {
-			windowsSize = fmt.Sprintf("--window-size=%s,%s", "1920", "1080")
+			windowsWidth = "1920"
+			windowsHeight = "1080"
 		} else {
-			windowsSize = fmt.Sprintf("--window-size=%s,%s", resolutionArr[0], resolutionArr[1])
+			windowsWidth = resolutionArr[0]
+			windowsHeight = resolutionArr[1]
 		}
+
+		chromiumWindowSize := fmt.Sprintf("--window-size=%s,%s", windowsWidth, windowsHeight)
 
 		windowsCasProcessor := CapsProcessor{
 			"goog:chromeOptions": {
-				ValueProcessor: addArgs("--headless=new", "--disable-gpu", windowsSize),
+				ValueProcessor: addArgs("--headless=new", "--disable-gpu", chromiumWindowSize),
 			},
 			"ms:edgeOptions": {
-				ValueProcessor: addArgs("--headless=new", "--disable-gpu", windowsSize),
+				ValueProcessor: addArgs("--headless=new", "--disable-gpu", chromiumWindowSize),
 			},
 			"moz:firefoxOptions": {
-				ValueProcessor: addArgs("--headless=new", "--disable-gpu", windowsSize),
+				ValueProcessor: addArgs("-headless", fmt.Sprintf("--width=%s", windowsWidth), fmt.Sprintf("--height=%s", windowsHeight)),
 			},
 		}
 

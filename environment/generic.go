@@ -3,6 +3,7 @@ package environment
 import (
 	b64 "encoding/base64"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -41,7 +42,7 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 
 		tmpDir            = "/tmp"
 		tmpRecorderVolume = "tmpRecorderVolume"
-		tmpExecutorVolume = "tmpExecutorVolume"
+		tmpSharedVolume   = "tmpSharedVolume" // Shared between clone and executor
 
 		executorConfigDir    = "/root/.config"
 		executorConfigVolume = "executorConfigVolume"
@@ -66,6 +67,9 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 
 		executorPlaywrighCacheDir     = "/usr/local/share/.cache"
 		executorPlaywrightCacheVolume = "executorPlaywrightCacheVolume"
+
+		shmDir    = "/dev/shm"
+		shmVolume = "shm"
 	)
 
 	branch := ""
@@ -82,7 +86,10 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 	cloneCommand := fmt.Sprintf("git clone --progress --depth=1 --single-branch %s %s %s", branchArg, caps.RepositoryUrl, workDir)
 	//fmt.Printf("cloneCommand: %s\n", cloneCommand)
 
-	taskLogRedirect := ">>" + logDir + "/task.log 2>&1"
+	downloadUrls, extractErr := utils.ExtractCapabilityAsString(caps.EnvVariables.ToPrimitive(), "zebrunner:downloadUrls")
+	if extractErr != nil {
+		log.Debug(extractErr)
+	}
 
 	cloneContainer := Container{
 		Name:  "clone",
@@ -91,11 +98,13 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 			Cpu:    cloneContainerMinCpu,
 			Memory: cloneContainerMinMemory,
 		},
-		Privileged:             false,
-		Essential:              false,
-		Mounts:                 []string{taskVolume, logVolume},
-		Command:                []string{"-c", cloneCommand + taskLogRedirect},
-		EntryPoint:             []string{"/bin/sh"},
+		Privileged: false,
+		Env: map[string]string{
+			"CLONE_COMMAND": cloneCommand,
+			"DOWNLOAD_URLS": downloadUrls,
+		},
+		Mounts:                 []string{taskVolume, logVolume, tmpSharedVolume},
+		EntryPoint:             []string{"/entrypoint.sh"},
 		ReadOnlyRootFileSystem: true,
 	}
 
@@ -154,7 +163,7 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 	//basic auth header for executor-logs service
 	basicAuthHeader := "Basic " + b64.StdEncoding.EncodeToString([]byte(conf.ZebrunnerIntegrationUser+":"+conf.ZebrunnerIntegrationPassword))
 
-	mounts := []string{entrypointVolume, taskVolume, logVolume, tmpExecutorVolume, executorCacheVolume, executorConfigVolume, executorNpmVolume}
+	mounts := []string{entrypointVolume, taskVolume, logVolume, tmpSharedVolume, executorCacheVolume, executorConfigVolume, executorNpmVolume}
 	if includeMaven {
 		mounts = append(mounts, mavenVolume)
 		mounts = append(mounts, mavenLogVolume)
@@ -169,6 +178,7 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 	}
 	if includePlaywright {
 		mounts = append(mounts, executorPlaywrightCacheVolume)
+		mounts = append(mounts, shmVolume)
 	}
 
 	dependsOn := make([]ecsTypes.ContainerDependency, 0)
@@ -220,6 +230,22 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 
 	executorContainer.Env["UUID"] = routerUUID
 	executorContainer.Env["E3S_URL"] = config.Conf.E3SUrl
+
+	if includePlaywright {
+		pwWsEndpoint := ""
+
+		if pwWsEndpoint == "" {
+			e3sUrl := strings.ToLower(config.Conf.E3SUrl)
+			wsScheme := "ws"
+			if strings.HasPrefix(e3sUrl, "https") {
+				wsScheme = "wss"
+			}
+			wsHost := strings.TrimPrefix(strings.TrimPrefix(e3sUrl, "https://"), "http://")
+			pwWsEndpoint = fmt.Sprintf("%s://%s/ws/playwright", wsScheme, wsHost)
+		}
+
+		executorContainer.Env["PLAYWRIGHT_WS_ENDPOINT"] = pwWsEndpoint
+	}
 
 	recorderContainer := Container{
 		Name:  "recorder",
@@ -284,7 +310,7 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 	volumes[taskVolume] = volume{Driver: "local", Scope: "task", ContainerPath: workDir, ReadOnly: false}
 	volumes[logVolume] = volume{Driver: "local", Scope: "task", ContainerPath: logDir, ReadOnly: false}
 	volumes[tmpRecorderVolume] = volume{Driver: "local", Scope: "task", ContainerPath: tmpDir, ReadOnly: false}
-	volumes[tmpExecutorVolume] = volume{Driver: "local", Scope: "task", ContainerPath: tmpDir, ReadOnly: false}
+	volumes[tmpSharedVolume] = volume{Driver: "local", Scope: "task", ContainerPath: tmpDir, ReadOnly: false}
 	volumes[executorCacheVolume] = volume{Driver: "local", Scope: "task", ContainerPath: executorCacheDir, ReadOnly: false}
 	volumes[executorConfigVolume] = volume{Driver: "local", Scope: "task", ContainerPath: executorConfigDir, ReadOnly: false}
 	volumes[executorNpmVolume] = volume{Driver: "local", Scope: "task", ContainerPath: executorNpmDir, ReadOnly: false}
@@ -305,6 +331,7 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 	}
 	if includePlaywright {
 		volumes[executorPlaywrightCacheVolume] = volume{Driver: "local", Scope: "task", ContainerPath: executorPlaywrighCacheDir, ReadOnly: false}
+		volumes[shmVolume] = volume{ContainerPath: shmDir, HostPath: shmDir, ReadOnly: false}
 	}
 
 	// Extract custom executor volumes capability directly from ZEBRUNNER_CAPABILITIES env var
@@ -313,46 +340,35 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 	executorVolumes, extractErr := utils.ExtractCapabilityAsString(caps.EnvVariables.ToPrimitive(), "zebrunner:executorVolumes")
 
 	if extractErr != nil {
-		log.Debug(extractErr)
+		log.Trace(extractErr)
 	} else {
-		executorVolumes := strings.Split(executorVolumes, ",")
-		seenPaths := make(map[string]bool)
+		log.Debugf("executorVolumes capability set: %s", executorVolumes)
+		executorVolumesPaths := strings.Split(executorVolumes, ",")
+		addValidatedVolumes(executorVolumesPaths, "executor-volume", volumes, []*Container{&executorContainer})
+	}
 
-		for i, path := range executorVolumes {
-			path = strings.TrimSpace(path)
-			if path == "" {
-				continue
-			}
-
-			if seenPaths[path] {
-				log.Warnf("duplicate ExecutorVolume path skipped (already in request): %s", path)
-				continue
-			}
-
-			alreadyExists := false
-			for _, v := range volumes {
-				if v.ContainerPath == path {
-					alreadyExists = true
-					break
+	// Extract destination paths from downloadUrls (format: "url1>dest1,url2>dest2")
+	// dest includes filename, so extract directory path only for volume mounting
+	var downloadDestPaths []string
+	if downloadUrls != "" {
+		urlPairs := strings.Split(downloadUrls, ",")
+		for _, pair := range urlPairs {
+			parts := strings.Split(pair, ">")
+			if len(parts) == 2 {
+				fullPath := strings.TrimSpace(parts[1])
+				if fullPath != "" {
+					// Extract directory path only (remove filename)
+					dirPath := filepath.Dir(fullPath)
+					if dirPath != "" && dirPath != "." {
+						downloadDestPaths = append(downloadDestPaths, dirPath)
+					}
 				}
 			}
-			if alreadyExists {
-				log.Warnf("duplicate ExecutorVolume path skipped (already in volumes): %s", path)
-				continue
-			}
-
-			seenPaths[path] = true
-
-			mountName := fmt.Sprintf("executor-volume-%d", i)
-			executorContainer.Mounts = append(executorContainer.Mounts, mountName)
-
-			volumes[mountName] = volume{
-				Driver:        "local",
-				Scope:         "task",
-				ContainerPath: path,
-				ReadOnly:      false,
-			}
 		}
+	}
+
+	if len(downloadDestPaths) > 0 {
+		addValidatedVolumes(downloadDestPaths, "download-volume", volumes, []*Container{&executorContainer, &cloneContainer})
 	}
 
 	var capacityProvider string
@@ -396,4 +412,49 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 	}
 
 	return &env, nil
+}
+
+// addValidatedVolumes validates and adds volume paths to containers and volumes map
+// It checks for duplicates, empty paths, and existing paths in volumes
+func addValidatedVolumes(paths []string, volumePrefix string, volumes map[string]volume, containers []*Container) {
+	seenPaths := make(map[string]bool)
+
+	for i, path := range paths {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			continue
+		}
+
+		if seenPaths[path] {
+			log.Warnf("duplicate %s path skipped (already in request): %s", volumePrefix, path)
+			continue
+		}
+
+		alreadyExists := false
+		for _, v := range volumes {
+			if v.ContainerPath == path {
+				alreadyExists = true
+				break
+			}
+		}
+		if alreadyExists {
+			log.Warnf("duplicate %s path skipped (already in volumes): %s", volumePrefix, path)
+			continue
+		}
+
+		seenPaths[path] = true
+
+		mountName := fmt.Sprintf("%s-%d", volumePrefix, i)
+
+		for _, container := range containers {
+			container.Mounts = append(container.Mounts, mountName)
+		}
+
+		volumes[mountName] = volume{
+			Driver:        "local",
+			Scope:         "task",
+			ContainerPath: path,
+			ReadOnly:      false,
+		}
+	}
 }

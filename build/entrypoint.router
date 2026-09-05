@@ -142,9 +142,6 @@ fi
 if [ ! -z ${CYPRESS_RECORDER_IMAGE} ]; then
   CMD_ARGS="${CMD_ARGS} -cypress-recorder-image ${CYPRESS_RECORDER_IMAGE}"
 fi
-if [ ! -z ${APPIUM_IMAGE} ]; then
-  CMD_ARGS="${CMD_ARGS} -appium-image ${APPIUM_IMAGE}"
-fi
 if [ ! -z ${CLONE_IMAGE} ]; then
   CMD_ARGS="${CMD_ARGS} -clone-image ${CLONE_IMAGE}"
 fi
@@ -175,6 +172,10 @@ if [ ! -z ${SINGLE_TENANT} ]; then
 fi
 if [ ! -z ${OLD_ABORT_API} ]; then
   CMD_ARGS="${CMD_ARGS} -old-abort-api=${OLD_ABORT_API}"
+fi
+
+if [ ! -z ${ROOT_CA_CERT} ]; then
+  CMD_ARGS="${CMD_ARGS} -root-ca-cert=${ROOT_CA_CERT}"
 fi
 
 echo "CMD_ARGS: $CMD_ARGS"

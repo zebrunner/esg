@@ -1,6 +1,7 @@
 package capabilities
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -12,6 +13,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/config"
 )
+
+const maxRootCACertSize = 4096
 
 var (
 	fullResolutionFormat  = regexp.MustCompile(`^([0-9]+x[0-9]+)x(8|16|24)$`)
@@ -94,6 +97,31 @@ func (s *mitmTypeWrapper) ToPrimitive() string {
 
 func (s *mitmTypeWrapper) From(value string) {
 	*s = mitmTypeWrapper(value)
+}
+
+type rootCACertWrapper string
+
+func (s *rootCACertWrapper) Validate(key string, value interface{}) string {
+	valueStr, ok := value.(string)
+	if !ok {
+		return typeError(value, key, "string")
+	}
+	if len(valueStr) > maxRootCACertSize {
+		return malformedError("(truncated)", key, fmt.Sprintf("value exceeds max size of %d characters", maxRootCACertSize)).Error()
+	}
+	if _, err := base64.StdEncoding.DecodeString(valueStr); err != nil {
+		return malformedError("(invalid)", key, "value must be a valid base64-encoded PEM certificate").Error()
+	}
+	s.From(valueStr)
+	return ""
+}
+
+func (s *rootCACertWrapper) ToPrimitive() string {
+	return string(*s)
+}
+
+func (s *rootCACertWrapper) From(value string) {
+	*s = rootCACertWrapper(value)
 }
 
 type boolWrapper bool
@@ -242,23 +270,25 @@ func (m *mapStrStrWrapper) From(value map[string]string) {
 }
 
 type Capabilities struct {
-	BrowserName      stringWrapper
-	BrowserVersion   stringWrapper
-	PlatformName     stringWrapper
-	PlatformVersion  stringWrapper
-	Proxy            mapStrInterfaceWrapper
-	Timeouts         stringWrapper
-	EnableVNC        boolWrapper
-	EnableLog        boolWrapper // not implemented
-	EnableDebug      boolWrapper
-	ScreenResolution stringWrapper
-	DeviceName       stringWrapper
-	IdleTimeout      int64Wrapper
-	MaxTimeout       int64Wrapper
-	TimeZone         stringWrapper
-	Env              sliceStringWrapper
-	HostsEntries     sliceStringWrapper
-	DNSServers       sliceStringWrapper
+	BrowserName       stringWrapper
+	BrowserVersion    stringWrapper
+	PlatformName      stringWrapper
+	PlatformVersion   stringWrapper
+	PlaywrightVersion stringWrapper
+	PlaywrightArgs    stringWrapper
+	Headless          boolWrapper
+	Proxy             mapStrInterfaceWrapper
+	Timeouts          stringWrapper
+	EnableVNC         boolWrapper
+	EnableLog         boolWrapper // not implemented
+	EnableDebug       boolWrapper
+	ScreenResolution  stringWrapper
+	IdleTimeout       int64Wrapper
+	MaxTimeout        int64Wrapper
+	TimeZone          stringWrapper
+	Env               sliceStringWrapper
+	HostsEntries      sliceStringWrapper
+	DNSServers        sliceStringWrapper
 
 	//Video related caps
 	EnableVideo     boolWrapper
@@ -275,6 +305,9 @@ type Capabilities struct {
 	MitmArgs   stringWrapper
 	MitmCpu    int64Wrapper
 	MitmMemory int64Wrapper
+
+	// Browser CA certificate (base64-encoded PEM), injected as ROOT_CA_custom env var
+	RootCACert rootCACertWrapper
 
 	// generic launcher caps
 	RepositoryUrl stringWrapper
@@ -434,29 +467,32 @@ func GetDefaultCaps() *Capabilities {
 		FrameRate:   12,
 		VideoCodec:  "libx264",
 
+		RootCACert:   rootCACertWrapper(config.Conf.RootCACert),
 		EnvVariables: make(mapStrStrWrapper, 0),
 	}
 }
 
 func (c *Capabilities) ParseRequestCaps(reqCaps map[string]interface{}) error {
 	mapping := map[string]Validator{
-		"browsername":      &c.BrowserName,
-		"browserversion":   &c.BrowserVersion,
-		"platformname":     &c.PlatformName,
-		"platformversion":  &c.PlatformVersion,
-		"proxy":            &c.Proxy,
-		"timeouts":         &c.Timeouts,
-		"enablevnc":        &c.EnableVNC,
-		"enablelog":        &c.EnableLog,
-		"enabledebug":      &c.EnableDebug,
-		"screenresolution": &c.ScreenResolution,
-		"devicename":       &c.DeviceName,
-		"idletimeout":      &c.IdleTimeout,
-		"maxtimeout":       &c.MaxTimeout,
-		"timezone":         &c.TimeZone,
-		"env":              &c.Env,
-		"hostsentries":     &c.HostsEntries,
-		"dnsservers":       &c.DNSServers,
+		"browsername":       &c.BrowserName,
+		"browserversion":    &c.BrowserVersion,
+		"platformname":      &c.PlatformName,
+		"platformversion":   &c.PlatformVersion,
+		"playwrightversion": &c.PlaywrightVersion,
+		"playwrightargs":    &c.PlaywrightArgs,
+		"headless":          &c.Headless,
+		"proxy":             &c.Proxy,
+		"timeouts":          &c.Timeouts,
+		"enablevnc":         &c.EnableVNC,
+		"enablelog":         &c.EnableLog,
+		"enabledebug":       &c.EnableDebug,
+		"screenresolution":  &c.ScreenResolution,
+		"idletimeout":       &c.IdleTimeout,
+		"maxtimeout":        &c.MaxTimeout,
+		"timezone":          &c.TimeZone,
+		"env":               &c.Env,
+		"hostsentries":      &c.HostsEntries,
+		"dnsservers":        &c.DNSServers,
 
 		"enablevideo":     &c.EnableVideo,
 		"videoscreensize": &c.VideoScreenSize,
@@ -471,6 +507,8 @@ func (c *Capabilities) ParseRequestCaps(reqCaps map[string]interface{}) error {
 		"mitmargs":   &c.MitmArgs,
 		"mitmcpu":    &c.MitmCpu,
 		"mitmmemory": &c.MitmMemory,
+
+		"rootcacert": &c.RootCACert,
 
 		"repositoryurl": &c.RepositoryUrl,
 		"branch":        &c.Branch,
