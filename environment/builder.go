@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	uploaderImage        = config.ZebrunnerEcrRegistryUri + "/" + "uploader:3.6.1"
+	uploaderImage        = config.ZebrunnerEcrRegistryUri + "/" + "uploader:3.6.2"
 	mitmImage            = config.ZebrunnerEcrRegistryUri + "/" + "mitmproxy:2.3"
 	recorderImage        = config.ZebrunnerEcrRegistryUri + "/" + "recorder:2.4"
 	cypressRecorderImage = config.ZebrunnerEcrRegistryUri + "/" + "cypress-recorder:1.3"
