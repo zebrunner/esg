@@ -43,6 +43,7 @@ func InitRedisClusterConnection() error {
 		}
 
 		log.WithError(err).Trace("Redis cluster ping error, retrying...")
+		RedisCluster.ReloadState(context.Background())
 		time.Sleep(time.Second)
 	}
 
