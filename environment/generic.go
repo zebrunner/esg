@@ -232,19 +232,10 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 	executorContainer.Env["E3S_URL"] = config.Conf.E3SUrl
 
 	if includePlaywright {
-		pwWsEndpoint := ""
-
-		if pwWsEndpoint == "" {
-			e3sUrl := strings.ToLower(config.Conf.E3SUrl)
-			wsScheme := "ws"
-			if strings.HasPrefix(e3sUrl, "https") {
-				wsScheme = "wss"
-			}
-			wsHost := strings.TrimPrefix(strings.TrimPrefix(e3sUrl, "https://"), "http://")
-			pwWsEndpoint = fmt.Sprintf("%s://%s/ws/playwright", wsScheme, wsHost)
-		}
-
-		executorContainer.Env["PLAYWRIGHT_WS_ENDPOINT"] = pwWsEndpoint
+		executorContainer.Env["PLAYWRIGHT_WS_ENDPOINT"] = utils.ResolvePlaywrightWSEndpoint(
+			executorContainer.Env["ZEBRUNNER_HUB_URL"],
+			config.Conf.E3SUrl,
+		)
 	}
 
 	recorderContainer := Container{
@@ -341,7 +332,7 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 
 	if extractErr != nil {
 		log.Trace(extractErr)
-	} else {
+	} else if executorVolumes != "" {
 		log.Debugf("executorVolumes capability set: %s", executorVolumes)
 		executorVolumesPaths := strings.Split(executorVolumes, ",")
 		addValidatedVolumes(executorVolumesPaths, "executor-volume", volumes, []*Container{&executorContainer})
