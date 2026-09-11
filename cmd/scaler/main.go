@@ -394,9 +394,10 @@ func main() {
 
 	log.SetLevel(config.Conf.ParseLogLevel())
 
-	ctx := context.Background()
+	initCtx, initCancel := context.WithTimeout(context.Background(), service.AwsCallTimeout)
+	defer initCancel()
 
-	_, err := service.InitAwsConfig(ctx)
+	_, err := service.InitAwsConfig(initCtx)
 	if err != nil {
 		utils.ExitWithError(err, "Failed to init AWS config", log.NewEntry(log.StandardLogger()))
 	}
@@ -412,13 +413,14 @@ func main() {
 		log.WithError(err).Error("Failed to set scaler version in cache")
 	}
 
-	scalersMap, err := service.InitScalingData(ctx)
+	scalersMap, err := service.InitScalingData(initCtx)
 	if err != nil {
 		utils.ExitWithError(err, "Failed to init scaling data", log.NewEntry(log.StandardLogger()))
 	}
-	service.StartScalers(ctx, scalersMap)
 
 	workerCtx, cancel := context.WithCancel(context.Background())
+
+	service.StartScalers(workerCtx, scalersMap)
 
 	go func() {
 		exit := make(chan os.Signal, 1)

@@ -9,6 +9,9 @@ import (
 )
 
 func DescribeImages(ctx context.Context, registryId string, repositories []string) ([]ecrTypes.ImageDetail, error) {
+	ctx, cancel := context.WithTimeout(ctx, AwsCallTimeout)
+	defer cancel()
+
 	svc := ecr.NewFromConfig(AwsCfg)
 
 	imgDetails := []ecrTypes.ImageDetail{}

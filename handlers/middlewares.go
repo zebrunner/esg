@@ -65,6 +65,9 @@ func SeleniumError(c *gin.Context) {
 			// Capabilities.EnableDebug by default - false
 			enableDebug = m.Capabilities.EnableDebug.ToPrimitive()
 			l = l.WithField(config.RouterUUID, m.RouterUUID)
+			if current := m.CurrentUUID(); current != m.RouterUUID {
+				l = l.WithField(config.ChildUUIDKey, current)
+			}
 			if m.TaskId != "" {
 				l = l.WithField(config.TaskIdKey, m.TaskId)
 			}
@@ -194,7 +197,7 @@ func UpdateLastAccessTime(c *gin.Context) {
 
 	accessedAt := time.Now()
 	mapperEntity.AccessedAt = &accessedAt
-	err := mapper.Write(mapperEntity, -1)
+	_, err := mapper.UpdateAccessedAt(mapperEntity.RouterUUID, accessedAt)
 	if err != nil {
 		log.WithField(config.SessionIdKey, mapperEntity.SessionID).WithField(config.RouterUUID, mapperEntity.RouterUUID).WithError(err).Error("Failed to update last access time")
 	}

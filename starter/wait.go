@@ -40,10 +40,19 @@ type waitWorker struct {
 
 func (w *waitWorker) start() {
 	svc := ecs.NewFromConfig(service.AwsCfg)
-	ctx := context.Background()
+
+	var (
+		ctx    context.Context
+		cancel context.CancelFunc
+	)
 
 	for {
 		time.Sleep(5 * time.Second)
+
+		if cancel != nil {
+			cancel()
+		}
+		ctx, cancel = context.WithTimeout(context.Background(), service.AwsCallTimeout)
 
 		if len(w.requests) == 0 {
 			continue

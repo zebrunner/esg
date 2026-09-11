@@ -15,6 +15,8 @@ import (
 	appConfig "github.com/zebrunner/esg/config"
 )
 
+const AwsCallTimeout = 15 * time.Minute
+
 var (
 	AwsCfg aws.Config
 

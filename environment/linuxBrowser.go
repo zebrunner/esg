@@ -104,6 +104,13 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 		ReadOnlyRootFileSystem: true,
 	}
 
+	if cert := caps.RootCACert.ToPrimitive(); cert != "" {
+		if err := capabilities.ValidateRootCACert(cert); err != nil {
+			return nil, fmt.Errorf("invalid root CA certificate: %w", err)
+		}
+		browserContainer.Env["ROOT_CA_custom"] = cert
+	}
+
 	recorderContainer := Container{
 		Name:  "recorder",
 		Image: recorderImage,

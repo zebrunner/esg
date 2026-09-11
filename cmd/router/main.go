@@ -135,6 +135,7 @@ func CreateRouter() *gin.Engine {
 	{
 		selenium.POST("/session", handlers.Create) // Auth logic moved to handler
 		selenium.GET("/ws/vnc/:uuid", handlers.ValidateMapperPresence, handlers.Vnc)
+		selenium.GET("/ws/playwright/:uuid", handlers.ValidateMapperPresence, handlers.UpdateLastAccessTime, handlers.PlaywrightAttach)
 
 		genericHub := selenium.Group("/", handlers.ValidateGenericMapperPresence, handlers.LockGenericTaskCache)
 		{
@@ -146,6 +147,8 @@ func CreateRouter() *gin.Engine {
 		{
 			cachedSeleniumSession.DELETE("/session/:uuid", handlers.CloseSession)
 			cachedSeleniumSession.Any("/session/:uuid/*action", handlers.Proxy)
+
+			cachedSeleniumSession.POST("/playwright/:uuid/refresh", handlers.PlaywrightRefresh)
 
 			cachedSeleniumSession.Any("/download/:uuid/*action", handlers.Downloads)
 
@@ -279,7 +282,8 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	ctx := context.Background()
+	initCtx, initCancel := context.WithTimeout(context.Background(), service.AwsCallTimeout)
+	defer initCancel()
 
 	err := config.InitDBConnection(config.Conf.DbConnectionString)
 	if err != nil {
@@ -293,18 +297,18 @@ func main() {
 	mapper.InitMapperWorkers()
 	resourcesToAllocate.InitResourceWorker()
 
-	err = InitClusterInfo(ctx)
+	err = InitClusterInfo(initCtx)
 	if err != nil {
 		log.WithError(err).Error("Failed to init cluster info")
 		startMockRouter()
 	} else {
-		startRouter(ctx)
+		startRouter()
 	}
 
 	log.Info("Router exited")
 }
 
-func startRouter(ctx context.Context) {
+func startRouter() {
 	// init all starter workers
 	starter.InitInstanceWorker()
 	starter.InitWaitWorker()
@@ -328,10 +332,13 @@ func startRouter(ctx context.Context) {
 
 	var tg *elbv2Types.TargetGroup = nil
 	if config.Conf.AwsTargetGroup != "" {
+		startupCtx, startupCancel := context.WithTimeout(context.Background(), service.AwsCallTimeout)
+		defer startupCancel()
+
 		var err error
 		l := log.WithField("targetGroup", config.Conf.AwsTargetGroup)
 
-		tg, err = service.DescribeTargetGroup(ctx, config.Conf.AwsTargetGroup)
+		tg, err = service.DescribeTargetGroup(startupCtx, config.Conf.AwsTargetGroup)
 		if err != nil {
 			l.WithError(err).Error("Failed to describe target group")
 			utils.ExitWithError(err, "Failed to append target to the elb target group", l)
@@ -340,7 +347,7 @@ func startRouter(ctx context.Context) {
 			utils.ExitWithError(err, "Failed to append target to the elb target group", l)
 		}
 
-		err = service.RegisterTarget(ctx, tg, config.Conf.ExternalPort)
+		err = service.RegisterTarget(startupCtx, tg, config.Conf.ExternalPort)
 		if err != nil {
 			utils.ExitWithError(err, "Failed to append target to the elb target group", l)
 		}
@@ -362,7 +369,7 @@ func startRouter(ctx context.Context) {
 	if tg != nil {
 		l := log.WithField("targetGroup", config.Conf.AwsTargetGroup)
 
-		err := service.DeregisterTarget(context.Background(), tg, config.Conf.ExternalPort)
+		err := service.DeregisterTarget(shutdownCtx, tg, config.Conf.ExternalPort)
 		if err != nil {
 			l.WithError(err).Fatal("Failed to detach target from the elb target group")
 		}

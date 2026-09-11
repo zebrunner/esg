@@ -236,6 +236,9 @@ func CloseSession(c *gin.Context) {
 	mapperEntity := c.MustGet(config.RouterUUID).(*mapper.Mapper)
 
 	l := log.WithFields(log.Fields{config.RouterUUID: mapperEntity.RouterUUID, config.TaskIdKey: mapperEntity.TaskId, config.SessionIdKey: mapperEntity.SessionID})
+	if current := mapperEntity.CurrentUUID(); current != mapperEntity.RouterUUID {
+		l = l.WithField(config.ChildUUIDKey, current)
+	}
 
 	selenium.CloseSession(mapperEntity)
 

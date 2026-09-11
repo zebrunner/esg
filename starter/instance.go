@@ -44,10 +44,19 @@ func (w *instanceWatchWorker) start() {
 	svc := ecs.NewFromConfig(service.AwsCfg)
 	ec2Svc := ec2.NewFromConfig(service.AwsCfg)
 	autoScalingSvc := autoscaling.NewFromConfig(service.AwsCfg)
-	ctx := context.Background()
+
+	var (
+		ctx    context.Context
+		cancel context.CancelFunc
+	)
 
 	for {
 		time.Sleep(5 * time.Second)
+
+		if cancel != nil {
+			cancel()
+		}
+		ctx, cancel = context.WithTimeout(context.Background(), service.AwsCallTimeout)
 
 		for k, v := range w.requests {
 			select {

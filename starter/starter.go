@@ -19,6 +19,7 @@ import (
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
 	envtype "github.com/zebrunner/esg/environment/envType"
+	"github.com/zebrunner/esg/playwright"
 	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
@@ -221,6 +222,18 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (essential *utils.Sel
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("driver started")
 		return nil, nil
 	}
+}
+
+func (s *startBasis) waitPlaywrightReadyPhase(ctx context.Context) (essential *utils.SeleniumError, nonEssential error) {
+	s.Log.Info("waiting for Playwright browser")
+	_, err := playwright.WaitReady(ctx, s.Env.Network)
+	if err != nil {
+		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(err).Info("Playwright browser startup failed")
+		return utils.CreationErr(fmt.Errorf("failed to start Playwright browser"), err.Error()), nil
+	}
+
+	s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("Playwright browser started")
+	return nil, nil
 }
 
 func (s *startBasis) setHostPort() error {
@@ -439,6 +452,35 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, workspace string, 
 				s.MapperEntity.Status = mapper.Cypress
 
 				err := mapper.WritedByWorker(s.MapperEntity, []cachemaps.SetType{cachemaps.TASK}, nil, 0)
+				if err != nil {
+					basis.Log.WithError(err).Error("Failed to recache task on finalize!")
+				}
+			},
+		}
+	} else if env.Type == envtype.PLAYWRIGHT {
+		basis.appendPhase(basis.registerTaskPhase).
+			appendPhase(basis.startTaskPhase).
+			appendPhase(basis.setNetworkPhase).
+			appendPhase(basis.waitPlaywrightReadyPhase)
+
+		starter = basicStarter{
+			basis: basis,
+			finalizeFunc: func(s *startBasis) {
+				accessedAt := time.Now()
+				s.MapperEntity.AccessedAt = &accessedAt
+				s.MapperEntity.Status = mapper.Active
+				// Playwright has no webdriver session, so mirror the uuid to keep the session routes usable.
+				s.MapperEntity.SessionID = s.MapperEntity.RouterUUID
+				s.Reply = map[string]interface{}{"sessionId": s.MapperEntity.SessionID}
+
+				go func() {
+					err := selenium.StartRecording(&s.MapperEntity.Network)
+					if err != nil {
+						basis.Log.WithError(err).Error("Failed to start recording")
+					}
+				}()
+
+				err := mapper.WritedByWorker(s.MapperEntity, []cachemaps.SetType{cachemaps.SESSION, cachemaps.TASK}, nil, 0)
 				if err != nil {
 					basis.Log.WithError(err).Error("Failed to recache task on finalize!")
 				}

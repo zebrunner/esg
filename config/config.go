@@ -18,6 +18,7 @@ var (
 	VendorPrefix = "zebrunner"
 	Conf         = Config{}
 	RouterUUID   = "_uuid"
+	ChildUUIDKey = "_childUuid"
 	TaskIdKey    = "_taskId"
 	SessionIdKey = "sessionId"
 	Version      = os.Getenv("VERSION")
@@ -81,7 +82,6 @@ type Config struct {
 	MitmImage            string
 	RecorderImage        string
 	CypressRecorderImage string
-	AppiumImage          string
 	CloneImage           string
 	EntrypointImage      string
 	MavenImage           string
@@ -96,6 +96,8 @@ type Config struct {
 
 	EcsTaskTags           utils.TagMap
 	EcsTaskDefinitionTags utils.TagMap
+
+	RootCACert string
 }
 
 func init() {
@@ -151,7 +153,6 @@ func init() {
 	flag.StringVar(&Conf.MitmImage, "mitm-image", "", "Override full image URL for the mitmproxy container")
 	flag.StringVar(&Conf.RecorderImage, "recorder-image", "", "Override full image URL for the recorder container")
 	flag.StringVar(&Conf.CypressRecorderImage, "cypress-recorder-image", "", "Override full image URL for the cypress recorder container")
-	flag.StringVar(&Conf.AppiumImage, "appium-image", "", "Override full image URL for the appium container")
 	flag.StringVar(&Conf.CloneImage, "clone-image", "", "Override full image URL for the git clone container")
 	flag.StringVar(&Conf.EntrypointImage, "entrypoint-image", "", "Override full image URL for the entrypoint container")
 	flag.StringVar(&Conf.MavenImage, "maven-image", "", "Override full image URL for the maven (m2-repo-carina) container")
@@ -166,6 +167,8 @@ func init() {
 
 	flag.Var(&Conf.EcsTaskTags, "ecs-task-tags", "Tags to apply to ECS tasks (RunTask) in key=value,key=value format")
 	flag.Var(&Conf.EcsTaskDefinitionTags, "ecs-task-definition-tags", "Tags to apply to ECS task definitions in key=value,key=value format. If 'Name' is not provided, defaults to family:revision")
+
+	flag.StringVar(&Conf.RootCACert, "root-ca-cert", "", "Default base64-encoded PEM CA certificate injected into browser containers. Can be overridden per-session via zebrunner:options.rootCACert capability")
 }
 
 // When static credentials are provided, IMDS calls should be skipped.
