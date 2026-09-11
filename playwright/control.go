@@ -50,7 +50,7 @@ func (e *ControlError) Error() string {
 }
 
 // Refresh swaps the running browser and returns the supervisor state once the new one is up.
-func Refresh(net *network.NetworkConfiguration, opts RefreshOptions) (*State, error) {
+func Refresh(ctx context.Context, net *network.NetworkConfiguration, opts RefreshOptions) (*State, error) {
 	url, ok := net.GetUrl("playwrightRefresh")
 	if !ok {
 		return nil, fmt.Errorf("failed to get url of playwright control")
@@ -61,7 +61,7 @@ func Refresh(net *network.NetworkConfiguration, opts RefreshOptions) (*State, er
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, url.String(), bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url.String(), bytes.NewReader(payload))
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +100,7 @@ func WaitReady(ctx context.Context, net *network.NetworkConfiguration) (*State, 
 
 	var lastErr error
 	for {
-		state, err := health(net)
+		state, err := health(ctx, net)
 		if err == nil && state.Status == readyStatus {
 			return state, nil
 		}
@@ -119,13 +119,13 @@ func WaitReady(ctx context.Context, net *network.NetworkConfiguration) (*State, 
 	}
 }
 
-func health(net *network.NetworkConfiguration) (*State, error) {
+func health(ctx context.Context, net *network.NetworkConfiguration) (*State, error) {
 	url, ok := net.GetUrl("playwrightHealth")
 	if !ok {
 		return nil, fmt.Errorf("failed to get url of playwright health")
 	}
 
-	req, err := http.NewRequest(http.MethodGet, url.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url.String(), nil)
 	if err != nil {
 		return nil, err
 	}

@@ -197,7 +197,7 @@ func UpdateLastAccessTime(c *gin.Context) {
 
 	accessedAt := time.Now()
 	mapperEntity.AccessedAt = &accessedAt
-	err := mapper.Write(mapperEntity, -1)
+	_, err := mapper.UpdateAccessedAt(mapperEntity.RouterUUID, accessedAt)
 	if err != nil {
 		log.WithField(config.SessionIdKey, mapperEntity.SessionID).WithField(config.RouterUUID, mapperEntity.RouterUUID).WithError(err).Error("Failed to update last access time")
 	}

@@ -19,6 +19,7 @@ import (
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
 	envtype "github.com/zebrunner/esg/environment/envType"
+	"github.com/zebrunner/esg/playwright"
 	"github.com/zebrunner/esg/selenium"
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
@@ -221,6 +222,18 @@ func (s *startBasis) startDriverPhase(ctx context.Context) (essential *utils.Sel
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("driver started")
 		return nil, nil
 	}
+}
+
+func (s *startBasis) waitPlaywrightReadyPhase(ctx context.Context) (essential *utils.SeleniumError, nonEssential error) {
+	s.Log.Info("waiting for Playwright browser")
+	_, err := playwright.WaitReady(ctx, s.Env.Network)
+	if err != nil {
+		s.Log.WithField("latency", time.Since(s.ServiceStart)).WithError(err).Info("Playwright browser startup failed")
+		return utils.CreationErr(fmt.Errorf("failed to start Playwright browser"), err.Error()), nil
+	}
+
+	s.Log.WithField("latency", time.Since(s.ServiceStart)).Info("Playwright browser started")
+	return nil, nil
 }
 
 func (s *startBasis) setHostPort() error {
@@ -445,7 +458,10 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, workspace string, 
 			},
 		}
 	} else if env.Type == envtype.PLAYWRIGHT {
-		basis.appendPhase(basis.registerTaskPhase).appendPhase(basis.startTaskPhase).appendPhase(basis.setNetworkPhase)
+		basis.appendPhase(basis.registerTaskPhase).
+			appendPhase(basis.startTaskPhase).
+			appendPhase(basis.setNetworkPhase).
+			appendPhase(basis.waitPlaywrightReadyPhase)
 
 		starter = basicStarter{
 			basis: basis,

@@ -1,8 +1,11 @@
 package capabilities
 
 import (
+	"bytes"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"strconv"
 
@@ -106,14 +109,45 @@ func (s *rootCACertWrapper) Validate(key string, value interface{}) string {
 	if !ok {
 		return typeError(value, key, "string")
 	}
-	if len(valueStr) > maxRootCACertSize {
-		return malformedError("(truncated)", key, fmt.Sprintf("value exceeds max size of %d characters", maxRootCACertSize)).Error()
-	}
-	if _, err := base64.StdEncoding.DecodeString(valueStr); err != nil {
-		return malformedError("(invalid)", key, "value must be a valid base64-encoded PEM certificate").Error()
+	if err := ValidateRootCACert(valueStr); err != nil {
+		return malformedError("(invalid)", key, err.Error()).Error()
 	}
 	s.From(valueStr)
 	return ""
+}
+
+// ValidateRootCACert verifies a base64-encoded PEM certificate or certificate bundle.
+func ValidateRootCACert(value string) error {
+	if value == "" {
+		return nil
+	}
+	if len(value) > maxRootCACertSize {
+		return fmt.Errorf("value exceeds max size of %d characters", maxRootCACertSize)
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(value)
+	if err != nil {
+		return fmt.Errorf("value must be a valid base64-encoded PEM certificate")
+	}
+
+	rest := decoded
+	certificates := 0
+	for len(bytes.TrimSpace(rest)) > 0 {
+		block, remaining := pem.Decode(rest)
+		if block == nil || block.Type != "CERTIFICATE" {
+			return fmt.Errorf("value must contain only PEM certificate blocks")
+		}
+		if _, err := x509.ParseCertificate(block.Bytes); err != nil {
+			return fmt.Errorf("value contains an invalid X.509 certificate")
+		}
+		certificates++
+		rest = remaining
+	}
+	if certificates == 0 {
+		return fmt.Errorf("value must contain a PEM certificate")
+	}
+
+	return nil
 }
 
 func (s *rootCACertWrapper) ToPrimitive() string {

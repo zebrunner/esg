@@ -3,9 +3,11 @@ package mapper
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/zebrunner/esg/cachemaps"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
@@ -108,6 +110,66 @@ func Write(mapper *Mapper, expiration time.Duration) error {
 	}
 
 	return nil
+}
+
+// UpdateSession applies a change to the newest session record and retries concurrent changes.
+// The update function can run more than once, so it must be idempotent.
+func UpdateSession(routerUUID string, update func(*Mapper) error) error {
+	const maxAttempts = 5
+
+	ctx := context.Background()
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		err := config.RedisCluster.Watch(ctx, func(tx *redis.Tx) error {
+			data, err := tx.Get(ctx, routerUUID).Bytes()
+			if err != nil {
+				return err
+			}
+
+			var entity Mapper
+			if err := json.Unmarshal(data, &entity); err != nil {
+				return err
+			}
+			if err := update(&entity); err != nil {
+				return err
+			}
+
+			data, err = json.Marshal(&entity)
+			if err != nil {
+				return err
+			}
+
+			_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+				pipe.Set(ctx, routerUUID, data, redis.KeepTTL)
+				return nil
+			})
+			return err
+		}, routerUUID)
+		if errors.Is(err, redis.TxFailedErr) {
+			continue
+		}
+
+		return err
+	}
+
+	return fmt.Errorf("failed to update session after %d concurrent changes", maxAttempts)
+}
+
+// UpdateAccessedAt updates only a current session record and preserves concurrent state changes.
+// The returned value is false when the session is already stopped.
+func UpdateAccessedAt(routerUUID string, accessedAt time.Time) (bool, error) {
+	errSessionStopped := errors.New("session is stopped")
+	err := UpdateSession(routerUUID, func(entity *Mapper) error {
+		if entity.Status == Stopped {
+			return errSessionStopped
+		}
+		entity.AccessedAt = &accessedAt
+		return nil
+	})
+	if errors.Is(err, errSessionStopped) {
+		return false, nil
+	}
+
+	return err == nil, err
 }
 
 // Find returns the session that owns uuid, following a child session id to the record holding the task.

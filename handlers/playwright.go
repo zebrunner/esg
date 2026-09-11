@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps/mapper"
+	"github.com/zebrunner/esg/cachemaps/utilsmap"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
 	envtype "github.com/zebrunner/esg/environment/envType"
@@ -27,8 +28,12 @@ const (
 	playwrightKeepAliveMaxInterval = 30 * time.Second
 
 	playwrightRefreshTimeout = 2 * time.Minute
+	playwrightRefreshLockTTL = 5 * time.Minute
+	playwrightLockReleaseTTL = 5 * time.Second
 
 	childSessionGrace = 30 * time.Minute
+
+	playwrightRefreshLockPrefix = "playwright-refresh-lock:"
 )
 
 type playwrightRefreshRequest struct {
@@ -106,36 +111,36 @@ func PlaywrightRefresh(c *gin.Context) {
 		browserType = resolved
 	}
 
-	// One id for the client, the recorder and the artifact scope of the browser about to start.
-	childUUID := uuid.NewString()
-	l = l.WithField(config.ChildUUIDKey, childUUID)
+	lockOwner := uuid.NewString()
+	lockKey := playwrightRefreshLockPrefix + mapperEntity.RouterUUID
+	locked, err := utilsmap.AcquireExpiringLock(c.Request.Context(), lockKey, lockOwner, playwrightRefreshLockTTL)
+	if err != nil {
+		l.WithError(err).Error("Playwright refresh: failed to acquire refresh lock")
+		c.Error(utils.UnknownErr(fmt.Errorf("failed to acquire refresh lock"), err.Error())).SetType(gin.ErrorTypePublic)
+		return
+	}
+	if !locked {
+		c.Error(playwrightRefreshConflictErr()).SetType(gin.ErrorTypePublic)
+		return
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), playwrightLockReleaseTTL)
+		defer cancel()
+		if err := utilsmap.ReleaseExpiringLock(ctx, lockKey, lockOwner); err != nil {
+			l.WithError(err).Warn("Playwright refresh: failed to release refresh lock")
+		}
+	}()
 
 	// A swap can outlast the idle timeout while no client is attached, so hold the session open.
 	heartbeatCtx, stopHeartbeat := context.WithCancel(context.Background())
 	defer stopHeartbeat()
 	go keepPlaywrightSessionAlive(heartbeatCtx, mapperEntity.RouterUUID, mapperEntity.IdleTimeout, l)
 
-	// Publish the current artifacts before the swap so each browser owns its own scope.
-	rotation, err := selenium.RotateRecording(&mapperEntity.Network, childUUID)
-	if err != nil {
-		l.WithError(err).Error("Playwright refresh: failed to rotate artifacts")
-		c.Error(utils.UnknownErr(fmt.Errorf("failed to rotate artifacts"), err.Error())).SetType(gin.ErrorTypePublic)
-		return
-	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), playwrightRefreshTimeout)
+	defer cancel()
 
-	// Rotating stopped the recorder, so a failure from here on must put it back or the rest of the
-	// session records nothing.
-	recordingResumed := false
-	defer func() {
-		if recordingResumed {
-			return
-		}
-		if err := selenium.StartRecording(&mapperEntity.Network); err != nil {
-			l.WithError(err).Error("Playwright refresh: failed to resume recording after a failed refresh")
-		}
-	}()
-
-	_, err = playwright.Refresh(&mapperEntity.Network, playwright.RefreshOptions{
+	// Replace the browser first. A rejected browser configuration must not rotate the artifact scope.
+	state, err := playwright.Refresh(ctx, &mapperEntity.Network, playwright.RefreshOptions{
 		BrowserType: browserType,
 		Args:        req.PlaywrightArgs,
 		Headless:    req.Headless,
@@ -146,79 +151,94 @@ func PlaywrightRefresh(c *gin.Context) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), playwrightRefreshTimeout)
-	defer cancel()
+	childUUID := uuid.NewString()
+	l = l.WithField(config.ChildUUIDKey, childUUID)
+	sessionID := mapperEntity.RouterUUID
+	artifactRotationSucceeded := false
+	var rotation *selenium.RotateResult
 
-	state, err := playwright.WaitReady(ctx, &mapperEntity.Network)
-	if err != nil {
-		l.WithError(err).Error("Playwright refresh: browser did not become ready")
-		c.Error(utils.UnknownErr(fmt.Errorf("browser did not become ready"), err.Error())).SetType(gin.ErrorTypePublic)
-		return
+	// Register the route before the recorder can publish artifacts under the new id.
+	if err := mapper.WriteChild(childUUID, mapperEntity.RouterUUID, childSessionTTL()); err != nil {
+		l.WithError(err).Error("Playwright refresh: failed to register child session; artifacts remain in the current scope")
+		childUUID = ""
+	} else {
+		sessionID = childUUID
+		rotation, err = selenium.RotateRecording(&mapperEntity.Network, childUUID)
+		if err != nil {
+			l.WithError(err).Error("Playwright refresh: failed to rotate artifacts")
+		} else {
+			artifactRotationSucceeded = true
+		}
+
+		// Rotate stops the recorder. This call also repairs a recorder that returned an uncertain result.
+		if err := selenium.StartRecording(&mapperEntity.Network); err != nil {
+			l.WithError(err).Error("Playwright refresh: failed to start recording")
+		}
 	}
 
 	stopHeartbeat()
 
-	// The browser is already usable, so a recorder failure must not fail the refresh.
-	if err := selenium.StartRecording(&mapperEntity.Network); err != nil {
-		l.WithError(err).Error("Playwright refresh: failed to start recording")
-	}
-	recordingResumed = true
-
-	// An unregistered child id resolves nowhere, so fall back to the id that still routes.
-	sessionID := childUUID
 	if err := persistRefreshedSession(mapperEntity, req, childUUID); err != nil {
-		l.WithError(err).Error("Playwright refresh: failed to register new session, returning original")
-		sessionID = mapperEntity.RouterUUID
+		l.WithError(err).Error("Playwright refresh: failed to persist refreshed session state")
 	}
 
-	l.WithFields(log.Fields{
-		"browserType":        state.BrowserType,
-		"generation":         state.Generation,
-		"artifactId":         rotation.ArtifactID,
-		"previousArtifactId": rotation.PreviousArtifactID,
-	}).Info("Playwright refresh: browser replaced")
+	fields := log.Fields{
+		"browserType":      state.BrowserType,
+		"generation":       state.Generation,
+		"artifactRotation": artifactRotationSucceeded,
+	}
+	value := gin.H{
+		"sessionId":                 sessionID,
+		"originalSessionId":         mapperEntity.RouterUUID,
+		"artifactRotationSucceeded": artifactRotationSucceeded,
+		"browserType":               state.BrowserType,
+		"generation":                state.Generation,
+	}
+	if rotation != nil {
+		fields["artifactId"] = rotation.ArtifactID
+		fields["previousArtifactId"] = rotation.PreviousArtifactID
+		value["artifactId"] = rotation.ArtifactID
+		value["previousArtifactId"] = rotation.PreviousArtifactID
+	}
+	if childUUID == "" {
+		value["warning"] = "browser replaced, but the child session and artifact scope could not be created"
+	} else if !artifactRotationSucceeded {
+		value["warning"] = "browser replaced, but artifact rotation did not complete"
+	}
+	l.WithFields(fields).Info("Playwright refresh: browser replaced")
 
-	c.JSON(http.StatusOK, gin.H{"value": gin.H{
-		"sessionId":          sessionID,
-		"originalSessionId":  mapperEntity.RouterUUID,
-		"artifactId":         rotation.ArtifactID,
-		"previousArtifactId": rotation.PreviousArtifactID,
-		"browserType":        state.BrowserType,
-		"generation":         state.Generation,
-	}})
+	c.JSON(http.StatusOK, gin.H{"value": value})
 }
 
 // A swap can outlive the idle timeout, so the record read before it must not be written back as is.
 // persistRefreshedSession registers childUUID and applies the request to the freshest session record.
-func persistRefreshedSession(fallback *mapper.Mapper, req playwrightRefreshRequest, childUUID string) error {
-	// The child id must resolve before it is advertised, so it is written ahead of the session record.
-	if err := mapper.WriteChild(childUUID, fallback.RouterUUID, childSessionTTL()); err != nil {
-		return err
-	}
+func persistRefreshedSession(rootSession *mapper.Mapper, req playwrightRefreshRequest, childUUID string) error {
+	return mapper.UpdateSession(rootSession.RouterUUID, func(entity *mapper.Mapper) error {
+		if entity.Capabilities == nil {
+			return fmt.Errorf("session capabilities are not available")
+		}
+		if entity.Status == mapper.Stopped {
+			return fmt.Errorf("session is stopped")
+		}
 
-	entity, err := mapper.Find(fallback.RouterUUID)
-	if err != nil || entity == nil || entity.Capabilities == nil {
-		entity = fallback
-	}
+		if req.BrowserName != "" {
+			entity.Capabilities.BrowserName.From(req.BrowserName)
+		}
+		if req.PlaywrightArgs != nil {
+			entity.Capabilities.PlaywrightArgs.From(*req.PlaywrightArgs)
+		}
+		if req.Headless != nil {
+			entity.Capabilities.Headless.From(*req.Headless)
+		}
 
-	if req.BrowserName != "" {
-		entity.Capabilities.BrowserName.From(req.BrowserName)
-	}
-	if req.PlaywrightArgs != nil {
-		entity.Capabilities.PlaywrightArgs.From(*req.PlaywrightArgs)
-	}
-	if req.Headless != nil {
-		entity.Capabilities.Headless.From(*req.Headless)
-	}
+		if childUUID != "" && !slices.Contains(entity.Children, childUUID) {
+			entity.Children = append(entity.Children, childUUID)
+		}
 
-	if !slices.Contains(entity.Children, childUUID) {
-		entity.Children = append(entity.Children, childUUID)
-	}
-
-	accessedAt := time.Now()
-	entity.AccessedAt = &accessedAt
-
-	return mapper.Write(entity, -1)
+		accessedAt := time.Now()
+		entity.AccessedAt = &accessedAt
+		return nil
+	})
 }
 
 // A child id outlives its session because the scaler caps every task at MaxTimeout, so it self-expires
@@ -238,14 +258,18 @@ func isPlaywrightSession(mapperEntity *mapper.Mapper) bool {
 func playwrightRefreshErr(err error) *utils.SeleniumError {
 	var controlErr *playwright.ControlError
 	if errors.As(err, &controlErr) && controlErr.StatusCode == http.StatusConflict {
-		return &utils.SeleniumError{
-			ResponseStatus: http.StatusConflict,
-			Name:           "browser refresh in progress",
-			MainErr:        fmt.Errorf("another refresh is already running for this session"),
-		}
+		return playwrightRefreshConflictErr()
 	}
 
 	return utils.UnknownErr(fmt.Errorf("failed to refresh browser"), err.Error())
+}
+
+func playwrightRefreshConflictErr() *utils.SeleniumError {
+	return &utils.SeleniumError{
+		ResponseStatus: http.StatusConflict,
+		Name:           "browser refresh in progress",
+		MainErr:        fmt.Errorf("another refresh is already running for this session"),
+	}
 }
 
 // keepPlaywrightSessionAlive refreshes the access time so the scaler does not abort a connected session.
@@ -265,21 +289,14 @@ func keepPlaywrightSessionAlive(ctx context.Context, routerUUID string, idleTime
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			mapperEntity, err := mapper.Find(routerUUID)
-			if err != nil || mapperEntity == nil {
+			updated, err := mapper.UpdateAccessedAt(routerUUID, time.Now())
+			if err != nil {
 				l.WithError(err).Debug("Playwright attach: session is gone, keep-alive stopped")
 				return
 			}
-
-			if mapperEntity.Status == mapper.Stopped {
+			if !updated {
 				l.Debug("Playwright attach: session is stopped, keep-alive stopped")
 				return
-			}
-
-			accessedAt := time.Now()
-			mapperEntity.AccessedAt = &accessedAt
-			if err := mapper.Write(mapperEntity, -1); err != nil {
-				l.WithError(err).Warn("Playwright attach: failed to refresh last access time")
 			}
 		}
 	}

@@ -90,7 +90,7 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 			"TZ":                tz.String(),
 			"SCREEN_RESOLUTION": resolution,
 		},
-		Mounts: []string{logVolume, shmVolume, seleniumBrowserVolume, tmpBrowserVolume},
+		Mounts:     []string{logVolume, shmVolume, seleniumBrowserVolume, tmpBrowserVolume},
 		Command:    []string{"-c", "/entrypoint.sh" + taskLogRedirect},
 		EntryPoint: []string{"/bin/sh"},
 		HealthCheck: &ecsTypes.HealthCheck{
@@ -105,6 +105,9 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 	}
 
 	if cert := caps.RootCACert.ToPrimitive(); cert != "" {
+		if err := capabilities.ValidateRootCACert(cert); err != nil {
+			return nil, fmt.Errorf("invalid root CA certificate: %w", err)
+		}
 		browserContainer.Env["ROOT_CA_custom"] = cert
 	}
 
