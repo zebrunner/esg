@@ -13,6 +13,8 @@ import (
 	"github.com/zebrunner/esg/cachemaps/utilsmap"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/definitions"
+	"github.com/zebrunner/esg/environment"
+	envtype "github.com/zebrunner/esg/environment/envType"
 
 	"github.com/gin-gonic/gin"
 )
@@ -72,9 +74,27 @@ func ListDrivers(c *gin.Context) {
 		if strings.Contains(image.Version, "-debug") {
 			continue
 		}
-		filteredImages = append(filteredImages, image)
+		filteredImages = append(filteredImages, expandPlaywrightBrowsers(image)...)
 	}
 	c.JSON(http.StatusOK, filteredImages)
+}
+
+// expandPlaywrightBrowsers advertises each playwright image as chromium, firefox, and webkit.
+func expandPlaywrightBrowsers(image imageDataModel) []imageDataModel {
+	if !strings.EqualFold(image.Platform, envtype.PLAYWRIGHT.String()) {
+		return []imageDataModel{image}
+	}
+	if image.Name != "" && !strings.EqualFold(image.Name, envtype.PLAYWRIGHT.String()) {
+		return []imageDataModel{image}
+	}
+
+	expanded := make([]imageDataModel, 0, len(environment.PlaywrightCatalogBrowsers))
+	for _, name := range environment.PlaywrightCatalogBrowsers {
+		entry := image
+		entry.Name = name
+		expanded = append(expanded, entry)
+	}
+	return expanded
 }
 
 func Welcome(c *gin.Context) {

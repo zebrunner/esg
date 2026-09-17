@@ -2,7 +2,10 @@ package utilsmap
 
 import (
 	"context"
+	"errors"
+	"time"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 	"github.com/zebrunner/esg/cachemaps"
 	"github.com/zebrunner/esg/config"
@@ -40,4 +43,26 @@ func AcquireLock(key string) bool {
 
 func ReleaseLock(key string) error {
 	return cachemaps.RemoveFromSet(cachemaps.UTILS, key)
+}
+
+// AcquireExpiringLock obtains a distributed lock that Redis releases if its owner disappears.
+func AcquireExpiringLock(ctx context.Context, key string, owner string, expiration time.Duration) (bool, error) {
+	return config.RedisCluster.SetNX(ctx, key, owner, expiration).Result()
+}
+
+// ReleaseExpiringLock releases a distributed lock only when owner still owns it.
+func ReleaseExpiringLock(ctx context.Context, key string, owner string) error {
+	const releaseScript = `
+if redis.call("get", KEYS[1]) == ARGV[1] then
+  return redis.call("del", KEYS[1])
+end
+return 0
+`
+
+	err := config.RedisCluster.Eval(ctx, releaseScript, []string{key}, owner).Err()
+	if errors.Is(err, redis.Nil) {
+		return nil
+	}
+
+	return err
 }

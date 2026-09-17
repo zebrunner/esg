@@ -51,8 +51,7 @@ func startSession(ctx context.Context, net *network.NetworkConfiguration, driver
 	}
 
 	req.Method = http.MethodPost
-	// Use the actual network IP instead of localhost for AWS VPC mode
-	req.Host = reqUrl.Host
+	req.Host = driverHost(net, reqUrl.Host)
 	req = req.WithContext(ctx)
 
 	log.WithFields(log.Fields{
@@ -90,7 +89,7 @@ func startSession(ctx context.Context, net *network.NetworkConfiguration, driver
 	}
 
 	go func() {
-		err := startRecording(net)
+		err := StartRecording(net)
 		if err != nil {
 			log.WithError(err).Error("Failed to start recording")
 		}
@@ -143,8 +142,7 @@ func CloseSession(mapperEntity *mapper.Mapper) {
 			l.WithError(err).Error("Failed to create request")
 			return
 		}
-		// Use the actual network IP instead of localhost for AWS VPC mode
-		req.Host = sessionUrl.Host
+		req.Host = driverHost(&mapperEntity.Network, sessionUrl.Host)
 
 		l.WithFields(log.Fields{"method": req.Method, "url": req.URL}).Debug("closing driver")
 		resp, err := httpClient.Do(req)
@@ -162,4 +160,12 @@ func CloseSession(mapperEntity *mapper.Mapper) {
 	}
 
 	l.Debug("driver closed")
+}
+
+// driverHost keeps the AWSVPC network host except when geckodriver requires localhost.
+func driverHost(net *network.NetworkConfiguration, networkHost string) string {
+	if endpoint, ok := net.Endpoints["gecko_driver"]; ok {
+		return fmt.Sprintf("localhost:%d", endpoint.ContainerPort)
+	}
+	return networkHost
 }

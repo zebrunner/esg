@@ -29,14 +29,24 @@ func InitRedisClusterConnection() error {
 
 	RedisCluster = redis.NewClusterClient(options)
 
-	_, err := RedisCluster.Ping(context.Background()).Result()
-	if err != nil {
-		log.WithError(err).Errorf("Failed to ping redis cluster connection")
-		return err
-	}
-
 	clusterInitDuration := time.Minute
 	clusterInitStartTime := time.Now()
+	for {
+		_, err := RedisCluster.Ping(context.Background()).Result()
+		if err == nil {
+			break
+		}
+
+		if time.Since(clusterInitStartTime) > clusterInitDuration {
+			log.WithError(err).Error("Failed to ping redis cluster connection")
+			return err
+		}
+
+		log.WithError(err).Trace("Redis cluster ping error, retrying...")
+		RedisCluster.ReloadState(context.Background())
+		time.Sleep(time.Second)
+	}
+
 	for {
 		res, err := RedisCluster.ClusterInfo(context.Background()).Result()
 		if strings.Contains(res, "cluster_state:ok") {

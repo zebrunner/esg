@@ -263,6 +263,9 @@ func CloseSession(c *gin.Context) {
 	mapperEntity := c.MustGet(config.RouterUUID).(*mapper.Mapper)
 
 	l := log.WithFields(log.Fields{config.RouterUUID: mapperEntity.RouterUUID, config.TaskIdKey: mapperEntity.TaskId, config.SessionIdKey: mapperEntity.SessionID})
+	if current := mapperEntity.CurrentUUID(); current != mapperEntity.RouterUUID {
+		l = l.WithField(config.ChildUUIDKey, current)
+	}
 
 	clientIp := c.ClientIP()
 	l.Infof("Session DELETE called by clientIp=%s routerUUID=%s sessionID=%s", clientIp, mapperEntity.RouterUUID, mapperEntity.SessionID)

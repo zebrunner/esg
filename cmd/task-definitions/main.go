@@ -113,7 +113,8 @@ func main() {
 
 	log.SetLevel(config.Conf.ParseLogLevel())
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), service.AwsCallTimeout)
+	defer cancel()
 
 	_, err := service.InitAwsConfig(ctx)
 	if err != nil {

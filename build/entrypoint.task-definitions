@@ -90,9 +90,6 @@ fi
 if [ ! -z ${CYPRESS_RECORDER_IMAGE} ]; then
   CMD_ARGS="${CMD_ARGS} -cypress-recorder-image ${CYPRESS_RECORDER_IMAGE}"
 fi
-if [ ! -z ${APPIUM_IMAGE} ]; then
-  CMD_ARGS="${CMD_ARGS} -appium-image ${APPIUM_IMAGE}"
-fi
 if [ ! -z ${CLONE_IMAGE} ]; then
   CMD_ARGS="${CMD_ARGS} -clone-image ${CLONE_IMAGE}"
 fi
