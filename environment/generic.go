@@ -239,8 +239,9 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 	}
 
 	recorderContainer := Container{
-		Name:  "recorder",
-		Image: recorderImage,
+		Name:        "recorder",
+		Image:       recorderImage,
+		StopTimeout: aws.Int32(recorderUploaderStopTimeoutSeconds),
 		Res: Resources{
 			Cpu:    16, // was 32
 			Memory: 64, // was 256 // with 128 failed for cyserver "OutOfMemoryError: Container killed due to memory usage"
@@ -277,8 +278,9 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 	}
 
 	uploaderContainer := Container{
-		Name:  "uploader",
-		Image: uploaderImage,
+		Name:        "uploader",
+		Image:       uploaderImage,
+		StopTimeout: aws.Int32(recorderUploaderStopTimeoutSeconds),
 		Res: Resources{
 			Cpu:    128,
 			Memory: 256,

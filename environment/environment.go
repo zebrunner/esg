@@ -105,6 +105,7 @@ func (e *ExecutionEnvironment) HashOvverideDefinition() string {
 			WorkingDirectory: container.WorkingDirectory,
 			HealthCheck:      healthCheck,
 			DependsOn:        dependsOn,
+			StopTimeout:      container.StopTimeout,
 		}
 
 		overrideContainersData = append(overrideContainersData, c)
@@ -137,6 +138,7 @@ func (env *ExecutionEnvironment) ContainerDefinitions() []ecsTypes.ContainerDefi
 			DependsOn:              c.DependsOn,
 			Links:                  c.Links,
 			EntryPoint:             c.EntryPoint,
+			StopTimeout:            c.StopTimeout,
 			ReadonlyRootFilesystem: aws.Bool(c.ReadOnlyRootFileSystem),
 		}
 
@@ -278,6 +280,7 @@ func (env *ExecutionEnvironment) HashRegisterDefinition() string {
 			WorkingDirectory: container.WorkingDirectory,
 			HealthCheck:      healthCheck,
 			DependsOn:        dependsOn,
+			StopTimeout:      container.StopTimeout,
 		}
 
 		containers = append(containers, c)
