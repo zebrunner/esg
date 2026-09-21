@@ -145,8 +145,9 @@ func buildPlaywright(workspace string, routerUUID string, image images.Image, ca
 	}
 
 	recorderContainer := Container{
-		Name:  "recorder",
-		Image: recorderImage,
+		Name:        "recorder",
+		Image:       recorderImage,
+		StopTimeout: aws.Int32(recorderUploaderStopTimeoutSeconds),
 		Res: Resources{
 			Cpu:    160,
 			Memory: 1024,
@@ -207,8 +208,9 @@ func buildPlaywright(workspace string, routerUUID string, image images.Image, ca
 	}
 
 	uploaderContainer := Container{
-		Name:  "uploader",
-		Image: uploaderImage,
+		Name:        "uploader",
+		Image:       uploaderImage,
+		StopTimeout: aws.Int32(recorderUploaderStopTimeoutSeconds),
 		Res: Resources{
 			Cpu:    128,
 			Memory: 256,

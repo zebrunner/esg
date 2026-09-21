@@ -16,6 +16,8 @@ var (
 	capacityProviderResourcesLimit = make(map[string]smallestInstanceResources)
 )
 
+const recorderUploaderStopTimeoutSeconds int32 = 60
+
 type smallestInstanceResources struct {
 	res             Resources
 	memoryDeviation int64
@@ -67,6 +69,7 @@ type Container struct {
 
 	HealthCheck *ecsTypes.HealthCheck
 	DependsOn   []ecsTypes.ContainerDependency
+	StopTimeout *int32
 
 	ReadOnlyRootFileSystem bool
 }

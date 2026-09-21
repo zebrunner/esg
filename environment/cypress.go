@@ -162,8 +162,9 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 	basicAuthHeader := "Authorization: Basic " + b64.StdEncoding.EncodeToString([]byte(conf.ZebrunnerIntegrationUser+":"+conf.ZebrunnerIntegrationPassword))
 
 	recorderContainer := Container{
-		Name:  "recorder",
-		Image: cypressRecorderImage,
+		Name:        "recorder",
+		Image:       cypressRecorderImage,
+		StopTimeout: aws.Int32(recorderUploaderStopTimeoutSeconds),
 		Res: Resources{
 			Cpu:    320,
 			Memory: 2048,
@@ -208,8 +209,9 @@ func buildCypress(workspace string, routerUUID string, image images.Image, caps 
 	}
 
 	uploaderContainer := Container{
-		Name:  "uploader",
-		Image: uploaderImage,
+		Name:        "uploader",
+		Image:       uploaderImage,
+		StopTimeout: aws.Int32(recorderUploaderStopTimeoutSeconds),
 		Res: Resources{
 			Cpu:    128, // with 32 uploading is aborted
 			Memory: 256, // 64 works for single thread. for backgroud copying it is not enough
