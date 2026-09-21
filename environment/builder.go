@@ -18,7 +18,7 @@ var (
 	recorderImage        = config.ZebrunnerEcrRegistryUri + "/" + "recorder:2.4"
 	cypressRecorderImage = config.ZebrunnerEcrRegistryUri + "/" + "cypress-recorder:1.3"
 	cloneImage           = config.ZebrunnerEcrRegistryUri + "/" + "git:2.55.0"
-	entrypointImage      = config.ZebrunnerEcrRegistryUri + "/" + "entrypoint:2.5.3"
+	entrypointImage      = config.ZebrunnerEcrRegistryUri + "/" + "entrypoint:2.5.4"
 	mavenImage           = config.ZebrunnerEcrRegistryUri + "/" + "m2-repo-carina:2.0"
 	winUploaderImage     = config.ZebrunnerEcrRegistryUri + "/" + "uploader:1.1-win"
 	winRecorderImage     = config.ZebrunnerEcrRegistryUri + "/" + "recorder:2.0-win"

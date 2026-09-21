@@ -112,8 +112,9 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 	}
 
 	recorderContainer := Container{
-		Name:  "recorder",
-		Image: recorderImage,
+		Name:        "recorder",
+		Image:       recorderImage,
+		StopTimeout: aws.Int32(recorderUploaderStopTimeoutSeconds),
 		Res: Resources{
 			Cpu:    160, // was 320
 			Memory: 1024,
@@ -178,8 +179,9 @@ func buildBrowser(workspace string, routerUUID string, image images.Image, caps 
 	}
 
 	uploaderContainer := Container{
-		Name:  "uploader",
-		Image: uploaderImage,
+		Name:        "uploader",
+		Image:       uploaderImage,
+		StopTimeout: aws.Int32(recorderUploaderStopTimeoutSeconds),
 		Res: Resources{
 			Cpu:    128, // with 32 uploading is aborted
 			Memory: 256, // 64 works for single thread. for backgroud copying it is not enough
