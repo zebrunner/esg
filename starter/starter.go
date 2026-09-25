@@ -177,8 +177,8 @@ func (s *startBasis) setNetworkPhase(ctx context.Context) (essential *utils.Sele
 		s.Env.Network.IP = ip
 		s.Log.Info("Task ENI private IP acquired successfully")
 
-		if s.Env.Type != envtype.CYPRESS {
-			// Validate network readiness before proceeding
+		// Cypress and Playwright have no WebDriver. Master only records the address here.
+		if s.Env.Type != envtype.CYPRESS && s.Env.Type != envtype.PLAYWRIGHT {
 			driverURL, ok := s.Env.Network.GetUrl("driver")
 			if !ok {
 				s.Log.Error("Failed to generate driver URL from network configuration")
