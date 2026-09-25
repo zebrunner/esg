@@ -166,6 +166,7 @@ func buildPlaywright(workspace string, routerUUID string, image images.Image, ca
 			"ENABLE_VIDEO":         strconv.FormatBool(caps.EnableVideo.ToPrimitive()),
 			"ENABLE_REALTIME_LOGS": "false",
 			"BASIC_AUTH":           "",
+			"DISPLAY":              "localhost:99",
 		},
 		Mounts: []string{logVolume, tmpRecorderVolume},
 		HealthCheck: &ecsTypes.HealthCheck{
