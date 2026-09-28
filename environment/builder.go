@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/zebrunner/esg/cachemaps/definitionmap"
 	"github.com/zebrunner/esg/capabilities"
 	"github.com/zebrunner/esg/config"
 	envtype "github.com/zebrunner/esg/environment/envType"
@@ -89,8 +90,39 @@ func BuildEnvForTaskDefinitionOverride(workspace string, caps *capabilities.Capa
 	if err != nil {
 		return nil, "", err
 	}
+	env, err = selectAutoUpdateEnvironment(*image, env, func(fallbackImage images.Image) (*ExecutionEnvironment, error) {
+		return buildFn(workspace, routerUUID, fallbackImage, caps)
+	}, func(candidate *ExecutionEnvironment) bool {
+		_, found := definitionmap.FindRevision(candidate.HashOvverideDefinition())
+		return found
+	})
+	if err != nil {
+		return nil, "", err
+	}
 
 	return env, routerUUID, nil
+}
+
+func selectAutoUpdateEnvironment(image images.Image, preferred *ExecutionEnvironment, buildFallback func(images.Image) (*ExecutionEnvironment, error), hasDefinition func(*ExecutionEnvironment) bool) (*ExecutionEnvironment, error) {
+	if !strings.HasSuffix(image.Tag, capabilities.AutoUpdateVersionSuffix) || image.RepositoryName != image.BrowserName+capabilities.AutoUpdateVersionSuffix {
+		return preferred, nil
+	}
+	if hasDefinition(preferred) {
+		return preferred, nil
+	}
+
+	fallbackImage, err := images.ImageFromString(image.BrowserName, image.Tag)
+	if err != nil {
+		return nil, err
+	}
+	fallback, err := buildFallback(*fallbackImage)
+	if err != nil {
+		return nil, err
+	}
+	if hasDefinition(fallback) {
+		return fallback, nil
+	}
+	return preferred, nil
 }
 
 type envBuilder func(string, string, images.Image, *capabilities.Capabilities) (*ExecutionEnvironment, error)
