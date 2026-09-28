@@ -332,6 +332,31 @@ func splitRegistryAndRepositories(registry string) (regAlly string, repositories
 	return
 }
 
+func preferAutoUpdateRepositories(imageList []Image) []Image {
+	type imageKey struct {
+		browser  string
+		platform envtype.ENV_TYPE
+		tag      string
+	}
+
+	dedicated := make(map[imageKey]bool)
+	for _, image := range imageList {
+		if strings.HasSuffix(image.Tag, capabilities.AutoUpdateVersionSuffix) && image.RepositoryName == image.BrowserName+capabilities.AutoUpdateVersionSuffix {
+			dedicated[imageKey{image.BrowserName, image.Platform, image.Tag}] = true
+		}
+	}
+
+	preferred := make([]Image, 0, len(imageList))
+	for _, image := range imageList {
+		key := imageKey{image.BrowserName, image.Platform, image.Tag}
+		if image.RepositoryName == image.BrowserName && dedicated[key] {
+			continue
+		}
+		preferred = append(preferred, image)
+	}
+	return preferred
+}
+
 func ListImages(imageRepositories string, rules string) ([]Image, error) {
 	imgsCh := make(chan []Image)
 	errCh := make(chan error)
@@ -376,6 +401,7 @@ out:
 		}
 	}
 
+	images = preferAutoUpdateRepositories(images)
 	slices.SortFunc(images, imageComparator)
 
 	return images, nil
