@@ -1,8 +1,10 @@
 package environment
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/google/uuid"
@@ -11,10 +13,11 @@ import (
 	"github.com/zebrunner/esg/config"
 	envtype "github.com/zebrunner/esg/environment/envType"
 	"github.com/zebrunner/esg/images"
+	"github.com/zebrunner/esg/utils"
 )
 
 var (
-	uploaderImage        = config.ZebrunnerEcrRegistryUri + "/" + "uploader:3.6.2"
+	uploaderImage        = config.ZebrunnerEcrRegistryUri + "/" + "uploader:3.6.3"
 	mitmImage            = config.ZebrunnerEcrRegistryUri + "/" + "mitmproxy:2.3"
 	recorderImage        = config.ZebrunnerEcrRegistryUri + "/" + "recorder:2.4"
 	cypressRecorderImage = config.ZebrunnerEcrRegistryUri + "/" + "cypress-recorder:1.3"
@@ -24,6 +27,25 @@ var (
 	winUploaderImage     = config.ZebrunnerEcrRegistryUri + "/" + "uploader:1.1-win"
 	winRecorderImage     = config.ZebrunnerEcrRegistryUri + "/" + "recorder:2.0-win"
 )
+
+func buildS3Tags(tagMap utils.TagMap) string {
+	if len(tagMap) == 0 {
+		return ""
+	}
+
+	keys := make([]string, 0, len(tagMap))
+	for key := range tagMap {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	tags := make([]map[string]string, 0, len(keys))
+	for _, key := range keys {
+		tags = append(tags, map[string]string{"Key": key, "Value": tagMap[key]})
+	}
+	encoded, _ := json.Marshal(map[string][]map[string]string{"TagSet": tags})
+	return string(encoded)
+}
 
 // Must run after flag.Parse so config-provided overrides replace the built-in defaults.
 func ResolveImageOverrides() {

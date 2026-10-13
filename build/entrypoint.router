@@ -180,7 +180,7 @@ fi
 
 echo "CMD_ARGS: $CMD_ARGS"
 
-./router -listen :$LISTEN_PORT $CMD_ARGS &
+./router -listen :$LISTEN_PORT $CMD_ARGS "-s3-artifact-tags=${S3_ARTIFACT_TAGS:-}" "-s3-folder-tags=${S3_FOLDER_TAGS:-}" &
 PID=$!
 
 trap 'finish $PID' TERM INT
