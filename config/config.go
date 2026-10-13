@@ -89,7 +89,6 @@ type Config struct {
 	WinRecorderImage     string
 
 	ProductionEnv bool
-	SingleTenant  bool
 	ExternalPort  int64
 
 	OldAbortApi bool
@@ -129,7 +128,7 @@ func init() {
 	flag.BoolVar(&Conf.RedisRemote, "cache-remote", false, "Is cache service deployed on remote instance")
 	flag.StringVar(&Conf.DefinitionsConnectionString, "definitions-connection", "localhost:5555", "Connection string for task-definitions service")
 
-	flag.StringVar(&Conf.ZebrunnerHost, "zebrunner-host", "", "Host for zebrunner integration for this environment")
+	flag.StringVar(&Conf.ZebrunnerHost, "zebrunner-host", "", "Zebrunner integration URL for this environment. Use the <tenant> placeholder to substitute the task workspace, for example https://<tenant>.example.com")
 	flag.StringVar(&Conf.ZebrunnerIntegrationUser, "zebrunner-integration-user", "", "User for zebrunner for current env")
 	flag.StringVar(&Conf.ZebrunnerIntegrationPassword, "zebrunner-integration-password", "", "Password for zebrunner for current env")
 
@@ -159,7 +158,6 @@ func init() {
 	flag.StringVar(&Conf.WinUploaderImage, "win-uploader-image", "", "Override full image URL for the windows uploader container")
 	flag.StringVar(&Conf.WinRecorderImage, "win-recorder-image", "", "Override full image URL for the windows recorder container")
 
-	flag.BoolVar(&Conf.SingleTenant, "single-tenant", false, "Single tenant mode")
 	flag.BoolVar(&Conf.ProductionEnv, "production-env", true, "Service configuration mode")
 	flag.Int64Var(&Conf.ExternalPort, "external-port", 0, "Router's external listening port")
 

@@ -26,7 +26,18 @@ const (
 	// TODO: delete as only all on-prem tenants will be upgraded
 	OLD_ABORT_API_PATH = "/api/reporting/api/project-test-runs/abort"
 	RETRY_COUNT        = 3
+	TENANT_PLACEHOLDER = "<tenant>"
 )
+
+func resolveBaseUrl(template, workspace string) (string, error) {
+	if !strings.Contains(template, TENANT_PLACEHOLDER) {
+		return template, nil
+	}
+	if workspace == "" {
+		return "", fmt.Errorf("zebrunner url %q requires a tenant but workspace is empty", template)
+	}
+	return strings.ReplaceAll(template, TENANT_PLACEHOLDER, workspace), nil
+}
 
 func TrackResourcesUsage(cachedTask *mapper.Mapper, task *ecsTypes.Task) {
 	//log.Info("Task:", task)
@@ -40,8 +51,17 @@ func TrackResourcesUsage(cachedTask *mapper.Mapper, task *ecsTypes.Task) {
 	if cachedTask.SessionID != "" {
 		l = l.WithField(config.SessionIdKey, cachedTask.SessionID)
 	}
+	if cachedTask.Workspace != "" {
+		l = l.WithField("workspace", cachedTask.Workspace)
+	}
 
-	requestUrl, err := url.ParseRequestURI(conf.ZebrunnerHost)
+	baseUrl, err := resolveBaseUrl(conf.ZebrunnerHost, cachedTask.Workspace)
+	if err != nil {
+		l.WithError(err).Error("Failed to resolve zebrunner base url")
+		return
+	}
+
+	requestUrl, err := url.ParseRequestURI(baseUrl)
 	if err != nil {
 		log.WithError(err).Error("Failed to parse zebrunner base url")
 		return
@@ -111,11 +131,6 @@ func TrackResourcesUsage(cachedTask *mapper.Mapper, task *ecsTypes.Task) {
 		memUsage += cachedTask.Capabilities.MitmMemory.ToPrimitive()
 	}
 
-	if !conf.SingleTenant {
-		// add workspace/tenant to the url
-		requestUrl.Host = cachedTask.Workspace + "." + requestUrl.Host
-		l = l.WithField("workspace", cachedTask.Workspace)
-	}
 	requestUrl.Path = USAGE_API_PATH
 	requestBody := map[string]interface{}{
 		"cpu":       strconv.FormatInt(cpuUsage, 10) + " millicores",
@@ -173,23 +188,27 @@ func AbortLaunch(routerUUID, workspace, launchUUID, reason string) {
 	}
 
 	l := log.WithFields(log.Fields{config.RouterUUID: routerUUID, "comment": reason})
+	if workspace != "" {
+		l = l.WithField("workspace", workspace)
+	}
+
+	baseUrl, err := resolveBaseUrl(conf.ZebrunnerHost, workspace)
+	if err != nil {
+		l.WithError(err).Error("Failed to resolve zebrunner base url")
+		return
+	}
 
 	abortPath := ""
 	if config.Conf.OldAbortApi {
-		abortPath = fmt.Sprintf("%s%s?ciRunId=%s", conf.ZebrunnerHost, OLD_ABORT_API_PATH, launchUUID)
+		abortPath = fmt.Sprintf("%s%s?ciRunId=%s", baseUrl, OLD_ABORT_API_PATH, launchUUID)
 	} else {
-		abortPath = fmt.Sprintf("%s%s:%s:abort", conf.ZebrunnerHost, ABORT_API_PATH, launchUUID)
+		abortPath = fmt.Sprintf("%s%s:%s:abort", baseUrl, ABORT_API_PATH, launchUUID)
 	}
 
 	requestUrl, err := url.ParseRequestURI(abortPath)
 	if err != nil {
 		l.WithError(err).Error("Failed to parse zebrunner base url")
 		return
-	}
-
-	if !conf.SingleTenant {
-		l = l.WithField("workspace", workspace)
-		requestUrl.Host = workspace + "." + requestUrl.Host
 	}
 
 	requestBody := map[string]interface{}{

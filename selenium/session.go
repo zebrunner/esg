@@ -101,7 +101,7 @@ func WaitForSessionStart(ctx context.Context, net *network.NetworkConfiguration,
 
 func CloseSession(mapperEntity *mapper.Mapper) {
 	l := log.WithFields(log.Fields{config.TaskIdKey: mapperEntity.TaskId, config.SessionIdKey: mapperEntity.SessionID, config.RouterUUID: mapperEntity.RouterUUID})
-	if !config.Conf.SingleTenant {
+	if mapperEntity.Workspace != "" {
 		l = l.WithField("workspace", mapperEntity.Workspace)
 	}
 
