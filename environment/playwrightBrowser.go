@@ -208,6 +208,13 @@ func buildPlaywright(workspace string, routerUUID string, image images.Image, ca
 		}
 	}
 
+	recorderContainer.Env["ESSENTIAL_CONTAINER"] = "browser"
+	recorderContainer.Env["ROUTER_UUID"] = routerUUID
+	recorderContainer.Env["ENV_TYPE"] = "playwright"
+	recorderContainer.Env["AWS_LOGS_GROUP"] = conf.AwsLogsGroup
+	recorderContainer.Env["LOGS_STREAM_PREFIX"] = "playwright"
+	recorderContainer.Env["AWS_REGION"] = conf.AwsRegion
+
 	uploaderContainer := Container{
 		Name:        "uploader",
 		Image:       uploaderImage,
@@ -260,6 +267,8 @@ func buildPlaywright(workspace string, routerUUID string, image images.Image, ca
 				"recorderStop":      {ContainerPort: recorderdPort, HostPort: 0, Path: "/stop"},
 				"recorderRotate":    {ContainerPort: recorderdPort, HostPort: 0, Path: "/rotate"},
 				"recorderFinish":    {ContainerPort: recorderdPort, HostPort: 0, Path: "/finish"},
+				"recorderStats":     {ContainerPort: recorderdPort, HostPort: 0, Path: "/stats"},
+				"recorderLogs":      {ContainerPort: recorderdPort, HostPort: 0, Path: "/logs"},
 			},
 		},
 		Type:             envtype.PLAYWRIGHT,

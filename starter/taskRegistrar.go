@@ -86,7 +86,7 @@ out:
 			Overrides:                &ecsTypes.TaskOverride{ContainerOverrides: env.ContainerOverrides()},
 			PlacementStrategy:        placementStrategy,
 			CapacityProviderStrategy: []ecsTypes.CapacityProviderStrategyItem{{CapacityProvider: aws.String(env.CapacityProvider)}},
-			Tags:                     service.BuildRunTaskTags(),
+			Tags:                     service.BuildRunTaskTags(routerUUID),
 		}
 
 		var outputErr error = nil

@@ -277,6 +277,13 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 		}
 	}
 
+	recorderContainer.Env["ESSENTIAL_CONTAINER"] = "executor"
+	recorderContainer.Env["ROUTER_UUID"] = routerUUID
+	recorderContainer.Env["ENV_TYPE"] = "generic"
+	recorderContainer.Env["AWS_LOGS_GROUP"] = conf.AwsLogsGroup
+	recorderContainer.Env["LOGS_STREAM_PREFIX"] = "generic"
+	recorderContainer.Env["AWS_REGION"] = conf.AwsRegion
+
 	uploaderContainer := Container{
 		Name:        "uploader",
 		Image:       uploaderImage,
@@ -384,6 +391,8 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 				"recorderStart":  {ContainerPort: recorderdPort, HostPort: 0, Path: "/start"},
 				"recorderStop":   {ContainerPort: recorderdPort, HostPort: 0, Path: "/stop"},
 				"recorderFinish": {ContainerPort: recorderdPort, HostPort: 0, Path: "/finish"},
+				"recorderStats":  {ContainerPort: recorderdPort, HostPort: 0, Path: "/stats"},
+				"recorderLogs":   {ContainerPort: recorderdPort, HostPort: 0, Path: "/logs"},
 			},
 		},
 		Type:             envtype.GENERIC,

@@ -78,8 +78,15 @@ func CreateTaskDefinition(ctx context.Context, definitions []ecsTypes.ContainerD
 	return nil, fmt.Errorf("failed to create task definition in %v retries: %v", i, err)
 }
 
-func BuildRunTaskTags() []ecsTypes.Tag {
-	return buildTags(config.Conf.EcsTaskTags)
+func BuildRunTaskTags(routerUUID string) []ecsTypes.Tag {
+	tags := buildTags(config.Conf.EcsTaskTags)
+	for i := range tags {
+		if aws.ToString(tags[i].Key) == "esg-id" {
+			tags[i].Value = aws.String(routerUUID)
+			return tags
+		}
+	}
+	return append(tags, ecsTypes.Tag{Key: aws.String("esg-id"), Value: aws.String(routerUUID)})
 }
 
 func BuildTaskDefinitionTags(familyRevision string) []ecsTypes.Tag {

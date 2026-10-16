@@ -16,7 +16,7 @@ import (
 var (
 	uploaderImage        = config.ZebrunnerEcrRegistryUri + "/" + "uploader:3.6.2"
 	mitmImage            = config.ZebrunnerEcrRegistryUri + "/" + "mitmproxy:2.3"
-	recorderImage        = config.ZebrunnerEcrRegistryUri + "/" + "recorder:2.4"
+	recorderImage        = config.ZebrunnerEcrRegistryUri + "/" + "recorder:2.5"
 	cypressRecorderImage = config.ZebrunnerEcrRegistryUri + "/" + "cypress-recorder:1.3"
 	cloneImage           = config.ZebrunnerEcrRegistryUri + "/" + "git:2.55.0"
 	entrypointImage      = config.ZebrunnerEcrRegistryUri + "/" + "entrypoint:2.5.4"
