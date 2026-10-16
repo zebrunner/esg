@@ -170,9 +170,6 @@ fi
 if [ ! -z ${EXTERNAL_PORT} ]; then
   CMD_ARGS="${CMD_ARGS} -external-port ${EXTERNAL_PORT}"
 fi
-if [ ! -z ${SINGLE_TENANT} ]; then
-  CMD_ARGS="${CMD_ARGS} -single-tenant=${SINGLE_TENANT}"
-fi
 if [ ! -z ${OLD_ABORT_API} ]; then
   CMD_ARGS="${CMD_ARGS} -old-abort-api=${OLD_ABORT_API}"
 fi

@@ -66,9 +66,6 @@ func Create(c *gin.Context) {
 	}
 
 	// not adding workspace to logs because as for now user and workspace have the same value
-	// if !config.Conf.SingleTenant {
-	// l = l.WithField("workspace", workspace)
-	// }
 
 	reqCaps, configurationCaps, err := capabilities.ParseRequestCapabilities(c.Request.Body)
 	if err != nil {
@@ -255,7 +252,7 @@ func AbortTask(c *gin.Context) {
 	mapperEntity := c.MustGet(config.RouterUUID).(*mapper.Mapper)
 
 	l := log.WithField(config.RouterUUID, mapperEntity.RouterUUID).WithField(config.TaskIdKey, mapperEntity.TaskId)
-	if !config.Conf.SingleTenant {
+	if mapperEntity.Workspace != "" {
 		l = l.WithField("workspace", mapperEntity.Workspace)
 	}
 
@@ -280,7 +277,7 @@ func MarkAsFinished(c *gin.Context) {
 	mapperEntity := c.MustGet(config.RouterUUID).(*mapper.Mapper)
 
 	l := log.WithField(config.RouterUUID, mapperEntity.RouterUUID).WithField(config.TaskIdKey, mapperEntity.TaskId)
-	if !config.Conf.SingleTenant {
+	if mapperEntity.Workspace != "" {
 		l = l.WithField("workspace", mapperEntity.Workspace)
 	}
 

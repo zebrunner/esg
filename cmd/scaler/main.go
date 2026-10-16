@@ -290,7 +290,7 @@ func trackResourceUsage(ctx context.Context, svc *ecs.Client, wg *sync.WaitGroup
 				tasksCacheToUpdate[cachedTask.RouterUUID] = cachedTask
 
 				l = l.WithField(config.RouterUUID, cachedTask.RouterUUID)
-				if !config.Conf.SingleTenant {
+				if cachedTask.Workspace != "" {
 					l = l.WithField("workspace", cachedTask.Workspace)
 				}
 
@@ -349,7 +349,7 @@ func stopIdleSessions(ctx context.Context, wg *sync.WaitGroup) {
 				}
 
 				l := log.WithFields(log.Fields{config.TaskIdKey: mapperEntity.TaskId, config.SessionIdKey: mapperEntity.SessionID, config.RouterUUID: mapperEntity.RouterUUID})
-				if !config.Conf.SingleTenant {
+				if mapperEntity.Workspace != "" {
 					l = l.WithField("workspace", mapperEntity.Workspace)
 				}
 
