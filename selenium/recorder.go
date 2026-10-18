@@ -115,11 +115,14 @@ func stopRecording(network *network.NetworkConfiguration) error {
 	return nil
 }
 
-func finishRecording(network *network.NetworkConfiguration) error {
+func finishRecording(network *network.NetworkConfiguration, reason string) error {
 	url, ok := network.GetUrl("recorderFinish")
 	if !ok {
 		return fmt.Errorf("failed to get url of recorder finish")
 	}
+	query := url.Query()
+	query.Set("reason", reason)
+	url.RawQuery = query.Encode()
 
 	req, err := http.NewRequest(http.MethodDelete, url.String(), nil)
 	if err != nil {

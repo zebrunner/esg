@@ -25,6 +25,7 @@ import (
 	"github.com/zebrunner/esg/definitions"
 	"github.com/zebrunner/esg/environment"
 	"github.com/zebrunner/esg/handlers"
+	"github.com/zebrunner/esg/monitoring"
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/starter"
 	"github.com/zebrunner/esg/utils"
@@ -103,6 +104,7 @@ func getRouterBasis() *gin.Engine {
 		lowLvlApi.GET("/video/:session", handlers.Video)
 		lowLvlApi.GET("/tasks/:task/log", handlers.TaskLog)
 		lowLvlApi.GET("/tasks/:task/status", handlers.TaskDescribe)
+		monitoring.RegisterRoutes(lowLvlApi, true)
 	}
 
 	return r
@@ -181,6 +183,7 @@ func CreateRouter() *gin.Engine {
 		httpHub.GET("/video/:session", handlers.Video)
 		httpHub.GET("/tasks/:task/log", handlers.TaskLog)
 		httpHub.GET("/tasks/:task/status", handlers.TaskDescribe)
+		monitoring.RegisterRoutes(httpHub.Group("/", handlers.APIAuthentication), false)
 	}
 
 	return r
@@ -277,6 +280,7 @@ func main() {
 		FullTimestamp: true,
 		DisableColors: true,
 	})
+	config.Conf.ValidateMonitoring()
 
 	if config.Conf.ProductionEnv {
 		gin.SetMode(gin.ReleaseMode)
