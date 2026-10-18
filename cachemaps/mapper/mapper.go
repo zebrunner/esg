@@ -37,18 +37,21 @@ const (
 )
 
 type Mapper struct {
-	RouterUUID   string
-	Capabilities *capabilities.Capabilities
-	Network      network.NetworkConfiguration
-	IdleTimeout  float64
-	Status       Status
-	UsageTracked bool
-	HealthAt     *time.Time
-	AccessedAt   *time.Time
-	TaskId       string        `json:",omitempty"`
-	SessionID    string        `json:",omitempty"`
-	StopReason   StoppedReason `json:",omitempty"`
-	Workspace    string        `json:",omitempty"`
+	MonitoringSession string `json:",omitempty"`
+	MonitoringEnvType string `json:",omitempty"`
+	MonitoringTaskARN string `json:",omitempty"`
+	RouterUUID        string
+	Capabilities      *capabilities.Capabilities
+	Network           network.NetworkConfiguration
+	IdleTimeout       float64
+	Status            Status
+	UsageTracked      bool
+	HealthAt          *time.Time
+	AccessedAt        *time.Time
+	TaskId            string        `json:",omitempty"`
+	SessionID         string        `json:",omitempty"`
+	StopReason        StoppedReason `json:",omitempty"`
+	Workspace         string        `json:",omitempty"`
 	// Children lists the session ids issued by browser refreshes, in the order they were handed out.
 	Children []string `json:",omitempty"`
 	// RootUUID marks this record as a pointer to the session that owns the task, and is set on it alone.

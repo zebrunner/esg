@@ -25,6 +25,8 @@ var (
 )
 
 type Config struct {
+	MonitoringCompatibilityEnabled bool
+	MonitoringIntegrationToken     string
 	// AWS settings
 	AwsRegion                       string
 	AwsRetry                        int
@@ -101,6 +103,8 @@ type Config struct {
 }
 
 func init() {
+	flag.BoolVar(&Conf.MonitoringCompatibilityEnabled, "monitoring-compatibility-enabled", os.Getenv("MONITORING_COMPATIBILITY_ENABLED") == "true", "Allow standalone monitoring integration")
+	Conf.MonitoringIntegrationToken = os.Getenv("MONITORING_INTEGRATION_TOKEN")
 	flag.StringVar(&Conf.AwsRegion, "aws-region", "us-east-1", "AWS region name")
 	flag.IntVar(&Conf.AwsRetry, "aws-retry", 10, "AWS client retry count")
 	flag.StringVar(&Conf.AwsCluster, "aws-cluster", "esg", "AWS ECS cluster name")

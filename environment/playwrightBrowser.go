@@ -208,6 +208,8 @@ func buildPlaywright(workspace string, routerUUID string, image images.Image, ca
 		}
 	}
 
+	recorderContainer.Env["ROUTER_UUID"] = routerUUID
+
 	uploaderContainer := Container{
 		Name:        "uploader",
 		Image:       uploaderImage,

@@ -113,6 +113,9 @@ func (s *startBasis) registerTaskPhase(ctx context.Context) (essential *utils.Se
 
 		s.Log = s.Log.WithField(config.TaskIdKey, taskId)
 		s.MapperEntity.TaskId = taskId
+		if s.Env.Monitoring != nil {
+			s.MapperEntity.MonitoringTaskARN = taskArn
+		}
 
 		s.Log.WithField("latency", time.Since(s.ServiceStart)).Debug("task registered")
 		s.Reply = map[string]interface{}{"taskId": s.MapperEntity.RouterUUID}
@@ -396,6 +399,10 @@ func GetServiceStarter(env *environment.ExecutionEnvironment, workspace string, 
 	basis.MapperEntity, err = mapper.CreateEntity(workspace, routerUUID, env.Capabilities, env.Network, 15*time.Minute)
 	if err != nil {
 		basis.Log.WithError(err).Error("Failed to create mapper entity")
+	}
+	if env.Monitoring != nil && basis.MapperEntity != nil {
+		basis.MapperEntity.MonitoringSession = env.Monitoring.SessionID
+		basis.MapperEntity.MonitoringEnvType = env.Monitoring.EnvType
 	}
 	basis.GinCtx.Set(config.RouterUUID, basis.MapperEntity)
 

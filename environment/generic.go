@@ -277,6 +277,8 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 		}
 	}
 
+	recorderContainer.Env["ROUTER_UUID"] = routerUUID
+
 	uploaderContainer := Container{
 		Name:        "uploader",
 		Image:       uploaderImage,

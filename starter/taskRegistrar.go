@@ -15,6 +15,7 @@ import (
 	"github.com/zebrunner/esg/cachemaps/resourcesToAllocate"
 	"github.com/zebrunner/esg/config"
 	"github.com/zebrunner/esg/environment"
+	"github.com/zebrunner/esg/monitoring"
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/utils"
 )
@@ -124,6 +125,11 @@ out:
 
 		if outputErr == nil {
 			l.Debugf("task register attempt successful, placement strategy: %s, result task arn: %s", strategyName, aws.ToString(resultRunTask.Tasks[0].TaskArn))
+			if env.Monitoring != nil {
+				descriptor := *env.Monitoring
+				descriptor.ECSTaskARN = aws.ToString(resultRunTask.Tasks[0].TaskArn)
+				monitoring.Publish(descriptor)
+			}
 			utils.SendToChanIfNotBlocked(waitRequest.ResponseCh, aws.ToString(resultRunTask.Tasks[0].TaskArn))
 
 			if resourceAllocationEntity != nil {

@@ -25,6 +25,7 @@ import (
 	"github.com/zebrunner/esg/definitions"
 	"github.com/zebrunner/esg/environment"
 	"github.com/zebrunner/esg/handlers"
+	"github.com/zebrunner/esg/monitoring"
 	"github.com/zebrunner/esg/service"
 	"github.com/zebrunner/esg/starter"
 	"github.com/zebrunner/esg/utils"
@@ -92,6 +93,7 @@ func getRouterBasis() *gin.Engine {
 	r.ForwardedByClientIP = true
 
 	r.Use(gin.LoggerWithFormatter(utils.TraceLogFromating), gin.Recovery())
+	monitoring.Register(r)
 
 	lowLvlApi := r.Group("/api", handlers.APIError, handlers.LowLvlAuthentication)
 	{
@@ -277,6 +279,8 @@ func main() {
 		FullTimestamp: true,
 		DisableColors: true,
 	})
+	config.Conf.ValidateMonitoring()
+	defer monitoring.Close()
 
 	if config.Conf.ProductionEnv {
 		gin.SetMode(gin.ReleaseMode)

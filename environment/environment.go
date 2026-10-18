@@ -13,10 +13,12 @@ import (
 	"github.com/zebrunner/esg/config"
 	envtype "github.com/zebrunner/esg/environment/envType"
 	"github.com/zebrunner/esg/environment/network"
+	"github.com/zebrunner/esg/monitoring"
 	"github.com/zebrunner/esg/utils"
 )
 
 type ExecutionEnvironment struct {
+	Monitoring           *monitoring.Descriptor
 	TaskDefinitionFamily string
 	Schema               string
 	Type                 envtype.ENV_TYPE
