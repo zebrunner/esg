@@ -90,6 +90,12 @@ fi
 if [ ! -z ${S3_REGION} ]; then
   CMD_ARGS="${CMD_ARGS} -s3-region ${S3_REGION}"
 fi
+if [ ! -z ${S3_ARTIFACT_TAGS} ]; then
+  CMD_ARGS="${CMD_ARGS} -s3-artifact-tags=${S3_ARTIFACT_TAGS}"
+fi
+if [ -n "${S3_ARTIFACT_TAG_FILES}" ]; then
+  CMD_ARGS="${CMD_ARGS} -s3-artifact-tag-files=${S3_ARTIFACT_TAG_FILES}"
+fi
 if [ ! -z ${S3_AWS_ACCESS_KEY_ID} ]; then
   CMD_ARGS="${CMD_ARGS} -s3-aws-access-key-id ${S3_AWS_ACCESS_KEY_ID}"
 fi
