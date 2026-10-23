@@ -290,6 +290,7 @@ func buildGeneric(workspace string, routerUUID string, image images.Image, caps 
 		Env: map[string]string{
 			"S3_KEY_PATTERN":        fmt.Sprintf("s3://%s/%s/artifacts/launches", conf.S3Bucket, workspace),
 			"S3_ARTIFACT_TAGS":      buildS3Tags(conf.S3ArtifactTags),
+			"S3_ARTIFACT_TAG_FILES": conf.S3ArtifactTagFiles,
 			"AWS_ACCESS_KEY_ID":     conf.S3AwsAccessKeyID,
 			"AWS_SECRET_ACCESS_KEY": conf.S3AwsSecretAccessKey,
 			"AWS_DEFAULT_REGION":    conf.S3Region,

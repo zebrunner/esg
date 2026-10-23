@@ -64,6 +64,7 @@ type Config struct {
 	S3Bucket             string // For static artifacts
 	S3Region             string
 	S3ArtifactTags       utils.TagMap
+	S3ArtifactTagFiles   string
 	S3AwsAccessKeyID     string
 	S3AwsSecretAccessKey string
 
@@ -138,6 +139,7 @@ func init() {
 	flag.StringVar(&Conf.S3Bucket, "s3-bucket", "", "S3 Bucket name for pushing artifacts")
 	flag.StringVar(&Conf.S3Region, "s3-region", "", "S3 Bucket region for pushing artifacts")
 	flag.Var(&Conf.S3ArtifactTags, "s3-artifact-tags", "Tags to apply to S3 artifacts in key=value,key=value format")
+	flag.StringVar(&Conf.S3ArtifactTagFiles, "s3-artifact-tag-files", "all", "S3 artifacts to tag: all or comma-separated exact file names")
 	flag.StringVar(&Conf.S3AwsAccessKeyID, "s3-aws-access-key-id", "", "Access key for S3 bucket")
 	flag.StringVar(&Conf.S3AwsSecretAccessKey, "s3-aws-secret-access-key", "", "Secret key for S3 bucket")
 

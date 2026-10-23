@@ -114,6 +114,7 @@ func buildWindowsBrowser(workspace string, routerUUID string, image images.Image
 			"S3_BUCKET":             conf.S3Bucket,
 			"S3_KEY":                fmt.Sprintf("%s/artifacts/test-sessions", workspace),
 			"S3_ARTIFACT_TAGS":      buildS3Tags(conf.S3ArtifactTags),
+			"S3_ARTIFACT_TAG_FILES": conf.S3ArtifactTagFiles,
 			"AWS_ACCESS_KEY_ID":     conf.S3AwsAccessKeyID,
 			"AWS_SECRET_ACCESS_KEY": conf.S3AwsSecretAccessKey,
 			"AWS_DEFAULT_REGION":    conf.S3Region,
